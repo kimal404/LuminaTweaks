@@ -28,7 +28,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
 
       - name: Make Gradlew Executable
-        run: chmod +x gradlew
+        run: chmod +x manager/gradlew
 
       - name: Decode Keystore from Secrets
         env:
@@ -58,13 +58,14 @@ jobs:
           keytool -list -v -keystore lumina-release.jks -storepass LuminaTweaks021 -alias LuminaTweaks021
 
       - name: Compile Release APK
+        working-directory: manager
         run: ./gradlew assembleRelease || ./gradlew assembleDebug
 
       - name: Sign & Align APK
         run: |
           BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | tail -n 1)
           mkdir -p dist
-          find app/build/outputs/apk -name "*.apk" | while read -r apk; do
+          find manager/app/build/outputs/apk -name "*.apk" | while read -r apk; do
             if [[ "$apk" == *"unsigned"* ]]; then
               base_name=$(basename "${apk%-unsigned.apk}")
               aligned="dist/${base_name}-aligned.apk"
