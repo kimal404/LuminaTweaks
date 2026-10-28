@@ -85,3 +85,46 @@ jobs:
           name: LuminaTweaks-Release-Signed
           path: dist/*.apk
           if-no-files-found: error
+
+      - name: Send Build to Telegram Channel
+        if: success()
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RUN_NUM: ${{ github.run_number }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          SERVER_URL: ${{ github.server_url }}
+          COMMIT_URL: ${{ github.event.head_commit.url }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          TARGET_FILE=$(find . -type f -name "*.apk" | grep -v "unaligned" | head -n 1)
+
+          if [ -z "$TARGET_FILE" ]; then
+            echo "[!] File APK hasil build tidak ditemukan!"
+            exit 1
+          fi
+
+          echo "[*] Mengirim file: $TARGET_FILE"
+          WORKFLOW_URL="${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
+
+          CAPTION="<b>LuminaTweaks</b>
+          #ci_${RUN_NUM}
+
+          <pre>${COMMIT_MSG}</pre>
+
+          <a href=\"${COMMIT_URL}\">Commit</a>
+          <a href=\"${WORKFLOW_URL}\">Workflow run</a>"
+
+          RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
+            -F chat_id="${CHAT_ID}" \
+            -F document=@"${TARGET_FILE}" \
+            -F caption="${CAPTION}" \
+            -F parse_mode="HTML")
+
+          echo "Response Telegram: $RESPONSE"
+
+          # Pastikan workflow gagal jika Telegram menolak
+          if echo "$RESPONSE" | grep -q '"ok":false'; then
+            exit 1
+          fi
