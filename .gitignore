@@ -1,2 +1,6 @@
 *.jks
 keystore_base64.txt
+
+build/
+.gradle/
+local.properties

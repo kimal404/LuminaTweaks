@@ -59,7 +59,7 @@ jobs:
 
       - name: Compile Release APK
         working-directory: manager
-        run: ./gradlew assembleRelease || ./gradlew assembleDebug
+        run: ./gradlew clean assembleRelease || ./gradlew assembleDebug
 
       - name: Sign & Align APK
         run: |
