@@ -2,6 +2,8 @@ package com.luminatweaks.ui.screen
 
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.os.Build
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,6 +50,7 @@ import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -82,10 +85,14 @@ fun AppsScreen(
     var isLoading by remember { mutableStateOf(true) }
     var searchQuery by remember { mutableStateOf("") }
 
-    var hideSystemApps by remember { mutableStateOf(false) }
+    var hideSystemApps by remember { mutableStateOf(true) }
     var showMoreMenu by remember { mutableStateOf(false) }
     var showFilterDialog by remember { mutableStateOf(false) }
     var sortOrder by remember { mutableStateOf(AppSortOrder.NAME_ASC) }
+
+    // Real-time app status cache
+    val appActiveMap = remember { mutableStateMapOf<String, Boolean>() }
+    var selectedPackageName by remember { mutableStateOf<String?>(null) }
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
@@ -95,18 +102,42 @@ fun AppsScreen(
             val parsedList = installed.map { appInfo ->
                 val label = appInfo.loadLabel(packageManager).toString()
                 val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                val isGame = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    appInfo.category == ApplicationInfo.CATEGORY_GAME
+                } else {
+                    @Suppress("DEPRECATION")
+                    (appInfo.flags and ApplicationInfo.FLAG_IS_GAME) != 0
+                }
+
                 AppItem(
                     name = label,
                     packageName = appInfo.packageName,
-                    isSystemApp = isSystem
+                    isSystemApp = isSystem,
+                    isGame = isGame,
+                    isEnabled = appInfo.enabled
                 )
             }
 
             withContext(Dispatchers.Main) {
                 rawApps = parsedList
+                parsedList.forEach { appActiveMap[it.packageName] = it.isEnabled }
                 isLoading = false
             }
         }
+    }
+
+    // Detail Screen Display
+    val activeApp = rawApps.find { it.packageName == selectedPackageName }
+    if (activeApp != null) {
+        AppProfileScreen(
+            app = activeApp,
+            isEnabled = appActiveMap[activeApp.packageName] ?: activeApp.isEnabled,
+            onToggleEnabled = { newState ->
+                appActiveMap[activeApp.packageName] = newState
+            },
+            onBack = { selectedPackageName = null }
+        )
+        return
     }
 
     val filteredApps = remember(rawApps, searchQuery, hideSystemApps, sortOrder) {
@@ -119,12 +150,14 @@ fun AppsScreen(
             matchesSystem && matchesSearch
         }
 
-        when (sortOrder) {
-            AppSortOrder.NAME_ASC -> filtered.sortedBy { it.name.lowercase() }
-            AppSortOrder.NAME_DESC -> filtered.sortedByDescending { it.name.lowercase() }
-            AppSortOrder.PACKAGE_ASC -> filtered.sortedBy { it.packageName.lowercase() }
-            AppSortOrder.PACKAGE_DESC -> filtered.sortedByDescending { it.packageName.lowercase() }
+        val baseComparator = when (sortOrder) {
+            AppSortOrder.NAME_ASC -> compareBy<AppItem> { it.name.lowercase() }
+            AppSortOrder.NAME_DESC -> compareByDescending<AppItem> { it.name.lowercase() }
+            AppSortOrder.PACKAGE_ASC -> compareBy<AppItem> { it.packageName.lowercase() }
+            AppSortOrder.PACKAGE_DESC -> compareByDescending<AppItem> { it.packageName.lowercase() }
         }
+
+        filtered.sortedWith(compareByDescending<AppItem> { it.isGame }.then(baseComparator))
     }
 
     Scaffold(
@@ -202,7 +235,6 @@ fun AppsScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                // Pill Search Bar
                 item {
                     TextField(
                         value = searchQuery,
@@ -257,8 +289,9 @@ fun AppsScreen(
 
                     AppRowCard(
                         app = appItem,
+                        isEnabled = appActiveMap[appItem.packageName] ?: appItem.isEnabled,
                         position = position,
-                        onClick = { /* Action: open package config */ }
+                        onClick = { selectedPackageName = appItem.packageName }
                     )
                 }
 
@@ -351,6 +384,7 @@ private fun SortOptionRow(
 @Composable
 fun AppRowCard(
     app: AppItem,
+    isEnabled: Boolean,
     position: ContainerPosition,
     onClick: () -> Unit
 ) {
@@ -407,6 +441,38 @@ fun AppRowCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            // Real-time badge status reflection
+            val badgeContainer = if (isEnabled) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainer
+            }
+
+            val badgeContent = if (isEnabled) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+            }
+
+            Box(
+                modifier = Modifier
+                    .background(
+                        color = badgeContainer,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    .padding(horizontal = 9.dp, vertical = 5.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (isEnabled) "AKTIF" else "NONAKTIF",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = badgeContent
                 )
             }
         }

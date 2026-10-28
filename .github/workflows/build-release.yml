@@ -1,4 +1,4 @@
-name: Build Release
+name: Build & Sign Release
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    name: Build & Package APK
+    name: Build & Sign APK
     runs-on: ubuntu-latest
 
     steps:
@@ -30,12 +30,36 @@ jobs:
       - name: Make Gradlew Executable
         run: chmod +x gradlew
 
+      - name: Generate Release Keystore
+        run: |
+          keytool -genkey -v -keystore lumina-release.jks -alias lumina -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=LuminaTweaks, OU=Development, O=Lumina, L=Jakarta, ST=Jakarta, C=ID" \
+            -storepass luminapassword -keypass luminapassword
+
       - name: Compile Release APK
         run: ./gradlew assembleRelease || ./gradlew assembleDebug
 
-      - name: Upload APK Artifact
+      - name: Sign & Align APK
+        run: |
+          BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | tail -n 1)
+          mkdir -p dist
+          find app/build/outputs/apk -name "*.apk" | while read -r apk; do
+            if [[ "$apk" == *"unsigned"* ]]; then
+              base_name=$(basename "${apk%-unsigned.apk}")
+              aligned="dist/${base_name}-aligned.apk"
+              signed="dist/${base_name}-signed.apk"
+              $BUILD_TOOLS_DIR/zipalign -v -p 4 "$apk" "$aligned"
+              $BUILD_TOOLS_DIR/apksigner sign --ks lumina-release.jks --ks-pass pass:luminapassword --ks-key-alias lumina --key-pass pass:luminapassword --out "$signed" "$aligned"
+              rm -f "$aligned"
+              echo "Successfully signed: $signed"
+            else
+              cp "$apk" dist/
+            fi
+          done
+
+      - name: Upload Signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: LuminaTweaks-Build
-          path: app/build/outputs/apk/**/*.apk
+          name: LuminaTweaks-Release-Signed
+          path: dist/*.apk
           if-no-files-found: error
