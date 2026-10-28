@@ -1,6 +1,5 @@
 package com.luminatweaks.ui.screen
 
-import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -64,20 +63,25 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.luminatweaks.data.AppProfileConfig
 import com.luminatweaks.model.AppItem
 
-enum class LiteModeOption(val label: String) {
-    OFF("Mati"),
-    DEFAULT("Default"),
-    ON("Hidup")
+enum class LiteModeOption(val label: String, val value: String) {
+    OFF("Mati", "off"),
+    DEFAULT("Default", "default"),
+    ON("Hidup", "on");
+
+    companion object {
+        fun fromValue(v: String): LiteModeOption = entries.find { it.value == v } ?: DEFAULT
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppProfileScreen(
     app: AppItem,
-    isEnabled: Boolean,
-    onToggleEnabled: (Boolean) -> Unit,
+    profile: AppProfileConfig,
+    onProfileChanged: (AppProfileConfig) -> Unit,
     onBack: () -> Unit
 ) {
     BackHandler(onBack = onBack)
@@ -86,9 +90,7 @@ fun AppProfileScreen(
     val packageManager = remember { context.packageManager }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
-    var selectedLiteMode by remember { mutableStateOf(LiteModeOption.DEFAULT) }
     var showLiteModeDialog by remember { mutableStateOf(false) }
-    var isGamingDnd by remember { mutableStateOf(false) }
 
     val packageInfo = remember(app.packageName) {
         runCatching { packageManager.getPackageInfo(app.packageName, 0) }.getOrNull()
@@ -124,7 +126,7 @@ fun AppProfileScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { /* Action: overflow menu */ }) {
+                    IconButton(onClick = { }) {
                         Icon(
                             imageVector = Icons.Rounded.MoreVert,
                             contentDescription = "More",
@@ -151,7 +153,6 @@ fun AppProfileScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // App Header Overview Card
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -210,7 +211,6 @@ fun AppProfileScreen(
 
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        // UID Telemetry Badge
                         Box(
                             modifier = Modifier
                                 .background(
@@ -231,7 +231,6 @@ fun AppProfileScreen(
                 }
             }
 
-            // Info Card
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -262,17 +261,20 @@ fun AppProfileScreen(
                 }
             }
 
-            // Connected Settings Containers
             item {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    // Saklar Utama Row
+                    // Saklar Utama Row (Seluruh kartu clickable)
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onProfileChanged(profile.copy(saklarUtama = !profile.saklarUtama))
+                            },
                         shape = getConnectedContainerShape(
-                            if (isEnabled) ContainerPosition.Top else ContainerPosition.Single,
+                            if (profile.saklarUtama) ContainerPosition.Top else ContainerPosition.Single,
                             outerRadius = 18.dp
                         ),
                         colors = CardDefaults.cardColors(
@@ -300,8 +302,10 @@ fun AppProfileScreen(
                                 modifier = Modifier.weight(1f)
                             )
                             Switch(
-                                checked = isEnabled,
-                                onCheckedChange = onToggleEnabled,
+                                checked = profile.saklarUtama,
+                                onCheckedChange = { newState ->
+                                    onProfileChanged(profile.copy(saklarUtama = newState))
+                                },
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                                     checkedTrackColor = MaterialTheme.colorScheme.primary
@@ -310,14 +314,13 @@ fun AppProfileScreen(
                         }
                     }
 
-                    // Tampil hanya ketika Saklar Utama aktif
                     AnimatedVisibility(
-                        visible = isEnabled,
+                        visible = profile.saklarUtama,
                         enter = fadeIn() + expandVertically(),
                         exit = fadeOut() + shrinkVertically()
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            // Lite Mode Selector Row (Middle)
+                            // Lite Mode Selector Row
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -365,7 +368,7 @@ fun AppProfileScreen(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
-                                            text = selectedLiteMode.label,
+                                            text = LiteModeOption.fromValue(profile.liteMode).label,
                                             style = MaterialTheme.typography.labelMedium,
                                             fontWeight = FontWeight.SemiBold,
                                             color = MaterialTheme.colorScheme.onSecondaryContainer
@@ -374,9 +377,13 @@ fun AppProfileScreen(
                                 }
                             }
 
-                            // DND saat Gaming Row (Bottom)
+                            // DND saat Gaming Row (Seluruh kartu clickable)
                             Card(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        onProfileChanged(profile.copy(dnd = !profile.dnd))
+                                    },
                                 shape = getConnectedContainerShape(ContainerPosition.Bottom, outerRadius = 18.dp),
                                 colors = CardDefaults.cardColors(
                                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
@@ -411,8 +418,10 @@ fun AppProfileScreen(
                                     }
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Switch(
-                                        checked = isGamingDnd,
-                                        onCheckedChange = { isGamingDnd = it },
+                                        checked = profile.dnd,
+                                        onCheckedChange = { newState ->
+                                            onProfileChanged(profile.copy(dnd = newState))
+                                        },
                                         colors = SwitchDefaults.colors(
                                             checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                                             checkedTrackColor = MaterialTheme.colorScheme.primary
@@ -427,8 +436,8 @@ fun AppProfileScreen(
         }
     }
 
-    // Popup Dialog Selector Lite Mode (Hanya Judul, Pilihan Horizontal, & Tombol Selesai)
     if (showLiteModeDialog) {
+        val currentOption = LiteModeOption.fromValue(profile.liteMode)
         AlertDialog(
             onDismissRequest = { showLiteModeDialog = false },
             title = {
@@ -444,7 +453,7 @@ fun AppProfileScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     listOf(LiteModeOption.OFF, LiteModeOption.DEFAULT, LiteModeOption.ON).forEach { option ->
-                        val isSelected = selectedLiteMode == option
+                        val isSelected = currentOption == option
                         val containerColor = if (isSelected) {
                             MaterialTheme.colorScheme.primaryContainer
                         } else {
@@ -461,7 +470,9 @@ fun AppProfileScreen(
                                 .weight(1f)
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(containerColor)
-                                .clickable { selectedLiteMode = option }
+                                .clickable {
+                                    onProfileChanged(profile.copy(liteMode = option.value))
+                                }
                                 .padding(vertical = 12.dp),
                             contentAlignment = Alignment.Center
                         ) {

@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
+#[allow(dead_code)]
 pub const CONFIG_DIR: &str = "/data/adb/luminatweaks";
 pub const GLOBAL_CONFIG_PATH: &str = "/data/adb/luminatweaks/config.json";
 pub const APP_CONFIG_PATH: &str = "/data/adb/luminatweaks/app_config.json";

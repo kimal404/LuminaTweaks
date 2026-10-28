@@ -29,9 +29,11 @@ import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DeveloperBoard
+import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.MenuBook
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Smartphone
@@ -56,6 +58,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,11 +68,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.luminatweaks.data.ConfigRepository
+import com.luminatweaks.data.DaemonManager
 import com.luminatweaks.ui.component.LuminaBottomBar
 import com.luminatweaks.util.DeviceUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 enum class ContainerPosition {
@@ -106,18 +112,24 @@ fun HomeScreen() {
     var selectedTab by remember { mutableIntStateOf(0) }
     val kernelVersion = remember { System.getProperty("os.version") ?: "Unknown" }
     val deviceModel = remember { DeviceUtil.getMarketDeviceName(context) }
-    val daemonPid = remember { DeviceUtil.getDaemonPid() }
 
     var batteryTemp by remember { mutableStateOf(DeviceUtil.getBatteryTemperature(context)) }
+    var daemonPid by remember { mutableStateOf<String?>(null) }
 
+    // Loop monitoring background untuk temperatur & status PID daemon
     LaunchedEffect(Unit) {
+        // Cek dan jalankan daemon otomatis jika belum running
+        DaemonManager.startDaemon(context)
+
         withContext(Dispatchers.IO) {
             while (isActive) {
                 val currentTemp = DeviceUtil.getBatteryTemperature(context)
+                val currentPid = DaemonManager.getDaemonPid()
                 withContext(Dispatchers.Main) {
                     batteryTemp = currentTemp
+                    daemonPid = currentPid
                 }
-                delay(1500L)
+                delay(2000L)
             }
         }
     }
@@ -142,27 +154,15 @@ fun HomeScreen() {
 
                 (slideIntoContainer(
                     towards = direction,
-                    animationSpec = tween(
-                        durationMillis = 300,
-                        easing = FastOutSlowInEasing
-                    )
+                    animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
                 ) + fadeIn(
-                    animationSpec = tween(
-                        durationMillis = 300,
-                        easing = FastOutSlowInEasing
-                    )
+                    animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
                 )).togetherWith(
                     slideOutOfContainer(
                         towards = direction,
-                        animationSpec = tween(
-                            durationMillis = 300,
-                            easing = FastOutSlowInEasing
-                        )
+                        animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
                     ) + fadeOut(
-                        animationSpec = tween(
-                            durationMillis = 300,
-                            easing = FastOutSlowInEasing
-                        )
+                        animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
                     )
                 )
             },
@@ -176,7 +176,11 @@ fun HomeScreen() {
                     batteryTemp = batteryTemp,
                     daemonPid = daemonPid,
                     kernelVersion = kernelVersion,
-                    deviceModel = deviceModel
+                    deviceModel = deviceModel,
+                    onRestartDaemon = {
+                        daemonPid = null
+                        DaemonManager.restartDaemon(context)
+                    }
                 )
                 1 -> AppsScreen()
                 2 -> TweaksContent()
@@ -189,11 +193,16 @@ fun HomeScreen() {
 @Composable
 fun HomeDashboardContent(
     batteryTemp: String,
-    daemonPid: String,
+    daemonPid: String?,
     kernelVersion: String,
-    deviceModel: String
+    deviceModel: String,
+    onRestartDaemon: suspend () -> Unit
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    val coroutineScope = rememberCoroutineScope()
+    var isRestarting by remember { mutableStateOf(false) }
+
+    val isRunning = daemonPid != null
 
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
@@ -207,11 +216,21 @@ fun HomeDashboardContent(
                     )
                 },
                 actions = {
-                    IconButton(onClick = { /* Action: restart daemon */ }) {
+                    IconButton(
+                        onClick = {
+                            if (!isRestarting) {
+                                isRestarting = true
+                                coroutineScope.launch {
+                                    onRestartDaemon()
+                                    isRestarting = false
+                                }
+                            }
+                        }
+                    ) {
                         Icon(
                             imageVector = Icons.Rounded.PowerSettingsNew,
                             contentDescription = "Restart Core",
-                            tint = MaterialTheme.colorScheme.onSurface
+                            tint = if (isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                         )
                     }
                 },
@@ -234,13 +253,27 @@ fun HomeDashboardContent(
             ),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Hero Status Card (Working + PID)
+            // Status Card (Dynamic Working / Inactive)
             item {
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            if (!isRunning && !isRestarting) {
+                                isRestarting = true
+                                coroutineScope.launch {
+                                    onRestartDaemon()
+                                    isRestarting = false
+                                }
+                            }
+                        },
                     shape = MaterialTheme.shapes.medium,
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        containerColor = if (isRunning) {
+                            MaterialTheme.colorScheme.secondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.errorContainer
+                        }
                     )
                 ) {
                     Row(
@@ -250,30 +283,52 @@ fun HomeDashboardContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Rounded.CheckCircle,
+                            imageVector = if (isRunning) Icons.Rounded.CheckCircle else Icons.Rounded.ErrorOutline,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            tint = if (isRunning) {
+                                MaterialTheme.colorScheme.onSecondaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onErrorContainer
+                            },
                             modifier = Modifier.size(30.dp)
                         )
                         Spacer(modifier = Modifier.width(14.dp))
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Working",
+                                text = if (isRunning) "Working" else if (isRestarting) "Starting Core..." else "Core Inactive",
                                 style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                                fontWeight = FontWeight.Bold,
+                                color = if (isRunning) {
+                                    MaterialTheme.colorScheme.onSecondaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onErrorContainer
+                                }
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "PID: $daemonPid",
+                                text = if (isRunning) "PID: $daemonPid (Active background)" else "Tap to start or restart daemon",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f)
+                                color = if (isRunning) {
+                                    MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f)
+                                } else {
+                                    MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f)
+                                }
+                            )
+                        }
+
+                        if (!isRunning) {
+                            Icon(
+                                imageVector = Icons.Rounded.PlayArrow,
+                                contentDescription = "Start",
+                                tint = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }
                 }
             }
 
-            // Hardware Telemetry & Active Profile Row
+            // Quick Stats
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -343,7 +398,7 @@ fun HomeDashboardContent(
                 }
             }
 
-            // Connected Containers: Device Specifications
+            // Device Info Block
             item {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -370,7 +425,7 @@ fun HomeDashboardContent(
                 }
             }
 
-            // Connected Containers: Environment & Privileges
+            // Security Info Block
             item {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -391,7 +446,7 @@ fun HomeDashboardContent(
                 }
             }
 
-            // Connected Containers: Actions & Documentation
+            // Support & Documentation
             item {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -402,14 +457,14 @@ fun HomeDashboardContent(
                         title = "Support Us",
                         subtitle = "LuminaTweaks is free and open source forever. Support development through donations.",
                         position = ContainerPosition.Top,
-                        onClick = { /* Action: open support or donation link */ }
+                        onClick = { }
                     )
                     ConnectedActionCardRow(
                         icon = Icons.Rounded.MenuBook,
                         title = "Learn LuminaTweaks",
                         subtitle = "Explore documentation, kernel tweak parameters, and optimization guides.",
                         position = ContainerPosition.Bottom,
-                        onClick = { /* Action: open documentation */ }
+                        onClick = { }
                     )
                 }
             }
@@ -425,7 +480,13 @@ fun HomeDashboardContent(
 @Composable
 fun TweaksContent() {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    val coroutineScope = rememberCoroutineScope()
     var isGlobalLiteMode by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        val current = ConfigRepository.getGlobalLiteMode()
+        isGlobalLiteMode = current
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
@@ -457,7 +518,6 @@ fun TweaksContent() {
             ),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Lite Mode (Global) Toggle Card
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -496,7 +556,12 @@ fun TweaksContent() {
                         Spacer(modifier = Modifier.width(8.dp))
                         Switch(
                             checked = isGlobalLiteMode,
-                            onCheckedChange = { isGlobalLiteMode = it },
+                            onCheckedChange = { newState ->
+                                isGlobalLiteMode = newState
+                                coroutineScope.launch {
+                                    ConfigRepository.setGlobalLiteMode(newState)
+                                }
+                            },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                                 checkedTrackColor = MaterialTheme.colorScheme.primary

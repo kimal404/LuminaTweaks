@@ -49,6 +49,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,8 +62,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.luminatweaks.data.AppProfileConfig
+import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.model.AppItem
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -72,21 +76,23 @@ fun AppsScreen(
 ) {
     val context = LocalContext.current
     val packageManager = remember { context.packageManager }
+    val coroutineScope = rememberCoroutineScope()
 
     var rawApps by remember { mutableStateOf<List<AppItem>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var searchQuery by remember { mutableStateOf("") }
-
     var hideSystemApps by remember { mutableStateOf(true) }
     var showMoreMenu by remember { mutableStateOf(false) }
 
-    // State status aktif tiap aplikasi (default false / NONAKTIF)
-    val appActiveMap = remember { mutableStateMapOf<String, Boolean>() }
+    val appConfigs = remember { mutableStateMapOf<String, AppProfileConfig>() }
     var selectedPackageName by remember { mutableStateOf<String?>(null) }
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
     LaunchedEffect(Unit) {
+        val loadedConfigs = ConfigRepository.getAppConfigs()
+        appConfigs.putAll(loadedConfigs)
+
         withContext(Dispatchers.IO) {
             val installed = packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
             val parsedList = installed.map { appInfo ->
@@ -110,7 +116,6 @@ fun AppsScreen(
 
             withContext(Dispatchers.Main) {
                 rawApps = parsedList
-                parsedList.forEach { appActiveMap[it.packageName] = false }
                 isLoading = false
             }
         }
@@ -118,11 +123,15 @@ fun AppsScreen(
 
     val activeApp = rawApps.find { it.packageName == selectedPackageName }
     if (activeApp != null) {
+        val currentProfile = appConfigs[activeApp.packageName] ?: AppProfileConfig(pkg = activeApp.packageName)
         AppProfileScreen(
             app = activeApp,
-            isEnabled = appActiveMap[activeApp.packageName] ?: false,
-            onToggleEnabled = { newState ->
-                appActiveMap[activeApp.packageName] = newState
+            profile = currentProfile,
+            onProfileChanged = { updated ->
+                appConfigs[updated.pkg] = updated
+                coroutineScope.launch {
+                    ConfigRepository.saveAppConfig(updated)
+                }
             },
             onBack = { selectedPackageName = null }
         )
@@ -139,7 +148,6 @@ fun AppsScreen(
             matchesSystem && matchesSearch
         }
 
-        // Prioritas otomatis game ke paling atas, disusul nama A-Z
         filtered.sortedWith(
             compareByDescending<AppItem> { it.isGame }
                 .thenBy { it.name.lowercase() }
@@ -264,9 +272,12 @@ fun AppsScreen(
                         else -> ContainerPosition.Middle
                     }
 
+                    val profile = appConfigs[appItem.packageName]
+                    val isEnabled = profile?.saklarUtama ?: false
+
                     AppRowCard(
                         app = appItem,
-                        isEnabled = appActiveMap[appItem.packageName] ?: false,
+                        isEnabled = isEnabled,
                         position = position,
                         onClick = { selectedPackageName = appItem.packageName }
                     )
@@ -334,7 +345,6 @@ fun AppRowCard(
                     overflow = TextOverflow.Ellipsis
                 )
 
-                // Label Rekomendasi khusus game
                 if (app.isGame) {
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(

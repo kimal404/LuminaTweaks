@@ -2,6 +2,8 @@
 name = "luminad"
 version = "0.1.0"
 edition = "2021"
+authors = ["MalCLA <rizkysyahrul799@gmail.com>"]
+description = "Native background daemon for LuminaTweaks root manager"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
@@ -9,8 +11,8 @@ serde_json = "1.0"
 anyhow = "1.0"
 
 [profile.release]
-opt-level = "z"     # Optimasi ukuran binary
-lto = true          # Link-Time Optimization
-codegen-units = 1
-panic = "abort"
-strip = true        # Buang debug symbols
+opt-level = "z"     # Optimize for size
+lto = true          # Enable Link-Time Optimization across crates
+codegen-units = 1   # Maximize LTO optimization scope
+panic = "abort"     # Remove unwinding landing pads to reduce binary size
+strip = true        # Automatically strip debug symbols
