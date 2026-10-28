@@ -1,4 +1,4 @@
-use crate::{log_debug, log_warn};
+use crate::log_sub;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -39,7 +39,6 @@ impl ForegroundDetector {
                 for pid in pids {
                     if let Some(pkg) = Self::get_package_from_pid(pid) {
                         if Self::is_ignored_process(&pkg) {
-                            log_debug!("Detector", "Mengabaikan proses overlay/IME: {} (PID: {})", pkg, pid);
                             continue;
                         }
                         return Some(pkg);
@@ -76,7 +75,6 @@ impl ForegroundDetector {
 
         let app_id = real_uid % 100000;
         if app_id < 10000 {
-            // UID sistem (root, system, media, dll.)
             return None;
         }
 
@@ -112,7 +110,6 @@ impl ForegroundDetector {
     }
 
     fn detect_via_dumpsys() -> Option<String> {
-        log_warn!("Detector", "Cgroup tidak menghasilkan kandidat, beralih ke fallback dumpsys window");
         let output = Command::new("dumpsys").args(["window"]).output().ok()?;
         if !output.status.success() {
             return None;
