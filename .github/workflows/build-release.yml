@@ -145,6 +145,7 @@ jobs:
           <a href=\"${COMMIT_URL}\">Commit</a>
           <a href=\"${WORKFLOW_URL}\">Workflow run</a>"
 
+        python3 -c "from PIL import Image; im = Image.open('manager/app/src/main/res/drawable/app_logo.jpg').convert('RGB'); im.thumbnail((320, 320)); im.save('thumb.jpg', 'JPEG')"
           RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
             --form-string chat_id="${CHAT_ID}" \
             -F document=@"${TARGET_FILE}" \
