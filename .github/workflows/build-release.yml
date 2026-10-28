@@ -96,7 +96,7 @@ jobs:
           REPO: ${{ github.repository }}
           SERVER_URL: ${{ github.server_url }}
           COMMIT_URL: ${{ github.event.head_commit.url }}
-          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          COMMIT_RAW_MSG: ${{ github.event.head_commit.message }}
         run: |
           TARGET_FILE=$(find . -type f -name "*.apk" | grep -v "unaligned" | head -n 1)
 
@@ -108,23 +108,26 @@ jobs:
           echo "[*] Mengirim file: $TARGET_FILE"
           WORKFLOW_URL="${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
 
+          # Escape karakter HTML agar entity parser Telegram tidak error
+          SAFE_MSG=$(echo "$COMMIT_RAW_MSG" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+
           CAPTION="<b>LuminaTweaks</b>
           #ci_${RUN_NUM}
 
-          <pre>${COMMIT_MSG}</pre>
+          <pre>${SAFE_MSG}</pre>
 
           <a href=\"${COMMIT_URL}\">Commit</a>
           <a href=\"${WORKFLOW_URL}\">Workflow run</a>"
 
+          # Gunakan --form-string agar @ di username channel tidak dianggap sebagai file path
           RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
-            -F chat_id="${CHAT_ID}" \
+            --form-string chat_id="${CHAT_ID}" \
             -F document=@"${TARGET_FILE}" \
-            -F caption="${CAPTION}" \
-            -F parse_mode="HTML")
+            --form-string caption="${CAPTION}" \
+            --form-string parse_mode="HTML")
 
           echo "Response Telegram: $RESPONSE"
 
-          # Pastikan workflow gagal jika Telegram menolak
           if echo "$RESPONSE" | grep -q '"ok":false'; then
             exit 1
           fi
