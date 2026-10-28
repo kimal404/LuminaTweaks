@@ -35,7 +35,7 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 --decode > lumina-release.jks
+            python3 -c "import os, base64; open('lumina-release.jks', 'wb').write(base64.b64decode(os.environ['KEYSTORE_BASE64']))"
             echo "KEYSTORE_SOURCE=secret" >> $GITHUB_ENV
           else
             echo "Warning: KEYSTORE_BASE64 secret not found, generating fallback temporary keystore."
@@ -44,6 +44,10 @@ jobs:
               -storepass LuminaTweaks021 -keypass LuminaTweaks021
             echo "KEYSTORE_SOURCE=temp" >> $GITHUB_ENV
           fi
+
+      - name: Verify Keystore Integrity
+        run: |
+          keytool -list -v -keystore lumina-release.jks -storepass LuminaTweaks021 -alias LuminaTweaks021
 
       - name: Compile Release APK
         run: ./gradlew assembleRelease || ./gradlew assembleDebug
