@@ -86,6 +86,33 @@ jobs:
           path: dist/*.apk
           if-no-files-found: error
 
+      - name: Package Flashable ZIP Module
+        if: success()
+        run: |
+          mkdir -p dist
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          ZIP_NAME="LuminaTweaks-v2.0.0-ci${{ github.run_number }}-${SHORT_SHA}.zip"
+          ZIP_TARGET="${GITHUB_WORKSPACE}/dist/${ZIP_NAME}"
+
+          # Buat struktur sementara untuk ZIP
+          mkdir -p build_module/common
+          cp -r module/* build_module/
+
+          # Masukkan biner daemon luminad
+          cp manager/app/src/main/assets/bin/luminad build_module/common/luminad
+
+          # Masukkan APK manager hasil kompilasi
+          APK_FILE=$(find . -type f -name "*.apk" | grep -v "unaligned" | head -n 1)
+          cp "$APK_FILE" build_module/common/manager.apk
+
+          # Kemas menjadi ZIP flashable
+          cd build_module
+          zip -r9 "$ZIP_TARGET" ./*
+          cd ..
+
+          echo "ZIP_PATH=dist/${ZIP_NAME}" >> $GITHUB_ENV
+          echo "ZIP_FILENAME=${ZIP_NAME}" >> $GITHUB_ENV
+
       - name: Send Build to Telegram Channel
         if: success()
         env:
@@ -98,17 +125,16 @@ jobs:
           COMMIT_URL: ${{ github.event.head_commit.url }}
           COMMIT_RAW_MSG: ${{ github.event.head_commit.message }}
         run: |
-          TARGET_FILE=$(find . -type f -name "*.apk" | grep -v "unaligned" | head -n 1)
+          TARGET_FILE="${ZIP_PATH}"
 
-          if [ -z "$TARGET_FILE" ]; then
-            echo "[!] File APK hasil build tidak ditemukan!"
+          if [ ! -f "$TARGET_FILE" ]; then
+            echo "[!] File ZIP flashable tidak ditemukan!"
             exit 1
           fi
 
           echo "[*] Mengirim file: $TARGET_FILE"
           WORKFLOW_URL="${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
 
-          # Escape karakter HTML agar entity parser Telegram tidak error
           SAFE_MSG=$(echo "$COMMIT_RAW_MSG" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
 
           CAPTION="<b>LuminaTweaks</b>
@@ -119,7 +145,6 @@ jobs:
           <a href=\"${COMMIT_URL}\">Commit</a>
           <a href=\"${WORKFLOW_URL}\">Workflow run</a>"
 
-          # Gunakan --form-string agar @ di username channel tidak dianggap sebagai file path
           RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
             --form-string chat_id="${CHAT_ID}" \
             -F document=@"${TARGET_FILE}" \
