@@ -101,8 +101,13 @@ jobs:
           # Masukkan biner daemon luminad
           cp manager/app/src/main/assets/bin/luminad build_module/common/luminad
 
-          # Masukkan APK manager hasil kompilasi
-          APK_FILE=$(find . -type f -name "*.apk" | grep -v "unaligned" | head -n 1)
+          # Masukkan APK manager signed hasil kompilasi
+          APK_FILE=$(ls dist/*-signed.apk 2>/dev/null | head -n 1)
+          if [ -z "$APK_FILE" ]; then
+            APK_FILE=$(find manager/app/build/outputs/apk -name "*.apk" | grep -v "unsigned" | grep -v "unaligned" | head -n 1)
+          fi
+          echo "Mengemas APK ke dalam modul: $APK_FILE"
+          cp "$APK_FILE" build_module/manager.apk
           cp "$APK_FILE" build_module/common/manager.apk
 
           # Kemas menjadi ZIP flashable
