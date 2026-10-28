@@ -1,0 +1,38 @@
+
+      - name: Send Build to Telegram Channel
+        if: success()
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RUN_NUM: ${{ github.run_number }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          SERVER_URL: ${{ github.server_url }}
+          COMMIT_URL: ${{ github.event.head_commit.url }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          # Cari file output release (APK atau ZIP)
+          TARGET_FILE=$(find manager/app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
+
+          if [ -z "$TARGET_FILE" ]; then
+            echo "File output tidak ditemukan!"
+            exit 1
+          fi
+
+          FILE_NAME=$(basename "$TARGET_FILE")
+          WORKFLOW_URL="${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
+
+          # Format pesan persis seperti layout CI AZenith
+          CAPTION="<b>LuminaTweaks</b>
+          #ci_${RUN_NUM}
+
+          <pre>${COMMIT_MSG}</pre>
+
+          <a href=\"${COMMIT_URL}\">Commit</a>
+          <a href=\"${WORKFLOW_URL}\">Workflow run</a>"
+
+          curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
+            -F chat_id="${CHAT_ID}" \
+            -F document=@"${TARGET_FILE}" \
+            -F caption="${CAPTION}" \
+            -F parse_mode="HTML"
