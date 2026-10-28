@@ -63,7 +63,7 @@ object DeviceUtil {
     }
 
     fun getBatteryTemperature(context: Context): String {
-        // Priority 1: Android BatteryManager sticky broadcast (bypasses SELinux restrictions)
+        // Primary: read sticky battery intent (bypasses SELinux denial)
         try {
             val intentFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
             val batteryStatus = context.registerReceiver(null, intentFilter)
@@ -72,11 +72,16 @@ object DeviceUtil {
                 val celsius = rawTemp / 10.0
                 return String.format(Locale.US, "%.1f°C", celsius)
             }
-        } catch (_: Exception) {
-            // Fall through to sysfs check
-        }
+        } catch (_: Exception) {}
 
-        // Priority 2: Direct sysfs paths fallback
+        return getBatteryTemperatureFallback()
+    }
+
+    fun getBatteryTemperature(): String {
+        return getBatteryTemperatureFallback()
+    }
+
+    private fun getBatteryTemperatureFallback(): String {
         val paths = listOf(
             "/sys/class/power_supply/battery/temp",
             "/sys/class/power_supply/bms/temp",
@@ -92,11 +97,8 @@ object DeviceUtil {
                         return String.format(Locale.US, "%.1f°C", celsius)
                     }
                 }
-            } catch (_: Exception) {
-                // Ignore and inspect next path
-            }
+            } catch (_: Exception) {}
         }
-
         return "--.-°C"
     }
 

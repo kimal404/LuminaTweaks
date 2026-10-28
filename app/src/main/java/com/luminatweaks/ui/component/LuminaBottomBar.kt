@@ -8,8 +8,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.dp
 
 @Composable
 fun LuminaBottomBar(
@@ -17,25 +19,64 @@ fun LuminaBottomBar(
     onTabSelected: (Int) -> Unit
 ) {
     NavigationBar(
-        containerColor = MaterialTheme.colorScheme.surfaceContainer
+        containerColor = MaterialTheme.colorScheme.background,
+        tonalElevation = 0.dp
     ) {
         NavigationBarItem(
             selected = selectedTab == 0,
             onClick = { onTabSelected(0) },
-            icon = { Icon(Icons.Rounded.Home, contentDescription = null) },
-            label = { Text("Home") }
+            icon = {
+                Icon(
+                    imageVector = Icons.Rounded.Home,
+                    contentDescription = "Home"
+                )
+            },
+            label = { Text("Home") },
+            colors = NavigationBarItemDefaults.colors(
+                indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         )
+
         NavigationBarItem(
             selected = selectedTab == 1,
             onClick = { onTabSelected(1) },
-            icon = { Icon(Icons.Rounded.Apps, contentDescription = null) },
-            label = { Text("Apps") }
+            icon = {
+                Icon(
+                    imageVector = Icons.Rounded.Apps,
+                    contentDescription = "Apps"
+                )
+            },
+            label = { Text("Apps") },
+            colors = NavigationBarItemDefaults.colors(
+                indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         )
+
         NavigationBarItem(
             selected = selectedTab == 2,
             onClick = { onTabSelected(2) },
-            icon = { Icon(Icons.Rounded.Tune, contentDescription = null) },
-            label = { Text("Tweaks") }
+            icon = {
+                Icon(
+                    imageVector = Icons.Rounded.Tune,
+                    contentDescription = "Tweaks"
+                )
+            },
+            label = { Text("Tweaks") },
+            colors = NavigationBarItemDefaults.colors(
+                indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         )
     }
 }

@@ -1,7 +1,7 @@
 {
     "logs": [
         {
-            "outputFile": "com.luminatweaks.app-mergeDebugResources-41:/values-sq/values-sq.xml",
+            "outputFile": "com.luminatweaks.app-mergeDebugResources-43:/values-sq/values-sq.xml",
             "map": [
                 {
                     "source": "/data/user/0/com.tom.rv2ide/files/home/.gradle/caches/9.0.0/transforms/5909be65f7807e57112f920261e8dbce/transformed/ui-release/res/values-sq/values-sq.xml",

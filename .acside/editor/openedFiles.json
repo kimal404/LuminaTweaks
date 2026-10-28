@@ -14,7 +14,22 @@
           "line": 0
         }
       }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/LuminaTweaks/app/src/main/java/com/luminatweaks/ui/screen/AppsScreen.kt",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 12138,
+          "line": 300
+        },
+        "start": {
+          "column": 0,
+          "index": 0,
+          "line": 0
+        }
+      }
     }
   ],
-  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/LuminaTweaks/app/src/main/java/com/luminatweaks/ui/screen/SetupWizardScreen.kt"
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/LuminaTweaks/app/src/main/java/com/luminatweaks/ui/screen/AppsScreen.kt"
 }
