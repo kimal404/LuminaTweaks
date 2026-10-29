@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    name: Build & Sign APK
+    name: Build Daemon, Manager & Sign Module
     runs-on: ubuntu-latest
 
     steps:
@@ -23,6 +23,18 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+
+      - name: Setup Rust & Compile luminad
+        run: |
+          rustup target add aarch64-linux-android
+          NDK_BIN=$(ls -d $ANDROID_HOME/ndk/* | tail -n 1)/toolchains/llvm/prebuilt/linux-x86_64/bin
+          export PATH="$NDK_BIN:$PATH"
+          export CC_aarch64_linux_android="$NDK_BIN/aarch64-linux-android24-clang"
+          export AR_aarch64_linux_android="$NDK_BIN/llvm-ar"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$NDK_BIN/aarch64-linux-android24-clang"
+          cd daemon
+          cargo build --target aarch64-linux-android --release
+          cd ..
 
       - name: Setup Gradle Build Cache
         uses: gradle/actions/setup-gradle@v3
@@ -46,16 +58,12 @@ jobs:
           "
             echo "KEYSTORE_SOURCE=secret" >> $GITHUB_ENV
           else
-            echo "Warning: KEYSTORE_BASE64 secret not found, generating fallback temporary keystore."
+            echo "Warning: KEYSTORE_BASE64 secret not found, generating temporary keystore."
             keytool -genkey -v -keystore lumina-release.jks -alias LuminaTweaks021 -keyalg RSA -keysize 2048 -validity 10000 \
               -dname "CN=LuminaTweaks, OU=Development, O=Lumina, L=Jakarta, ST=Jakarta, C=ID" \
               -storepass LuminaTweaks021 -keypass LuminaTweaks021
             echo "KEYSTORE_SOURCE=temp" >> $GITHUB_ENV
           fi
-
-      - name: Verify Keystore Integrity
-        run: |
-          keytool -list -v -keystore lumina-release.jks -storepass LuminaTweaks021 -alias LuminaTweaks021
 
       - name: Compile Release APK
         working-directory: manager
@@ -79,13 +87,6 @@ jobs:
             fi
           done
 
-      - name: Upload Signed APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: LuminaTweaks-Release-Signed
-          path: dist/*.apk
-          if-no-files-found: error
-
       - name: Package Flashable ZIP Module
         if: success()
         run: |
@@ -94,23 +95,28 @@ jobs:
           ZIP_NAME="LuminaTweaks-v2.0.0-ci${{ github.run_number }}-${SHORT_SHA}.zip"
           ZIP_TARGET="${GITHUB_WORKSPACE}/dist/${ZIP_NAME}"
 
-          # Buat struktur sementara untuk ZIP
-          mkdir -p build_module/common
-          cp -r module/* build_module/
+          # Buat staging folder bersih
+          mkdir -p build_module
+          if [ -d "module" ]; then
+            cp -r module/* build_module/
+          fi
 
-          # Masukkan biner daemon luminad
-          cp manager/app/src/main/assets/bin/luminad build_module/common/luminad
+          # Salin biner luminad terbaru langsung sejajar di root modul
+          cp daemon/target/aarch64-linux-android/release/luminad build_module/luminad
+          chmod 755 build_module/luminad
 
-          # Masukkan APK manager signed hasil kompilasi
+          # Salin 1 APK manager signed sejajar di root modul
           APK_FILE=$(ls dist/*-signed.apk 2>/dev/null | head -n 1)
           if [ -z "$APK_FILE" ]; then
             APK_FILE=$(find manager/app/build/outputs/apk -name "*.apk" | grep -v "unsigned" | grep -v "unaligned" | head -n 1)
           fi
           echo "Mengemas APK ke dalam modul: $APK_FILE"
           cp "$APK_FILE" build_module/manager.apk
-          cp "$APK_FILE" build_module/common/manager.apk
 
-          # Kemas menjadi ZIP flashable
+          # Hapus sisa folder common jika ada
+          rm -rf build_module/common
+
+          # Kemas menjadi ZIP flashable flat
           cd build_module
           zip -r9 "$ZIP_TARGET" ./*
           cd ..
@@ -153,7 +159,6 @@ jobs:
           RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
             --form-string chat_id="${CHAT_ID}" \
             -F document=@"${TARGET_FILE}" \
-            -F "thumbnail=@thumb.jpg" \
             --form-string caption="${CAPTION}" \
             --form-string parse_mode="HTML")
 
