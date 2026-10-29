@@ -19,4 +19,12 @@ if [ -f "$MODPATH/manager.apk" ]; then
 fi
 
 set_perm "$MODPATH/service.sh" 0 0 0755
+
+# Jika instalasi dilakukan saat sistem sudah booting, aktifkan daemon sekarang juga
+if [ "$(getprop sys.boot_completed)" = "1" ]; then
+    ui_print "- Starting native daemon immediately..."
+    killall -9 luminad 2>/dev/null
+    nohup "$BASE_DIR/bin/luminad" </dev/null >/dev/null 2>&1 &
+fi
+
 ui_print "- Installation finished successfully!"

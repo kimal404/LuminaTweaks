@@ -20,4 +20,4 @@ fi
 chmod 755 "$BASE_DIR/bin/luminad"
 
 killall -9 luminad 2>/dev/null
-exec "$BASE_DIR/bin/luminad" &
+nohup "$BASE_DIR/bin/luminad" </dev/null >/dev/null 2>&1 &

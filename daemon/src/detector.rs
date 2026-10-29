@@ -13,8 +13,23 @@ pub fn get_focused_package() -> Option<String> {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
 
+    // Prioritaskan mCurrentFocus terlebih dahulu
     for line in stdout.lines() {
-        if line.contains("mCurrentFocus") || line.contains("mFocusedApp") {
+        if line.contains("mCurrentFocus") {
+            if let Some(token) = line.split_whitespace().find(|t| t.contains('/')) {
+                let cleaned = token.trim_start_matches('{').trim_end_matches('}');
+                if let Some(pkg) = cleaned.split('/').next() {
+                    if !pkg.is_empty() && pkg != "null" {
+                        return Some(pkg.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback ke mFocusedApp jika mCurrentFocus tidak ditemukan
+    for line in stdout.lines() {
+        if line.contains("mFocusedApp") {
             if let Some(token) = line.split_whitespace().find(|t| t.contains('/')) {
                 let cleaned = token.trim_start_matches('{').trim_end_matches('}');
                 if let Some(pkg) = cleaned.split('/').next() {
@@ -93,15 +108,46 @@ pub fn is_lite_mode_active() -> bool {
 
 /// Checks whether an app has active performance profile enabled
 pub fn is_app_enabled(pkg: &str) -> bool {
+    // 1. Cek di app_config.json global
+    if let Ok(content) = std::fs::read_to_string("/data/adb/luminatweaks/app_config.json") {
+        if content.contains(pkg) {
+            let lower = content.to_ascii_lowercase();
+            if lower.contains("\"saklarutama\":true") || lower.contains("\"saklarutama\": true") {
+                return true;
+            }
+        }
+    }
+
+    // 2. Cek di configs/{pkg}.json
     let conf_path = format!("/data/adb/luminatweaks/configs/{}.json", pkg);
     if let Ok(content) = std::fs::read_to_string(conf_path) {
         return content.contains("\"saklarUtama\":true") || content.contains("\"saklarUtama\": true");
     }
+
     pkg == "flar2.devcheck"
 }
 
-/// Checks whether an app specifically has Lite Mode enabled in its per-app JSON config
+/// Checks whether an app specifically has Lite Mode enabled
 pub fn is_app_lite_mode(pkg: &str) -> bool {
+    // 1. Cek di app_config.json
+    if let Ok(content) = std::fs::read_to_string("/data/adb/luminatweaks/app_config.json") {
+        if content.contains(pkg) {
+            let lower = content.to_ascii_lowercase();
+            if lower.contains("\"modelite\":true")
+                || lower.contains("\"modelite\": true")
+                || lower.contains("\"litemode\":true")
+                || lower.contains("\"litemode\": true")
+                || lower.contains("\"islite\":true")
+                || lower.contains("\"islite\": true")
+                || lower.contains("\"performancelite\":true")
+                || lower.contains("\"performancelite\": true")
+            {
+                return true;
+            }
+        }
+    }
+
+    // 2. Cek di configs/{pkg}.json
     let conf_path = format!("/data/adb/luminatweaks/configs/{}.json", pkg);
     if let Ok(content) = std::fs::read_to_string(conf_path) {
         let lower = content.to_ascii_lowercase();
@@ -112,11 +158,8 @@ pub fn is_app_lite_mode(pkg: &str) -> bool {
             || lower.contains("\"islite\":true")
             || lower.contains("\"islite\": true")
             || lower.contains("\"performancelite\":true")
-            || lower.contains("\"performancelite\": true")
-            || lower.contains("\"profile\":\"lite\"")
-            || lower.contains("\"profile\": \"lite\"")
-            || lower.contains("\"profile\":\"performance_lite\"")
-            || lower.contains("\"profile\": \"performance_lite\"");
+            || lower.contains("\"performancelite\": true");
     }
+
     false
 }
