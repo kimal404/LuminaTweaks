@@ -9,7 +9,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -25,7 +24,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DeveloperBoard
@@ -47,8 +45,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
@@ -68,7 +64,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DaemonManager
 import com.luminatweaks.ui.component.LuminaBottomBar
 import com.luminatweaks.util.DeviceUtil
@@ -116,9 +111,7 @@ fun HomeScreen() {
     var batteryTemp by remember { mutableStateOf(DeviceUtil.getBatteryTemperature(context)) }
     var daemonPid by remember { mutableStateOf<String?>(null) }
 
-    // Loop monitoring background untuk temperatur & status PID daemon
     LaunchedEffect(Unit) {
-        // Cek dan jalankan daemon otomatis jika belum running
         DaemonManager.startDaemon(context)
 
         withContext(Dispatchers.IO) {
@@ -183,7 +176,7 @@ fun HomeScreen() {
                     }
                 )
                 1 -> AppsScreen()
-                2 -> TweaksContent()
+                2 -> TweaksScreen()
             }
         }
     }
@@ -253,7 +246,6 @@ fun HomeDashboardContent(
             ),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Status Card (Dynamic Working / Inactive)
             item {
                 Card(
                     modifier = Modifier
@@ -328,7 +320,6 @@ fun HomeDashboardContent(
                 }
             }
 
-            // Quick Stats
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -398,7 +389,6 @@ fun HomeDashboardContent(
                 }
             }
 
-            // Device Info Block
             item {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -425,7 +415,6 @@ fun HomeDashboardContent(
                 }
             }
 
-            // Security Info Block
             item {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -446,7 +435,6 @@ fun HomeDashboardContent(
                 }
             }
 
-            // Support & Documentation
             item {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -471,104 +459,6 @@ fun HomeDashboardContent(
 
             item {
                 Spacer(modifier = Modifier.height(16.dp))
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun TweaksContent() {
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
-    val coroutineScope = rememberCoroutineScope()
-    var isGlobalLiteMode by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        val current = ConfigRepository.getGlobalLiteMode()
-        isGlobalLiteMode = current
-    }
-
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = {
-            MediumTopAppBar(
-                title = {
-                    Text(
-                        text = "Tweaks Suite",
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                scrollBehavior = scrollBehavior,
-                windowInsets = WindowInsets.statusBars,
-                colors = TopAppBarDefaults.mediumTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    scrolledContainerColor = MaterialTheme.colorScheme.background
-                )
-            )
-        }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding(),
-                bottom = 16.dp,
-                start = 16.dp,
-                end = 16.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = getConnectedContainerShape(ContainerPosition.Single, outerRadius = 18.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.BatterySaver,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Lite Mode (Global)",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Terapkan profil gaming ringan ke semua aplikasi secara global",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Switch(
-                            checked = isGlobalLiteMode,
-                            onCheckedChange = { newState ->
-                                isGlobalLiteMode = newState
-                                coroutineScope.launch {
-                                    ConfigRepository.setGlobalLiteMode(newState)
-                                }
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                checkedTrackColor = MaterialTheme.colorScheme.primary
-                            )
-                        )
-                    }
-                }
             }
         }
     }
