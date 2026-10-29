@@ -16,6 +16,8 @@ data class AppProfileConfig(
     val dnd: Boolean = false
 )
 
+data class DisplayRrMode(val id: Int, val hz: Int)
+
 object ConfigRepository {
     private const val CONFIG_DIR = "/data/adb/luminatweaks"
     private const val GLOBAL_CONFIG_PATH = "$CONFIG_DIR/config.json"
@@ -116,6 +118,34 @@ object ConfigRepository {
             }
             val rawJson = arr.toString()
             runSuCmd("echo '$rawJson' > $APP_CONFIG_PATH")
+        }
+    }
+    suspend fun getRefreshRateModes(): List<DisplayRrMode> = withContext(Dispatchers.IO) {
+        val content = runSuCmd("cat /data/adb/luminatweaks/rr_modes.json 2>/dev/null")
+        if (content.isBlank()) return@withContext emptyList()
+        val list = mutableListOf<DisplayRrMode>()
+        try {
+            val arr = JSONArray(content)
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                list.add(DisplayRrMode(obj.getInt("id"), obj.getInt("hz")))
+            }
+        } catch (_: Exception) {}
+        list.sortedBy { it.hz }
+    }
+
+    suspend fun getCurrentRefreshRateId(): Int? = withContext(Dispatchers.IO) {
+        val content = runSuCmd("cat /data/adb/luminatweaks/current_rr.txt 2>/dev/null").trim()
+        content.toIntOrNull()
+    }
+
+    suspend fun setRefreshRate(id: Int?) = withContext(Dispatchers.IO) {
+        if (id != null) {
+            runSuCmd("echo $id > /data/adb/luminatweaks/current_rr.txt")
+            runSuCmd("[ -d /data/adb/modules/luminatweaks ] && echo $id > /data/adb/modules/luminatweaks/current_rr.txt")
+            runSuCmd("/system/bin/service call SurfaceFlinger 1035 i32 $id")
+        } else {
+            runSuCmd("rm -f /data/adb/luminatweaks/current_rr.txt /data/adb/modules/luminatweaks/current_rr.txt")
         }
     }
 }

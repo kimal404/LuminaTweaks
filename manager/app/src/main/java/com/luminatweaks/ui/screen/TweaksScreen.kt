@@ -2,9 +2,7 @@ package com.luminatweaks.ui.screen
 
 import android.content.Context
 import android.content.pm.PackageManager
-import android.hardware.display.DisplayManager
 import android.os.Build
-import android.view.Display
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -55,29 +53,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.luminatweaks.data.ConfigRepository
+import com.luminatweaks.data.DisplayRrMode
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
-
-fun getSupportedRefreshRates(context: Context): List<String> {
-    val rates = mutableListOf("Default / Dynamic")
-    try {
-        val dm = context.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
-        val display = dm?.getDisplay(Display.DEFAULT_DISPLAY)
-        val modes = display?.supportedModes ?: emptyArray()
-        val detected = modes
-            .map { it.refreshRate.roundToInt() }
-            .filter { it > 0 }
-            .distinct()
-            .sorted()
-
-        detected.forEach { rate ->
-            rates.add("$rate Hz")
-        }
-    } catch (_: Exception) {
-        rates.addAll(listOf("60 Hz", "120 Hz"))
-    }
-    return rates
-}
 
 fun getSupportedRenderers(context: Context): List<String> {
     val renderers = mutableListOf("System Default", "OpenGL ES")
@@ -100,18 +77,28 @@ fun TweaksScreen() {
 
     var isGlobalLiteMode by remember { mutableStateOf(false) }
 
-    val supportedRefreshRates = remember { getSupportedRefreshRates(context) }
-    val supportedRenderers = remember { getSupportedRenderers(context) }
+    var rrModes by remember { mutableStateOf<List<DisplayRrMode>>(emptyList()) }
+    var currentRrId by remember { mutableStateOf<Int?>(null) }
 
-    var selectedRefreshRate by remember { mutableStateOf("Default / Dynamic") }
+    val supportedRenderers = remember { getSupportedRenderers(context) }
     var selectedRenderer by remember { mutableStateOf("System Default") }
 
     var showRefreshRateDialog by remember { mutableStateOf(false) }
     var showRenderDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        val current = ConfigRepository.getGlobalLiteMode()
-        isGlobalLiteMode = current
+        isGlobalLiteMode = ConfigRepository.getGlobalLiteMode()
+        rrModes = ConfigRepository.getRefreshRateModes()
+        currentRrId = ConfigRepository.getCurrentRefreshRateId()
+    }
+
+    val currentRrText = remember(currentRrId, rrModes) {
+        if (currentRrId == null) {
+            "Default / Dynamic"
+        } else {
+            val matched = rrModes.find { it.id == currentRrId }
+            if (matched != null) "${matched.hz} Hz" else "Mode $currentRrId"
+        }
     }
 
     if (showRefreshRateDialog) {
@@ -128,15 +115,48 @@ fun TweaksScreen() {
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    supportedRefreshRates.forEach { rate ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = (currentRrId == null),
+                                onClick = {
+                                    currentRrId = null
+                                    showRefreshRateDialog = false
+                                    coroutineScope.launch {
+                                        ConfigRepository.setRefreshRate(null)
+                                    }
+                                },
+                                role = Role.RadioButton
+                            )
+                            .padding(vertical = 10.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = (currentRrId == null),
+                            onClick = null
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Default / Dynamic",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    rrModes.forEach { mode ->
+                        val isSelected = currentRrId == mode.id
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .selectable(
-                                    selected = (rate == selectedRefreshRate),
+                                    selected = isSelected,
                                     onClick = {
-                                        selectedRefreshRate = rate
+                                        currentRrId = mode.id
                                         showRefreshRateDialog = false
+                                        coroutineScope.launch {
+                                            ConfigRepository.setRefreshRate(mode.id)
+                                        }
                                     },
                                     role = Role.RadioButton
                                 )
@@ -144,12 +164,12 @@ fun TweaksScreen() {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             RadioButton(
-                                selected = (rate == selectedRefreshRate),
+                                selected = isSelected,
                                 onClick = null
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                text = rate,
+                                text = "${mode.hz} Hz",
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -284,7 +304,7 @@ fun TweaksScreen() {
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = selectedRefreshRate,
+                                text = currentRrText,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.primary
                             )
