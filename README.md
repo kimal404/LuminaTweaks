@@ -1,7 +1,7 @@
 # LuminaTweaks
 
-Android system optimization daemon and performance tweaks suite.
+Android system optimization daemon & tweaks suite.
 
-## Acknowledgements & Credits
-* **[AZenith](https://github.com/Zexshia)** by **Zexshia** – Reference implementation for HWUI graphics renderer pipeline configuration logic (Licensed under Apache 2.0).
-* **[libsu](https://github.com/topjohnwu/libsu)** by **topjohnwu** – Complete Android root shell solution.
+## Tweak Sources
+- **AZenith** – by @Zexshia (alongside @rianixia & @kanaochar)
+- **Encore Tweak** – by @Rem01Gaming
