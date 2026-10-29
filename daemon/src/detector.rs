@@ -49,14 +49,12 @@ pub fn is_master_enabled() -> bool {
 
 /// Checks if Android Battery Saver mode is active
 pub fn is_low_power_active() -> bool {
-    // 1. Cek via sysprop (kalau ada modul/ROM khusus yang pasang)
     if let Ok(output) = Command::new("getprop").arg("low_power").output() {
         if String::from_utf8_lossy(&output.stdout).trim() == "1" {
             return true;
         }
     }
 
-    // 2. Cek via Android Settings Global (Standar AOSP / HyperOS / MIUI)
     if let Ok(output) = Command::new("settings").args(["get", "global", "low_power"]).output() {
         if String::from_utf8_lossy(&output.stdout).trim() == "1" {
             return true;
@@ -66,9 +64,8 @@ pub fn is_low_power_active() -> bool {
     false
 }
 
-/// Checks if Lite Mode is active (via flag file, persist sysprop, or battery saver)
+/// Checks if Global Lite Mode is active
 pub fn is_lite_mode_active() -> bool {
-    // 1. Cek persist sysprop
     if let Ok(output) = Command::new("getprop").arg("persist.lumina.litemode").output() {
         let val = String::from_utf8_lossy(&output.stdout).trim().to_string();
         if val == "1" || val == "true" {
@@ -78,22 +75,15 @@ pub fn is_lite_mode_active() -> bool {
         }
     }
 
-    // 2. Cek file flag dari switch UI Manager
-    if let Ok(content) = std::fs::read_to_string("/data/adb/luminatweaks/configs/lite_mode") {
-        let trimmed = content.trim();
-        if trimmed == "1" || trimmed.eq_ignore_ascii_case("true") {
-            return true;
+    for path in ["/data/adb/luminatweaks/configs/lite_mode", "/data/adb/luminatweaks/lite_mode.conf"] {
+        if let Ok(content) = std::fs::read_to_string(path) {
+            let trimmed = content.trim();
+            if trimmed == "1" || trimmed.eq_ignore_ascii_case("true") {
+                return true;
+            }
         }
     }
 
-    if let Ok(content) = std::fs::read_to_string("/data/adb/luminatweaks/lite_mode.conf") {
-        let trimmed = content.trim();
-        if trimmed == "1" || trimmed.eq_ignore_ascii_case("true") {
-            return true;
-        }
-    }
-
-    // 3. Fallback: Battery Saver aktif dianggap Mode Lite
     if is_low_power_active() {
         return true;
     }
@@ -108,4 +98,25 @@ pub fn is_app_enabled(pkg: &str) -> bool {
         return content.contains("\"saklarUtama\":true") || content.contains("\"saklarUtama\": true");
     }
     pkg == "flar2.devcheck"
+}
+
+/// Checks whether an app specifically has Lite Mode enabled in its per-app JSON config
+pub fn is_app_lite_mode(pkg: &str) -> bool {
+    let conf_path = format!("/data/adb/luminatweaks/configs/{}.json", pkg);
+    if let Ok(content) = std::fs::read_to_string(conf_path) {
+        let lower = content.to_ascii_lowercase();
+        return lower.contains("\"modelite\":true")
+            || lower.contains("\"modelite\": true")
+            || lower.contains("\"litemode\":true")
+            || lower.contains("\"litemode\": true")
+            || lower.contains("\"islite\":true")
+            || lower.contains("\"islite\": true")
+            || lower.contains("\"performancelite\":true")
+            || lower.contains("\"performancelite\": true")
+            || lower.contains("\"profile\":\"lite\"")
+            || lower.contains("\"profile\": \"lite\"")
+            || lower.contains("\"profile\":\"performance_lite\"")
+            || lower.contains("\"profile\": \"performance_lite\"");
+    }
+    false
 }

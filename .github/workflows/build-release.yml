@@ -36,6 +36,11 @@ jobs:
           cargo build --target aarch64-linux-android --release
           cd ..
 
+          # SINKRONISASI: Salin biner terbaru ke dalam assets Manager sebelum APK di-build
+          mkdir -p manager/app/src/main/assets/bin
+          cp daemon/target/aarch64-linux-android/release/luminad manager/app/src/main/assets/bin/luminad
+          chmod 755 manager/app/src/main/assets/bin/luminad
+
       - name: Setup Gradle Build Cache
         uses: gradle/actions/setup-gradle@v3
 
@@ -95,22 +100,28 @@ jobs:
           ZIP_NAME="LuminaTweaks-v2.0.0-ci${{ github.run_number }}-${SHORT_SHA}.zip"
           ZIP_TARGET="${GITHUB_WORKSPACE}/dist/${ZIP_NAME}"
 
+          # Buat staging folder modul
           mkdir -p build_module
           if [ -d "module" ]; then
             cp -r module/* build_module/
           fi
 
+          # Masukkan biner daemon hasil kompilasi Rust
           cp daemon/target/aarch64-linux-android/release/luminad build_module/luminad
           chmod 755 build_module/luminad
 
+          # Ambil 1 APK signed rilis
           APK_FILE=$(ls dist/*-signed.apk 2>/dev/null | head -n 1)
           if [ -z "$APK_FILE" ]; then
             APK_FILE=$(find manager/app/build/outputs/apk/release -name "*.apk" | head -n 1)
           fi
+          echo "Mengemas APK ke dalam modul: $APK_FILE"
           cp "$APK_FILE" build_module/manager.apk
 
+          # Bersihkan subfolder common agar struktur modul tetap flat
           rm -rf build_module/common
 
+          # Kemas ke ZIP flashable
           cd build_module
           zip -r9 "$ZIP_TARGET" ./*
           cd ..

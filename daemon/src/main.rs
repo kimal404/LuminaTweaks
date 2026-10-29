@@ -7,8 +7,8 @@ mod notifier;
 use std::thread;
 use std::time::Duration;
 use detector::{
-    get_focused_package, is_app_enabled, is_lite_mode_active, is_low_power_active,
-    is_master_enabled,
+    get_focused_package, is_app_enabled, is_app_lite_mode, is_lite_mode_active,
+    is_low_power_active, is_master_enabled,
 };
 use notifier::{send_notification, NotificationPayload};
 
@@ -29,7 +29,11 @@ fn main() {
         if is_master_enabled() {
             let focused = get_focused_package();
             let is_target_active = focused.as_deref().map_or(false, is_app_enabled);
-            let is_lite = is_lite_mode_active();
+            let is_global_lite = is_lite_mode_active();
+            let is_per_app_lite = focused.as_deref().map_or(false, is_app_lite_mode);
+
+            // Mode Lite aktif jika flag global menyala ATAU aplikasi target mengaktifkan per-app lite
+            let is_lite = is_global_lite || is_per_app_lite;
 
             let target_profile = if is_target_active {
                 if is_lite {
@@ -37,7 +41,7 @@ fn main() {
                 } else {
                     Profile::Performance
                 }
-            } else if is_low_power_active() || is_lite {
+            } else if is_low_power_active() || is_global_lite {
                 Profile::Eco
             } else {
                 Profile::Balance
