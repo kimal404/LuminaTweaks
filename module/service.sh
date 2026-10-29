@@ -11,7 +11,7 @@ while ! pm path android >/dev/null 2>&1; do
     sleep 1
 done
 
-# 3. Tunggu sampai user membuka kunci layar pertama kali (CE Storage Decrypted)
+# 3. Tunggu sampai user membuka kunci layar pertama kali
 while [ "$(pm is-user-unlocked 0 2>/dev/null)" != "true" ]; do
     sleep 2
 done
@@ -30,16 +30,15 @@ fi
 
 chmod 755 "$BASE_DIR/bin/luminad"
 
-# Pastikan izin notifikasi tetap aktif pasca-boot
+# Pastikan izin notifikasi aktif
 pm grant com.luminatweaks android.permission.POST_NOTIFICATIONS >/dev/null 2>&1
 cmd appops set com.luminatweaks POST_NOTIFICATION allow >/dev/null 2>&1
 
-# Broadcast notifikasi modul berhasil dimuat ke User 0
-am broadcast --user 0 -a com.luminatweaks.ACTION_NOTIFY \
-    -p com.luminatweaks \
-    --receiver-foreground \
-    --include-stopped-packages \
-    -f 0x01000020 \
+# Broadcast notifikasi modul berhasil dimuat (Explicit Target)
+am broadcast --user 0 \
+    -n com.luminatweaks/com.luminatweaks.receiver.LuminaReceiver \
+    -a com.luminatweaks.ACTION_NOTIFY \
+    -f 0x11000020 \
     --es notifytitle "LuminaTweaks" \
     --es notifytext "Module loaded successfully" \
     --ez is_profile false \

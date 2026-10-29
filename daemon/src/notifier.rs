@@ -35,11 +35,9 @@ pub fn send_notification(payload: NotificationPayload) {
     let mut cmd = Command::new("am");
     cmd.arg("broadcast")
        .arg("--user").arg("0")
+       .arg("-n").arg("com.luminatweaks/com.luminatweaks.receiver.LuminaReceiver")
        .arg("-a").arg("com.luminatweaks.ACTION_NOTIFY")
-       .arg("-p").arg("com.luminatweaks")
-       .arg("--receiver-foreground")
-       .arg("--include-stopped-packages")
-       .arg("-f").arg("0x01000020")
+       .arg("-f").arg("0x11000020")
        .arg("--es").arg("notifytitle").arg(payload.title)
        .arg("--es").arg("notifytext").arg(payload.text);
 
@@ -68,11 +66,9 @@ pub fn clear_all_notifications() {
     let _ = Command::new("am")
         .arg("broadcast")
         .arg("--user").arg("0")
+        .arg("-n").arg("com.luminatweaks/com.luminatweaks.receiver.LuminaReceiver")
         .arg("-a").arg("com.luminatweaks.ACTION_NOTIFY")
-        .arg("-p").arg("com.luminatweaks")
-        .arg("--receiver-foreground")
-        .arg("--include-stopped-packages")
-        .arg("-f").arg("0x01000020")
+        .arg("-f").arg("0x11000020")
         .arg("--ez").arg("clearall").arg("true")
         .spawn();
 }
