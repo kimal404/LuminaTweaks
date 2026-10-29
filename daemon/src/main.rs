@@ -84,7 +84,7 @@ fn main() {
                 } else {
                     Profile::Performance
                 }
-            } else if is_low_power_active() || is_global_lite {
+            } else if is_low_power_active() {
                 Profile::Eco
             } else {
                 Profile::Balance
