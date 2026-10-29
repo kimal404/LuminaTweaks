@@ -66,6 +66,41 @@ pub fn is_low_power_active() -> bool {
     false
 }
 
+/// Checks if Lite Mode is active (via flag file, persist sysprop, or battery saver)
+pub fn is_lite_mode_active() -> bool {
+    // 1. Cek persist sysprop
+    if let Ok(output) = Command::new("getprop").arg("persist.lumina.litemode").output() {
+        let val = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if val == "1" || val == "true" {
+            return true;
+        } else if val == "0" || val == "false" {
+            return false;
+        }
+    }
+
+    // 2. Cek file flag dari switch UI Manager
+    if let Ok(content) = std::fs::read_to_string("/data/adb/luminatweaks/configs/lite_mode") {
+        let trimmed = content.trim();
+        if trimmed == "1" || trimmed.eq_ignore_ascii_case("true") {
+            return true;
+        }
+    }
+
+    if let Ok(content) = std::fs::read_to_string("/data/adb/luminatweaks/lite_mode.conf") {
+        let trimmed = content.trim();
+        if trimmed == "1" || trimmed.eq_ignore_ascii_case("true") {
+            return true;
+        }
+    }
+
+    // 3. Fallback: Battery Saver aktif dianggap Mode Lite
+    if is_low_power_active() {
+        return true;
+    }
+
+    false
+}
+
 /// Checks whether an app has active performance profile enabled
 pub fn is_app_enabled(pkg: &str) -> bool {
     let conf_path = format!("/data/adb/luminatweaks/configs/{}.json", pkg);

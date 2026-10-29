@@ -570,6 +570,25 @@ pub fn performance_profile() {
     });
 }
 
+/// Applies Performance Lite Profile (Universal CPU/IO boost without SoC vendor locks)
+pub fn performance_lite_profile() {
+    crate::log!("[*] Applying Performance Lite Profile (Universal Only, SoC Bypass)...");
+    apply_universal_performance();
+
+    // Revert/Ensure vendor chipset nodes stay at balanced baseline
+    let soc = get_soc_type();
+    thread::spawn(move || {
+        match soc {
+            1 => mediatek_balance(),
+            2 => snapdragon_balance(),
+            3 => exynos_balance(),
+            4 => unisoc_balance(),
+            5 => tensor_balance(),
+            _ => crate::log!("[*] Unknown SoC: Vendor nodes bypassed."),
+        }
+    });
+}
+
 fn apply_universal_eco() {
     crate::log!("[*] Applying Universal ECO Tweaks...");
 
