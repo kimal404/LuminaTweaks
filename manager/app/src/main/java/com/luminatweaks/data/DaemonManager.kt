@@ -2,6 +2,7 @@ package com.luminatweaks.data
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.File
@@ -125,7 +126,7 @@ object DaemonManager {
 
         var retries = 5
         while (retries > 0) {
-            kotlinx.coroutines.delay(300)
+            delay(300)
             if (isDaemonRunning()) return@withContext true
             retries--
         }

@@ -1,6 +1,25 @@
-*.jks
-keystore_base64.txt
+*.log
+*.img
+target/
+daemon/target/
 
-build/
+# Gradle & Build cache
 .gradle/
+manager/.gradle/
+build/
+manager/build/
+manager/app/build/
+captures/
+
+# AndroidIDE & Editor metadata
+.acside/
+manager/.acside/
+.idea/
+*.iml
 local.properties
+.DS_Store
+
+# Keystore & Signing Secrets
+*.jks
+*.keystore
+*keystore_base64*

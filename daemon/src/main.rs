@@ -1,63 +1,74 @@
-mod config;
+#[macro_use]
+mod logger;
 mod detector;
 mod engine;
-mod logger;
+mod notifier;
 
-use config::{ConfigManager, APP_CONFIG_PATH, GLOBAL_CONFIG_PATH};
-use detector::ForegroundDetector;
-use engine::PolicyEngine;
-use std::thread::sleep;
+use std::thread;
 use std::time::Duration;
+use detector::{get_focused_package, is_app_enabled, is_low_power_active, is_master_enabled};
+use notifier::{send_notification, NotificationPayload};
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Profile {
+    Eco,
+    Balance,
+    Performance,
+}
 
 fn main() {
-    log_sub!("CORE", "LuminaCore Daemon initialized (PID: {})", std::process::id());
-    log_sub!("CORE", "Logger attached: {}", logger::LOG_FILE_PATH);
+    log!("[*] luminad daemon started successfully");
 
-    let mut last_pkg: Option<String> = None;
-    let mut last_effective_lite: Option<bool> = None;
-    let mut last_dnd_state: Option<bool> = None;
+    let mut current_profile = Profile::Balance;
 
     loop {
-        let current_pkg = ForegroundDetector::get_foreground_package()
-            .unwrap_or_else(|| "unknown".to_string());
+        if is_master_enabled() {
+            let focused = get_focused_package();
+            let is_target_active = focused.as_deref().map_or(false, is_app_enabled);
 
-        let global_config = ConfigManager::load_global_config(GLOBAL_CONFIG_PATH);
-        let app_configs = ConfigManager::load_app_configs(APP_CONFIG_PATH).unwrap_or_default();
+            if is_target_active {
+                if current_profile != Profile::Performance {
+                    current_profile = Profile::Performance;
+                    engine::performance_profile();
 
-        let effective_lite = PolicyEngine::calculate_effective_lite(
-            &current_pkg,
-            &global_config,
-            &app_configs,
-        );
+                    send_notification(NotificationPayload {
+                        title: "Lumina: Performance",
+                        text: "Target App Active • Boost Engaged",
+                        toast: Some("Performance Profile Applied"),
+                        is_profile: true,
+                        chrono: true,
+                        ..Default::default()
+                    });
+                }
+            } else if is_low_power_active() {
+                if current_profile != Profile::Eco {
+                    current_profile = Profile::Eco;
+                    engine::eco_profile();
 
-        let effective_dnd = PolicyEngine::calculate_effective_dnd(
-            &current_pkg,
-            &app_configs,
-        );
+                    send_notification(NotificationPayload {
+                        title: "ECO Mode",
+                        text: "System is now at Endurance state",
+                        toast: Some("Applying Eco Mode"),
+                        is_profile: true,
+                        chrono: true,
+                        ..Default::default()
+                    });
+                }
+            } else if current_profile != Profile::Balance {
+                current_profile = Profile::Balance;
+                engine::balance_profile();
 
-        let pkg_changed = last_pkg.as_deref() != Some(&current_pkg);
-
-        if pkg_changed {
-            log_sub!(
-                "SESSION",
-                "Foreground app active: \"{}\" - Lite Mode: {}, DnD: {}",
-                current_pkg,
-                if effective_lite { "ON" } else { "OFF" },
-                if effective_dnd { "ON" } else { "OFF" }
-            );
-            last_pkg = Some(current_pkg.clone());
+                send_notification(NotificationPayload {
+                    title: "Lumina: Balanced",
+                    text: "System is now at Dynamic State",
+                    toast: Some("Balanced Profile Restored"),
+                    is_profile: true,
+                    chrono: true,
+                    ..Default::default()
+                });
+            }
         }
 
-        if last_effective_lite != Some(effective_lite) {
-            PolicyEngine::apply_lite_mode_state(effective_lite);
-            last_effective_lite = Some(effective_lite);
-        }
-
-        if last_dnd_state != Some(effective_dnd) {
-            PolicyEngine::apply_dnd_state(effective_dnd);
-            last_dnd_state = Some(effective_dnd);
-        }
-
-        sleep(Duration::from_millis(1200));
+        thread::sleep(Duration::from_millis(1200));
     }
 }

@@ -138,7 +138,7 @@ fun AppsScreen(
         return
     }
 
-    val filteredApps = remember(rawApps, searchQuery, hideSystemApps) {
+        val filteredApps = remember(rawApps, searchQuery, hideSystemApps, appConfigs.toMap()) {
         val filtered = rawApps.filter { app ->
             val matchesSystem = if (hideSystemApps) !app.isSystemApp else true
             val matchesSearch = if (searchQuery.isBlank()) true else {
@@ -149,10 +149,15 @@ fun AppsScreen(
         }
 
         filtered.sortedWith(
-            compareByDescending<AppItem> { it.isGame }
+            
+            compareByDescending<AppItem> { appConfigs[it.packageName]?.saklarUtama == true }
+                
+                .thenByDescending { it.isGame }
+
                 .thenBy { it.name.lowercase() }
         )
     }
+
 
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
