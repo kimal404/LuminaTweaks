@@ -1,8 +1,5 @@
 package com.luminatweaks.ui.screen
 
-import android.content.Context
-import android.content.pm.PackageManager
-import android.os.Build
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -48,30 +45,97 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DisplayRrMode
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-fun getSupportedRenderers(context: Context): List<String> {
-    val renderers = mutableListOf("System Default", "OpenGL ES")
-    val pm = context.packageManager
-    if (pm.hasSystemFeature(PackageManager.FEATURE_VULKAN_HARDWARE_VERSION)) {
-        renderers.add("Vulkan (SkiaVK)")
+data class RendererItem(
+    val id: String,
+    val label: String
+)
+
+val RENDERER_OPTIONS = listOf(
+    RendererItem("default", "System Default"),
+    RendererItem("skiavk", "Skia Vulkan"),
+    RendererItem("skiavkthreaded", "Skia Vulkan (Threaded)"),
+    RendererItem("skiagl", "Skia OpenGL"),
+    RendererItem("skiaglthreaded", "Skia OpenGL (Threaded)"),
+    RendererItem("opengl", "OpenGL ES"),
+    RendererItem("openglthreaded", "OpenGL ES (Threaded)"),
+    RendererItem("vulkan", "Vulkan")
+)
+
+suspend fun runShellCommand(cmd: String): String = withContext(Dispatchers.IO) {
+    try {
+        val process = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
+        val output = process.inputStream.bufferedReader().use { it.readText() }
+        process.waitFor()
+        output.trim()
+    } catch (_: Exception) {
+        ""
     }
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        renderers.add("ANGLE")
+}
+
+suspend fun loadActiveRenderer(): String = withContext(Dispatchers.IO) {
+    val fileSaved = runShellCommand("cat /data/adb/luminatweaks/current_renderer.txt 2>/dev/null")
+    if (fileSaved.isNotBlank()) return@withContext fileSaved
+    val propSaved = runShellCommand("getprop persist.lumina.renderer")
+    if (propSaved.isNotBlank()) return@withContext propSaved
+    val hwui = runShellCommand("getprop debug.hwui.renderer")
+    if (hwui.isNotBlank()) return@withContext hwui
+    "default"
+}
+
+suspend fun applyRendererSetting(id: String) = withContext(Dispatchers.IO) {
+    val cmds = mutableListOf<String>()
+    cmds.add("mkdir -p /data/adb/luminatweaks")
+    cmds.add("echo '$id' > /data/adb/luminatweaks/current_renderer.txt")
+    cmds.add("[ -d /data/adb/modules/luminatweaks ] && echo '$id' > /data/adb/modules/luminatweaks/current_renderer.txt")
+    cmds.add("setprop persist.lumina.renderer '$id'")
+
+    if (id == "default") {
+        cmds.add("setprop debug.hwui.renderer ''")
+        cmds.add("setprop debug.renderengine.backend ''")
+        cmds.add("setprop debug.hwui.render_thread ''")
+        cmds.add("setprop debug.skia.threaded_mode ''")
+        cmds.add("resetprop --delete ro.hwui.use_vulkan 2>/dev/null || resetprop ro.hwui.use_vulkan ''")
+    } else {
+        cmds.add("setprop debug.hwui.renderer '$id'")
+        if (id.contains("threaded")) {
+            cmds.add("setprop debug.hwui.render_thread true")
+            if (id.contains("skia")) {
+                cmds.add("setprop debug.skia.threaded_mode true")
+            } else {
+                cmds.add("setprop debug.skia.threaded_mode false")
+            }
+        } else {
+            cmds.add("setprop debug.hwui.render_thread false")
+            cmds.add("setprop debug.skia.threaded_mode false")
+        }
+
+        when (id) {
+            "skiavk", "skiavkthreaded", "vulkan" -> {
+                cmds.add("setprop debug.renderengine.backend vulkan")
+                cmds.add("resetprop ro.hwui.use_vulkan true")
+            }
+            "skiagl", "skiaglthreaded", "opengl", "openglthreaded" -> {
+                cmds.add("setprop debug.renderengine.backend gles")
+                cmds.add("resetprop ro.hwui.use_vulkan false")
+            }
+        }
     }
-    return renderers
+
+    runShellCommand(cmds.joinToString(" && "))
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TweaksScreen() {
-    val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val coroutineScope = rememberCoroutineScope()
 
@@ -80,8 +144,7 @@ fun TweaksScreen() {
     var rrModes by remember { mutableStateOf<List<DisplayRrMode>>(emptyList()) }
     var currentRrId by remember { mutableStateOf<Int?>(null) }
 
-    val supportedRenderers = remember { getSupportedRenderers(context) }
-    var selectedRenderer by remember { mutableStateOf("System Default") }
+    var currentRendererId by remember { mutableStateOf("default") }
 
     var showRefreshRateDialog by remember { mutableStateOf(false) }
     var showRenderDialog by remember { mutableStateOf(false) }
@@ -90,6 +153,7 @@ fun TweaksScreen() {
         isGlobalLiteMode = ConfigRepository.getGlobalLiteMode()
         rrModes = ConfigRepository.getRefreshRateModes()
         currentRrId = ConfigRepository.getCurrentRefreshRateId()
+        currentRendererId = loadActiveRenderer()
     }
 
     val currentRrText = remember(currentRrId, rrModes) {
@@ -99,6 +163,10 @@ fun TweaksScreen() {
             val matched = rrModes.find { it.id == currentRrId }
             if (matched != null) "${matched.hz} Hz" else "Mode $currentRrId"
         }
+    }
+
+    val currentRendererText = remember(currentRendererId) {
+        RENDERER_OPTIONS.find { it.id.equals(currentRendererId, ignoreCase = true) }?.label ?: currentRendererId
     }
 
     if (showRefreshRateDialog) {
@@ -115,35 +183,6 @@ fun TweaksScreen() {
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .selectable(
-                                selected = (currentRrId == null),
-                                onClick = {
-                                    currentRrId = null
-                                    showRefreshRateDialog = false
-                                    coroutineScope.launch {
-                                        ConfigRepository.setRefreshRate(null)
-                                    }
-                                },
-                                role = Role.RadioButton
-                            )
-                            .padding(vertical = 10.dp, horizontal = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = (currentRrId == null),
-                            onClick = null
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "Default / Dynamic",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-
                     rrModes.forEach { mode ->
                         val isSelected = currentRrId == mode.id
                         Row(
@@ -199,15 +238,19 @@ fun TweaksScreen() {
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    supportedRenderers.forEach { renderer ->
+                    RENDERER_OPTIONS.forEach { item ->
+                        val isSelected = item.id.equals(currentRendererId, ignoreCase = true)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .selectable(
-                                    selected = (renderer == selectedRenderer),
+                                    selected = isSelected,
                                     onClick = {
-                                        selectedRenderer = renderer
+                                        currentRendererId = item.id
                                         showRenderDialog = false
+                                        coroutineScope.launch {
+                                            applyRendererSetting(item.id)
+                                        }
                                     },
                                     role = Role.RadioButton
                                 )
@@ -215,12 +258,12 @@ fun TweaksScreen() {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             RadioButton(
-                                selected = (renderer == selectedRenderer),
+                                selected = isSelected,
                                 onClick = null
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                text = renderer,
+                                text = item.label,
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -344,7 +387,7 @@ fun TweaksScreen() {
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = selectedRenderer,
+                                text = currentRendererText,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.primary
                             )
