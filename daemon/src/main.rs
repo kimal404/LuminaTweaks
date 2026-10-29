@@ -23,7 +23,7 @@ pub enum Profile {
 fn main() {
     log!("[*] luminad daemon started successfully");
 
-    // 1. Initializing Notification
+    // Sequence Notifikasi Startup
     send_notification(NotificationPayload {
         title: "Initializing...",
         text: "Starting LuminaTweaks service...",
@@ -32,10 +32,8 @@ fn main() {
         ..Default::default()
     });
 
-    // 2. Delay 3000ms
     thread::sleep(Duration::from_millis(3000));
 
-    // 3. Active Notification
     send_notification(NotificationPayload {
         title: "LuminaTweaks Active",
         text: "Daemon running successfully",
@@ -44,7 +42,8 @@ fn main() {
         ..Default::default()
     });
 
-    let mut current_profile = Profile::Balance;
+    // Inisialisasi awal None agar profil pertama langsung trigger apply & notifikasi
+    let mut current_profile: Option<Profile> = None;
 
     loop {
         if is_master_enabled() {
@@ -53,7 +52,6 @@ fn main() {
             let is_global_lite = is_lite_mode_active();
             let is_per_app_lite = focused.as_deref().map_or(false, is_app_lite_mode);
 
-            // Lite mode is active if global flag is ON OR current target app has lite mode enabled
             let is_lite = is_global_lite || is_per_app_lite;
 
             let target_profile = if is_target_active {
@@ -68,7 +66,7 @@ fn main() {
                 Profile::Balance
             };
 
-            if current_profile != target_profile {
+            if current_profile != Some(target_profile) {
                 match target_profile {
                     Profile::Performance => {
                         engine::performance_profile();
@@ -115,10 +113,10 @@ fn main() {
                         });
                     }
                 }
-                current_profile = target_profile;
+                current_profile = Some(target_profile);
             }
-        } else if current_profile != Profile::Balance {
-            current_profile = Profile::Balance;
+        } else if current_profile != Some(Profile::Balance) {
+            current_profile = Some(Profile::Balance);
             engine::balance_profile();
             send_notification(NotificationPayload {
                 title: "Lumina: Disabled",
