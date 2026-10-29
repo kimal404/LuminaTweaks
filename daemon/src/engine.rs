@@ -119,6 +119,14 @@ fn baseline_generic() {
             }
         }
     } else {
+        for policy in &policies {
+            if let Ok(min_freq) = fs::read_to_string(policy.join("cpuinfo_min_freq")) {
+                write_unlock(policy.join("scaling_min_freq"), min_freq.trim());
+            }
+            if let Ok(max_freq) = fs::read_to_string(policy.join("cpuinfo_max_freq")) {
+                write_unlock(policy.join("scaling_max_freq"), max_freq.trim());
+            }
+        }
         for cpu in find_matching_nodes("/sys/devices/system/cpu", |s| s.starts_with("cpu") && s[3..].chars().all(char::is_numeric)) {
             let cpufreq = cpu.join("cpufreq");
             if let Ok(min_freq) = fs::read_to_string(cpufreq.join("cpuinfo_min_freq")) {
@@ -345,11 +353,12 @@ pub fn balance_profile() {
 fn apply_universal_performance() {
     crate::log!("[*] Applying Universal Performance Tweaks...");
 
+    // Koreksi 4: Write governor "schedutil" instead of "performance"
     for policy in find_matching_nodes("/sys/devices/system/cpu/cpufreq", |s| s.starts_with("policy")) {
-        write_lock(policy.join("scaling_governor"), "performance");
+        write_lock(policy.join("scaling_governor"), "schedutil");
     }
     for cpu in find_matching_nodes("/sys/devices/system/cpu", |s| s.starts_with("cpu") && s[3..].chars().all(char::is_numeric)) {
-        write_lock(cpu.join("cpufreq/scaling_governor"), "performance");
+        write_lock(cpu.join("cpufreq/scaling_governor"), "schedutil");
     }
 
     let has_ppm = Path::new("/proc/ppm").exists();
@@ -367,6 +376,13 @@ fn apply_universal_performance() {
             }
         }
     } else {
+        // Lock freq: write cpuinfo_max_freq to scaling_min_freq AND scaling_max_freq
+        for policy in &policies {
+            if let Ok(max_freq) = fs::read_to_string(policy.join("cpuinfo_max_freq")) {
+                write_lock(policy.join("scaling_min_freq"), max_freq.trim());
+                write_lock(policy.join("scaling_max_freq"), max_freq.trim());
+            }
+        }
         for cpu in find_matching_nodes("/sys/devices/system/cpu", |s| s.starts_with("cpu") && s[3..].chars().all(char::is_numeric)) {
             let cpufreq = cpu.join("cpufreq");
             if let Ok(max_freq) = fs::read_to_string(cpufreq.join("cpuinfo_max_freq")) {
@@ -575,7 +591,6 @@ pub fn performance_lite_profile() {
     crate::log!("[*] Applying Performance Lite Profile (Universal Only, SoC Bypass)...");
     apply_universal_performance();
 
-    // Revert/Ensure vendor chipset nodes stay at balanced baseline
     let soc = get_soc_type();
     thread::spawn(move || {
         match soc {
@@ -592,11 +607,12 @@ pub fn performance_lite_profile() {
 fn apply_universal_eco() {
     crate::log!("[*] Applying Universal ECO Tweaks...");
 
+    // Koreksi 1: write_unlock for all ECO parameters
     for policy in find_matching_nodes("/sys/devices/system/cpu/cpufreq", |s| s.starts_with("policy")) {
-        write_lock(policy.join("scaling_governor"), "powersave");
+        write_unlock(policy.join("scaling_governor"), "powersave");
     }
     for cpu in find_matching_nodes("/sys/devices/system/cpu", |s| s.starts_with("cpu") && s[3..].chars().all(char::is_numeric)) {
-        write_lock(cpu.join("cpufreq/scaling_governor"), "powersave");
+        write_unlock(cpu.join("cpufreq/scaling_governor"), "powersave");
     }
 
     let has_ppm = Path::new("/proc/ppm").exists();
@@ -609,21 +625,29 @@ fn apply_universal_eco() {
 
             if let Ok(min_freq) = fs::read_to_string(policy.join("cpuinfo_min_freq")) {
                 let val = format!("{} {}", cluster_id, min_freq.trim());
-                write_lock("/proc/ppm/policy/hard_userlimit_min_cpu_freq", val);
+                write_unlock("/proc/ppm/policy/hard_userlimit_min_cpu_freq", val);
             }
             if let Ok(max_freq) = fs::read_to_string(policy.join("cpuinfo_max_freq")) {
                 let val = format!("{} {}", cluster_id, max_freq.trim());
-                write_lock("/proc/ppm/policy/hard_userlimit_max_cpu_freq", val);
+                write_unlock("/proc/ppm/policy/hard_userlimit_max_cpu_freq", val);
             }
         }
     } else {
+        for policy in &policies {
+            if let Ok(min_freq) = fs::read_to_string(policy.join("cpuinfo_min_freq")) {
+                write_unlock(policy.join("scaling_min_freq"), min_freq.trim());
+            }
+            if let Ok(max_freq) = fs::read_to_string(policy.join("cpuinfo_max_freq")) {
+                write_unlock(policy.join("scaling_max_freq"), max_freq.trim());
+            }
+        }
         for cpu in find_matching_nodes("/sys/devices/system/cpu", |s| s.starts_with("cpu") && s[3..].chars().all(char::is_numeric)) {
             let cpufreq = cpu.join("cpufreq");
             if let Ok(min_freq) = fs::read_to_string(cpufreq.join("cpuinfo_min_freq")) {
-                write_lock(cpufreq.join("scaling_min_freq"), min_freq.trim());
+                write_unlock(cpufreq.join("scaling_min_freq"), min_freq.trim());
             }
             if let Ok(max_freq) = fs::read_to_string(cpufreq.join("cpuinfo_max_freq")) {
-                write_lock(cpufreq.join("scaling_max_freq"), max_freq.trim());
+                write_unlock(cpufreq.join("scaling_max_freq"), max_freq.trim());
             }
         }
     }
@@ -631,41 +655,45 @@ fn apply_universal_eco() {
     let bsave_path = "/sys/module/battery_saver/parameters/enabled";
     if let Ok(content) = fs::read_to_string(bsave_path) {
         if content.trim().chars().any(|c| c.is_ascii_digit()) {
-            write_lock(bsave_path, "1");
+            write_unlock(bsave_path, "1");
         } else {
-            write_lock(bsave_path, "Y");
+            write_unlock(bsave_path, "Y");
         }
     }
 
-    write_lock("/sys/devices/system/cpu/eas/enable", "1");
-    write_lock("/proc/sys/vm/vfs_cache_pressure", "120");
-    write_lock("/proc/sys/kernel/split_lock_mitigate", "1");
-    write_lock("/sys/kernel/debug/sched_features", "NO_NEXT_BUDDY");
-    write_lock("/sys/kernel/debug/sched_features", "NO_TTWU_QUEUE");
+    write_unlock("/sys/devices/system/cpu/eas/enable", "1");
+
+    // Koreksi 2: Add power_efficient_workqueue in ECO
+    write_unlock("/sys/module/workqueue/parameters/power_efficient", "Y");
+
+    write_unlock("/proc/sys/vm/vfs_cache_pressure", "120");
+    write_unlock("/proc/sys/kernel/split_lock_mitigate", "1");
+    write_unlock("/sys/kernel/debug/sched_features", "NO_NEXT_BUDDY");
+    write_unlock("/sys/kernel/debug/sched_features", "NO_TTWU_QUEUE");
 
     for stune in find_matching_nodes("/dev/stune", |_| true) {
-        write_lock(stune.join("schedtune.boost"), "0");
-        write_lock(stune.join("schedtune.sched_boost_enabled"), "0");
-        write_lock(stune.join("schedtune.prefer_idle"), "1");
-        write_lock(stune.join("schedtune.colocate"), "0");
+        write_unlock(stune.join("schedtune.boost"), "0");
+        write_unlock(stune.join("schedtune.sched_boost_enabled"), "0");
+        write_unlock(stune.join("schedtune.prefer_idle"), "1");
+        write_unlock(stune.join("schedtune.colocate"), "0");
     }
 
     thread::spawn(|| {
         for block in find_matching_nodes("/sys/block", |s| s.starts_with("mmcblk") || s.starts_with("sd")) {
-            write_lock(block.join("queue/read_ahead_kb"), "128");
+            write_unlock(block.join("queue/read_ahead_kb"), "128");
         }
     });
 }
 
 fn mediatek_eco() {
     crate::log!("[*] Applying MediaTek ECO Profile...");
-    write_lock("/proc/cpufreq/cpufreq_power_mode", "1");
+    write_unlock("/proc/cpufreq/cpufreq_power_mode", "1");
 
     if Path::new("/proc/gpufreqv2/gpu_working_opp_table").exists() {
         if let Ok(content) = fs::read_to_string("/proc/gpufreqv2/gpu_working_opp_table") {
             if let Some(last_line) = content.lines().filter(|l| !l.trim().is_empty()).last() {
                 if let Some(min_idx) = last_line.split_whitespace().next() {
-                    write_lock("/proc/gpufreqv2/fix_target_opp_index", min_idx);
+                    write_unlock("/proc/gpufreqv2/fix_target_opp_index", min_idx);
                 }
             }
         }
@@ -673,7 +701,7 @@ fn mediatek_eco() {
         if let Ok(content) = fs::read_to_string("/proc/gpufreq/gpufreq_opp_dump") {
             if let Some(last_line) = content.lines().filter(|l| !l.trim().is_empty()).last() {
                 if let Some(min_freq) = last_line.split_whitespace().find_map(|s| s.parse::<u64>().ok()) {
-                    write_lock("/proc/gpufreq/gpufreq_opp_freq", min_freq.to_string());
+                    write_unlock("/proc/gpufreq/gpufreq_opp_freq", min_freq.to_string());
                 }
             }
         }
@@ -688,7 +716,7 @@ fn mediatek_eco() {
     let mut mali_applied = false;
     for path in &mali_candidates {
         if Path::new(path).exists() {
-            write_lock(path, "coarse_demand");
+            write_unlock(path, "coarse_demand");
             mali_applied = true;
             break;
         }
@@ -696,47 +724,50 @@ fn mediatek_eco() {
 
     if !mali_applied {
         for mali in find_matching_nodes("/sys/devices/platform", |s| s.ends_with(".mali")) {
-            write_lock(mali.join("power_policy"), "coarse_demand");
+            write_unlock(mali.join("power_policy"), "coarse_demand");
         }
     }
 
-    write_lock("/sys/class/devfreq/mtk-dvfsrc-devfreq/governor", "powersave");
+    write_unlock("/sys/class/devfreq/mtk-dvfsrc-devfreq/governor", "powersave");
     for dvfsrc in find_matching_nodes("/sys/devices/platform", |s| s.ends_with(".dvfsrc")) {
-        write_lock(dvfsrc.join("dvfsrc_req_ddr_opp"), "-1");
-        write_lock(dvfsrc.join("dvfsrc_force_vcore_dvfs_opp"), "-1");
+        write_unlock(dvfsrc.join("dvfsrc_req_ddr_opp"), "-1");
+        write_unlock(dvfsrc.join("dvfsrc_force_vcore_dvfs_opp"), "-1");
     }
 
-    write_lock("/sys/kernel/fpsgo/common/force_onoff", "2");
-    write_lock("/sys/kernel/eara_thermal/enable", "1");
-    write_lock("/sys/devices/platform/boot_dramboost/dramboost/dramboost", "0");
+    write_unlock("/sys/kernel/fpsgo/common/force_onoff", "2");
+    write_unlock("/sys/kernel/eara_thermal/enable", "1");
+    write_unlock("/sys/devices/platform/boot_dramboost/dramboost/dramboost", "0");
 }
 
 fn snapdragon_eco() {
     crate::log!("[*] Applying Snapdragon ECO Profile...");
     let kgsl_devfreq = Path::new("/sys/class/kgsl/kgsl-3d0/devfreq");
     if let Some(min_gpu) = which_minfreq(kgsl_devfreq.join("available_frequencies")) {
-        write_lock(kgsl_devfreq.join("min_freq"), min_gpu.to_string());
-        write_lock(kgsl_devfreq.join("max_freq"), min_gpu.to_string());
+        write_unlock(kgsl_devfreq.join("min_freq"), min_gpu.to_string());
+        write_unlock(kgsl_devfreq.join("max_freq"), min_gpu.to_string());
     }
-    write_lock("/sys/class/kgsl/kgsl-3d0/adrenoboost", "0");
+    write_unlock("/sys/class/kgsl/kgsl-3d0/adrenoboost", "0");
 
-    for bus_name in ["LLCC", "L3", "DDR", "DDRQOS"] {
-        let bus_path = PathBuf::from(format!("/sys/devices/system/cpu/bus_dcvs/{}", bus_name));
-        if let Some(min_bus) = which_minfreq(bus_path.join("available_frequencies")) {
-            write_lock(bus_path.join("min_freq"), min_bus.to_string());
-            write_lock(bus_path.join("max_freq"), min_bus.to_string());
+    // Koreksi 3: Run bus_dcvs and devfreq in a spawned thread
+    thread::spawn(|| {
+        for bus_name in ["LLCC", "L3", "DDR", "DDRQOS"] {
+            let bus_path = PathBuf::from(format!("/sys/devices/system/cpu/bus_dcvs/{}", bus_name));
+            if let Some(min_bus) = which_minfreq(bus_path.join("available_frequencies")) {
+                write_unlock(bus_path.join("min_freq"), min_bus.to_string());
+                write_unlock(bus_path.join("max_freq"), min_bus.to_string());
+            }
         }
-    }
 
-    for df in find_matching_nodes("/sys/class/devfreq", |s| {
-        s.contains("cpu-ddr-latfloor")
-            || s.contains("-lat")
-            || s.contains("cpu-cpu-ddr-bw")
-            || s.contains("cpu-cpu-llcc-bw")
-            || s.contains("gpubw")
-    }) {
-        write_lock(df.join("governor"), "powersave");
-    }
+        for df in find_matching_nodes("/sys/class/devfreq", |s| {
+            s.contains("cpu-ddr-latfloor")
+                || s.contains("-lat")
+                || s.contains("cpu-cpu-ddr-bw")
+                || s.contains("cpu-cpu-llcc-bw")
+                || s.contains("gpubw")
+        }) {
+            write_unlock(df.join("governor"), "powersave");
+        }
+    });
 }
 
 fn exynos_eco() {
@@ -744,12 +775,12 @@ fn exynos_eco() {
     let exynos_gpu = Path::new("/sys/kernel/gpu");
     let avail = exynos_gpu.join("gpu_available_frequencies");
     if let Some(min) = which_minfreq(&avail) {
-        write_lock(exynos_gpu.join("gpu_min_clock"), min.to_string());
-        write_lock(exynos_gpu.join("gpu_max_clock"), min.to_string());
+        write_unlock(exynos_gpu.join("gpu_min_clock"), min.to_string());
+        write_unlock(exynos_gpu.join("gpu_max_clock"), min.to_string());
     }
 
     for mali in find_matching_nodes("/sys/devices/platform", |s| s.ends_with(".mali")) {
-        write_lock(mali.join("power_policy"), "coarse_demand");
+        write_unlock(mali.join("power_policy"), "coarse_demand");
     }
 }
 
@@ -757,8 +788,8 @@ fn unisoc_eco() {
     crate::log!("[*] Applying Unisoc ECO Profile...");
     for dev in find_matching_nodes("/sys/class/devfreq", |s| s.ends_with(".gpu")) {
         if let Some(min_freq) = which_minfreq(dev.join("available_frequencies")) {
-            write_lock(dev.join("min_freq"), min_freq.to_string());
-            write_lock(dev.join("max_freq"), min_freq.to_string());
+            write_unlock(dev.join("min_freq"), min_freq.to_string());
+            write_unlock(dev.join("max_freq"), min_freq.to_string());
         }
     }
 }
@@ -767,10 +798,10 @@ fn tensor_eco() {
     crate::log!("[*] Applying Tensor ECO Profile...");
     for mali in find_matching_nodes("/sys/devices/platform", |s| s.ends_with(".mali")) {
         if let Some(min_freq) = which_minfreq(mali.join("available_frequencies")) {
-            write_lock(mali.join("scaling_min_freq"), min_freq.to_string());
-            write_lock(mali.join("scaling_max_freq"), min_freq.to_string());
+            write_unlock(mali.join("scaling_min_freq"), min_freq.to_string());
+            write_unlock(mali.join("scaling_max_freq"), min_freq.to_string());
         }
-        write_lock(mali.join("power_policy"), "coarse_demand");
+        write_unlock(mali.join("power_policy"), "coarse_demand");
     }
 }
 

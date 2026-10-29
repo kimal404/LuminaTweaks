@@ -23,6 +23,27 @@ pub enum Profile {
 fn main() {
     log!("[*] luminad daemon started successfully");
 
+    // 1. Initializing Notification
+    send_notification(NotificationPayload {
+        title: "Initializing...",
+        text: "Starting LuminaTweaks service...",
+        is_profile: true,
+        chrono: false,
+        ..Default::default()
+    });
+
+    // 2. Delay 3000ms
+    thread::sleep(Duration::from_millis(3000));
+
+    // 3. Active Notification
+    send_notification(NotificationPayload {
+        title: "LuminaTweaks Active",
+        text: "Daemon running successfully",
+        is_profile: true,
+        timeout_ms: 60000,
+        ..Default::default()
+    });
+
     let mut current_profile = Profile::Balance;
 
     loop {
@@ -32,7 +53,7 @@ fn main() {
             let is_global_lite = is_lite_mode_active();
             let is_per_app_lite = focused.as_deref().map_or(false, is_app_lite_mode);
 
-            // Mode Lite aktif jika flag global menyala ATAU aplikasi target mengaktifkan per-app lite
+            // Lite mode is active if global flag is ON OR current target app has lite mode enabled
             let is_lite = is_global_lite || is_per_app_lite;
 
             let target_profile = if is_target_active {
