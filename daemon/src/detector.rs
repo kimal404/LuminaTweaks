@@ -1,6 +1,7 @@
 use std::process::Command;
+use serde_json::Value;
 
-/// Extracts the currently focused foreground package from window manager
+/// Ekstraksi package foreground aktif dari dumpsys window
 pub fn get_focused_package() -> Option<String> {
     let output = Command::new("dumpsys")
         .args(["window"])
@@ -13,23 +14,8 @@ pub fn get_focused_package() -> Option<String> {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    // Prioritaskan mCurrentFocus terlebih dahulu
     for line in stdout.lines() {
-        if line.contains("mCurrentFocus") {
-            if let Some(token) = line.split_whitespace().find(|t| t.contains('/')) {
-                let cleaned = token.trim_start_matches('{').trim_end_matches('}');
-                if let Some(pkg) = cleaned.split('/').next() {
-                    if !pkg.is_empty() && pkg != "null" {
-                        return Some(pkg.to_string());
-                    }
-                }
-            }
-        }
-    }
-
-    // Fallback ke mFocusedApp jika mCurrentFocus tidak ditemukan
-    for line in stdout.lines() {
-        if line.contains("mFocusedApp") {
+        if line.contains("mCurrentFocus") || line.contains("mFocusedApp") {
             if let Some(token) = line.split_whitespace().find(|t| t.contains('/')) {
                 let cleaned = token.trim_start_matches('{').trim_end_matches('}');
                 if let Some(pkg) = cleaned.split('/').next() {
@@ -44,7 +30,7 @@ pub fn get_focused_package() -> Option<String> {
     None
 }
 
-/// Verifies whether the master switch is enabled
+/// Cek master switch global
 pub fn is_master_enabled() -> bool {
     if let Ok(output) = Command::new("getprop").arg("persist.lumina.master").output() {
         let val = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -62,7 +48,7 @@ pub fn is_master_enabled() -> bool {
     true
 }
 
-/// Checks if Android Battery Saver mode is active
+/// Cek Android Battery Saver
 pub fn is_low_power_active() -> bool {
     if let Ok(output) = Command::new("getprop").arg("low_power").output() {
         if String::from_utf8_lossy(&output.stdout).trim() == "1" {
@@ -79,7 +65,7 @@ pub fn is_low_power_active() -> bool {
     false
 }
 
-/// Checks if Global Lite Mode is active
+/// Cek status Mode Lite Global
 pub fn is_lite_mode_active() -> bool {
     if let Ok(output) = Command::new("getprop").arg("persist.lumina.litemode").output() {
         let val = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -106,60 +92,66 @@ pub fn is_lite_mode_active() -> bool {
     false
 }
 
-/// Checks whether an app has active performance profile enabled
-pub fn is_app_enabled(pkg: &str) -> bool {
-    // 1. Cek di app_config.json global
+/// Helper untuk menginspeksi nilai boolean field per-package dari JSON secara presisi
+fn get_package_field(pkg: &str, field_keys: &[&str]) -> bool {
+    // 1. Cek dari file master app_config.json
     if let Ok(content) = std::fs::read_to_string("/data/adb/luminatweaks/app_config.json") {
-        if content.contains(pkg) {
-            let lower = content.to_ascii_lowercase();
-            if lower.contains("\"saklarutama\":true") || lower.contains("\"saklarutama\": true") {
-                return true;
+        if let Ok(json) = serde_json::from_str::<Value>(&content) {
+            // Skema Map: {"com.example.app": {"saklarUtama": true}}
+            if let Some(app_obj) = json.get(pkg) {
+                for key in field_keys {
+                    if let Some(val) = app_obj.get(*key) {
+                        if val.as_bool() == Some(true) || val.as_str() == Some("true") || val.as_str() == Some("1") {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            // Skema Array: [{"packageName": "com.example.app", "saklarUtama": true}]
+            if let Some(list) = json.as_array() {
+                for item in list {
+                    let matches_pkg = item.get("packageName").and_then(|v| v.as_str()) == Some(pkg)
+                        || item.get("package").and_then(|v| v.as_str()) == Some(pkg)
+                        || item.get("pkg").and_then(|v| v.as_str()) == Some(pkg);
+
+                    if matches_pkg {
+                        for key in field_keys {
+                            if let Some(val) = item.get(*key) {
+                                if val.as_bool() == Some(true) || val.as_str() == Some("true") || val.as_str() == Some("1") {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 
-    // 2. Cek di configs/{pkg}.json
+    // 2. Cek dari file satuan configs/{pkg}.json
     let conf_path = format!("/data/adb/luminatweaks/configs/{}.json", pkg);
     if let Ok(content) = std::fs::read_to_string(conf_path) {
-        return content.contains("\"saklarUtama\":true") || content.contains("\"saklarUtama\": true");
+        if let Ok(json) = serde_json::from_str::<Value>(&content) {
+            for key in field_keys {
+                if let Some(val) = json.get(*key) {
+                    if val.as_bool() == Some(true) || val.as_str() == Some("true") || val.as_str() == Some("1") {
+                        return true;
+                    }
+                }
+            }
+        }
     }
 
-    pkg == "flar2.devcheck"
+    false
+}
+
+/// Checks whether an app has active performance profile enabled
+pub fn is_app_enabled(pkg: &str) -> bool {
+    get_package_field(pkg, &["saklarUtama", "saklar_utama", "enabled", "isBoosted"])
 }
 
 /// Checks whether an app specifically has Lite Mode enabled
 pub fn is_app_lite_mode(pkg: &str) -> bool {
-    // 1. Cek di app_config.json
-    if let Ok(content) = std::fs::read_to_string("/data/adb/luminatweaks/app_config.json") {
-        if content.contains(pkg) {
-            let lower = content.to_ascii_lowercase();
-            if lower.contains("\"modelite\":true")
-                || lower.contains("\"modelite\": true")
-                || lower.contains("\"litemode\":true")
-                || lower.contains("\"litemode\": true")
-                || lower.contains("\"islite\":true")
-                || lower.contains("\"islite\": true")
-                || lower.contains("\"performancelite\":true")
-                || lower.contains("\"performancelite\": true")
-            {
-                return true;
-            }
-        }
-    }
-
-    // 2. Cek di configs/{pkg}.json
-    let conf_path = format!("/data/adb/luminatweaks/configs/{}.json", pkg);
-    if let Ok(content) = std::fs::read_to_string(conf_path) {
-        let lower = content.to_ascii_lowercase();
-        return lower.contains("\"modelite\":true")
-            || lower.contains("\"modelite\": true")
-            || lower.contains("\"litemode\":true")
-            || lower.contains("\"litemode\": true")
-            || lower.contains("\"islite\":true")
-            || lower.contains("\"islite\": true")
-            || lower.contains("\"performancelite\":true")
-            || lower.contains("\"performancelite\": true");
-    }
-
-    false
+    get_package_field(pkg, &["modeLite", "mode_lite", "liteMode", "isLite", "performanceLite"])
 }
