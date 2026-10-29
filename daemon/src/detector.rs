@@ -112,7 +112,6 @@ fn get_package_field(pkg: &str, field_keys: &[&str]) -> bool {
     // 1. Cek dari file master app_config.json
     if let Ok(content) = std::fs::read_to_string("/data/adb/luminatweaks/app_config.json") {
         if let Ok(json) = serde_json::from_str::<Value>(&content) {
-            // Skema Array: [{"pkg": "flar2.devcheck", "saklar_utama": true, "lite_mode": "on"}]
             if let Some(list) = json.as_array() {
                 for item in list {
                     let matches_pkg = item.get("pkg").and_then(|v| v.as_str()) == Some(pkg)
@@ -131,7 +130,6 @@ fn get_package_field(pkg: &str, field_keys: &[&str]) -> bool {
                 }
             }
 
-            // Skema Map: {"flar2.devcheck": {"saklar_utama": true, "lite_mode": "on"}}
             if let Some(app_obj) = json.get(pkg) {
                 for key in field_keys {
                     if let Some(val) = app_obj.get(*key) {
@@ -179,4 +177,54 @@ pub fn is_app_lite_mode(pkg: &str) -> bool {
             "performanceLite",
         ],
     )
+}
+
+/// Memeriksa apakah proses package masih hidup di /proc secara instan (~0.5ms)
+pub fn is_process_alive(pkg: &str) -> bool {
+    if let Ok(entries) = std::fs::read_dir("/proc") {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            if let Some(s) = name.to_str() {
+                if s.chars().all(|c| c.is_ascii_digit()) {
+                    let cmdline_path = entry.path().join("cmdline");
+                    if let Ok(cmd) = std::fs::read(cmdline_path) {
+                        if let Some(first) = cmd.split(|&b| b == 0).next() {
+                            if let Ok(proc_name) = std::str::from_utf8(first) {
+                                if proc_name == pkg || proc_name.starts_with(&format!("{}:", pkg)) {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Memeriksa apakah task package masih ada di daftar Recent Apps
+pub fn is_task_in_recents(pkg: &str) -> bool {
+    if let Ok(output) = Command::new("dumpsys").args(["activity", "recents"]).output() {
+        if output.status.success() {
+            let s = String::from_utf8_lossy(&output.stdout);
+            for line in s.lines() {
+                if (line.contains("Recent #") || line.contains("Task{") || line.contains("realActivity="))
+                    && line.contains(pkg)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+    true
+}
+
+/// Menentukan apakah aplikasi target masih ditahan (hidup dan masih ada di Recents)
+pub fn is_app_retained(pkg: &str) -> bool {
+    if !is_process_alive(pkg) {
+        return false;
+    }
+    is_task_in_recents(pkg)
 }

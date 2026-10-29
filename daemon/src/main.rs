@@ -7,8 +7,8 @@ mod notifier;
 use std::thread;
 use std::time::Duration;
 use detector::{
-    get_focused_package, is_app_enabled, is_app_lite_mode, is_lite_mode_active,
-    is_low_power_active, is_master_enabled,
+    get_focused_package, is_app_enabled, is_app_lite_mode, is_app_retained,
+    is_lite_mode_active, is_low_power_active, is_master_enabled,
 };
 use notifier::{send_notification, NotificationPayload};
 
@@ -42,19 +42,41 @@ fn main() {
         ..Default::default()
     });
 
-    // Inisialisasi awal None agar profil pertama langsung trigger apply & notifikasi
     let mut current_profile: Option<Profile> = None;
+    let mut active_target_pkg: Option<String> = None;
 
     loop {
         if is_master_enabled() {
             let focused = get_focused_package();
-            let is_target_active = focused.as_deref().map_or(false, is_app_enabled);
             let is_global_lite = is_lite_mode_active();
-            let is_per_app_lite = focused.as_deref().map_or(false, is_app_lite_mode);
 
-            let is_lite = is_global_lite || is_per_app_lite;
+            // 1. Cek apakah foreground saat ini adalah aplikasi target dengan saklar ON
+            let newly_focused_target = focused.as_deref().filter(|pkg| is_app_enabled(pkg));
 
-            let target_profile = if is_target_active {
+            let current_target = if let Some(pkg) = newly_focused_target {
+                // Game target aktif di layar utama: kunci sesi ke game ini
+                let pkg_str = pkg.to_string();
+                active_target_pkg = Some(pkg_str.clone());
+                Some(pkg_str)
+            } else if let Some(ref saved_pkg) = active_target_pkg {
+                // Sedang membuka floating app atau ke home: cek apakah game tadi masih ada di Recents & berjalan
+                if is_app_enabled(saved_pkg) && is_app_retained(saved_pkg) {
+                    // Masih hidup di background/recents: pertahankan profil game!
+                    Some(saved_pkg.clone())
+                } else {
+                    // Pengguna menghapus game dari Recent Apps: sesi game berakhir
+                    active_target_pkg = None;
+                    None
+                }
+            } else {
+                None
+            };
+
+            // 2. Tentukan target profil
+            let target_profile = if let Some(ref target_pkg) = current_target {
+                let is_per_app_lite = is_app_lite_mode(target_pkg);
+                let is_lite = is_global_lite || is_per_app_lite;
+
                 if is_lite {
                     Profile::PerformanceLite
                 } else {
@@ -66,6 +88,7 @@ fn main() {
                 Profile::Balance
             };
 
+            // 3. Terapkan engine & notifikasi HANYA jika terjadi transisi profil
             if current_profile != Some(target_profile) {
                 match target_profile {
                     Profile::Performance => {
@@ -116,6 +139,7 @@ fn main() {
                 current_profile = Some(target_profile);
             }
         } else if current_profile != Some(Profile::Balance) {
+            active_target_pkg = None;
             current_profile = Some(Profile::Balance);
             engine::balance_profile();
             send_notification(NotificationPayload {
