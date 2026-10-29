@@ -350,15 +350,15 @@ pub fn balance_profile() {
     });
 }
 
-fn apply_universal_performance() {
-    crate::log!("[*] Applying Universal Performance Tweaks...");
+/// Universal performance core: sets requested governor and locks max frequency
+fn apply_universal_performance(governor: &str) {
+    crate::log!("[*] Applying Universal Performance Tweaks (Governor: {})...", governor);
 
-    // Koreksi 4: Write governor "schedutil" instead of "performance"
     for policy in find_matching_nodes("/sys/devices/system/cpu/cpufreq", |s| s.starts_with("policy")) {
-        write_lock(policy.join("scaling_governor"), "schedutil");
+        write_lock(policy.join("scaling_governor"), governor);
     }
     for cpu in find_matching_nodes("/sys/devices/system/cpu", |s| s.starts_with("cpu") && s[3..].chars().all(char::is_numeric)) {
-        write_lock(cpu.join("cpufreq/scaling_governor"), "schedutil");
+        write_lock(cpu.join("cpufreq/scaling_governor"), governor);
     }
 
     let has_ppm = Path::new("/proc/ppm").exists();
@@ -376,7 +376,6 @@ fn apply_universal_performance() {
             }
         }
     } else {
-        // Lock freq: write cpuinfo_max_freq to scaling_min_freq AND scaling_max_freq
         for policy in &policies {
             if let Ok(max_freq) = fs::read_to_string(policy.join("cpuinfo_max_freq")) {
                 write_lock(policy.join("scaling_min_freq"), max_freq.trim());
@@ -570,8 +569,9 @@ fn tensor_performance() {
     });
 }
 
+/// Applies Performance Profile: Governor "performance" + Full SoC Vendor Lock
 pub fn performance_profile() {
-    apply_universal_performance();
+    apply_universal_performance("performance");
 
     let soc = get_soc_type();
     thread::spawn(move || {
@@ -586,10 +586,10 @@ pub fn performance_profile() {
     });
 }
 
-/// Applies Performance Lite Profile (Universal CPU/IO boost without SoC vendor locks)
+/// Applies Performance Lite Profile: Governor "schedutil" + SoC Vendor Nodes Bypassed
 pub fn performance_lite_profile() {
-    crate::log!("[*] Applying Performance Lite Profile (Universal Only, SoC Bypass)...");
-    apply_universal_performance();
+    crate::log!("[*] Applying Performance Lite Profile (Universal schedutil, SoC Bypass)...");
+    apply_universal_performance("schedutil");
 
     let soc = get_soc_type();
     thread::spawn(move || {
@@ -607,7 +607,6 @@ pub fn performance_lite_profile() {
 fn apply_universal_eco() {
     crate::log!("[*] Applying Universal ECO Tweaks...");
 
-    // Koreksi 1: write_unlock for all ECO parameters
     for policy in find_matching_nodes("/sys/devices/system/cpu/cpufreq", |s| s.starts_with("policy")) {
         write_unlock(policy.join("scaling_governor"), "powersave");
     }
@@ -662,10 +661,7 @@ fn apply_universal_eco() {
     }
 
     write_unlock("/sys/devices/system/cpu/eas/enable", "1");
-
-    // Koreksi 2: Add power_efficient_workqueue in ECO
     write_unlock("/sys/module/workqueue/parameters/power_efficient", "Y");
-
     write_unlock("/proc/sys/vm/vfs_cache_pressure", "120");
     write_unlock("/proc/sys/kernel/split_lock_mitigate", "1");
     write_unlock("/sys/kernel/debug/sched_features", "NO_NEXT_BUDDY");
@@ -748,7 +744,6 @@ fn snapdragon_eco() {
     }
     write_unlock("/sys/class/kgsl/kgsl-3d0/adrenoboost", "0");
 
-    // Koreksi 3: Run bus_dcvs and devfreq in a spawned thread
     thread::spawn(|| {
         for bus_name in ["LLCC", "L3", "DDR", "DDRQOS"] {
             let bus_path = PathBuf::from(format!("/sys/devices/system/cpu/bus_dcvs/{}", bus_name));
