@@ -1,7 +1,6 @@
 use std::process::Command;
 use serde_json::Value;
 
-/// Ekstraksi package foreground aktif dari dumpsys window
 pub fn get_focused_package() -> Option<String> {
     let output = Command::new("dumpsys")
         .args(["window"])
@@ -30,7 +29,6 @@ pub fn get_focused_package() -> Option<String> {
     None
 }
 
-/// Cek master switch global
 pub fn is_master_enabled() -> bool {
     if let Ok(output) = Command::new("getprop").arg("persist.lumina.master").output() {
         let val = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -48,7 +46,6 @@ pub fn is_master_enabled() -> bool {
     true
 }
 
-/// Cek Android Battery Saver
 pub fn is_low_power_active() -> bool {
     if let Ok(output) = Command::new("getprop").arg("low_power").output() {
         if String::from_utf8_lossy(&output.stdout).trim() == "1" {
@@ -65,8 +62,36 @@ pub fn is_low_power_active() -> bool {
     false
 }
 
-/// Cek status Mode Lite Global
+fn is_truthy(val: &Value) -> bool {
+    if let Some(b) = val.as_bool() {
+        return b;
+    }
+    if let Some(s) = val.as_str() {
+        let lower = s.trim().to_ascii_lowercase();
+        return lower == "true" || lower == "1" || lower == "on";
+    }
+    if let Some(n) = val.as_i64() {
+        return n == 1;
+    }
+    false
+}
+
 pub fn is_lite_mode_active() -> bool {
+    for path in [
+        "/data/adb/luminatweaks/config.json",
+        "/data/adb/luminatweaks/configs/config.json",
+    ] {
+        if let Ok(content) = std::fs::read_to_string(path) {
+            if let Ok(json) = serde_json::from_str::<Value>(&content) {
+                if let Some(val) = json.get("lite_mode_global") {
+                    if is_truthy(val) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
     if let Ok(output) = Command::new("getprop").arg("persist.lumina.litemode").output() {
         let val = String::from_utf8_lossy(&output.stdout).trim().to_string();
         if val == "1" || val == "true" {
@@ -92,24 +117,7 @@ pub fn is_lite_mode_active() -> bool {
     false
 }
 
-/// Evaluasi nilai boolean, integer, atau string ("true", "1", "on")
-fn is_truthy(val: &Value) -> bool {
-    if let Some(b) = val.as_bool() {
-        return b;
-    }
-    if let Some(s) = val.as_str() {
-        let lower = s.trim().to_ascii_lowercase();
-        return lower == "true" || lower == "1" || lower == "on";
-    }
-    if let Some(n) = val.as_i64() {
-        return n == 1;
-    }
-    false
-}
-
-/// Helper untuk menginspeksi nilai field per-package dari JSON secara presisi
 fn get_package_field(pkg: &str, field_keys: &[&str]) -> bool {
-    // 1. Cek dari file master app_config.json
     if let Ok(content) = std::fs::read_to_string("/data/adb/luminatweaks/app_config.json") {
         if let Ok(json) = serde_json::from_str::<Value>(&content) {
             if let Some(list) = json.as_array() {
@@ -142,7 +150,6 @@ fn get_package_field(pkg: &str, field_keys: &[&str]) -> bool {
         }
     }
 
-    // 2. Cek dari file satuan configs/{pkg}.json
     let conf_path = format!("/data/adb/luminatweaks/configs/{}.json", pkg);
     if let Ok(content) = std::fs::read_to_string(conf_path) {
         if let Ok(json) = serde_json::from_str::<Value>(&content) {
@@ -159,12 +166,10 @@ fn get_package_field(pkg: &str, field_keys: &[&str]) -> bool {
     false
 }
 
-/// Checks whether an app has active performance profile enabled
 pub fn is_app_enabled(pkg: &str) -> bool {
     get_package_field(pkg, &["saklar_utama", "saklarUtama", "enabled", "isBoosted"])
 }
 
-/// Checks whether an app specifically has Lite Mode enabled
 pub fn is_app_lite_mode(pkg: &str) -> bool {
     get_package_field(
         pkg,
@@ -179,7 +184,6 @@ pub fn is_app_lite_mode(pkg: &str) -> bool {
     )
 }
 
-/// Memeriksa apakah proses package masih hidup di /proc secara instan (~0.5ms)
 pub fn is_process_alive(pkg: &str) -> bool {
     if let Ok(entries) = std::fs::read_dir("/proc") {
         for entry in entries.flatten() {
@@ -203,7 +207,6 @@ pub fn is_process_alive(pkg: &str) -> bool {
     false
 }
 
-/// Memeriksa apakah task package masih ada di daftar Recent Apps
 pub fn is_task_in_recents(pkg: &str) -> bool {
     if let Ok(output) = Command::new("dumpsys").args(["activity", "recents"]).output() {
         if output.status.success() {
@@ -221,7 +224,6 @@ pub fn is_task_in_recents(pkg: &str) -> bool {
     true
 }
 
-/// Menentukan apakah aplikasi target masih ditahan (hidup dan masih ada di Recents)
 pub fn is_app_retained(pkg: &str) -> bool {
     if !is_process_alive(pkg) {
         return false;
