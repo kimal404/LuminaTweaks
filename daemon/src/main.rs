@@ -3,6 +3,7 @@ mod logger;
 mod detector;
 mod engine;
 mod notifier;
+mod display;
 
 use std::thread;
 use std::time::Duration;
@@ -22,6 +23,7 @@ pub enum Profile {
 
 fn main() {
     log!("[*] luminad daemon started successfully");
+    display::init_display_subsystem();
 
     // Sequence Notifikasi Startup
     send_notification(NotificationPayload {
