@@ -13,8 +13,11 @@ This project incorporates code, algorithms, ideas, and software libraries from t
 
 ## 2. Encore Tweaks
 * **Project**: Encore Tweaks
+* **Copyright**: (C) 2024-2025 Rem01Gaming
 * **Author**: Rem01 (@Rem01Gaming)
+* **License**: Apache License, Version 2.0
 * **Usage**: Kernel tuning parameters and performance profile logic reference.
+* **License Link**: http://www.apache.org/licenses/LICENSE-2.0
 
 ## 3. libsu
 * **Project**: libsu
