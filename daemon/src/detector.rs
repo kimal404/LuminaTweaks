@@ -79,7 +79,7 @@ pub fn is_lite_mode_active() -> bool {
     for path in ["/data/adb/luminatweaks/configs/lite_mode", "/data/adb/luminatweaks/lite_mode.conf"] {
         if let Ok(content) = std::fs::read_to_string(path) {
             let trimmed = content.trim();
-            if trimmed == "1" || trimmed.eq_ignore_ascii_case("true") {
+            if trimmed == "1" || trimmed.eq_ignore_ascii_case("true") || trimmed.eq_ignore_ascii_case("on") {
                 return true;
             }
         }
@@ -92,36 +92,51 @@ pub fn is_lite_mode_active() -> bool {
     false
 }
 
-/// Helper untuk menginspeksi nilai boolean field per-package dari JSON secara presisi
+/// Evaluasi nilai boolean, integer, atau string ("true", "1", "on")
+fn is_truthy(val: &Value) -> bool {
+    if let Some(b) = val.as_bool() {
+        return b;
+    }
+    if let Some(s) = val.as_str() {
+        let lower = s.trim().to_ascii_lowercase();
+        return lower == "true" || lower == "1" || lower == "on";
+    }
+    if let Some(n) = val.as_i64() {
+        return n == 1;
+    }
+    false
+}
+
+/// Helper untuk menginspeksi nilai field per-package dari JSON secara presisi
 fn get_package_field(pkg: &str, field_keys: &[&str]) -> bool {
     // 1. Cek dari file master app_config.json
     if let Ok(content) = std::fs::read_to_string("/data/adb/luminatweaks/app_config.json") {
         if let Ok(json) = serde_json::from_str::<Value>(&content) {
-            // Skema Map: {"com.example.app": {"saklarUtama": true}}
-            if let Some(app_obj) = json.get(pkg) {
-                for key in field_keys {
-                    if let Some(val) = app_obj.get(*key) {
-                        if val.as_bool() == Some(true) || val.as_str() == Some("true") || val.as_str() == Some("1") {
-                            return true;
+            // Skema Array: [{"pkg": "flar2.devcheck", "saklar_utama": true, "lite_mode": "on"}]
+            if let Some(list) = json.as_array() {
+                for item in list {
+                    let matches_pkg = item.get("pkg").and_then(|v| v.as_str()) == Some(pkg)
+                        || item.get("package").and_then(|v| v.as_str()) == Some(pkg)
+                        || item.get("packageName").and_then(|v| v.as_str()) == Some(pkg);
+
+                    if matches_pkg {
+                        for key in field_keys {
+                            if let Some(val) = item.get(*key) {
+                                if is_truthy(val) {
+                                    return true;
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            // Skema Array: [{"packageName": "com.example.app", "saklarUtama": true}]
-            if let Some(list) = json.as_array() {
-                for item in list {
-                    let matches_pkg = item.get("packageName").and_then(|v| v.as_str()) == Some(pkg)
-                        || item.get("package").and_then(|v| v.as_str()) == Some(pkg)
-                        || item.get("pkg").and_then(|v| v.as_str()) == Some(pkg);
-
-                    if matches_pkg {
-                        for key in field_keys {
-                            if let Some(val) = item.get(*key) {
-                                if val.as_bool() == Some(true) || val.as_str() == Some("true") || val.as_str() == Some("1") {
-                                    return true;
-                                }
-                            }
+            // Skema Map: {"flar2.devcheck": {"saklar_utama": true, "lite_mode": "on"}}
+            if let Some(app_obj) = json.get(pkg) {
+                for key in field_keys {
+                    if let Some(val) = app_obj.get(*key) {
+                        if is_truthy(val) {
+                            return true;
                         }
                     }
                 }
@@ -135,7 +150,7 @@ fn get_package_field(pkg: &str, field_keys: &[&str]) -> bool {
         if let Ok(json) = serde_json::from_str::<Value>(&content) {
             for key in field_keys {
                 if let Some(val) = json.get(*key) {
-                    if val.as_bool() == Some(true) || val.as_str() == Some("true") || val.as_str() == Some("1") {
+                    if is_truthy(val) {
                         return true;
                     }
                 }
@@ -148,10 +163,20 @@ fn get_package_field(pkg: &str, field_keys: &[&str]) -> bool {
 
 /// Checks whether an app has active performance profile enabled
 pub fn is_app_enabled(pkg: &str) -> bool {
-    get_package_field(pkg, &["saklarUtama", "saklar_utama", "enabled", "isBoosted"])
+    get_package_field(pkg, &["saklar_utama", "saklarUtama", "enabled", "isBoosted"])
 }
 
 /// Checks whether an app specifically has Lite Mode enabled
 pub fn is_app_lite_mode(pkg: &str) -> bool {
-    get_package_field(pkg, &["modeLite", "mode_lite", "liteMode", "isLite", "performanceLite"])
+    get_package_field(
+        pkg,
+        &[
+            "lite_mode",
+            "mode_lite",
+            "liteMode",
+            "modeLite",
+            "isLite",
+            "performanceLite",
+        ],
+    )
 }
