@@ -64,6 +64,7 @@ object ConfigRepository {
                 put("lite_mode_global", enabled)
             }.toString()
             runSuCmd("echo '$json' > $GLOBAL_CONFIG_PATH")
+            runSuCmd("setprop persist.lumina.litemode ${if (enabled) \"1\" else \"0\"}")
         }
     }
 
