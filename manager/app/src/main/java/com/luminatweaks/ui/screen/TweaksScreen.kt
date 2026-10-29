@@ -1,5 +1,10 @@
 package com.luminatweaks.ui.screen
 
+import android.content.Context
+import android.content.pm.PackageManager
+import android.hardware.display.DisplayManager
+import android.os.Build
+import android.view.Display
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.DeveloperBoard
@@ -26,6 +32,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MediumTopAppBar
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -43,17 +50,61 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.luminatweaks.data.ConfigRepository
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
+
+fun getSupportedRefreshRates(context: Context): List<String> {
+    val rates = mutableListOf("Default / Dynamic")
+    try {
+        val dm = context.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+        val display = dm?.getDisplay(Display.DEFAULT_DISPLAY)
+        val modes = display?.supportedModes ?: emptyArray()
+        val detected = modes
+            .map { it.refreshRate.roundToInt() }
+            .filter { it > 0 }
+            .distinct()
+            .sorted()
+
+        detected.forEach { rate ->
+            rates.add("$rate Hz")
+        }
+    } catch (_: Exception) {
+        rates.addAll(listOf("60 Hz", "120 Hz"))
+    }
+    return rates
+}
+
+fun getSupportedRenderers(context: Context): List<String> {
+    val renderers = mutableListOf("System Default", "OpenGL ES")
+    val pm = context.packageManager
+    if (pm.hasSystemFeature(PackageManager.FEATURE_VULKAN_HARDWARE_VERSION)) {
+        renderers.add("Vulkan (SkiaVK)")
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        renderers.add("ANGLE")
+    }
+    return renderers
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TweaksScreen() {
+    val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val coroutineScope = rememberCoroutineScope()
+
     var isGlobalLiteMode by remember { mutableStateOf(false) }
+
+    val supportedRefreshRates = remember { getSupportedRefreshRates(context) }
+    val supportedRenderers = remember { getSupportedRenderers(context) }
+
+    var selectedRefreshRate by remember { mutableStateOf("Default / Dynamic") }
+    var selectedRenderer by remember { mutableStateOf("System Default") }
 
     var showRefreshRateDialog by remember { mutableStateOf(false) }
     var showRenderDialog by remember { mutableStateOf(false) }
@@ -68,19 +119,47 @@ fun TweaksScreen() {
             onDismissRequest = { showRefreshRateDialog = false },
             title = {
                 Text(
-                    text = "Display Refresh Rate",
+                    text = "Pilih Refresh Rate",
                     fontWeight = FontWeight.Bold
                 )
             },
             text = {
-                Text(
-                    text = "Konfigurasi target frame rate panel display sistem. Pengaturan parameter hardware ini sedang dipersiapkan.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    supportedRefreshRates.forEach { rate ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .selectable(
+                                    selected = (rate == selectedRefreshRate),
+                                    onClick = {
+                                        selectedRefreshRate = rate
+                                        showRefreshRateDialog = false
+                                    },
+                                    role = Role.RadioButton
+                                )
+                                .padding(vertical = 10.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = (rate == selectedRefreshRate),
+                                onClick = null
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = rate,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
             },
             confirmButton = {
                 TextButton(onClick = { showRefreshRateDialog = false }) {
-                    Text("Tutup")
+                    Text("Batal")
                 }
             }
         )
@@ -91,19 +170,47 @@ fun TweaksScreen() {
             onDismissRequest = { showRenderDialog = false },
             title = {
                 Text(
-                    text = "Graphics Renderer",
+                    text = "Pilih Graphics Renderer",
                     fontWeight = FontWeight.Bold
                 )
             },
             text = {
-                Text(
-                    text = "Pemilihan backend pipeline rendering grafis (Vulkan / OpenGL ES). Modul switcher sedang dipersiapkan.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    supportedRenderers.forEach { renderer ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .selectable(
+                                    selected = (renderer == selectedRenderer),
+                                    onClick = {
+                                        selectedRenderer = renderer
+                                        showRenderDialog = false
+                                    },
+                                    role = Role.RadioButton
+                                )
+                                .padding(vertical = 10.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = (renderer == selectedRenderer),
+                                onClick = null
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = renderer,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
             },
             confirmButton = {
                 TextButton(onClick = { showRenderDialog = false }) {
-                    Text("Tutup")
+                    Text("Batal")
                 }
             }
         )
@@ -177,9 +284,9 @@ fun TweaksScreen() {
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Default / Dynamic",
+                                text = selectedRefreshRate,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
@@ -217,9 +324,9 @@ fun TweaksScreen() {
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "System Default",
+                                text = selectedRenderer,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
