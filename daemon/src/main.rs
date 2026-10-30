@@ -115,6 +115,14 @@ impl EngineRuntime {
                     engine::balance_profile();
                     set_system_profile_prop("Balanced");
                     clear_all_notifications();
+                    send_notification(NotificationPayload {
+                        title: "Lumina: Balance",
+                        text: "System is now at Dynamic State",
+                        toast: Some("Balanced Profile Applied"),
+                        is_profile: true,
+                        timeout_ms: 3000,
+                        ..Default::default()
+                    });
                 }
             }
             self.current_profile = Some(target_profile);
