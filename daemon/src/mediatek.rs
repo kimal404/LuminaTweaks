@@ -43,17 +43,17 @@ fn write_sysfs(path: &str, val: &str, lock: bool) -> bool {
     if !Path::new(path).exists() {
         return false;
     }
-    if lock {
-        let _ = Command::new("chmod").args(["644", path]).status();
-    }
+    let _ = Command::new("chmod").args(["644", path]).status();
     let res = fs::write(path, val.as_bytes()).is_ok();
     if lock {
         let _ = Command::new("chmod").args(["444", path]).status();
+    } else {
+        let _ = Command::new("chmod").args(["644", path]).status();
     }
     res
 }
 
-pub fn apply_mtk_performance(is_lite: bool) {
+pub fn apply_mtk_performance() {
     if !is_mtk_device() {
         return;
     }
@@ -62,20 +62,17 @@ pub fn apply_mtk_performance(is_lite: bool) {
     let boost_ged = is_ged_boost_enabled();
 
     log!(
-        "[MTK] Performance Profile (Bypass FPSGo: {}, Boost GED: {}, Lite: {})",
+        "[MTK] Performance Profile (Bypass FPSGo: {}, Boost GED: {})",
         bypass_fpsgo,
-        boost_ged,
-        is_lite
+        boost_ged
     );
 
-    // 1. FPSGo Control
     if bypass_fpsgo {
         write_sysfs("/sys/kernel/fpsgo/common/force_onoff", "0", true);
     } else {
         write_sysfs("/sys/kernel/fpsgo/common/force_onoff", "1", false);
     }
 
-    // 2. GED (Graphics Event Daemon)
     if boost_ged {
         write_sysfs("/sys/kernel/ged/hal/custom_boost_gpu_freq", "1", true);
     } else {
@@ -83,7 +80,6 @@ pub fn apply_mtk_performance(is_lite: bool) {
     }
     write_sysfs("/sys/module/sspm_v3/holders/ged/parameters/is_GED_KPI_enabled", "0", true);
 
-    // 3. Mali Driver Power Policy & Interconnect Bus
     write_sysfs("/sys/class/misc/mali0/device/power_policy", "always_on", true);
     write_sysfs("/sys/class/devfreq/mtk-dvfsrc-devfreq/governor", "performance", true);
     write_sysfs("/proc/gpufreqv2/fix_target_opp_index", "0", true);
