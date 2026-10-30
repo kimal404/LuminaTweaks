@@ -24,7 +24,6 @@ object ConfigRepository {
     private const val CONFIG_DIR = "/data/adb/luminatweaks"
     private const val GLOBAL_CONFIG_PATH = "$CONFIG_DIR/config.json"
     private const val APP_CONFIG_PATH = "$CONFIG_DIR/app_config.json"
-    private const val CURRENT_PROFILE_PATH = "$CONFIG_DIR/current_profile"
 
     private val fileMutex = Mutex()
 
@@ -51,7 +50,8 @@ object ConfigRepository {
     }
 
     suspend fun getCurrentProfile(): String = withContext(Dispatchers.IO) {
-        runSuCmd("cat $CURRENT_PROFILE_PATH 2>/dev/null").trim()
+        val prop = runSuCmd("getprop sys.lumina.profile").trim()
+        if (prop.isNotBlank()) prop else "Balanced"
     }
 
     suspend fun getGlobalLiteMode(): Boolean = withContext(Dispatchers.IO) {

@@ -111,7 +111,7 @@ fun HomeScreen() {
 
     var batteryTemp by remember { mutableStateOf(DeviceUtil.getBatteryTemperature(context)) }
     var daemonPid by remember { mutableStateOf<String?>(null) }
-    var currentProfile by remember { mutableStateOf("Inactive") }
+    var currentProfile by remember { mutableStateOf("Balanced") }
 
     LaunchedEffect(Unit) {
         DaemonManager.startDaemon(context)
@@ -121,10 +121,9 @@ fun HomeScreen() {
                 val currentTemp = DeviceUtil.getBatteryTemperature(context)
                 val currentPid = DaemonManager.getDaemonPid()
                 val profileText = if (currentPid != null) {
-                    val raw = ConfigRepository.getCurrentProfile()
-                    if (raw.isNotBlank()) raw else "Inactive"
+                    ConfigRepository.getCurrentProfile()
                 } else {
-                    "Inactive"
+                    "-"
                 }
 
                 withContext(Dispatchers.Main) {
@@ -183,7 +182,7 @@ fun HomeScreen() {
                     deviceModel = deviceModel,
                     onRestartDaemon = {
                         daemonPid = null
-                        currentProfile = "Inactive"
+                        currentProfile = "-"
                         DaemonManager.restartDaemon(context)
                     }
                 )
@@ -395,11 +394,7 @@ fun HomeDashboardContent(
                             Text(
                                 text = currentProfile,
                                 style = MaterialTheme.typography.titleLarge,
-                                color = if (currentProfile == "Inactive") {
-                                    MaterialTheme.colorScheme.error
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface
-                                }
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
