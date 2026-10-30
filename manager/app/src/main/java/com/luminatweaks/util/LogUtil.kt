@@ -53,42 +53,70 @@ object LogUtil {
         val script = """
             TMP_DIR="/data/local/tmp/lumina_logs_tmp"
             rm -rf ${d}TMP_DIR
+
             mkdir -p ${d}TMP_DIR/LuminaConfig
             mkdir -p ${d}TMP_DIR/log
 
             cp -f /data/adb/luminatweaks/*.json ${d}TMP_DIR/LuminaConfig/ 2>/dev/null
-            cp -f /data/adb/luminatweaks/luminad.log ${d}TMP_DIR/log/daemon.log 2>/dev/null
-            cp -f /data/adb/luminatweaks/luminad.log.old ${d}TMP_DIR/log/daemon.log.old 2>/dev/null
 
-            INFO_FILE="${d}TMP_DIR/log/Lumina_Diagnostic.txt"
+            INFO_FILE="${d}TMP_DIR/log/Lumina.log"
+
+            MODULE_VER=${d}(grep '^version=' /data/adb/modules/luminatweaks/module.prop 2>/dev/null | cut -d= -f2)
+            [ -z "${d}MODULE_VER" ] && MODULE_VER="2.0.0 (Remastered)"
 
             KERNEL_INFO=${d}(uname -r -m)
             ANDROID_VER=${d}(getprop ro.build.version.release)
             API_LEVEL=${d}(getprop ro.build.version.sdk)
             DEVICE_MODEL=${d}(getprop ro.product.model)
+            FINGERPRINT=${d}(getprop ro.build.fingerprint)
             SELINUX_STATUS=${d}(getenforce 2>/dev/null)
             DAEMON_PID=${d}(pidof luminad 2>/dev/null)
             ACTIVE_PROFILE=${d}(getprop sys.lumina.profile 2>/dev/null)
             [ -z "${d}ACTIVE_PROFILE" ] && ACTIVE_PROFILE="Balanced"
 
-            echo "================================================================" > "${d}INFO_FILE"
+            echo "################################################################" > "${d}INFO_FILE"
             echo "                     LuminaTweaks Diagnostics                   " >> "${d}INFO_FILE"
-            echo "================================================================" >> "${d}INFO_FILE"
+            echo "################################################################" >> "${d}INFO_FILE"
             echo "" >> "${d}INFO_FILE"
             echo "  [Device Information]" >> "${d}INFO_FILE"
             echo "    Device Model   : ${d}DEVICE_MODEL" >> "${d}INFO_FILE"
             echo "    Android Ver    : ${d}ANDROID_VER (API ${d}API_LEVEL)" >> "${d}INFO_FILE"
             echo "    Kernel         : ${d}KERNEL_INFO" >> "${d}INFO_FILE"
             echo "    SELinux Status : ${d}SELINUX_STATUS" >> "${d}INFO_FILE"
+            echo "    Fingerprint    : ${d}FINGERPRINT" >> "${d}INFO_FILE"
             echo "" >> "${d}INFO_FILE"
             echo "  [Lumina Subsystem]" >> "${d}INFO_FILE"
             echo "    Manager Version: $appVersion" >> "${d}INFO_FILE"
+            echo "    Module Version : ${d}MODULE_VER" >> "${d}INFO_FILE"
             echo "    Daemon PID     : ${d}DAEMON_PID" >> "${d}INFO_FILE"
             echo "    Active Profile : ${d}ACTIVE_PROFILE" >> "${d}INFO_FILE"
             echo "" >> "${d}INFO_FILE"
-            echo "================================================================" >> "${d}INFO_FILE"
+            echo "################################################################" >> "${d}INFO_FILE"
+            echo "" >> "${d}INFO_FILE"
 
-            logcat -d -t 300 > ${d}TMP_DIR/log/logcat_recent.txt 2>/dev/null
+            if [ -f "/data/adb/luminatweaks/luminad.log" ]; then
+                echo "--- START OF LUMINAD SERVICE LOG ---" >> "${d}INFO_FILE"
+                cat /data/adb/luminatweaks/luminad.log >> "${d}INFO_FILE"
+                echo "" >> "${d}INFO_FILE"
+                echo "--- END OF LUMINAD SERVICE LOG ---" >> "${d}INFO_FILE"
+                echo "" >> "${d}INFO_FILE"
+            fi
+
+            if [ -f "/data/adb/luminatweaks/luminad.log.old" ]; then
+                echo "--- PREVIOUS LUMINAD SERVICE LOG (.old) ---" >> "${d}INFO_FILE"
+                cat /data/adb/luminatweaks/luminad.log.old >> "${d}INFO_FILE"
+                echo "" >> "${d}INFO_FILE"
+            fi
+
+            cat /data/adb/ksu/log/logcat.log > ${d}TMP_DIR/log/logcat.log 2>/dev/null
+            cat /data/adb/ap/log/logcat.log >> ${d}TMP_DIR/log/logcat.log 2>/dev/null
+            cat /data/adb/ksu/log/dmesg.log > ${d}TMP_DIR/log/dmesg.log 2>/dev/null
+            cat /data/adb/ap/log/dmesg.log >> ${d}TMP_DIR/log/dmesg.log 2>/dev/null
+            cat /cache/magisk.log > ${d}TMP_DIR/log/magisk.log 2>/dev/null
+            cat /data/adb/magisk.log >> ${d}TMP_DIR/log/magisk.log 2>/dev/null
+            cat /data/adb/apatch/log/* >> ${d}TMP_DIR/log/apatch.log 2>/dev/null
+
+            logcat -d -t 350 > ${d}TMP_DIR/log/logcat_recent.txt 2>/dev/null
             dmesg | tail -n 250 > ${d}TMP_DIR/log/dmesg_recent.txt 2>/dev/null
 
             cd /data/local/tmp
