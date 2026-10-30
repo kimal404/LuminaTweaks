@@ -188,6 +188,7 @@ fun HomeScreen() {
                 )
                 1 -> AppsScreen()
                 2 -> TweaksScreen()
+                3 -> SettingsScreen()
             }
         }
     }

@@ -3,6 +3,7 @@ package com.luminatweaks.ui.component
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -70,6 +71,25 @@ fun LuminaBottomBar(
                 )
             },
             label = { Text("Tweaks") },
+            colors = NavigationBarItemDefaults.colors(
+                indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        )
+
+        NavigationBarItem(
+            selected = selectedTab == 3,
+            onClick = { onTabSelected(3) },
+            icon = {
+                Icon(
+                    imageVector = Icons.Rounded.Settings,
+                    contentDescription = "Settings"
+                )
+            },
+            label = { Text("Settings") },
             colors = NavigationBarItemDefaults.colors(
                 indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
                 selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
