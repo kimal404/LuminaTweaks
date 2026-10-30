@@ -12,7 +12,9 @@ import java.io.InputStreamReader
 data class AppProfileConfig(
     val pkg: String,
     val saklarUtama: Boolean = false,
-    val liteMode: String = "default", // "default", "on", "off"
+    val liteMode: String = "default",
+    val refreshRate: String = "default",
+    val renderer: String = "default",
     val dnd: Boolean = false
 )
 
@@ -86,6 +88,8 @@ object ConfigRepository {
                         pkg = pkg,
                         saklarUtama = obj.optBoolean("saklar_utama", false),
                         liteMode = obj.optString("lite_mode", "default"),
+                        refreshRate = obj.optString("refresh_rate", "default"),
+                        renderer = obj.optString("renderer", "default"),
                         dnd = obj.optBoolean("dnd", false)
                     )
                 }
@@ -112,6 +116,8 @@ object ConfigRepository {
                     put("pkg", item.pkg)
                     put("saklar_utama", item.saklarUtama)
                     put("lite_mode", item.liteMode)
+                    put("refresh_rate", item.refreshRate)
+                    put("renderer", item.renderer)
                     put("dnd", item.dnd)
                 }
                 arr.put(obj)
@@ -120,6 +126,7 @@ object ConfigRepository {
             runSuCmd("echo '$rawJson' > $APP_CONFIG_PATH")
         }
     }
+
     suspend fun getRefreshRateModes(): List<DisplayRrMode> = withContext(Dispatchers.IO) {
         val content = runSuCmd("cat /data/adb/luminatweaks/rr_modes.json 2>/dev/null")
         if (content.isBlank()) return@withContext emptyList()

@@ -19,19 +19,23 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.BatterySaver
+import androidx.compose.material.icons.rounded.Brush
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.PowerSettingsNew
+import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -40,6 +44,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MediumTopAppBar
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -76,6 +82,9 @@ enum class LiteModeOption(val label: String, val value: String) {
     }
 }
 
+data class RendererOption(val id: String, val label: String)
+data class RefreshRateOption(val value: String, val label: String)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppProfileScreen(
@@ -91,6 +100,31 @@ fun AppProfileScreen(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
     var showLiteModeDialog by remember { mutableStateOf(false) }
+    var showRefreshRateDialog by remember { mutableStateOf(false) }
+    var showRendererDialog by remember { mutableStateOf(false) }
+
+    val rendererOptions = remember {
+        listOf(
+            RendererOption("default", "Default (Ikuti Global)"),
+            RendererOption("skiavk", "Skia Vulkan"),
+            RendererOption("skiavkthreaded", "Skia Vulkan Threaded"),
+            RendererOption("skiagl", "Skia OpenGL"),
+            RendererOption("skiaglthreaded", "Skia OpenGL Threaded"),
+            RendererOption("opengl", "OpenGL ES"),
+            RendererOption("openglthreaded", "OpenGL ES Threaded"),
+            RendererOption("vulkan", "Vulkan")
+        )
+    }
+
+    val refreshRateOptions = remember {
+        listOf(
+            RefreshRateOption("default", "Default (Ikuti Global)"),
+            RefreshRateOption("60", "60 Hz"),
+            RefreshRateOption("90", "90 Hz"),
+            RefreshRateOption("120", "120 Hz"),
+            RefreshRateOption("144", "144 Hz")
+        )
+    }
 
     val packageInfo = remember(app.packageName) {
         runCatching { packageManager.getPackageInfo(app.packageName, 0) }.getOrNull()
@@ -266,7 +300,6 @@ fun AppProfileScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    // Saklar Utama Row (Seluruh kartu clickable)
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -320,7 +353,6 @@ fun AppProfileScreen(
                         exit = fadeOut() + shrinkVertically()
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            // Lite Mode Selector Row
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -377,7 +409,122 @@ fun AppProfileScreen(
                                 }
                             }
 
-                            // DND saat Gaming Row (Seluruh kartu clickable)
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showRefreshRateDialog = true },
+                                shape = getConnectedContainerShape(ContainerPosition.Middle, outerRadius = 18.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Speed,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Refresh Rate",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "Kunci Hz layar khusus saat game ini dibuka",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .background(
+                                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                                shape = RoundedCornerShape(8.dp)
+                                            )
+                                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        val currentHzLabel = refreshRateOptions.find { it.value == profile.refreshRate }?.label ?: "Default (Ikuti Global)"
+                                        Text(
+                                            text = currentHzLabel,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                                        )
+                                    }
+                                }
+                            }
+
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showRendererDialog = true },
+                                shape = getConnectedContainerShape(ContainerPosition.Middle, outerRadius = 18.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Brush,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Graphics Renderer",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "Backend render grafik aplikasi",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .background(
+                                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                                shape = RoundedCornerShape(8.dp)
+                                            )
+                                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        val currentRendererLabel = rendererOptions.find { it.id == profile.renderer }?.label ?: "Default (Ikuti Global)"
+                                        Text(
+                                            text = currentRendererLabel,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -488,6 +635,120 @@ fun AppProfileScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showLiteModeDialog = false }) {
+                    Text("Selesai")
+                }
+            }
+        )
+    }
+
+    if (showRefreshRateDialog) {
+        AlertDialog(
+            onDismissRequest = { showRefreshRateDialog = false },
+            title = {
+                Text(
+                    text = "Pilih Refresh Rate",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 320.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(refreshRateOptions) { item ->
+                        val isSelected = profile.refreshRate == item.value
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    onProfileChanged(profile.copy(refreshRate = item.value))
+                                }
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = isSelected,
+                                onClick = {
+                                    onProfileChanged(profile.copy(refreshRate = item.value))
+                                },
+                                colors = RadioButtonDefaults.colors(
+                                    selectedColor = MaterialTheme.colorScheme.primary
+                                )
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = item.label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showRefreshRateDialog = false }) {
+                    Text("Selesai")
+                }
+            }
+        )
+    }
+
+    if (showRendererDialog) {
+        AlertDialog(
+            onDismissRequest = { showRendererDialog = false },
+            title = {
+                Text(
+                    text = "Pilih Renderer",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 350.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(rendererOptions) { item ->
+                        val isSelected = profile.renderer == item.id
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    onProfileChanged(profile.copy(renderer = item.id))
+                                }
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = isSelected,
+                                onClick = {
+                                    onProfileChanged(profile.copy(renderer = item.id))
+                                },
+                                colors = RadioButtonDefaults.colors(
+                                    selectedColor = MaterialTheme.colorScheme.primary
+                                )
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = item.label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showRendererDialog = false }) {
                     Text("Selesai")
                 }
             }
