@@ -26,8 +26,10 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DeveloperBoard
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -38,7 +40,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -173,6 +174,20 @@ suspend fun saveGedBoost(enabled: Boolean) = withContext(Dispatchers.IO) {
     runShellCommand(cmd)
 }
 
+suspend fun loadDisableThermal(): Boolean = withContext(Dispatchers.IO) {
+    val fileSaved = runShellCommand("cat /data/adb/luminatweaks/disable_thermal.txt 2>/dev/null")
+    if (fileSaved.isNotBlank()) return@withContext fileSaved == "1"
+    val propSaved = runShellCommand("getprop persist.lumina.disable_thermal")
+    if (propSaved.isNotBlank()) return@withContext propSaved == "1"
+    false
+}
+
+suspend fun saveDisableThermal(enabled: Boolean) = withContext(Dispatchers.IO) {
+    val valStr = if (enabled) "1" else "0"
+    val cmd = "mkdir -p /data/adb/luminatweaks && echo '$valStr' > /data/adb/luminatweaks/disable_thermal.txt && setprop persist.lumina.disable_thermal '$valStr'"
+    runShellCommand(cmd)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MediaTekEngineScreen(
@@ -217,6 +232,45 @@ fun MediaTekEngineScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Informasi Profil",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Fitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. Pada profil Balanced atau Eco, subsistem kembali ke baseline standar.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -343,6 +397,7 @@ fun TweaksScreen() {
     val coroutineScope = rememberCoroutineScope()
 
     var isGlobalLiteMode by remember { mutableStateOf(false) }
+    var isDisableThermal by remember { mutableStateOf(false) }
 
     var rrModes by remember { mutableStateOf<List<DisplayRrMode>>(emptyList()) }
     var currentRrId by remember { mutableStateOf<Int?>(null) }
@@ -359,6 +414,7 @@ fun TweaksScreen() {
 
     LaunchedEffect(Unit) {
         isGlobalLiteMode = ConfigRepository.getGlobalLiteMode()
+        isDisableThermal = loadDisableThermal()
         rrModes = ConfigRepository.getRefreshRateModes()
         currentRrId = ConfigRepository.getCurrentRefreshRateId()
         currentRendererId = loadActiveRenderer()
@@ -382,13 +438,6 @@ fun TweaksScreen() {
 
     val currentRendererText = remember(currentRendererId) {
         RENDERER_OPTIONS.find { it.id.equals(currentRendererId, ignoreCase = true) }?.label ?: currentRendererId
-    }
-
-    val mtkSummaryText = remember(isBypassFpsgo, isBoostGed) {
-        val activeFeatures = mutableListOf<String>()
-        if (isBypassFpsgo) activeFeatures.add("Bypass FPSGo")
-        if (isBoostGed) activeFeatures.add("GED Boost")
-        if (activeFeatures.isEmpty()) "Standard" else activeFeatures.joinToString(" • ")
     }
 
     if (inMtkSubpage) {
@@ -660,13 +709,13 @@ fun TweaksScreen() {
                             modifier = Modifier
                                 .size(40.dp)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                                .background(MaterialTheme.colorScheme.primaryContainer),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.BatterySaver,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.size(22.dp)
                             )
                         }
@@ -680,7 +729,7 @@ fun TweaksScreen() {
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Batasi clock prosesor untuk efisiensi daya dan stabilitas suhu.",
+                                text = "Batasi frekuensi CPU.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -692,6 +741,67 @@ fun TweaksScreen() {
                                 isGlobalLiteMode = newState
                                 coroutineScope.launch {
                                     ConfigRepository.setGlobalLiteMode(newState)
+                                }
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                checkedTrackColor = MaterialTheme.colorScheme.primary
+                            )
+                        )
+                    }
+                }
+            }
+
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Thermostat,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Disable Thermal",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Matikan thermal sepenuhnya pada profil Performance.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Switch(
+                            checked = isDisableThermal,
+                            onCheckedChange = { newState ->
+                                isDisableThermal = newState
+                                coroutineScope.launch {
+                                    saveDisableThermal(newState)
                                 }
                             },
                             colors = SwitchDefaults.colors(
@@ -749,19 +859,6 @@ fun TweaksScreen() {
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh
-                            ) {
-                                Text(
-                                    text = mtkSummaryText,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(6.dp))
                             Icon(
                                 imageVector = Icons.Rounded.ChevronRight,
                                 contentDescription = null,
