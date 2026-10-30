@@ -3,6 +3,7 @@ package com.luminatweaks.ui.screen
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,13 +48,17 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.luminatweaks.util.LogUtil
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen() {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     var showLogBottomSheet by remember { mutableStateOf(false) }
+    var isGeneratingLog by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
 
     Scaffold(
@@ -88,7 +95,7 @@ fun SettingsScreen() {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { showLogBottomSheet = true },
+                        .clickable(enabled = !isGeneratingLog) { showLogBottomSheet = true },
                     shape = getConnectedContainerShape(ContainerPosition.Single, outerRadius = 18.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
@@ -100,12 +107,20 @@ fun SettingsScreen() {
                             .padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Description,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(24.dp)
-                        )
+                        if (isGeneratingLog) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.5.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Rounded.Description,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                         Spacer(modifier = Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
@@ -116,7 +131,7 @@ fun SettingsScreen() {
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Ekspor atau bagikan log diagnosis daemon Lumina",
+                                text = if (isGeneratingLog) "Sedang membundel berkas log..." else "Ekspor atau bagikan log diagnosis daemon Lumina",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -150,10 +165,19 @@ fun SettingsScreen() {
                 LogOptionCard(
                     icon = Icons.Rounded.FileDownload,
                     title = "Simpan Log",
-                    subtitle = "Simpan berkas log ke penyimpanan perangkat",
+                    subtitle = "Simpan berkas log ke folder Download",
                     onClick = {
                         showLogBottomSheet = false
-                        Toast.makeText(context, "Log berhasil disimpan (Placeholder)", Toast.LENGTH_SHORT).show()
+                        isGeneratingLog = true
+                        coroutineScope.launch {
+                            val file = LogUtil.dumpDiagnosticLogs(context, saveToDownloads = true)
+                            isGeneratingLog = false
+                            if (file != null) {
+                                Toast.makeText(context, "Log tersimpan: Download/${file.name}", Toast.LENGTH_LONG).show()
+                            } else {
+                                Toast.makeText(context, "Gagal mengekspor log sistem", Toast.LENGTH_SHORT).show()
+                            }
+                        }
                     }
                 )
 
@@ -163,7 +187,17 @@ fun SettingsScreen() {
                     subtitle = "Bagikan berkas log langsung ke aplikasi lain",
                     onClick = {
                         showLogBottomSheet = false
-                        Toast.makeText(context, "Membagikan log (Placeholder)", Toast.LENGTH_SHORT).show()
+                        isGeneratingLog = true
+                        coroutineScope.launch {
+                            val file = LogUtil.dumpDiagnosticLogs(context, saveToDownloads = false)
+                            isGeneratingLog = false
+                            if (file != null) {
+                                val intent = LogUtil.getShareLogIntent(context, file)
+                                context.startActivity(intent)
+                            } else {
+                                Toast.makeText(context, "Gagal menyiapkan berkas log untuk dibagikan", Toast.LENGTH_SHORT).show()
+                            }
+                        }
                     }
                 )
             }
