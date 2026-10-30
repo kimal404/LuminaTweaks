@@ -45,7 +45,7 @@ object LogUtil {
         val appVersion = try {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
         } catch (e: Exception) {
-            "2.0.0"
+            "2.0.1"
         }
 
         val d = "$"
@@ -56,7 +56,9 @@ object LogUtil {
             mkdir -p ${d}TMP_DIR/LuminaConfig
             mkdir -p ${d}TMP_DIR/log
 
-            cp /data/adb/luminatweaks/*.json ${d}TMP_DIR/LuminaConfig/ 2>/dev/null
+            cp -f /data/adb/luminatweaks/*.json ${d}TMP_DIR/LuminaConfig/ 2>/dev/null
+            cp -f /data/adb/luminatweaks/luminad.log ${d}TMP_DIR/log/daemon.log 2>/dev/null
+            cp -f /data/adb/luminatweaks/luminad.log.old ${d}TMP_DIR/log/daemon.log.old 2>/dev/null
 
             INFO_FILE="${d}TMP_DIR/log/Lumina_Diagnostic.txt"
 
@@ -86,7 +88,8 @@ object LogUtil {
             echo "" >> "${d}INFO_FILE"
             echo "================================================================" >> "${d}INFO_FILE"
 
-            logcat -d -t 350 -s luminad,LuminaTweaks > ${d}TMP_DIR/log/daemon_logcat.txt 2>/dev/null
+            logcat -d -t 300 > ${d}TMP_DIR/log/logcat_recent.txt 2>/dev/null
+            dmesg | tail -n 250 > ${d}TMP_DIR/log/dmesg_recent.txt 2>/dev/null
 
             cd /data/local/tmp
             tar -czf "$fileName" -C lumina_logs_tmp .
