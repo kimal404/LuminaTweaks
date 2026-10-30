@@ -133,6 +133,34 @@ suspend fun applyRendererSetting(id: String) = withContext(Dispatchers.IO) {
     runShellCommand(cmds.joinToString(" && "))
 }
 
+suspend fun loadFpsgoBypass(): Boolean = withContext(Dispatchers.IO) {
+    val fileSaved = runShellCommand("cat /data/adb/luminatweaks/fpsgo_bypass.txt 2>/dev/null")
+    if (fileSaved.isNotBlank()) return@withContext fileSaved == "1"
+    val propSaved = runShellCommand("getprop persist.lumina.fpsgo_bypass")
+    if (propSaved.isNotBlank()) return@withContext propSaved == "1"
+    false
+}
+
+suspend fun saveFpsgoBypass(enabled: Boolean) = withContext(Dispatchers.IO) {
+    val valStr = if (enabled) "1" else "0"
+    val cmd = "mkdir -p /data/adb/luminatweaks && echo '$valStr' > /data/adb/luminatweaks/fpsgo_bypass.txt && setprop persist.lumina.fpsgo_bypass '$valStr'"
+    runShellCommand(cmd)
+}
+
+suspend fun loadGedBoost(): Boolean = withContext(Dispatchers.IO) {
+    val fileSaved = runShellCommand("cat /data/adb/luminatweaks/ged_boost.txt 2>/dev/null")
+    if (fileSaved.isNotBlank()) return@withContext fileSaved == "1"
+    val propSaved = runShellCommand("getprop persist.lumina.ged_boost")
+    if (propSaved.isNotBlank()) return@withContext propSaved == "1"
+    true
+}
+
+suspend fun saveGedBoost(enabled: Boolean) = withContext(Dispatchers.IO) {
+    val valStr = if (enabled) "1" else "0"
+    val cmd = "mkdir -p /data/adb/luminatweaks && echo '$valStr' > /data/adb/luminatweaks/ged_boost.txt && setprop persist.lumina.ged_boost '$valStr'"
+    runShellCommand(cmd)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TweaksScreen() {
@@ -146,6 +174,10 @@ fun TweaksScreen() {
 
     var currentRendererId by remember { mutableStateOf("default") }
 
+    var isMtkDevice by remember { mutableStateOf(false) }
+    var isBypassFpsgo by remember { mutableStateOf(false) }
+    var isBoostGed by remember { mutableStateOf(true) }
+
     var showRefreshRateDialog by remember { mutableStateOf(false) }
     var showRenderDialog by remember { mutableStateOf(false) }
 
@@ -154,6 +186,13 @@ fun TweaksScreen() {
         rrModes = ConfigRepository.getRefreshRateModes()
         currentRrId = ConfigRepository.getCurrentRefreshRateId()
         currentRendererId = loadActiveRenderer()
+
+        val mtkCheck = runShellCommand("[ -e /sys/kernel/fpsgo/common/force_onoff ] && echo 1 || echo 0")
+        isMtkDevice = mtkCheck == "1"
+        if (isMtkDevice) {
+            isBypassFpsgo = loadFpsgoBypass()
+            isBoostGed = loadGedBoost()
+        }
     }
 
     val currentRrText = remember(currentRrId, rrModes) {
@@ -445,6 +484,124 @@ fun TweaksScreen() {
                                 checkedTrackColor = MaterialTheme.colorScheme.primary
                             )
                         )
+                    }
+                }
+            }
+
+            if (isMtkDevice) {
+                item {
+                    Text(
+                        text = "MediaTek Engine",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = 4.dp, top = 6.dp)
+                    )
+                }
+
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = getConnectedContainerShape(ContainerPosition.Single, outerRadius = 18.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Speed,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Bypass Frame Limiter (FPSGo)",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Bypass pembatasan frame rate dinamis saat perangkat hangat. Menjaga FPS tetap stabil, namun suhu perangkat akan meningkat.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Switch(
+                                checked = isBypassFpsgo,
+                                onCheckedChange = { newState ->
+                                    isBypassFpsgo = newState
+                                    coroutineScope.launch {
+                                        saveFpsgoBypass(newState)
+                                    }
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                    checkedTrackColor = MaterialTheme.colorScheme.primary
+                                )
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = getConnectedContainerShape(ContainerPosition.Single, outerRadius = 18.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.DeveloperBoard,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Mali GED GPU Boost",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Akselerasi frekuensi GPU Mali seketika saat render beban grafis berat untuk memangkas micro-stutter.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Switch(
+                                checked = isBoostGed,
+                                onCheckedChange = { newState ->
+                                    isBoostGed = newState
+                                    coroutineScope.launch {
+                                        saveGedBoost(newState)
+                                    }
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                    checkedTrackColor = MaterialTheme.colorScheme.primary
+                                )
+                            )
+                        }
                     }
                 }
             }
