@@ -64,6 +64,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DaemonManager
 import com.luminatweaks.ui.component.LuminaBottomBar
 import com.luminatweaks.util.DeviceUtil
@@ -110,6 +111,7 @@ fun HomeScreen() {
 
     var batteryTemp by remember { mutableStateOf(DeviceUtil.getBatteryTemperature(context)) }
     var daemonPid by remember { mutableStateOf<String?>(null) }
+    var currentProfile by remember { mutableStateOf("Inactive") }
 
     LaunchedEffect(Unit) {
         DaemonManager.startDaemon(context)
@@ -118,11 +120,19 @@ fun HomeScreen() {
             while (isActive) {
                 val currentTemp = DeviceUtil.getBatteryTemperature(context)
                 val currentPid = DaemonManager.getDaemonPid()
+                val profileText = if (currentPid != null) {
+                    val raw = ConfigRepository.getCurrentProfile()
+                    if (raw.isNotBlank()) raw else "Inactive"
+                } else {
+                    "Inactive"
+                }
+
                 withContext(Dispatchers.Main) {
                     batteryTemp = currentTemp
                     daemonPid = currentPid
+                    currentProfile = profileText
                 }
-                delay(2000L)
+                delay(1500L)
             }
         }
     }
@@ -168,10 +178,12 @@ fun HomeScreen() {
                 0 -> HomeDashboardContent(
                     batteryTemp = batteryTemp,
                     daemonPid = daemonPid,
+                    currentProfile = currentProfile,
                     kernelVersion = kernelVersion,
                     deviceModel = deviceModel,
                     onRestartDaemon = {
                         daemonPid = null
+                        currentProfile = "Inactive"
                         DaemonManager.restartDaemon(context)
                     }
                 )
@@ -187,6 +199,7 @@ fun HomeScreen() {
 fun HomeDashboardContent(
     batteryTemp: String,
     daemonPid: String?,
+    currentProfile: String,
     kernelVersion: String,
     deviceModel: String,
     onRestartDaemon: suspend () -> Unit
@@ -380,9 +393,13 @@ fun HomeDashboardContent(
                             }
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(
-                                text = "Balanced",
+                                text = currentProfile,
                                 style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = if (currentProfile == "Inactive") {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                }
                             )
                         }
                     }
