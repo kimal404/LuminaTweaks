@@ -12,7 +12,7 @@ use detector::{
     get_app_config, get_focused_package, get_zen_mode, is_app_enabled, is_app_retained,
     is_lite_mode_active, is_low_power_active, is_master_enabled, set_zen_mode,
 };
-use notifier::{send_notification, NotificationPayload};
+use notifier::{clear_all_notifications, send_notification, NotificationPayload};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Profile {
@@ -100,7 +100,7 @@ fn main() {
                         engine::performance_profile();
                         send_notification(NotificationPayload {
                             title: "Lumina: Performance",
-                            text: "Target App Active • Boost Engaged",
+                            text: "System is now at Maximum State",
                             toast: Some("Performance Profile Applied"),
                             is_profile: true,
                             chrono: true,
@@ -111,7 +111,7 @@ fn main() {
                         engine::performance_lite_profile();
                         send_notification(NotificationPayload {
                             title: "Lumina: Performance Lite",
-                            text: "Target App Active • Lite Boost (No SoC Lock)",
+                            text: "System is now at Optimized State",
                             toast: Some("Performance Lite Profile Applied"),
                             is_profile: true,
                             chrono: true,
@@ -121,8 +121,8 @@ fn main() {
                     Profile::Eco => {
                         engine::eco_profile();
                         send_notification(NotificationPayload {
-                            title: "ECO Mode",
-                            text: "System is now at Endurance state",
+                            title: "Lumina: Eco",
+                            text: "System is now at Endurance State",
                             toast: Some("Applying Eco Mode"),
                             is_profile: true,
                             chrono: true,
@@ -243,14 +243,7 @@ fn main() {
                 original_zen_mode = None;
             }
 
-            send_notification(NotificationPayload {
-                title: "Lumina: Disabled",
-                text: "Master Switch Off • Reverted to Balance",
-                toast: Some("Lumina Master Switch Disabled"),
-                is_profile: true,
-                chrono: true,
-                ..Default::default()
-            });
+            clear_all_notifications();
         }
 
         thread::sleep(Duration::from_millis(1200));
