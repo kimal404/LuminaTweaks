@@ -1,6 +1,15 @@
 use std::process::Command;
 use serde_json::Value;
 
+#[derive(Debug, Clone, Default)]
+pub struct AppConfig {
+    pub enabled: bool,
+    pub lite_mode: String,
+    pub refresh_rate: String,
+    pub renderer: String,
+    pub dnd: String,
+}
+
 pub fn get_focused_package() -> Option<String> {
     let output = Command::new("dumpsys")
         .args(["window"])
@@ -117,7 +126,46 @@ pub fn is_lite_mode_active() -> bool {
     false
 }
 
-fn get_package_field(pkg: &str, field_keys: &[&str]) -> bool {
+fn extract_app_config(item: &Value) -> AppConfig {
+    let enabled = item.get("saklar_utama")
+        .or_else(|| item.get("saklarUtama"))
+        .or_else(|| item.get("enabled"))
+        .map(is_truthy)
+        .unwrap_or(false);
+
+    let lite_mode = match item.get("lite_mode").or_else(|| item.get("liteMode")) {
+        Some(Value::Bool(b)) => if *b { "on".to_string() } else { "off".to_string() },
+        Some(Value::String(s)) => s.clone(),
+        _ => "default".to_string(),
+    };
+
+    let refresh_rate = match item.get("refresh_rate").or_else(|| item.get("refreshRate")) {
+        Some(Value::Number(n)) => n.to_string(),
+        Some(Value::String(s)) => s.clone(),
+        _ => "default".to_string(),
+    };
+
+    let renderer = match item.get("renderer") {
+        Some(Value::String(s)) => s.clone(),
+        _ => "default".to_string(),
+    };
+
+    let dnd = match item.get("dnd") {
+        Some(Value::Bool(b)) => if *b { "on".to_string() } else { "off".to_string() },
+        Some(Value::String(s)) => s.clone(),
+        _ => "default".to_string(),
+    };
+
+    AppConfig {
+        enabled,
+        lite_mode,
+        refresh_rate,
+        renderer,
+        dnd,
+    }
+}
+
+pub fn get_app_config(pkg: &str) -> Option<AppConfig> {
     if let Ok(content) = std::fs::read_to_string("/data/adb/luminatweaks/app_config.json") {
         if let Ok(json) = serde_json::from_str::<Value>(&content) {
             if let Some(list) = json.as_array() {
@@ -127,61 +175,29 @@ fn get_package_field(pkg: &str, field_keys: &[&str]) -> bool {
                         || item.get("packageName").and_then(|v| v.as_str()) == Some(pkg);
 
                     if matches_pkg {
-                        for key in field_keys {
-                            if let Some(val) = item.get(*key) {
-                                if is_truthy(val) {
-                                    return true;
-                                }
-                            }
-                        }
+                        return Some(extract_app_config(item));
                     }
                 }
             }
 
             if let Some(app_obj) = json.get(pkg) {
-                for key in field_keys {
-                    if let Some(val) = app_obj.get(*key) {
-                        if is_truthy(val) {
-                            return true;
-                        }
-                    }
-                }
+                return Some(extract_app_config(app_obj));
             }
         }
     }
 
     let conf_path = format!("/data/adb/luminatweaks/configs/{}.json", pkg);
     if let Ok(content) = std::fs::read_to_string(conf_path) {
-        if let Ok(json) = serde_json::from_str::<Value>(&content) {
-            for key in field_keys {
-                if let Some(val) = json.get(*key) {
-                    if is_truthy(val) {
-                        return true;
-                    }
-                }
-            }
+        if let Ok(item) = serde_json::from_str::<Value>(&content) {
+            return Some(extract_app_config(&item));
         }
     }
 
-    false
+    None
 }
 
 pub fn is_app_enabled(pkg: &str) -> bool {
-    get_package_field(pkg, &["saklar_utama", "saklarUtama", "enabled", "isBoosted"])
-}
-
-pub fn is_app_lite_mode(pkg: &str) -> bool {
-    get_package_field(
-        pkg,
-        &[
-            "lite_mode",
-            "mode_lite",
-            "liteMode",
-            "modeLite",
-            "isLite",
-            "performanceLite",
-        ],
-    )
+    get_app_config(pkg).map(|c| c.enabled).unwrap_or(false)
 }
 
 pub fn is_process_alive(pkg: &str) -> bool {
@@ -229,4 +245,18 @@ pub fn is_app_retained(pkg: &str) -> bool {
         return false;
     }
     is_task_in_recents(pkg)
+}
+
+pub fn get_zen_mode() -> Option<String> {
+    Command::new("settings")
+        .args(["get", "global", "zen_mode"])
+        .output()
+        .ok()
+        .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+pub fn set_zen_mode(mode: &str) {
+    let _ = Command::new("settings")
+        .args(["put", "global", "zen_mode", mode])
+        .output();
 }

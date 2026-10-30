@@ -54,6 +54,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,20 +71,21 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.luminatweaks.data.AppProfileConfig
+import com.luminatweaks.data.ConfigRepository
+import com.luminatweaks.data.DisplayRrMode
 import com.luminatweaks.model.AppItem
 
-enum class LiteModeOption(val label: String, val value: String) {
+enum class OptionItem(val label: String, val value: String) {
     OFF("Mati", "off"),
     DEFAULT("Default", "default"),
     ON("Hidup", "on");
 
     companion object {
-        fun fromValue(v: String): LiteModeOption = entries.find { it.value == v } ?: DEFAULT
+        fun fromValue(v: String): OptionItem = entries.find { it.value == v } ?: DEFAULT
     }
 }
 
 data class RendererOption(val id: String, val label: String)
-data class RefreshRateOption(val value: String, val label: String)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,13 +101,28 @@ fun AppProfileScreen(
     val packageManager = remember { context.packageManager }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
+    var rrModes by remember { mutableStateOf<List<DisplayRrMode>>(emptyList()) }
+
     var showLiteModeDialog by remember { mutableStateOf(false) }
     var showRefreshRateDialog by remember { mutableStateOf(false) }
     var showRendererDialog by remember { mutableStateOf(false) }
+    var showDndDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        rrModes = ConfigRepository.getRefreshRateModes()
+    }
+
+    val triStateOptions = remember {
+        listOf(
+            OptionItem.OFF,
+            OptionItem.DEFAULT,
+            OptionItem.ON
+        )
+    }
 
     val rendererOptions = remember {
         listOf(
-            RendererOption("default", "Default (Ikuti Global)"),
+            RendererOption("default", "Default"),
             RendererOption("skiavk", "Skia Vulkan"),
             RendererOption("skiavkthreaded", "Skia Vulkan Threaded"),
             RendererOption("skiagl", "Skia OpenGL"),
@@ -116,14 +133,13 @@ fun AppProfileScreen(
         )
     }
 
-    val refreshRateOptions = remember {
-        listOf(
-            RefreshRateOption("default", "Default (Ikuti Global)"),
-            RefreshRateOption("60", "60 Hz"),
-            RefreshRateOption("90", "90 Hz"),
-            RefreshRateOption("120", "120 Hz"),
-            RefreshRateOption("144", "144 Hz")
-        )
+    val currentHzLabel = remember(profile.refreshRate, rrModes) {
+        if (profile.refreshRate == "default" || profile.refreshRate.isBlank()) {
+            "Default"
+        } else {
+            val matched = rrModes.find { it.id.toString() == profile.refreshRate || it.hz.toString() == profile.refreshRate }
+            if (matched != null) "${matched.hz} Hz" else "Mode ${profile.refreshRate}"
+        }
     }
 
     val packageInfo = remember(app.packageName) {
@@ -399,8 +415,9 @@ fun AppProfileScreen(
                                             .padding(horizontal = 10.dp, vertical = 6.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
+                                        val currentLiteLabel = OptionItem.fromValue(profile.liteMode).label
                                         Text(
-                                            text = LiteModeOption.fromValue(profile.liteMode).label,
+                                            text = currentLiteLabel,
                                             style = MaterialTheme.typography.labelMedium,
                                             fontWeight = FontWeight.SemiBold,
                                             color = MaterialTheme.colorScheme.onSecondaryContainer
@@ -455,7 +472,6 @@ fun AppProfileScreen(
                                             .padding(horizontal = 10.dp, vertical = 6.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        val currentHzLabel = refreshRateOptions.find { it.value == profile.refreshRate }?.label ?: "Default (Ikuti Global)"
                                         Text(
                                             text = currentHzLabel,
                                             style = MaterialTheme.typography.labelMedium,
@@ -512,7 +528,7 @@ fun AppProfileScreen(
                                             .padding(horizontal = 10.dp, vertical = 6.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        val currentRendererLabel = rendererOptions.find { it.id == profile.renderer }?.label ?: "Default (Ikuti Global)"
+                                        val currentRendererLabel = rendererOptions.find { it.id == profile.renderer }?.label ?: "Default"
                                         Text(
                                             text = currentRendererLabel,
                                             style = MaterialTheme.typography.labelMedium,
@@ -528,9 +544,7 @@ fun AppProfileScreen(
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable {
-                                        onProfileChanged(profile.copy(dnd = !profile.dnd))
-                                    },
+                                    .clickable { showDndDialog = true },
                                 shape = getConnectedContainerShape(ContainerPosition.Bottom, outerRadius = 18.dp),
                                 colors = CardDefaults.cardColors(
                                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
@@ -539,7 +553,7 @@ fun AppProfileScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                        .padding(horizontal = 16.dp, vertical = 14.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(
@@ -563,17 +577,24 @@ fun AppProfileScreen(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Switch(
-                                        checked = profile.dnd,
-                                        onCheckedChange = { newState ->
-                                            onProfileChanged(profile.copy(dnd = newState))
-                                        },
-                                        colors = SwitchDefaults.colors(
-                                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                            checkedTrackColor = MaterialTheme.colorScheme.primary
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .background(
+                                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                                shape = RoundedCornerShape(8.dp)
+                                            )
+                                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        val currentDndLabel = OptionItem.fromValue(profile.dnd).label
+                                        Text(
+                                            text = currentDndLabel,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer
                                         )
-                                    )
+                                    }
                                 }
                             }
                         }
@@ -584,50 +605,49 @@ fun AppProfileScreen(
     }
 
     if (showLiteModeDialog) {
-        val currentOption = LiteModeOption.fromValue(profile.liteMode)
         AlertDialog(
             onDismissRequest = { showLiteModeDialog = false },
             title = {
                 Text(
-                    text = "Lite Mode",
+                    text = "Pilih Lite Mode",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
             },
             text = {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 320.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    listOf(LiteModeOption.OFF, LiteModeOption.DEFAULT, LiteModeOption.ON).forEach { option ->
-                        val isSelected = currentOption == option
-                        val containerColor = if (isSelected) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surfaceContainerHighest
-                        }
-                        val contentColor = if (isSelected) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-
-                        Box(
+                    items(triStateOptions) { item ->
+                        val isSelected = profile.liteMode == item.value
+                        Row(
                             modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(containerColor)
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
                                 .clickable {
-                                    onProfileChanged(profile.copy(liteMode = option.value))
+                                    onProfileChanged(profile.copy(liteMode = item.value))
                                 }
-                                .padding(vertical = 12.dp),
-                            contentAlignment = Alignment.Center
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            RadioButton(
+                                selected = isSelected,
+                                onClick = {
+                                    onProfileChanged(profile.copy(liteMode = item.value))
+                                },
+                                colors = RadioButtonDefaults.colors(
+                                    selectedColor = MaterialTheme.colorScheme.primary
+                                )
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = option.label,
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = contentColor
+                                text = item.label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
@@ -658,22 +678,22 @@ fun AppProfileScreen(
                         .heightIn(max = 320.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    items(refreshRateOptions) { item ->
-                        val isSelected = profile.refreshRate == item.value
+                    item {
+                        val isDefault = profile.refreshRate == "default" || profile.refreshRate.isBlank()
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(10.dp))
                                 .clickable {
-                                    onProfileChanged(profile.copy(refreshRate = item.value))
+                                    onProfileChanged(profile.copy(refreshRate = "default"))
                                 }
                                 .padding(horizontal = 8.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             RadioButton(
-                                selected = isSelected,
+                                selected = isDefault,
                                 onClick = {
-                                    onProfileChanged(profile.copy(refreshRate = item.value))
+                                    onProfileChanged(profile.copy(refreshRate = "default"))
                                 },
                                 colors = RadioButtonDefaults.colors(
                                     selectedColor = MaterialTheme.colorScheme.primary
@@ -681,7 +701,38 @@ fun AppProfileScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = item.label,
+                                text = "Default",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (isDefault) FontWeight.Bold else FontWeight.Normal,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+
+                    items(rrModes) { mode ->
+                        val isSelected = profile.refreshRate == mode.id.toString() || profile.refreshRate == mode.hz.toString()
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    onProfileChanged(profile.copy(refreshRate = mode.id.toString()))
+                                }
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = isSelected,
+                                onClick = {
+                                    onProfileChanged(profile.copy(refreshRate = mode.id.toString()))
+                                },
+                                colors = RadioButtonDefaults.colors(
+                                    selectedColor = MaterialTheme.colorScheme.primary
+                                )
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "${mode.hz} Hz",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -749,6 +800,63 @@ fun AppProfileScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showRendererDialog = false }) {
+                    Text("Selesai")
+                }
+            }
+        )
+    }
+
+    if (showDndDialog) {
+        AlertDialog(
+            onDismissRequest = { showDndDialog = false },
+            title = {
+                Text(
+                    text = "Pilih Mode DND",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 320.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(triStateOptions) { item ->
+                        val isSelected = profile.dnd == item.value
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    onProfileChanged(profile.copy(dnd = item.value))
+                                }
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = isSelected,
+                                onClick = {
+                                    onProfileChanged(profile.copy(dnd = item.value))
+                                },
+                                colors = RadioButtonDefaults.colors(
+                                    selectedColor = MaterialTheme.colorScheme.primary
+                                )
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = item.label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showDndDialog = false }) {
                     Text("Selesai")
                 }
             }

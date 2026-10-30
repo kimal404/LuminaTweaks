@@ -3,6 +3,7 @@ use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
+use serde_json::Value;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DisplayMode {
@@ -51,6 +52,36 @@ pub fn get_saved_mode_id() -> Option<i32> {
         }
     }
     None
+}
+
+pub fn resolve_mode_id(val: &str) -> Option<i32> {
+    let trimmed = val.trim();
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("default") {
+        return None;
+    }
+
+    let num = trimmed.parse::<i32>().ok()?;
+
+    if let Ok(content) = fs::read_to_string("/data/adb/luminatweaks/rr_modes.json") {
+        if let Ok(json) = serde_json::from_str::<Value>(&content) {
+            if let Some(arr) = json.as_array() {
+                for item in arr {
+                    if item.get("id").and_then(|v| v.as_i64()) == Some(num as i64) {
+                        return Some(num);
+                    }
+                }
+                for item in arr {
+                    if item.get("hz").and_then(|v| v.as_i64()) == Some(num as i64) {
+                        if let Some(id) = item.get("id").and_then(|v| v.as_i64()) {
+                            return Some(id as i32);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Some(num)
 }
 
 pub fn start_screen_toggle_listener() {

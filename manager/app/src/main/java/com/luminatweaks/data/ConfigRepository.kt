@@ -15,7 +15,7 @@ data class AppProfileConfig(
     val liteMode: String = "default",
     val refreshRate: String = "default",
     val renderer: String = "default",
-    val dnd: Boolean = false
+    val dnd: String = "default"
 )
 
 data class DisplayRrMode(val id: Int, val hz: Int)
@@ -90,7 +90,7 @@ object ConfigRepository {
                         liteMode = obj.optString("lite_mode", "default"),
                         refreshRate = obj.optString("refresh_rate", "default"),
                         renderer = obj.optString("renderer", "default"),
-                        dnd = obj.optBoolean("dnd", false)
+                        dnd = obj.optString("dnd", "default")
                     )
                 }
             }
