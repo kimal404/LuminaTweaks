@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -32,6 +33,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.RestartAlt
+import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -58,6 +60,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
@@ -67,6 +70,7 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -124,93 +128,155 @@ fun TextureComparisonPreview(
     val afterBitmap = remember(detailLevel) { generateTextureBitmap(detailLevel) }
     var splitFraction by remember { mutableFloatStateOf(0.5f) }
 
-    BoxWithConstraints(
+    val handleWidth = 32.dp
+    val handleHeight = 46.dp
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val dividerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+
+    Card(
         modifier = modifier
             .fillMaxWidth()
-            .height(200.dp)
-            .clip(RoundedCornerShape(22.dp))
-            .background(Color(0xFF141416))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f), RoundedCornerShape(22.dp))
+            .height(210.dp),
+        shape = RoundedCornerShape(26.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF141416)
+        )
     ) {
-        val totalWidth = constraints.maxWidth.toFloat()
-
-        Canvas(
-            modifier = Modifier
-                .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectDragGestures { change, dragAmount ->
-                        change.consume()
-                        splitFraction = (splitFraction + dragAmount.x / totalWidth).coerceIn(0.05f, 0.95f)
-                    }
-                }
-        ) {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val totalWidth = constraints.maxWidth.toFloat()
+            val totalHeight = constraints.maxHeight.toFloat()
             val splitPx = totalWidth * splitFraction
 
-            clipRect(left = 0f, top = 0f, right = splitPx, bottom = size.height) {
-                drawImage(
-                    image = beforeBitmap,
-                    dstSize = IntSize(size.width.toInt(), size.height.toInt()),
-                    filterQuality = FilterQuality.Medium
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectDragGestures { change, dragAmount ->
+                            change.consume()
+                            splitFraction = (splitFraction + dragAmount.x / totalWidth).coerceIn(0.06f, 0.94f)
+                        }
+                    }
+            ) {
+                clipRect(left = 0f, top = 0f, right = splitPx, bottom = size.height) {
+                    drawImage(
+                        image = beforeBitmap,
+                        dstSize = IntSize(size.width.toInt(), size.height.toInt()),
+                        filterQuality = FilterQuality.Medium
+                    )
+                }
+
+                clipRect(left = splitPx, top = 0f, right = size.width, bottom = size.height) {
+                    drawImage(
+                        image = afterBitmap,
+                        dstSize = IntSize(size.width.toInt(), size.height.toInt()),
+                        filterQuality = if (pixelSharp) FilterQuality.None else FilterQuality.Medium
+                    )
+                }
+
+                drawLine(
+                    color = dividerColor,
+                    start = Offset(splitPx, 0f),
+                    end = Offset(splitPx, size.height),
+                    strokeWidth = 2.dp.toPx()
                 )
             }
 
-            clipRect(left = splitPx, top = 0f, right = size.width, bottom = size.height) {
-                drawImage(
-                    image = afterBitmap,
-                    dstSize = IntSize(size.width.toInt(), size.height.toInt()),
-                    filterQuality = if (pixelSharp) FilterQuality.None else FilterQuality.Medium
+            Box(
+                modifier = Modifier
+                    .offset {
+                        IntOffset(
+                            x = (splitPx - (handleWidth / 2).toPx()).toInt(),
+                            y = ((totalHeight / 2) - (handleHeight / 2).toPx()).toInt()
+                        )
+                    }
+                    .size(width = handleWidth, height = handleHeight)
+                    .shadow(8.dp, RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(1.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(16.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.SwapHoriz,
+                    contentDescription = null,
+                    tint = primaryColor,
+                    modifier = Modifier.size(20.dp)
                 )
             }
 
-            drawLine(
-                color = Color.White,
-                start = Offset(splitPx, 0f),
-                end = Offset(splitPx, size.height),
-                strokeWidth = 3.dp.toPx()
-            )
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.88f),
+                tonalElevation = 2.dp,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.outline)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "ASLI",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        letterSpacing = 0.6.sp
+                    )
+                }
+            }
 
-            drawCircle(
-                color = Color.White,
-                radius = 16.dp.toPx(),
-                center = Offset(splitPx, size.height / 2)
-            )
-            drawCircle(
-                color = Color(0xFF1E1E1E),
-                radius = 12.dp.toPx(),
-                center = Offset(splitPx, size.height / 2)
-            )
-        }
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f),
+                tonalElevation = 2.dp,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(primaryColor)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "HASIL",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        letterSpacing = 0.6.sp
+                    )
+                }
+            }
 
-        Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = Color.Black.copy(alpha = 0.7f),
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(12.dp)
-        ) {
-            Text(
-                text = "SEBELUM",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-            )
-        }
-
-        Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(12.dp)
-        ) {
-            Text(
-                text = "SESUDAH",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-            )
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.72f),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 8.dp)
+            ) {
+                Text(
+                    text = "Geser pemisah untuk membandingkan",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                )
+            }
         }
     }
 }

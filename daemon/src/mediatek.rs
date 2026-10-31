@@ -3,22 +3,35 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Command;
 
-pub fn is_mtk_device() -> bool {
-    Path::new("/sys/kernel/fpsgo/common/force_onoff").exists()
-        || Path::new("/sys/class/misc/mali0").exists()
-        || Path::new("/sys/kernel/ged/hal").exists()
-}
-
-fn read_flag(path: &str) -> Option<String> {
-    fs::read_to_string(path).ok().map(|s| s.trim().to_string())
-}
-
 fn get_prop(prop: &str) -> String {
     Command::new("getprop")
         .arg(prop)
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
         .unwrap_or_default()
+}
+
+pub fn is_mtk_device() -> bool {
+    let platform = get_prop("ro.board.platform").to_lowercase();
+    let hardware = get_prop("ro.hardware").to_lowercase();
+    let soc_mfg = get_prop("ro.soc.manufacturer").to_lowercase();
+
+    let is_mtk_prop = platform.starts_with("mt")
+        || platform.contains("mediatek")
+        || hardware.starts_with("mt")
+        || hardware.contains("mediatek")
+        || soc_mfg.contains("mediatek");
+
+    let has_mtk_exclusive_node = Path::new("/sys/kernel/fpsgo/common/force_onoff").exists()
+        || Path::new("/sys/module/fpsgo").exists()
+        || Path::new("/sys/kernel/ged/hal").exists()
+        || Path::new("/proc/gpufreqv2").exists();
+
+    is_mtk_prop || has_mtk_exclusive_node
+}
+
+fn read_flag(path: &str) -> Option<String> {
+    fs::read_to_string(path).ok().map(|s| s.trim().to_string())
 }
 
 pub fn is_fpsgo_bypass_enabled() -> bool {
