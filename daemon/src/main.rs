@@ -9,6 +9,8 @@ mod engine;
 mod mediatek;
 mod notifier;
 mod renderer;
+mod snapdragon;
+mod unisoc;
 
 use std::collections::HashSet;
 use std::process::Command;

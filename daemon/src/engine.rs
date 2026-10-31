@@ -39,12 +39,14 @@ fn apply_thermal_kill(disable: bool) {
         let _ = Command::new("stop").arg("thermal-engine").status();
         let _ = Command::new("stop").arg("thermald").status();
         let _ = Command::new("stop").arg("thermal").status();
+        let _ = Command::new("stop").arg("sprd_thermald").status();
     } else {
         log!("[THERMAL] Restoring system thermal management");
         let _ = Command::new("start").arg("mi_thermald").status();
         let _ = Command::new("start").arg("thermal-engine").status();
         let _ = Command::new("start").arg("thermald").status();
         let _ = Command::new("start").arg("thermal").status();
+        let _ = Command::new("start").arg("sprd_thermal").status();
     }
 
     let mode_str = if disable { "disabled" } else { "enabled" };
@@ -131,26 +133,34 @@ pub fn performance_profile() {
     if is_disable_thermal_enabled() {
         apply_thermal_kill(true);
     }
+
     crate::mediatek::apply_mtk_performance();
+    crate::snapdragon::SnapdragonEngine::apply_performance();
+    crate::unisoc::UnisocEngine::apply_performance();
 }
 
 pub fn performance_lite_profile() {
-    log!("[ENGINE] Applying Performance Lite Profile");
+    log!("[ENGINE] Applying Performance Lite Profile (Vendor Chipset Tweaks Skipped)");
     apply_universal_cpu("schedutil", true, false);
     apply_thermal_kill(false);
-    crate::mediatek::apply_mtk_balance();
 }
 
 pub fn balance_profile() {
     log!("[ENGINE] Restoring Balanced Profile");
     apply_universal_cpu("schedutil", false, false);
     apply_thermal_kill(false);
+
     crate::mediatek::apply_mtk_balance();
+    crate::snapdragon::SnapdragonEngine::apply_balance();
+    crate::unisoc::UnisocEngine::apply_balance();
 }
 
 pub fn eco_profile() {
     log!("[ENGINE] Applying Eco Profile");
     apply_universal_cpu("powersave", false, false);
     apply_thermal_kill(false);
+
     crate::mediatek::apply_mtk_eco();
+    crate::snapdragon::SnapdragonEngine::apply_balance();
+    crate::unisoc::UnisocEngine::apply_balance();
 }
