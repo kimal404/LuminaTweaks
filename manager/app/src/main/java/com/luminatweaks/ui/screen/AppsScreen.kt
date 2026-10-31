@@ -1,8 +1,5 @@
 package com.luminatweaks.ui.screen
 
-import android.content.pm.ApplicationInfo
-import android.content.pm.PackageManager
-import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -65,9 +62,7 @@ import coil.request.ImageRequest
 import com.luminatweaks.data.AppProfileConfig
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.model.AppItem
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,8 +73,8 @@ fun AppsScreen(
     val packageManager = remember { context.packageManager }
     val coroutineScope = rememberCoroutineScope()
 
-    var rawApps by remember { mutableStateOf<List<AppItem>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
+    var rawApps by remember { mutableStateOf(ConfigRepository.cachedApps ?: emptyList()) }
+    var isLoading by remember { mutableStateOf(ConfigRepository.cachedApps == null) }
     var searchQuery by remember { mutableStateOf("") }
     var hideSystemApps by remember { mutableStateOf(true) }
     var showMoreMenu by remember { mutableStateOf(false) }
@@ -91,33 +86,16 @@ fun AppsScreen(
 
     LaunchedEffect(Unit) {
         val loadedConfigs = ConfigRepository.getAppConfigs()
+        appConfigs.clear()
         appConfigs.putAll(loadedConfigs)
 
-        withContext(Dispatchers.IO) {
-            val installed = packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
-            val parsedList = installed.map { appInfo ->
-                val label = appInfo.loadLabel(packageManager).toString()
-                val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
-                val isGame = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    appInfo.category == ApplicationInfo.CATEGORY_GAME
-                } else {
-                    @Suppress("DEPRECATION")
-                    (appInfo.flags and ApplicationInfo.FLAG_IS_GAME) != 0
-                }
-
-                AppItem(
-                    name = label,
-                    packageName = appInfo.packageName,
-                    isSystemApp = isSystem,
-                    isGame = isGame,
-                    isEnabled = false
-                )
-            }
-
-            withContext(Dispatchers.Main) {
-                rawApps = parsedList
-                isLoading = false
-            }
+        if (ConfigRepository.cachedApps == null) {
+            val apps = ConfigRepository.loadInstalledApps(packageManager)
+            rawApps = apps
+            isLoading = false
+        } else {
+            rawApps = ConfigRepository.cachedApps!!
+            isLoading = false
         }
     }
 
@@ -138,7 +116,7 @@ fun AppsScreen(
         return
     }
 
-        val filteredApps = remember(rawApps, searchQuery, hideSystemApps, appConfigs.toMap()) {
+    val filteredApps = remember(rawApps, searchQuery, hideSystemApps, appConfigs.toMap()) {
         val filtered = rawApps.filter { app ->
             val matchesSystem = if (hideSystemApps) !app.isSystemApp else true
             val matchesSearch = if (searchQuery.isBlank()) true else {
@@ -149,15 +127,11 @@ fun AppsScreen(
         }
 
         filtered.sortedWith(
-            
             compareByDescending<AppItem> { appConfigs[it.packageName]?.saklarUtama == true }
-                
                 .thenByDescending { it.isGame }
-
                 .thenBy { it.name.lowercase() }
         )
     }
-
 
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),

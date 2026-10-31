@@ -63,9 +63,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DisplayRrMode
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 data class RendererItem(
     val id: String,
@@ -82,111 +80,6 @@ val RENDERER_OPTIONS = listOf(
     RendererItem("openglthreaded", "OpenGL ES (Threaded)"),
     RendererItem("vulkan", "Vulkan")
 )
-
-suspend fun runShellCommand(cmd: String): String = withContext(Dispatchers.IO) {
-    try {
-        val process = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
-        val output = process.inputStream.bufferedReader().use { it.readText() }
-        process.waitFor()
-        output.trim()
-    } catch (_: Exception) {
-        ""
-    }
-}
-
-suspend fun loadActiveRenderer(): String = withContext(Dispatchers.IO) {
-    val fileSaved = runShellCommand("cat /data/adb/luminatweaks/current_renderer.txt 2>/dev/null")
-    if (fileSaved.isNotBlank()) return@withContext fileSaved
-    val propSaved = runShellCommand("getprop persist.lumina.renderer")
-    if (propSaved.isNotBlank()) return@withContext propSaved
-    val hwui = runShellCommand("getprop debug.hwui.renderer")
-    if (hwui.isNotBlank()) return@withContext hwui
-    "default"
-}
-
-suspend fun applyRendererSetting(id: String) = withContext(Dispatchers.IO) {
-    val cmds = mutableListOf<String>()
-    cmds.add("mkdir -p /data/adb/luminatweaks")
-    cmds.add("echo '$id' > /data/adb/luminatweaks/current_renderer.txt")
-    cmds.add("[ -d /data/adb/modules/luminatweaks ] && echo '$id' > /data/adb/modules/luminatweaks/current_renderer.txt")
-    cmds.add("setprop persist.lumina.renderer '$id'")
-
-    if (id == "default") {
-        cmds.add("setprop debug.hwui.renderer ''")
-        cmds.add("setprop debug.renderengine.backend ''")
-        cmds.add("setprop debug.hwui.render_thread ''")
-        cmds.add("setprop debug.skia.threaded_mode ''")
-        cmds.add("resetprop --delete ro.hwui.use_vulkan 2>/dev/null || resetprop ro.hwui.use_vulkan ''")
-    } else {
-        cmds.add("setprop debug.hwui.renderer '$id'")
-        if (id.contains("threaded")) {
-            cmds.add("setprop debug.hwui.render_thread true")
-            if (id.contains("skia")) {
-                cmds.add("setprop debug.skia.threaded_mode true")
-            } else {
-                cmds.add("setprop debug.skia.threaded_mode false")
-            }
-        } else {
-            cmds.add("setprop debug.hwui.render_thread false")
-            cmds.add("setprop debug.skia.threaded_mode false")
-        }
-
-        when (id) {
-            "skiavk", "skiavkthreaded", "vulkan" -> {
-                cmds.add("setprop debug.renderengine.backend vulkan")
-                cmds.add("resetprop ro.hwui.use_vulkan true")
-            }
-            "skiagl", "skiaglthreaded", "opengl", "openglthreaded" -> {
-                cmds.add("setprop debug.renderengine.backend gles")
-                cmds.add("resetprop ro.hwui.use_vulkan false")
-            }
-        }
-    }
-
-    runShellCommand(cmds.joinToString(" && "))
-}
-
-suspend fun loadFpsgoBypass(): Boolean = withContext(Dispatchers.IO) {
-    val fileSaved = runShellCommand("cat /data/adb/luminatweaks/fpsgo_bypass.txt 2>/dev/null")
-    if (fileSaved.isNotBlank()) return@withContext fileSaved == "1"
-    val propSaved = runShellCommand("getprop persist.lumina.fpsgo_bypass")
-    if (propSaved.isNotBlank()) return@withContext propSaved == "1"
-    false
-}
-
-suspend fun saveFpsgoBypass(enabled: Boolean) = withContext(Dispatchers.IO) {
-    val valStr = if (enabled) "1" else "0"
-    val cmd = "mkdir -p /data/adb/luminatweaks && echo '$valStr' > /data/adb/luminatweaks/fpsgo_bypass.txt && setprop persist.lumina.fpsgo_bypass '$valStr'"
-    runShellCommand(cmd)
-}
-
-suspend fun loadGedBoost(): Boolean = withContext(Dispatchers.IO) {
-    val fileSaved = runShellCommand("cat /data/adb/luminatweaks/ged_boost.txt 2>/dev/null")
-    if (fileSaved.isNotBlank()) return@withContext fileSaved == "1"
-    val propSaved = runShellCommand("getprop persist.lumina.ged_boost")
-    if (propSaved.isNotBlank()) return@withContext propSaved == "1"
-    true
-}
-
-suspend fun saveGedBoost(enabled: Boolean) = withContext(Dispatchers.IO) {
-    val valStr = if (enabled) "1" else "0"
-    val cmd = "mkdir -p /data/adb/luminatweaks && echo '$valStr' > /data/adb/luminatweaks/ged_boost.txt && setprop persist.lumina.ged_boost '$valStr'"
-    runShellCommand(cmd)
-}
-
-suspend fun loadDisableThermal(): Boolean = withContext(Dispatchers.IO) {
-    val fileSaved = runShellCommand("cat /data/adb/luminatweaks/disable_thermal.txt 2>/dev/null")
-    if (fileSaved.isNotBlank()) return@withContext fileSaved == "1"
-    val propSaved = runShellCommand("getprop persist.lumina.disable_thermal")
-    if (propSaved.isNotBlank()) return@withContext propSaved == "1"
-    false
-}
-
-suspend fun saveDisableThermal(enabled: Boolean) = withContext(Dispatchers.IO) {
-    val valStr = if (enabled) "1" else "0"
-    val cmd = "mkdir -p /data/adb/luminatweaks && echo '$valStr' > /data/adb/luminatweaks/disable_thermal.txt && setprop persist.lumina.disable_thermal '$valStr'"
-    runShellCommand(cmd)
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -396,35 +289,33 @@ fun TweaksScreen() {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val coroutineScope = rememberCoroutineScope()
 
-    var isGlobalLiteMode by remember { mutableStateOf(false) }
-    var isDisableThermal by remember { mutableStateOf(false) }
+    val cached = ConfigRepository.cachedTweaksState
+    var isGlobalLiteMode by remember { mutableStateOf(cached?.isGlobalLiteMode ?: false) }
+    var isDisableThermal by remember { mutableStateOf(cached?.isDisableThermal ?: false) }
 
-    var rrModes by remember { mutableStateOf<List<DisplayRrMode>>(emptyList()) }
-    var currentRrId by remember { mutableStateOf<Int?>(null) }
+    var rrModes by remember { mutableStateOf<List<DisplayRrMode>>(cached?.rrModes ?: emptyList()) }
+    var currentRrId by remember { mutableStateOf<Int?>(cached?.currentRrId) }
 
-    var currentRendererId by remember { mutableStateOf("default") }
+    var currentRendererId by remember { mutableStateOf(cached?.currentRendererId ?: "default") }
 
-    var isMtkDevice by remember { mutableStateOf(false) }
-    var isBypassFpsgo by remember { mutableStateOf(false) }
-    var isBoostGed by remember { mutableStateOf(true) }
+    var isMtkDevice by remember { mutableStateOf(cached?.isMtkDevice ?: false) }
+    var isBypassFpsgo by remember { mutableStateOf(cached?.isBypassFpsgo ?: false) }
+    var isBoostGed by remember { mutableStateOf(cached?.isBoostGed ?: true) }
 
     var showRefreshRateDialog by remember { mutableStateOf(false) }
     var showRenderDialog by remember { mutableStateOf(false) }
     var inMtkSubpage by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        isGlobalLiteMode = ConfigRepository.getGlobalLiteMode()
-        isDisableThermal = loadDisableThermal()
-        rrModes = ConfigRepository.getRefreshRateModes()
-        currentRrId = ConfigRepository.getCurrentRefreshRateId()
-        currentRendererId = loadActiveRenderer()
-
-        val mtkCheck = runShellCommand("[ -e /sys/kernel/fpsgo/common/force_onoff ] && echo 1 || echo 0")
-        isMtkDevice = mtkCheck == "1"
-        if (isMtkDevice) {
-            isBypassFpsgo = loadFpsgoBypass()
-            isBoostGed = loadGedBoost()
-        }
+        val state = ConfigRepository.getTweaksState()
+        isGlobalLiteMode = state.isGlobalLiteMode
+        isDisableThermal = state.isDisableThermal
+        rrModes = state.rrModes
+        currentRrId = state.currentRrId
+        currentRendererId = state.currentRendererId
+        isMtkDevice = state.isMtkDevice
+        isBypassFpsgo = state.isBypassFpsgo
+        isBoostGed = state.isBoostGed
     }
 
     val currentRrText = remember(currentRrId, rrModes) {
@@ -450,14 +341,14 @@ fun TweaksScreen() {
             onBypassFpsgoChange = { newState ->
                 isBypassFpsgo = newState
                 coroutineScope.launch {
-                    saveFpsgoBypass(newState)
+                    ConfigRepository.setFpsgoBypass(newState)
                 }
             },
             isBoostGed = isBoostGed,
             onBoostGedChange = { newState ->
                 isBoostGed = newState
                 coroutineScope.launch {
-                    saveGedBoost(newState)
+                    ConfigRepository.setGedBoost(newState)
                 }
             }
         )
@@ -544,7 +435,7 @@ fun TweaksScreen() {
                                         currentRendererId = item.id
                                         showRenderDialog = false
                                         coroutineScope.launch {
-                                            applyRendererSetting(item.id)
+                                            ConfigRepository.setRenderer(item.id)
                                         }
                                     },
                                     role = Role.RadioButton
@@ -801,7 +692,7 @@ fun TweaksScreen() {
                             onCheckedChange = { newState ->
                                 isDisableThermal = newState
                                 coroutineScope.launch {
-                                    saveDisableThermal(newState)
+                                    ConfigRepository.setDisableThermal(newState)
                                 }
                             },
                             colors = SwitchDefaults.colors(
