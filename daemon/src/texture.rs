@@ -51,11 +51,13 @@ impl TextureController {
                     })
                     .unwrap_or(false);
 
-                let detail = match item.get("texture_detail").or_else(|| item.get("textureDetail")) {
+                let raw_detail = match item.get("texture_detail").or_else(|| item.get("textureDetail")) {
                     Some(Value::Number(n)) => n.as_i64().unwrap_or(0) as i32,
                     Some(Value::String(s)) => s.parse::<i32>().unwrap_or(0),
                     _ => 0,
                 };
+                // Batasi maksimal ke 3 karena ANGLE tidak mendukung offset 4
+                let detail = raw_detail.clamp(0, 3);
 
                 let sharp = item.get("pixel_sharp")
                     .or_else(|| item.get("pixelSharp"))
@@ -75,7 +77,6 @@ impl TextureController {
                     })
                     .unwrap_or(false);
 
-                // Tetap aktif jika saklar ON dan salah satu fitur/toggle grafis hidup
                 let has_feature = detail > 0 || sharp || hard;
 
                 if master && tex_enabled && has_feature {
@@ -125,11 +126,11 @@ impl TextureController {
             features.push("forceNearestMipFiltering");
         }
 
-        match detail {
+        // Clamp maksimal 3
+        match detail.clamp(0, 3) {
             1 => features.push("forceTextureLodOffset1"),
             2 => features.push("forceTextureLodOffset2"),
             3 => features.push("forceTextureLodOffset3"),
-            4 => features.push("forceTextureLodOffset4"),
             _ => (),
         }
 
@@ -141,12 +142,23 @@ impl TextureController {
             return;
         }
 
-        let overrides = Self::build_features_string(detail, sharp, hard);
+        let valid_detail = detail.clamp(0, 3);
+        let overrides = Self::build_features_string(valid_detail, sharp, hard);
+
         if !overrides.is_empty() {
             let _ = Command::new("setprop")
                 .args(["debug.angle.feature_overrides_enabled", &overrides])
                 .status();
-            log!("[TEXTURE] Foreground: {} -> Overrides: [{}]", pkg, overrides);
+
+            // Pastikan package aktif selalu terdaftar di global settings
+            let _ = Command::new("settings")
+                .args(["put", "global", "angle_gl_driver_selection_pkgs", pkg])
+                .status();
+            let _ = Command::new("settings")
+                .args(["put", "global", "angle_gl_driver_selection_values", "angle"])
+                .status();
+
+            log!("[TEXTURE] Active: {} -> Overrides: [{}]", pkg, overrides);
         }
     }
 
@@ -154,11 +166,9 @@ impl TextureController {
         let _ = Command::new("setprop")
             .args(["debug.angle.feature_overrides_enabled", ""])
             .status();
-
         let _ = Command::new("settings")
             .args(["delete", "global", "angle_gl_driver_selection_pkgs"])
             .status();
-
         let _ = Command::new("settings")
             .args(["delete", "global", "angle_gl_driver_selection_values"])
             .status();
