@@ -296,7 +296,6 @@ fun TeksturRinganScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // 1. Kanvas Perbandingan Interaktif
             item {
                 TextureComparisonPreview(
                     detailLevel = profile.textureDetail.coerceIn(0, 3),
@@ -304,7 +303,6 @@ fun TeksturRinganScreen(
                 )
             }
 
-            // 2. Slider Level Detail LOD (0..3)
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -393,7 +391,6 @@ fun TeksturRinganScreen(
                 }
             }
 
-            // 3. Toggle Piksel Tajam
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -440,7 +437,6 @@ fun TeksturRinganScreen(
                 }
             }
 
-            // 4. Peringatan Kompatibilitas Engine & Latensi Input
             item {
                 Surface(
                     shape = RoundedCornerShape(16.dp),
@@ -480,7 +476,6 @@ fun TeksturRinganScreen(
                 }
             }
 
-            // 5. Master Switch Khusus Game Ini
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -525,7 +520,6 @@ fun TeksturRinganScreen(
                 }
             }
 
-            // 6. Tombol Aksi Bawah
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
