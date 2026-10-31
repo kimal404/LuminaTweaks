@@ -628,14 +628,16 @@ fun TeksturRinganScreen(
                 ) {
                     OutlinedButton(
                         onClick = {
-                            onProfileChanged(
-                                profile.copy(
-                                    textureEnabled = false,
-                                    textureDetail = 0,
-                                    pixelSharp = false,
-                                    hardDistance = false
-                                )
+                            val resetProfile = profile.copy(
+                                textureEnabled = false,
+                                textureDetail = 0,
+                                pixelSharp = false,
+                                hardDistance = false
                             )
+                            onProfileChanged(resetProfile)
+                            if (profile.pkg.isNotBlank()) {
+                                ConfigRepository.killApp(profile.pkg)
+                            }
                         },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(14.dp)
@@ -650,7 +652,12 @@ fun TeksturRinganScreen(
                     }
 
                     Button(
-                        onClick = onBack,
+                        onClick = {
+                            if (profile.textureEnabled && profile.pkg.isNotBlank()) {
+                                ConfigRepository.killApp(profile.pkg)
+                            }
+                            onBack()
+                        },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(

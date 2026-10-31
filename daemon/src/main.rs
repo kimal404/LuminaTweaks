@@ -31,9 +31,7 @@ pub enum Profile {
 }
 
 fn set_system_profile_prop(name: &str) {
-    let _ = Command::new("setprop")
-        .args(["sys.lumina.profile", name])
-        .status();
+    let _ = Command::new("setprop").args(["sys.lumina.profile", name]).status();
 }
 
 fn get_pkg_pid(pkg: &str) -> Option<i32> {
@@ -68,6 +66,8 @@ impl EngineRuntime {
         let topo = CpuTopology::detect();
         log!("[TOPOLOGY] Cores: {} | Little Mask: 0x{:X} | Fast Mask: 0x{:X}", 
              topo.total_cores, topo.little_mask, topo.fast_mask);
+
+        TextureController::ensure_setup();
 
         Self {
             current_profile: None,
@@ -309,7 +309,7 @@ impl EngineRuntime {
             engine::balance_profile();
             set_system_profile_prop("Balanced");
             affinity::isolate_background(false, &self.topology);
-            log!("[PROFILE] Master disabled -> Reverted to Balanced");
+            log!("[PROFILE] Target inactive -> Reverted to Balanced");
 
             let global_rr = display::get_saved_mode_id();
             if global_rr != self.current_applied_rr {
@@ -333,11 +333,6 @@ impl EngineRuntime {
                 self.original_zen_mode = None;
             }
 
-            if self.current_texture.is_some() {
-                TextureController::restore();
-                self.current_texture = None;
-            }
-
             clear_all_notifications();
         }
     }
@@ -347,7 +342,6 @@ fn main() {
     log!("[DAEMON] Initializing luminad subsystem...");
     display::init_display_subsystem();
     renderer::init_renderer_subsystem();
-    TextureController::restore();
 
     send_notification(NotificationPayload {
         title: "Lumina: Active",

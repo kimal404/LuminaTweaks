@@ -62,6 +62,10 @@ object ConfigRepository {
         }
     }
 
+    fun killApp(packageName: String) {
+        runSuCmd("am force-stop $packageName")
+    }
+
     private fun ensureDir() {
         runSuCmd("mkdir -p $CONFIG_DIR")
     }
