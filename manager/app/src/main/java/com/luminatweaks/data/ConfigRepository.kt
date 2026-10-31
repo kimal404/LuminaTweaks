@@ -13,15 +13,6 @@ import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
-data class AppProfileConfig(
-    val pkg: String,
-    val saklarUtama: Boolean = false,
-    val liteMode: String = "default",
-    val refreshRate: String = "default",
-    val renderer: String = "default",
-    val dnd: String = "default"
-)
-
 data class DisplayRrMode(val id: Int, val hz: Int)
 
 data class TweaksUiState(
@@ -243,7 +234,11 @@ object ConfigRepository {
                         liteMode = obj.optString("lite_mode", "default"),
                         refreshRate = obj.optString("refresh_rate", "default"),
                         renderer = obj.optString("renderer", "default"),
-                        dnd = obj.optString("dnd", "default")
+                        dnd = obj.optString("dnd", "default"),
+                        textureEnabled = obj.optBoolean("texture_enabled", false),
+                        textureDetail = obj.optInt("texture_detail", 0),
+                        pixelSharp = obj.optBoolean("pixel_sharp", false),
+                        hardDistance = obj.optBoolean("hard_distance", false)
                     )
                 }
             }
@@ -278,6 +273,10 @@ object ConfigRepository {
                     put("refresh_rate", item.refreshRate)
                     put("renderer", item.renderer)
                     put("dnd", item.dnd)
+                    put("texture_enabled", item.textureEnabled)
+                    put("texture_detail", item.textureDetail)
+                    put("pixel_sharp", item.pixelSharp)
+                    put("hard_distance", item.hardDistance)
                 }
                 arr.put(obj)
             }
