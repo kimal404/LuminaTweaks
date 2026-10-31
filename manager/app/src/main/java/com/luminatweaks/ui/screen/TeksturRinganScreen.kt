@@ -2,14 +2,12 @@ package com.luminatweaks.ui.screen
 
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -26,7 +24,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -35,12 +32,10 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.RestartAlt
-import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -230,15 +225,6 @@ fun TeksturRinganScreen(
 ) {
     BackHandler(onBack = onBack)
 
-    val currentPreset = remember(profile.textureDetail, profile.pixelSharp, profile.hardDistance) {
-        when {
-            profile.textureDetail == 1 && !profile.pixelSharp && !profile.hardDistance -> "Halus"
-            profile.textureDetail == 2 && profile.pixelSharp && !profile.hardDistance -> "Retro"
-            profile.textureDetail == 3 && profile.pixelSharp && profile.hardDistance -> "Kotak Total"
-            else -> "Kustom"
-        }
-    }
-
     val detailLabels = listOf("Asli", "Ringan", "Retro", "Kotak Total")
     val primaryAccent = MaterialTheme.colorScheme.primary
 
@@ -310,6 +296,7 @@ fun TeksturRinganScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // 1. Kanvas Perbandingan Interaktif
             item {
                 TextureComparisonPreview(
                     detailLevel = profile.textureDetail.coerceIn(0, 3),
@@ -317,84 +304,7 @@ fun TeksturRinganScreen(
                 )
             }
 
-            item {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "PRESET CEPAT",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = primaryAccent
-                    )
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf("Halus", "Retro", "Kotak Total", "Kustom").forEach { preset ->
-                            val isSelected = currentPreset == preset
-                            val animatedBg by animateColorAsState(
-                                if (isSelected) primaryAccent else MaterialTheme.colorScheme.surfaceContainerHighest,
-                                label = "preset_bg"
-                            )
-                            val animatedTextColor by animateColorAsState(
-                                if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                                label = "preset_text"
-                            )
-
-                            Surface(
-                                onClick = {
-                                    when (preset) {
-                                        "Halus" -> onProfileChanged(
-                                            profile.copy(
-                                                textureDetail = 1,
-                                                pixelSharp = false,
-                                                hardDistance = false,
-                                                textureEnabled = true
-                                            )
-                                        )
-                                        "Retro" -> onProfileChanged(
-                                            profile.copy(
-                                                textureDetail = 2,
-                                                pixelSharp = true,
-                                                hardDistance = false,
-                                                textureEnabled = true
-                                            )
-                                        )
-                                        "Kotak Total" -> onProfileChanged(
-                                            profile.copy(
-                                                textureDetail = 3,
-                                                pixelSharp = true,
-                                                hardDistance = true,
-                                                textureEnabled = true
-                                            )
-                                        )
-                                    }
-                                },
-                                shape = RoundedCornerShape(14.dp),
-                                color = animatedBg,
-                                modifier = Modifier.height(40.dp)
-                            ) {
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier.padding(horizontal = 16.dp)
-                                ) {
-                                    Text(
-                                        text = preset,
-                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                                        color = animatedTextColor
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
+            // 2. Slider Level Detail LOD (0..3)
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -483,6 +393,7 @@ fun TeksturRinganScreen(
                 }
             }
 
+            // 3. Toggle Piksel Tajam
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -491,89 +402,45 @@ fun TeksturRinganScreen(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                     )
                 ) {
-                    Column(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                            .clickable {
+                                onProfileChanged(profile.copy(pixelSharp = !profile.pixelSharp))
+                            }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    onProfileChanged(profile.copy(pixelSharp = !profile.pixelSharp))
-                                }
-                                .padding(vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Piksel Tajam",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "Tepi tekstur kotak-kotak. Matikan untuk efek buram halus.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Switch(
-                                checked = profile.pixelSharp,
-                                onCheckedChange = { newState ->
-                                    onProfileChanged(profile.copy(pixelSharp = newState))
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                    checkedTrackColor = primaryAccent
-                                )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Piksel Tajam",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Tepi tekstur kotak-kotak. Matikan untuk efek buram halus.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-
-                        Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    onProfileChanged(profile.copy(hardDistance = !profile.hardDistance))
-                                }
-                                .padding(vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Batas Jarak Tegas",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "Perpindahan detail dekat-jauh jadi patah-patah.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Switch(
-                                checked = profile.hardDistance,
-                                onCheckedChange = { newState ->
-                                    onProfileChanged(profile.copy(hardDistance = newState))
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                    checkedTrackColor = primaryAccent
-                                )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Switch(
+                            checked = profile.pixelSharp,
+                            onCheckedChange = { newState ->
+                                onProfileChanged(profile.copy(pixelSharp = newState))
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                checkedTrackColor = primaryAccent
                             )
-                        }
+                        )
                     }
                 }
             }
 
+            // 4. Peringatan Kompatibilitas Engine & Latensi Input
             item {
                 Surface(
                     shape = RoundedCornerShape(16.dp),
@@ -613,52 +480,7 @@ fun TeksturRinganScreen(
                 }
             }
 
-            item {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.Top) {
-                            Icon(
-                                imageVector = Icons.Rounded.Info,
-                                contentDescription = null,
-                                tint = primaryAccent,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = "Diubah waktu lagi main? Tutup game (force-stop) lalu buka lagi agar driver ANGLE memuat konfigurasi baru.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                lineHeight = 18.sp
-                            )
-                        }
-                        Row(verticalAlignment = Alignment.Top) {
-                            Icon(
-                                imageVector = Icons.Rounded.Speed,
-                                contentDescription = null,
-                                tint = primaryAccent,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = "Paling kelihatan efeknya kalau grafis in-game disetel ke posisi Smooth / Low.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                lineHeight = 18.sp
-                            )
-                        }
-                    }
-                }
-            }
-
+            // 5. Master Switch Khusus Game Ini
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -703,6 +525,7 @@ fun TeksturRinganScreen(
                 }
             }
 
+            // 6. Tombol Aksi Bawah
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
