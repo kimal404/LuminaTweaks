@@ -8,6 +8,10 @@ pub struct AppConfig {
     pub refresh_rate: String,
     pub renderer: String,
     pub dnd: String,
+    pub texture_enabled: bool,
+    pub texture_detail: i32,
+    pub pixel_sharp: bool,
+    pub hard_distance: bool,
 }
 
 pub fn get_focused_package() -> Option<String> {
@@ -156,12 +160,37 @@ fn extract_app_config(item: &Value) -> AppConfig {
         _ => "default".to_string(),
     };
 
+    let texture_enabled = item.get("texture_enabled")
+        .or_else(|| item.get("textureEnabled"))
+        .map(is_truthy)
+        .unwrap_or(false);
+
+    let texture_detail = match item.get("texture_detail").or_else(|| item.get("textureDetail")) {
+        Some(Value::Number(n)) => n.as_i64().unwrap_or(0) as i32,
+        Some(Value::String(s)) => s.parse::<i32>().unwrap_or(0),
+        _ => 0,
+    };
+
+    let pixel_sharp = item.get("pixel_sharp")
+        .or_else(|| item.get("pixelSharp"))
+        .map(is_truthy)
+        .unwrap_or(false);
+
+    let hard_distance = item.get("hard_distance")
+        .or_else(|| item.get("hardDistance"))
+        .map(is_truthy)
+        .unwrap_or(false);
+
     AppConfig {
         enabled,
         lite_mode,
         refresh_rate,
         renderer,
         dnd,
+        texture_enabled,
+        texture_detail,
+        pixel_sharp,
+        hard_distance,
     }
 }
 

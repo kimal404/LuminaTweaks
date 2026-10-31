@@ -1,3 +1,5 @@
+mod texture;
+use texture::TextureController;
 #[macro_use]
 mod logger;
 mod affinity;
@@ -38,6 +40,15 @@ fn get_pkg_pid(pkg: &str) -> Option<i32> {
     affinity::get_pkg_pid(pkg)
 }
 
+#[derive(Debug, PartialEq, Eq, Clone)]
+struct AppliedTexture {
+    pkg: String,
+    enabled: bool,
+    detail: i32,
+    sharp: bool,
+    hard: bool,
+}
+
 struct EngineRuntime {
     current_profile: Option<Profile>,
     active_target_pkg: Option<String>,
@@ -48,6 +59,7 @@ struct EngineRuntime {
     topology: CpuTopology,
     tracked_tids: HashSet<i32>,
     current_target_pid: Option<i32>,
+    current_texture: Option<AppliedTexture>,
 }
 
 impl EngineRuntime {
@@ -67,6 +79,7 @@ impl EngineRuntime {
             topology: topo,
             tracked_tids: HashSet::new(),
             current_target_pid: None,
+            current_texture: None,
         }
     }
 
@@ -171,7 +184,6 @@ impl EngineRuntime {
                     }
                     affinity::sync_process_threads(pid, &mut self.tracked_tids, &self.topology);
 
-                    // Multi-pass background thread binding on entering performance to capture loading scene spawns
                     if entering_performance {
                         let topo = self.topology.clone();
                         thread::spawn(move || {
@@ -261,6 +273,31 @@ impl EngineRuntime {
             self.original_zen_mode = None;
             log!("[DND] Zen mode restored");
         }
+
+        let desired_texture = if let (Some(pkg), Some(ref cfg)) = (target_pkg, &target_cfg) {
+            if cfg.texture_enabled {
+                Some(AppliedTexture {
+                    pkg: pkg.to_string(),
+                    enabled: cfg.texture_enabled,
+                    detail: cfg.texture_detail,
+                    sharp: cfg.pixel_sharp,
+                    hard: cfg.hard_distance,
+                })
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        if self.current_texture != desired_texture {
+            if let Some(ref tex) = desired_texture {
+                TextureController::apply(&tex.pkg, tex.enabled, tex.detail, tex.sharp, tex.hard);
+            } else if self.current_texture.is_some() {
+                TextureController::restore();
+            }
+            self.current_texture = desired_texture;
+        }
     }
 
     fn reset_to_balance(&mut self) {
@@ -296,6 +333,11 @@ impl EngineRuntime {
                 self.original_zen_mode = None;
             }
 
+            if self.current_texture.is_some() {
+                TextureController::restore();
+                self.current_texture = None;
+            }
+
             clear_all_notifications();
         }
     }
@@ -305,6 +347,7 @@ fn main() {
     log!("[DAEMON] Initializing luminad subsystem...");
     display::init_display_subsystem();
     renderer::init_renderer_subsystem();
+    TextureController::restore();
 
     send_notification(NotificationPayload {
         title: "Lumina: Active",
