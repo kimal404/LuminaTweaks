@@ -14,6 +14,7 @@ mod unisoc;
 
 use std::collections::HashSet;
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
@@ -22,7 +23,21 @@ use detector::{
     get_app_config, get_focused_package, get_zen_mode, is_app_enabled, is_app_retained,
     is_lite_mode_active, is_low_power_active, is_master_enabled, set_zen_mode,
 };
+use engine::apply_thermal_kill;
 use notifier::{clear_all_notifications, send_notification, NotificationPayload};
+
+static SHUTDOWN: AtomicBool = AtomicBool::new(false);
+
+extern "C" {
+    fn signal(signum: i32, handler: extern "C" fn(i32)) -> usize;
+}
+
+const SIGINT: i32 = 2;
+const SIGTERM: i32 = 15;
+
+extern "C" fn handle_signal(_: i32) {
+    SHUTDOWN.store(true, Ordering::Relaxed);
+}
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Profile {
@@ -316,12 +331,19 @@ impl EngineRuntime {
                 self.current_applied_zen_mode = None;
             }
 
+            TextureController::restore();
+
             clear_all_notifications();
         }
     }
 }
 
 fn main() {
+    unsafe {
+        signal(SIGINT, handle_signal);
+        signal(SIGTERM, handle_signal);
+    }
+
     log!("[DAEMON] Initializing luminad subsystem...");
     display::init_display_subsystem();
     renderer::init_renderer_subsystem();
@@ -340,6 +362,15 @@ fn main() {
     let mut last_pkg_for_texture: Option<String> = None;
 
     loop {
+        if SHUTDOWN.load(Ordering::Relaxed) {
+            log!("[DAEMON] Shutdown signal caught, restoring system baseline...");
+            runtime.reset_to_balance();
+            engine::restore_balance();
+            apply_thermal_kill(false);
+            TextureController::restore();
+            break;
+        }
+
         let mut config_just_changed = false;
         if let Ok(meta) = std::fs::metadata("/data/adb/luminatweaks/app_config.json") {
             if let Ok(mtime) = meta.modified() {
@@ -392,6 +423,7 @@ fn main() {
             if config_just_changed {
                 TextureController::restore();
             }
+            last_pkg_for_texture = None;
         }
 
         thread::sleep(Duration::from_millis(1200));

@@ -3,7 +3,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Command;
 
-fn write_sysfs(path: &str, val: &str, lock: bool) -> bool {
+pub fn write_sysfs(path: &str, val: &str, lock: bool) -> bool {
     if !Path::new(path).exists() {
         return false;
     }
@@ -32,7 +32,7 @@ pub fn is_disable_thermal_enabled() -> bool {
     prop == "1"
 }
 
-fn apply_thermal_kill(disable: bool) {
+pub fn apply_thermal_kill(disable: bool) {
     let mode_str = if disable { "disabled" } else { "enabled" };
     if let Ok(entries) = fs::read_dir("/sys/class/thermal") {
         for entry in entries.flatten() {
@@ -141,6 +141,10 @@ pub fn balance_profile() {
     crate::mediatek::apply_mtk_balance();
     crate::snapdragon::SnapdragonEngine::apply_balance();
     crate::unisoc::UnisocEngine::apply_balance();
+}
+
+pub fn restore_balance() {
+    balance_profile();
 }
 
 pub fn eco_profile() {
