@@ -583,134 +583,17 @@ fun TweaksScreen() {
             }
 
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.BatterySaver,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(14.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Lite Mode",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Batasi frekuensi CPU.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Switch(
-                            checked = isGlobalLiteMode,
-                            onCheckedChange = { newState ->
-                                isGlobalLiteMode = newState
-                                coroutineScope.launch {
-                                    ConfigRepository.setGlobalLiteMode(newState)
-                                }
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                checkedTrackColor = MaterialTheme.colorScheme.primary
-                            )
-                        )
-                    }
-                }
-            }
+                val litePos = ContainerPosition.Top
+                val thermalPos = if (isMtkDevice) ContainerPosition.Middle else ContainerPosition.Bottom
+                val mtkPos = ContainerPosition.Bottom
 
-            item {
-                Card(
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                    )
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Thermostat,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(14.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Disable Thermal",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Matikan thermal sepenuhnya pada profil Performance.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Switch(
-                            checked = isDisableThermal,
-                            onCheckedChange = { newState ->
-                                isDisableThermal = newState
-                                coroutineScope.launch {
-                                    ConfigRepository.setDisableThermal(newState)
-                                }
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                checkedTrackColor = MaterialTheme.colorScheme.primary
-                            )
-                        )
-                    }
-                }
-            }
-
-            if (isMtkDevice) {
-                item {
                     Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { inMtkSubpage = true },
-                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = getConnectedContainerShape(litePos, outerRadius = 20.dp, innerRadius = 4.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                         )
@@ -729,7 +612,7 @@ fun TweaksScreen() {
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = Icons.Rounded.Memory,
+                                    imageVector = Icons.Rounded.BatterySaver,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                     modifier = Modifier.size(22.dp)
@@ -738,24 +621,146 @@ fun TweaksScreen() {
                             Spacer(modifier = Modifier.width(14.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "MediaTek Engine",
+                                    text = "Lite Mode",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Subsistem FPSGo dan GPU Mali",
+                                    text = "Batasi frekuensi CPU.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Icon(
-                                imageVector = Icons.Rounded.ChevronRight,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Switch(
+                                checked = isGlobalLiteMode,
+                                onCheckedChange = { newState ->
+                                    isGlobalLiteMode = newState
+                                    coroutineScope.launch {
+                                        ConfigRepository.setGlobalLiteMode(newState)
+                                    }
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                    checkedTrackColor = MaterialTheme.colorScheme.primary
+                                )
                             )
+                        }
+                    }
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = getConnectedContainerShape(thermalPos, outerRadius = 20.dp, innerRadius = 4.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Thermostat,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Disable Thermal",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Matikan thermal sepenuhnya pada profil Performance.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Switch(
+                                checked = isDisableThermal,
+                                onCheckedChange = { newState ->
+                                    isDisableThermal = newState
+                                    coroutineScope.launch {
+                                        ConfigRepository.setDisableThermal(newState)
+                                    }
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                    checkedTrackColor = MaterialTheme.colorScheme.primary
+                                )
+                            )
+                        }
+                    }
+
+                    if (isMtkDevice) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { inMtkSubpage = true },
+                            shape = getConnectedContainerShape(mtkPos, outerRadius = 20.dp, innerRadius = 4.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primaryContainer),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Memory,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(14.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "MediaTek Engine",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Subsistem FPSGo dan GPU Mali",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Icon(
+                                    imageVector = Icons.Rounded.ChevronRight,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                     }
                 }
