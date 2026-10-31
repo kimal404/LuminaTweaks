@@ -25,5 +25,3 @@ local.properties
 *keystore_base64*
 
 # Proprietary / Closed Source Logic
-hook.cpp
-libluminagfx.so
