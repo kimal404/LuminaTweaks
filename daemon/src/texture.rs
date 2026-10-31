@@ -7,10 +7,10 @@ pub struct TextureController;
 
 impl TextureController {
     pub fn ensure_setup() {
-        Self::sync_config();
+        Self::sync_config(None);
     }
 
-    pub fn sync_config() {
+    pub fn sync_config(focused_pkg: Option<&str>) {
         let config_path = "/data/adb/luminatweaks/app_config.json";
         let content = match fs::read_to_string(config_path) {
             Ok(c) => c,
@@ -29,7 +29,8 @@ impl TextureController {
         };
 
         let mut active_pkgs: Vec<String> = Vec::new();
-        let mut first_features: Option<String> = None;
+        let mut target_features: Option<String> = None;
+        let mut fallback_features: Option<String> = None;
 
         if let Some(list) = json.as_array() {
             for item in list {
@@ -56,7 +57,6 @@ impl TextureController {
                     Some(Value::String(s)) => s.parse::<i32>().unwrap_or(0),
                     _ => 0,
                 };
-                // Batasi maksimal ke 3 karena ANGLE tidak mendukung offset 4
                 let detail = raw_detail.clamp(0, 3);
 
                 let sharp = item.get("pixel_sharp")
@@ -83,8 +83,14 @@ impl TextureController {
                     if let Some(pkg) = item.get("pkg").and_then(|v| v.as_str()) {
                         active_pkgs.push(pkg.to_string());
 
-                        if first_features.is_none() {
-                            first_features = Some(Self::build_features_string(detail, sharp, hard));
+                        let feat = Self::build_features_string(detail, sharp, hard);
+                        if let Some(f_pkg) = focused_pkg {
+                            if pkg == f_pkg {
+                                target_features = Some(feat.clone());
+                            }
+                        }
+                        if fallback_features.is_none() {
+                            fallback_features = Some(feat);
                         }
                     }
                 }
@@ -106,15 +112,14 @@ impl TextureController {
             .args(["put", "global", "angle_gl_driver_selection_values", &values_joined])
             .status();
 
-        if let Some(ref feat) = first_features {
-            if !feat.is_empty() {
-                let _ = Command::new("setprop")
-                    .args(["debug.angle.feature_overrides_enabled", feat])
-                    .status();
-            }
+        let applied_features = target_features.or(fallback_features).unwrap_or_default();
+        if !applied_features.is_empty() {
+            let _ = Command::new("setprop")
+                .args(["debug.angle.feature_overrides_enabled", &applied_features])
+                .status();
         }
 
-        log!("[TEXTURE] Registered ANGLE packages -> [{}]", pkgs_joined);
+        log!("[TEXTURE] Synced ANGLE pkgs: [{}] -> Overrides: [{}]", pkgs_joined, applied_features);
     }
 
     fn build_features_string(detail: i32, sharp: bool, hard: bool) -> String {
@@ -126,7 +131,6 @@ impl TextureController {
             features.push("forceNearestMipFiltering");
         }
 
-        // Clamp maksimal 3
         match detail.clamp(0, 3) {
             1 => features.push("forceTextureLodOffset1"),
             2 => features.push("forceTextureLodOffset2"),
@@ -137,29 +141,8 @@ impl TextureController {
         features.join(":")
     }
 
-    pub fn apply(pkg: &str, enabled: bool, detail: i32, sharp: bool, hard: bool) {
-        if !enabled {
-            return;
-        }
-
-        let valid_detail = detail.clamp(0, 3);
-        let overrides = Self::build_features_string(valid_detail, sharp, hard);
-
-        if !overrides.is_empty() {
-            let _ = Command::new("setprop")
-                .args(["debug.angle.feature_overrides_enabled", &overrides])
-                .status();
-
-            // Pastikan package aktif selalu terdaftar di global settings
-            let _ = Command::new("settings")
-                .args(["put", "global", "angle_gl_driver_selection_pkgs", pkg])
-                .status();
-            let _ = Command::new("settings")
-                .args(["put", "global", "angle_gl_driver_selection_values", "angle"])
-                .status();
-
-            log!("[TEXTURE] Active: {} -> Overrides: [{}]", pkg, overrides);
-        }
+    pub fn apply_foreground(pkg: &str) {
+        Self::sync_config(Some(pkg));
     }
 
     pub fn restore() {
