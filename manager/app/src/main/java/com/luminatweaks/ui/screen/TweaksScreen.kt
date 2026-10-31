@@ -155,7 +155,7 @@ fun MediaTekEngineScreen(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "FPSGO adalah modul kernel MediaTek yang menyesuaikan clock CPU/GPU secara dinamis berdasarkan frame rate real-time. Saat FPS stabil, clock diturunkan untuk hemat daya; saat FPS drop, clock dinaikkan cepat untuk menjaga kelancaran.\n\nFitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. Pada profil Balanced atau Eco, subsistem kembali ke baseline standar.",
+                                text = "FPSGO adalah modul kernel MediaTek yang menyesuaikan clock CPU/GPU secara dinamis berdasarkan frame rate real-time. Saat FPS stabil, clock diturunkan untuk hemat daya — namun di adegan berat, pembatasan ini bisa menyebabkan frame drop.\n\nFitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. Pada profil Balanced atau Eco, subsistem kembali ke baseline standar.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -214,7 +214,7 @@ fun MediaTekEngineScreen(
                         }
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = "Bypass modul ini jika menginginkan clock bebas tanpa intervensi penahanan FPSGO, dengan konsekuensi konsumsi daya dan suhu lebih tinggi.",
+                            text = "Nonaktifkan regulasi FPSGO agar clock CPU/GPU bebas naik sesuai kebutuhan render, tanpa dibatasi saat FPS terlihat stabil. Konsumsi daya dan suhu lebih tinggi.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
