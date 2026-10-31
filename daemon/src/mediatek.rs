@@ -1,4 +1,5 @@
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Command;
 
@@ -43,13 +44,16 @@ fn write_sysfs(path: &str, val: &str, lock: bool) -> bool {
     if !Path::new(path).exists() {
         return false;
     }
-    let _ = Command::new("chmod").args(["644", path]).status();
-    let res = fs::write(path, val.as_bytes()).is_ok();
-    if lock {
-        let _ = Command::new("chmod").args(["444", path]).status();
-    } else {
-        let _ = Command::new("chmod").args(["644", path]).status();
-    }
+    let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o644));
+    let res = match fs::write(path, val.as_bytes()) {
+        Ok(_) => true,
+        Err(e) => {
+            log!("[WARN] Failed to write '{}' to {}: {}", val, path, e);
+            false
+        }
+    };
+    let mode = if lock { 0o444 } else { 0o644 };
+    let _ = fs::set_permissions(path, fs::Permissions::from_mode(mode));
     res
 }
 

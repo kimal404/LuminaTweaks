@@ -1,4 +1,5 @@
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Command;
 
@@ -6,13 +7,16 @@ fn write_sysfs(path: &str, val: &str, lock: bool) -> bool {
     if !Path::new(path).exists() {
         return false;
     }
-    let _ = Command::new("chmod").args(["644", path]).status();
-    let res = fs::write(path, val.as_bytes()).is_ok();
-    if lock {
-        let _ = Command::new("chmod").args(["444", path]).status();
-    } else {
-        let _ = Command::new("chmod").args(["644", path]).status();
-    }
+    let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o644));
+    let res = match fs::write(path, val.as_bytes()) {
+        Ok(_) => true,
+        Err(e) => {
+            log!("[WARN] Failed to write '{}' to {}: {}", val, path, e);
+            false
+        }
+    };
+    let mode = if lock { 0o444 } else { 0o644 };
+    let _ = fs::set_permissions(path, fs::Permissions::from_mode(mode));
     res
 }
 
@@ -35,81 +39,82 @@ fn apply_thermal_kill(disable: bool) {
         let _ = Command::new("stop").arg("thermal-engine").status();
         let _ = Command::new("stop").arg("thermald").status();
         let _ = Command::new("stop").arg("thermal").status();
-        for i in 0..64 {
-            let path = format!("/sys/class/thermal/thermal_zone{}/mode", i);
-            if Path::new(&path).exists() {
-                write_sysfs(&path, "disabled", false);
-            }
-        }
     } else {
         log!("[THERMAL] Restoring system thermal management");
         let _ = Command::new("start").arg("mi_thermald").status();
         let _ = Command::new("start").arg("thermal-engine").status();
         let _ = Command::new("start").arg("thermald").status();
         let _ = Command::new("start").arg("thermal").status();
-        for i in 0..64 {
-            let path = format!("/sys/class/thermal/thermal_zone{}/mode", i);
-            if Path::new(&path).exists() {
-                write_sysfs(&path, "enabled", false);
+    }
+
+    let mode_str = if disable { "disabled" } else { "enabled" };
+    if let Ok(entries) = fs::read_dir("/sys/class/thermal") {
+        for entry in entries.flatten() {
+            let fname = entry.file_name().to_string_lossy().into_owned();
+            if fname.starts_with("thermal_zone") {
+                let path = format!("/sys/class/thermal/{}/mode", fname);
+                write_sysfs(&path, mode_str, false);
             }
         }
     }
 }
 
 fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool) {
-    for policy_idx in 0..16 {
-        let p_str = format!("/sys/devices/system/cpu/cpufreq/policy{}", policy_idx);
-        if !Path::new(&p_str).exists() {
-            continue;
-        }
+    if let Ok(entries) = fs::read_dir("/sys/devices/system/cpu/cpufreq") {
+        for entry in entries.flatten() {
+            let fname = entry.file_name().to_string_lossy().into_owned();
+            if fname.starts_with("policy") {
+                let p_str = format!("/sys/devices/system/cpu/cpufreq/{}", fname);
+                let gov_path = format!("{}/scaling_governor", p_str);
+                let min_path = format!("{}/scaling_min_freq", p_str);
+                let max_path = format!("{}/scaling_max_freq", p_str);
+                let avail_path = format!("{}/scaling_available_frequencies", p_str);
+                let hw_min_path = format!("{}/cpuinfo_min_freq", p_str);
+                let hw_max_path = format!("{}/cpuinfo_max_freq", p_str);
 
-        let gov_path = format!("{}/scaling_governor", p_str);
-        let min_path = format!("{}/scaling_min_freq", p_str);
-        let max_path = format!("{}/scaling_max_freq", p_str);
-        let avail_path = format!("{}/scaling_available_frequencies", p_str);
-        let hw_min_path = format!("{}/cpuinfo_min_freq", p_str);
-        let hw_max_path = format!("{}/cpuinfo_max_freq", p_str);
+                write_sysfs(&gov_path, gov, lock_gov);
 
-        write_sysfs(&gov_path, gov, lock_gov);
+                let hw_min = fs::read_to_string(&hw_min_path)
+                    .ok()
+                    .and_then(|s| s.trim().parse::<u64>().ok())
+                    .unwrap_or(300000);
+                let hw_max = fs::read_to_string(&hw_max_path)
+                    .ok()
+                    .and_then(|s| s.trim().parse::<u64>().ok())
+                    .unwrap_or(2000000);
 
-        let hw_min = fs::read_to_string(&hw_min_path)
-            .ok()
-            .and_then(|s| s.trim().parse::<u64>().ok())
-            .unwrap_or(300000);
-        let hw_max = fs::read_to_string(&hw_max_path)
-            .ok()
-            .and_then(|s| s.trim().parse::<u64>().ok())
-            .unwrap_or(2000000);
+                if min_clamp {
+                    let mut freqs: Vec<u64> = fs::read_to_string(&avail_path)
+                        .unwrap_or_default()
+                        .split_whitespace()
+                        .filter_map(|s| s.parse::<u64>().ok())
+                        .collect();
+                    freqs.sort_unstable();
 
-        if min_clamp {
-            let mut freqs: Vec<u64> = fs::read_to_string(&avail_path)
-                .unwrap_or_default()
-                .split_whitespace()
-                .filter_map(|s| s.parse::<u64>().ok())
-                .collect();
-            freqs.sort_unstable();
+                    let target_min = freqs
+                        .iter()
+                        .copied()
+                        .find(|&f| f >= 900000)
+                        .unwrap_or(hw_min);
 
-            let target_min = freqs
-                .iter()
-                .copied()
-                .find(|&f| f >= 900000)
-                .unwrap_or(hw_min);
-
-            write_sysfs(&min_path, &target_min.to_string(), true);
-            write_sysfs(&max_path, &hw_max.to_string(), true);
-        } else {
-            write_sysfs(&min_path, &hw_min.to_string(), false);
-            write_sysfs(&max_path, &hw_max.to_string(), false);
+                    write_sysfs(&min_path, &target_min.to_string(), true);
+                    write_sysfs(&max_path, &hw_max.to_string(), true);
+                } else {
+                    write_sysfs(&min_path, &hw_min.to_string(), false);
+                    write_sysfs(&max_path, &hw_max.to_string(), false);
+                }
+            }
         }
     }
 
-    for cpu_idx in 0..16 {
-        let c_str = format!("/sys/devices/system/cpu/cpu{}", cpu_idx);
-        if !Path::new(&c_str).exists() {
-            break;
+    if let Ok(entries) = fs::read_dir("/sys/devices/system/cpu") {
+        for entry in entries.flatten() {
+            let fname = entry.file_name().to_string_lossy().into_owned();
+            if fname.starts_with("cpu") && fname[3..].chars().all(|c| c.is_ascii_digit()) {
+                let gov_path = format!("/sys/devices/system/cpu/{}/cpufreq/scaling_governor", fname);
+                write_sysfs(&gov_path, gov, lock_gov);
+            }
         }
-        let gov_path = format!("{}/cpufreq/scaling_governor", c_str);
-        write_sysfs(&gov_path, gov, lock_gov);
     }
 
     let ra_val = if min_clamp { "1024" } else { "128" };
