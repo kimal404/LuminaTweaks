@@ -289,36 +289,31 @@ pub fn sync_process_threads(
     }
 
     if newly_bound > 0 {
-        let mut summary_parts = Vec::new();
+        log!(
+            "[AFFINITY] └── Affinity : {} Threads Tuned",
+            newly_bound
+        );
         if !fast_names.is_empty() {
-            summary_parts.push(format!(
-                "Fast(0x{:X}): {}",
+            log!(
+                "             ├── Fast (0x{:X}) : {}",
                 topology.fast_mask,
                 format_thread_counts(&fast_names, &fast_counts)
-            ));
+            );
         }
         if !big_names.is_empty() {
-            summary_parts.push(format!(
-                "Big(0x{:X}): {}",
+            log!(
+                "             ├── Big  (0x{:X}) : {}",
                 topology.big_mask,
                 format_thread_counts(&big_names, &big_counts)
-            ));
+            );
         }
         if worker_count > 0 {
-            summary_parts.push(format!(
-                "All(0x{:X}): {} workers",
+            log!(
+                "             └── All  (0x{:X}) : {} Workers",
                 topology.all_mask,
                 worker_count
-            ));
+            );
         }
-
-        let details = summary_parts.join(" | ");
-        log!(
-            "[AFFINITY] PID {} | {} threads bound | {}",
-            pid,
-            newly_bound,
-            details
-        );
     }
 }
 
@@ -334,7 +329,7 @@ pub fn restore_process_threads(
         set_affinity_mask(tid, topology.all_mask);
     }
     log!(
-        "[AFFINITY] Restored {} thread(s) to All Cores (0x{:X})",
+        "[AFFINITY] └── Affinity : Restored {} thread(s) to All Cores (0x{:X})",
         total,
         topology.all_mask
     );
@@ -358,23 +353,25 @@ pub fn isolate_background(enable: bool, topology: &CpuTopology) {
 
     for node in &cpuset_nodes {
         if Path::new(node).exists() {
-            match fs::write(node, target) {
-                Ok(_) => {
-                    configured_count += 1;
-                    log!("[AFFINITY] Configured cpuset node {}: {}", node, target);
-                }
-                Err(e) => {
-                    log!("[WARN] Failed to write cpuset node {}: {}", node, e);
-                }
+            if fs::write(node, target).is_ok() {
+                configured_count += 1;
             }
-        } else {
-            log!("[AFFINITY] Cpuset node {} not found, skipped gracefully", node);
         }
     }
 
-    log!(
-        "[AFFINITY] {}/{} cpuset nodes configured",
-        configured_count,
-        total_nodes
-    );
+    if enable {
+        log!(
+            "[AFFINITY] ├── Cpuset   : Background isolated to Little Cores ({}) [{}/{} OK]",
+            target,
+            configured_count,
+            total_nodes
+        );
+    } else {
+        log!(
+            "[AFFINITY] ├── Cpuset   : Restored to All Cores ({}) [{}/{} OK]",
+            target,
+            configured_count,
+            total_nodes
+        );
+    }
 }
