@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
@@ -144,8 +144,21 @@ fn set_affinity_mask(tid: i32, mask: u64) -> bool {
     ret == 0
 }
 
-/// Scan /proc directly to find the exact main process PID for a given package name.
-/// Validates that UID >= 10000 (Android user app range) to filter out system services.
+fn format_thread_counts(names: &[String], counts: &HashMap<String, usize>) -> String {
+    names
+        .iter()
+        .map(|name| {
+            let cnt = counts.get(name).copied().unwrap_or(1);
+            if cnt > 1 {
+                format!("{} x{}", name, cnt)
+            } else {
+                name.clone()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 pub fn get_pkg_pid(pkg: &str) -> Option<i32> {
     let entries = fs::read_dir("/proc").ok()?;
     for entry in entries.flatten() {
@@ -156,7 +169,6 @@ pub fn get_pkg_pid(pkg: &str) -> Option<i32> {
         }
         let pid: i32 = name_str.parse().ok()?;
 
-        // Verify exact match against /proc/[pid]/cmdline (separated by null bytes)
         let cmdline_path = entry.path().join("cmdline");
         let cmdline_bytes = match fs::read(cmdline_path) {
             Ok(b) => b,
@@ -177,13 +189,12 @@ pub fn get_pkg_pid(pkg: &str) -> Option<i32> {
             continue;
         }
 
-        // Verify UID via /proc/[pid]/status
         let status_path = entry.path().join("status");
         if let Ok(status_str) = fs::read_to_string(status_path) {
             for line in status_str.lines() {
                 if line.starts_with("Uid:") {
                     let mut parts = line.split_whitespace();
-                    parts.next(); // Skip "Uid:"
+                    parts.next();
                     if let Some(uid_str) = parts.next() {
                         if let Ok(uid) = uid_str.parse::<u32>() {
                             if uid >= 10000 {
@@ -199,62 +210,115 @@ pub fn get_pkg_pid(pkg: &str) -> Option<i32> {
     None
 }
 
-/// Synchronize process threads with smart classification based on /proc/[pid]/task/[tid]/comm
 pub fn sync_process_threads(
     pid: i32,
     tracked_tids: &mut HashSet<i32>,
     topology: &CpuTopology,
 ) {
     let task_dir = format!("/proc/{}/task", pid);
-    if let Ok(entries) = fs::read_dir(task_dir) {
-        let mut newly_bound = 0;
-        for entry in entries.flatten() {
-            if let Ok(tid) = entry.file_name().to_string_lossy().parse::<i32>() {
-                if !tracked_tids.contains(&tid) {
-                    let comm_path = format!("/proc/{}/task/{}/comm", pid, tid);
-                    let comm = fs::read_to_string(comm_path)
-                        .unwrap_or_default()
-                        .trim()
-                        .to_string();
+    let entries = match fs::read_dir(task_dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
 
-                    let target_mask = if tid == pid {
-                        topology.fast_mask
-                    } else if comm.contains("Render")
-                        || comm.contains("GL")
-                        || comm.contains("GPU")
-                        || comm.contains("SurfaceFlinger")
-                        || comm.contains("RenderThread")
-                        || comm.contains("main")
-                        || comm.contains("GameCore")
-                        || comm.contains("UnityMain")
-                    {
-                        topology.fast_mask
-                    } else if comm.contains("Audio") {
-                        topology.big_mask
+    let mut newly_bound = 0;
+    let mut fast_names: Vec<String> = Vec::new();
+    let mut fast_counts: HashMap<String, usize> = HashMap::new();
+    let mut big_names: Vec<String> = Vec::new();
+    let mut big_counts: HashMap<String, usize> = HashMap::new();
+    let mut worker_count = 0;
+
+    for entry in entries.flatten() {
+        if let Ok(tid) = entry.file_name().to_string_lossy().parse::<i32>() {
+            if !tracked_tids.contains(&tid) {
+                let comm_path = format!("/proc/{}/task/{}/comm", pid, tid);
+                let mut comm = fs::read_to_string(comm_path)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string();
+
+                if comm.is_empty() {
+                    comm = "unnamed".to_string();
+                }
+
+                let target_mask = if tid == pid {
+                    topology.fast_mask
+                } else if comm.contains("Render")
+                    || comm.contains("GL")
+                    || comm.contains("GPU")
+                    || comm.contains("SurfaceFlinger")
+                    || comm.contains("RenderThread")
+                    || comm.contains("main")
+                    || comm.contains("GameCore")
+                    || comm.contains("UnityMain")
+                {
+                    topology.fast_mask
+                } else if comm.contains("Audio") {
+                    topology.big_mask
+                } else {
+                    topology.all_mask
+                };
+
+                if set_affinity_mask(tid, target_mask) {
+                    tracked_tids.insert(tid);
+                    newly_bound += 1;
+
+                    if target_mask == topology.fast_mask {
+                        if !fast_counts.contains_key(&comm) {
+                            fast_names.push(comm.clone());
+                        }
+                        *fast_counts.entry(comm.clone()).or_insert(0) += 1;
+                    } else if target_mask == topology.big_mask {
+                        if !big_counts.contains_key(&comm) {
+                            big_names.push(comm.clone());
+                        }
+                        *big_counts.entry(comm.clone()).or_insert(0) += 1;
                     } else {
-                        topology.all_mask
-                    };
-
-                    if set_affinity_mask(tid, target_mask) {
-                        tracked_tids.insert(tid);
-                        newly_bound += 1;
-                        log!(
-                            "[AFFINITY] TID {} ({}) bound to mask 0x{:X}",
-                            tid,
-                            comm,
-                            target_mask
-                        );
+                        worker_count += 1;
                     }
+
+                    log_verbose!(
+                        "[AFFINITY] TID {} ({}) bound to mask 0x{:X}",
+                        tid,
+                        comm,
+                        target_mask
+                    );
                 }
             }
         }
-        if newly_bound > 0 {
-            log!(
-                "[AFFINITY] Tuned {} thread(s) for PID {}",
-                newly_bound,
-                pid
-            );
+    }
+
+    if newly_bound > 0 {
+        let mut summary_parts = Vec::new();
+        if !fast_names.is_empty() {
+            summary_parts.push(format!(
+                "Fast(0x{:X}): {}",
+                topology.fast_mask,
+                format_thread_counts(&fast_names, &fast_counts)
+            ));
         }
+        if !big_names.is_empty() {
+            summary_parts.push(format!(
+                "Big(0x{:X}): {}",
+                topology.big_mask,
+                format_thread_counts(&big_names, &big_counts)
+            ));
+        }
+        if worker_count > 0 {
+            summary_parts.push(format!(
+                "All(0x{:X}): {} workers",
+                topology.all_mask,
+                worker_count
+            ));
+        }
+
+        let details = summary_parts.join(" | ");
+        log!(
+            "[AFFINITY] PID {} | {} threads bound | {}",
+            pid,
+            newly_bound,
+            details
+        );
     }
 }
 
@@ -276,7 +340,6 @@ pub fn restore_process_threads(
     );
 }
 
-/// Isolate background tasks to Little cores with verbose status logging
 pub fn isolate_background(enable: bool, topology: &CpuTopology) {
     let target = if enable {
         &topology.little_range_str
