@@ -54,12 +54,22 @@ object LogUtil {
             TMP_DIR="/data/local/tmp/lumina_logs_tmp"
             rm -rf ${d}TMP_DIR
 
-            mkdir -p ${d}TMP_DIR/LuminaConfig
-            mkdir -p ${d}TMP_DIR/log
+            mkdir -p ${d}TMP_DIR/luminatweaks
+            mkdir -p ${d}TMP_DIR/system
 
-            cp -f /data/adb/luminatweaks/*.json ${d}TMP_DIR/LuminaConfig/ 2>/dev/null
+            # 1. Salin langsung berkas asli dari /data/adb/luminatweaks/
+            cp -f /data/adb/luminatweaks/*.log* ${d}TMP_DIR/luminatweaks/ 2>/dev/null
+            cp -f /data/adb/luminatweaks/*.json ${d}TMP_DIR/luminatweaks/ 2>/dev/null
+            cp -f /data/adb/luminatweaks/*.txt ${d}TMP_DIR/luminatweaks/ 2>/dev/null
+            cp -f /data/adb/luminatweaks/*.conf ${d}TMP_DIR/luminatweaks/ 2>/dev/null
 
-            INFO_FILE="${d}TMP_DIR/log/Lumina.log"
+            # Salin metadata modul untuk verifikasi instalasi
+            cp -f /data/adb/modules/luminatweaks/module.prop ${d}TMP_DIR/luminatweaks/ 2>/dev/null
+            cp -f /data/adb/modules/luminatweaks/service.sh ${d}TMP_DIR/luminatweaks/ 2>/dev/null
+            cp -f /data/adb/modules/luminatweaks/post-fs-data.sh ${d}TMP_DIR/luminatweaks/ 2>/dev/null
+
+            # 2. Dump identitas perangkat dan status sistem
+            INFO_FILE="${d}TMP_DIR/system/device_info.txt"
 
             MODULE_VER=${d}(grep '^version=' /data/adb/modules/luminatweaks/module.prop 2>/dev/null | cut -d= -f2)
             [ -z "${d}MODULE_VER" ] && MODULE_VER="2.0.0 (Remastered)"
@@ -74,9 +84,9 @@ object LogUtil {
             ACTIVE_PROFILE=${d}(getprop sys.lumina.profile 2>/dev/null)
             [ -z "${d}ACTIVE_PROFILE" ] && ACTIVE_PROFILE="Balanced"
 
-            echo "################################################################" > "${d}INFO_FILE"
+            echo "================================================================" > "${d}INFO_FILE"
             echo "                     LuminaTweaks Diagnostics                   " >> "${d}INFO_FILE"
-            echo "################################################################" >> "${d}INFO_FILE"
+            echo "================================================================" >> "${d}INFO_FILE"
             echo "" >> "${d}INFO_FILE"
             echo "  [Device Information]" >> "${d}INFO_FILE"
             echo "    Device Model   : ${d}DEVICE_MODEL" >> "${d}INFO_FILE"
@@ -91,34 +101,21 @@ object LogUtil {
             echo "    Daemon PID     : ${d}DAEMON_PID" >> "${d}INFO_FILE"
             echo "    Active Profile : ${d}ACTIVE_PROFILE" >> "${d}INFO_FILE"
             echo "" >> "${d}INFO_FILE"
-            echo "################################################################" >> "${d}INFO_FILE"
+            echo "  [Active System Properties]" >> "${d}INFO_FILE"
+            getprop | grep -iE "lumina|fpsgo|ged" >> "${d}INFO_FILE" 2>/dev/null
             echo "" >> "${d}INFO_FILE"
+            echo "================================================================" >> "${d}INFO_FILE"
 
-            if [ -f "/data/adb/luminatweaks/luminad.log" ]; then
-                echo "--- START OF LUMINAD SERVICE LOG ---" >> "${d}INFO_FILE"
-                cat /data/adb/luminatweaks/luminad.log >> "${d}INFO_FILE"
-                echo "" >> "${d}INFO_FILE"
-                echo "--- END OF LUMINAD SERVICE LOG ---" >> "${d}INFO_FILE"
-                echo "" >> "${d}INFO_FILE"
-            fi
+            # 3. Ambil logcat & dmesg terbaru (tanpa menimbun data usang puluhan MB)
+            logcat -d -t 1000 > ${d}TMP_DIR/system/logcat_recent.txt 2>/dev/null
+            dmesg | tail -n 300 > ${d}TMP_DIR/system/dmesg_recent.txt 2>/dev/null
 
-            if [ -f "/data/adb/luminatweaks/luminad.log.old" ]; then
-                echo "--- PREVIOUS LUMINAD SERVICE LOG (.old) ---" >> "${d}INFO_FILE"
-                cat /data/adb/luminatweaks/luminad.log.old >> "${d}INFO_FILE"
-                echo "" >> "${d}INFO_FILE"
-            fi
+            # Ambil log root manager terbaru (dibatasi 300 baris terakhir)
+            [ -f /data/adb/ksu/log/logcat.log ] && tail -n 300 /data/adb/ksu/log/logcat.log > ${d}TMP_DIR/system/ksu.log 2>/dev/null
+            [ -f /data/adb/ap/log/logcat.log ] && tail -n 300 /data/adb/ap/log/logcat.log > ${d}TMP_DIR/system/apatch.log 2>/dev/null
+            [ -f /data/adb/magisk.log ] && tail -n 300 /data/adb/magisk.log > ${d}TMP_DIR/system/magisk.log 2>/dev/null
 
-            cat /data/adb/ksu/log/logcat.log > ${d}TMP_DIR/log/logcat.log 2>/dev/null
-            cat /data/adb/ap/log/logcat.log >> ${d}TMP_DIR/log/logcat.log 2>/dev/null
-            cat /data/adb/ksu/log/dmesg.log > ${d}TMP_DIR/log/dmesg.log 2>/dev/null
-            cat /data/adb/ap/log/dmesg.log >> ${d}TMP_DIR/log/dmesg.log 2>/dev/null
-            cat /cache/magisk.log > ${d}TMP_DIR/log/magisk.log 2>/dev/null
-            cat /data/adb/magisk.log >> ${d}TMP_DIR/log/magisk.log 2>/dev/null
-            cat /data/adb/apatch/log/* >> ${d}TMP_DIR/log/apatch.log 2>/dev/null
-
-            logcat -d -t 350 > ${d}TMP_DIR/log/logcat_recent.txt 2>/dev/null
-            dmesg | tail -n 250 > ${d}TMP_DIR/log/dmesg_recent.txt 2>/dev/null
-
+            # 4. Arsipkan ke format tar.gz
             cd /data/local/tmp
             tar -czf "$fileName" -C lumina_logs_tmp .
 
