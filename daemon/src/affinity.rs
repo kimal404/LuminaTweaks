@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
@@ -54,7 +55,6 @@ impl CpuTopology {
         let mut big_mask: u64 = 0;
         let mut prime_mask: u64 = 0;
         let mut all_mask: u64 = 0;
-
         let mut little_cores_vec: Vec<usize> = Vec::new();
 
         if sorted_caps.len() == 1 {
@@ -68,8 +68,8 @@ impl CpuTopology {
                 prime_mask: all_mask,
                 fast_mask: all_mask,
                 all_mask,
-                little_range_str: format!("0-{}", total_cores - 1),
-                all_range_str: format!("0-{}", total_cores - 1),
+                little_range_str: format!("0-{}", total_cores.saturating_sub(1)),
+                all_range_str: format!("0-{}", total_cores.saturating_sub(1)),
             };
         }
 
@@ -95,7 +95,7 @@ impl CpuTopology {
             let max = little_cores_vec.iter().max().unwrap();
             format!("{}-{}", min, max)
         } else {
-            "0-1".to_string()
+            "0-3".to_string()
         };
 
         let all_range_str = format!("0-{}", total_cores.saturating_sub(1));
@@ -144,30 +144,139 @@ fn set_affinity_mask(tid: i32, mask: u64) -> bool {
     ret == 0
 }
 
-pub fn tune_game_threads(pid: i32, topology: &CpuTopology) {
-    let task_dir = format!("/proc/{}/task", pid);
-    if let Ok(entries) = fs::read_dir(task_dir) {
-        for entry in entries.flatten() {
-            if let Ok(tid_num) = entry.file_name().to_string_lossy().parse::<i32>() {
-                let comm_path = entry.path().join("comm");
-                let comm = fs::read_to_string(comm_path).unwrap_or_default().to_lowercase();
-                let name = comm.trim();
+/// Scan /proc directly to find the exact main process PID for a given package name.
+/// Validates that UID >= 10000 (Android user app range) to filter out system services.
+pub fn get_pkg_pid(pkg: &str) -> Option<i32> {
+    let entries = fs::read_dir("/proc").ok()?;
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name_str = name.to_str()?;
+        if !name_str.chars().all(|c| c.is_ascii_digit()) {
+            continue;
+        }
+        let pid: i32 = name_str.parse().ok()?;
 
-                if tid_num == pid {
-                    set_affinity_mask(tid_num, topology.fast_mask);
-                } else if name.contains("renderthread")
-                    || name.contains("unitygfx")
-                    || name.contains("glthread")
-                    || name.contains("mali")
-                    || name.contains("vk")
-                {
-                    set_affinity_mask(tid_num, topology.fast_mask);
+        // Verify exact match against /proc/[pid]/cmdline (separated by null bytes)
+        let cmdline_path = entry.path().join("cmdline");
+        let cmdline_bytes = match fs::read(cmdline_path) {
+            Ok(b) => b,
+            Err(_) => continue,
+        };
+
+        let first_arg = match cmdline_bytes.split(|&b| b == 0).next() {
+            Some(arg) => arg,
+            None => continue,
+        };
+
+        let proc_cmd = match std::str::from_utf8(first_arg) {
+            Ok(s) => s.trim(),
+            Err(_) => continue,
+        };
+
+        if proc_cmd != pkg {
+            continue;
+        }
+
+        // Verify UID via /proc/[pid]/status
+        let status_path = entry.path().join("status");
+        if let Ok(status_str) = fs::read_to_string(status_path) {
+            for line in status_str.lines() {
+                if line.starts_with("Uid:") {
+                    let mut parts = line.split_whitespace();
+                    parts.next(); // Skip "Uid:"
+                    if let Some(uid_str) = parts.next() {
+                        if let Ok(uid) = uid_str.parse::<u32>() {
+                            if uid >= 10000 {
+                                return Some(pid);
+                            }
+                        }
+                    }
+                    break;
                 }
             }
         }
     }
+    None
 }
 
+/// Synchronize process threads with smart classification based on /proc/[pid]/task/[tid]/comm
+pub fn sync_process_threads(
+    pid: i32,
+    tracked_tids: &mut HashSet<i32>,
+    topology: &CpuTopology,
+) {
+    let task_dir = format!("/proc/{}/task", pid);
+    if let Ok(entries) = fs::read_dir(task_dir) {
+        let mut newly_bound = 0;
+        for entry in entries.flatten() {
+            if let Ok(tid) = entry.file_name().to_string_lossy().parse::<i32>() {
+                if !tracked_tids.contains(&tid) {
+                    let comm_path = format!("/proc/{}/task/{}/comm", pid, tid);
+                    let comm = fs::read_to_string(comm_path)
+                        .unwrap_or_default()
+                        .trim()
+                        .to_string();
+
+                    let target_mask = if tid == pid {
+                        topology.fast_mask
+                    } else if comm.contains("Render")
+                        || comm.contains("GL")
+                        || comm.contains("GPU")
+                        || comm.contains("SurfaceFlinger")
+                        || comm.contains("RenderThread")
+                        || comm.contains("main")
+                        || comm.contains("GameCore")
+                        || comm.contains("UnityMain")
+                    {
+                        topology.fast_mask
+                    } else if comm.contains("Audio") {
+                        topology.big_mask
+                    } else {
+                        topology.all_mask
+                    };
+
+                    if set_affinity_mask(tid, target_mask) {
+                        tracked_tids.insert(tid);
+                        newly_bound += 1;
+                        log!(
+                            "[AFFINITY] TID {} ({}) bound to mask 0x{:X}",
+                            tid,
+                            comm,
+                            target_mask
+                        );
+                    }
+                }
+            }
+        }
+        if newly_bound > 0 {
+            log!(
+                "[AFFINITY] Tuned {} thread(s) for PID {}",
+                newly_bound,
+                pid
+            );
+        }
+    }
+}
+
+pub fn restore_process_threads(
+    tracked_tids: &mut HashSet<i32>,
+    topology: &CpuTopology,
+) {
+    if tracked_tids.is_empty() {
+        return;
+    }
+    let total = tracked_tids.len();
+    for tid in tracked_tids.drain() {
+        set_affinity_mask(tid, topology.all_mask);
+    }
+    log!(
+        "[AFFINITY] Restored {} thread(s) to All Cores (0x{:X})",
+        total,
+        topology.all_mask
+    );
+}
+
+/// Isolate background tasks to Little cores with verbose status logging
 pub fn isolate_background(enable: bool, topology: &CpuTopology) {
     let target = if enable {
         &topology.little_range_str
@@ -181,9 +290,28 @@ pub fn isolate_background(enable: bool, topology: &CpuTopology) {
         "/dev/cpuset/restricted/cpus",
     ];
 
+    let mut configured_count = 0;
+    let total_nodes = cpuset_nodes.len();
+
     for node in &cpuset_nodes {
         if Path::new(node).exists() {
-            let _ = fs::write(node, target);
+            match fs::write(node, target) {
+                Ok(_) => {
+                    configured_count += 1;
+                    log!("[AFFINITY] Configured cpuset node {}: {}", node, target);
+                }
+                Err(e) => {
+                    log!("[WARN] Failed to write cpuset node {}: {}", node, e);
+                }
+            }
+        } else {
+            log!("[AFFINITY] Cpuset node {} not found, skipped gracefully", node);
         }
     }
+
+    log!(
+        "[AFFINITY] {}/{} cpuset nodes configured",
+        configured_count,
+        total_nodes
+    );
 }

@@ -1,13 +1,14 @@
 #[macro_use]
 mod logger;
 mod affinity;
-mod mediatek;
 mod detector;
 mod display;
 mod engine;
+mod mediatek;
 mod notifier;
 mod renderer;
 
+use std::collections::HashSet;
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
@@ -34,16 +35,7 @@ fn set_system_profile_prop(name: &str) {
 }
 
 fn get_pkg_pid(pkg: &str) -> Option<i32> {
-    let output = Command::new("pidof")
-        .arg(pkg)
-        .output()
-        .ok()?;
-
-    let text = String::from_utf8_lossy(&output.stdout);
-    text.split_whitespace()
-        .next()?
-        .parse::<i32>()
-        .ok()
+    affinity::get_pkg_pid(pkg)
 }
 
 struct EngineRuntime {
@@ -54,6 +46,8 @@ struct EngineRuntime {
     original_zen_mode: Option<String>,
     dnd_overridden: bool,
     topology: CpuTopology,
+    tracked_tids: HashSet<i32>,
+    current_target_pid: Option<i32>,
 }
 
 impl EngineRuntime {
@@ -71,6 +65,8 @@ impl EngineRuntime {
             original_zen_mode: None,
             dnd_overridden: false,
             topology: topo,
+            tracked_tids: HashSet::new(),
+            current_target_pid: None,
         }
     }
 
@@ -95,7 +91,11 @@ impl EngineRuntime {
             Profile::Balance
         };
 
-        if self.current_profile != Some(target_profile) {
+        let is_profile_changing = self.current_profile != Some(target_profile);
+        let entering_performance = is_profile_changing
+            && (target_profile == Profile::Performance || target_profile == Profile::PerformanceLite);
+
+        if is_profile_changing {
             match target_profile {
                 Profile::Performance => {
                     engine::performance_profile();
@@ -126,6 +126,8 @@ impl EngineRuntime {
                     });
                 }
                 Profile::Eco => {
+                    affinity::restore_process_threads(&mut self.tracked_tids, &self.topology);
+                    self.current_target_pid = None;
                     engine::eco_profile();
                     set_system_profile_prop("Eco");
                     affinity::isolate_background(false, &self.topology);
@@ -140,6 +142,8 @@ impl EngineRuntime {
                     });
                 }
                 Profile::Balance => {
+                    affinity::restore_process_threads(&mut self.tracked_tids, &self.topology);
+                    self.current_target_pid = None;
                     engine::balance_profile();
                     set_system_profile_prop("Balanced");
                     affinity::isolate_background(false, &self.topology);
@@ -158,12 +162,31 @@ impl EngineRuntime {
             self.current_profile = Some(target_profile);
         }
 
-        if let Some(pkg) = target_pkg {
-            if target_profile == Profile::Performance || target_profile == Profile::PerformanceLite {
+        if target_profile == Profile::Performance || target_profile == Profile::PerformanceLite {
+            if let Some(pkg) = target_pkg {
                 if let Some(pid) = get_pkg_pid(pkg) {
-                    affinity::tune_game_threads(pid, &self.topology);
+                    if self.current_target_pid != Some(pid) {
+                        affinity::restore_process_threads(&mut self.tracked_tids, &self.topology);
+                        self.current_target_pid = Some(pid);
+                    }
+                    affinity::sync_process_threads(pid, &mut self.tracked_tids, &self.topology);
+
+                    // Multi-pass background thread binding on entering performance to capture loading scene spawns
+                    if entering_performance {
+                        let topo = self.topology.clone();
+                        thread::spawn(move || {
+                            let mut burst_tracked = HashSet::new();
+                            for _ in 0..3 {
+                                thread::sleep(Duration::from_millis(200));
+                                affinity::sync_process_threads(pid, &mut burst_tracked, &topo);
+                            }
+                        });
+                    }
                 }
             }
+        } else if !self.tracked_tids.is_empty() {
+            affinity::restore_process_threads(&mut self.tracked_tids, &self.topology);
+            self.current_target_pid = None;
         }
 
         let global_rr = display::get_saved_mode_id();
@@ -242,6 +265,8 @@ impl EngineRuntime {
 
     fn reset_to_balance(&mut self) {
         if self.current_profile != Some(Profile::Balance) {
+            affinity::restore_process_threads(&mut self.tracked_tids, &self.topology);
+            self.current_target_pid = None;
             self.active_target_pkg = None;
             self.current_profile = Some(Profile::Balance);
             engine::balance_profile();
