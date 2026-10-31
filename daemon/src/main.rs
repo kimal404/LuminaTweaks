@@ -13,7 +13,7 @@ mod renderer;
 use std::collections::HashSet;
 use std::process::Command;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use affinity::CpuTopology;
 use detector::{
@@ -38,15 +38,6 @@ fn get_pkg_pid(pkg: &str) -> Option<i32> {
     affinity::get_pkg_pid(pkg)
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-struct AppliedTexture {
-    pkg: String,
-    enabled: bool,
-    detail: i32,
-    sharp: bool,
-    hard: bool,
-}
-
 struct EngineRuntime {
     current_profile: Option<Profile>,
     active_target_pkg: Option<String>,
@@ -57,7 +48,7 @@ struct EngineRuntime {
     topology: CpuTopology,
     tracked_tids: HashSet<i32>,
     current_target_pid: Option<i32>,
-    current_texture: Option<AppliedTexture>,
+    last_config_mtime: Option<SystemTime>,
 }
 
 impl EngineRuntime {
@@ -79,7 +70,7 @@ impl EngineRuntime {
             topology: topo,
             tracked_tids: HashSet::new(),
             current_target_pid: None,
-            current_texture: None,
+            last_config_mtime: None,
         }
     }
 
@@ -273,31 +264,6 @@ impl EngineRuntime {
             self.original_zen_mode = None;
             log!("[DND] Zen mode restored");
         }
-
-        let desired_texture = if let (Some(pkg), Some(ref cfg)) = (target_pkg, &target_cfg) {
-            if cfg.texture_enabled {
-                Some(AppliedTexture {
-                    pkg: pkg.to_string(),
-                    enabled: cfg.texture_enabled,
-                    detail: cfg.texture_detail,
-                    sharp: cfg.pixel_sharp,
-                    hard: cfg.hard_distance,
-                })
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        if self.current_texture != desired_texture {
-            if let Some(ref tex) = desired_texture {
-                TextureController::apply(&tex.pkg, tex.enabled, tex.detail, tex.sharp, tex.hard);
-            } else if self.current_texture.is_some() {
-                TextureController::restore();
-            }
-            self.current_texture = desired_texture;
-        }
     }
 
     fn reset_to_balance(&mut self) {
@@ -354,8 +320,19 @@ fn main() {
 
     log!("[DAEMON] Subsystems online, entering main event loop");
     let mut runtime = EngineRuntime::new();
+    let mut last_pkg_for_texture: Option<String> = None;
 
     loop {
+        let mut config_just_changed = false;
+        if let Ok(meta) = std::fs::metadata("/data/adb/luminatweaks/app_config.json") {
+            if let Ok(mtime) = meta.modified() {
+                if runtime.last_config_mtime != Some(mtime) {
+                    runtime.last_config_mtime = Some(mtime);
+                    config_just_changed = true;
+                }
+            }
+        }
+
         if is_master_enabled() {
             let focused = get_focused_package();
             let newly_focused_target = focused.as_deref().filter(|pkg| is_app_enabled(pkg));
@@ -375,9 +352,21 @@ fn main() {
                 None
             };
 
+            if config_just_changed || current_target != last_pkg_for_texture {
+                if let Some(ref pkg) = current_target {
+                    TextureController::apply_foreground(pkg);
+                } else {
+                    TextureController::sync_config(None);
+                }
+                last_pkg_for_texture = current_target.clone();
+            }
+
             runtime.apply_target(current_target.as_deref());
         } else {
             runtime.reset_to_balance();
+            if config_just_changed {
+                TextureController::restore();
+            }
         }
 
         thread::sleep(Duration::from_millis(1200));
