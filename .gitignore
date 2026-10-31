@@ -25,6 +25,5 @@ local.properties
 *keystore_base64*
 
 # Proprietary / Closed Source Logic
-daemon/src/texture.rs
 hook.cpp
 libluminagfx.so
