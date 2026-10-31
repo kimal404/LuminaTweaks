@@ -127,4 +127,5 @@ pub fn apply_mtk_eco() {
     write_sysfs("/sys/module/sspm_v3/holders/ged/parameters/is_GED_KPI_enabled", "0", false);
     write_sysfs("/sys/class/misc/mali0/device/power_policy", "coarse_demand", false);
     write_sysfs("/sys/class/devfreq/mtk-dvfsrc-devfreq/governor", "powersave", false);
+    write_sysfs("/proc/gpufreqv2/fix_target_opp_index", "-1", false);
 }

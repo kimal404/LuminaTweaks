@@ -61,6 +61,11 @@ impl CpuTopology {
             for (c, _) in &core_caps {
                 all_mask |= 1 << c;
             }
+            let range_str = if total_cores <= 1 {
+                "0".to_string()
+            } else {
+                format!("0-{}", total_cores.saturating_sub(1))
+            };
             return Self {
                 total_cores,
                 little_mask: all_mask,
@@ -68,8 +73,8 @@ impl CpuTopology {
                 prime_mask: all_mask,
                 fast_mask: all_mask,
                 all_mask,
-                little_range_str: format!("0-{}", total_cores.saturating_sub(1)),
-                all_range_str: format!("0-{}", total_cores.saturating_sub(1)),
+                little_range_str: range_str.clone(),
+                all_range_str: range_str,
             };
         }
 
@@ -90,15 +95,30 @@ impl CpuTopology {
         }
         let fast_mask = big_mask | prime_mask;
 
+        little_cores_vec.sort_unstable();
         let little_range_str = if !little_cores_vec.is_empty() {
-            let min = little_cores_vec.iter().min().unwrap();
-            let max = little_cores_vec.iter().max().unwrap();
-            format!("{}-{}", min, max)
+            let min = *little_cores_vec.first().unwrap();
+            let max = *little_cores_vec.last().unwrap();
+            if min == max {
+                format!("{}", min)
+            } else {
+                format!("{}-{}", min, max)
+            }
+        } else if total_cores <= 4 {
+            if total_cores <= 1 {
+                "0".to_string()
+            } else {
+                format!("0-{}", total_cores.saturating_sub(1))
+            }
         } else {
             "0-3".to_string()
         };
 
-        let all_range_str = format!("0-{}", total_cores.saturating_sub(1));
+        let all_range_str = if total_cores <= 1 {
+            "0".to_string()
+        } else {
+            format!("0-{}", total_cores.saturating_sub(1))
+        };
 
         Self {
             total_cores,
@@ -163,11 +183,17 @@ pub fn get_pkg_pid(pkg: &str) -> Option<i32> {
     let entries = fs::read_dir("/proc").ok()?;
     for entry in entries.flatten() {
         let name = entry.file_name();
-        let name_str = name.to_str()?;
+        let name_str = match name.to_str() {
+            Some(s) => s,
+            None => continue,
+        };
         if !name_str.chars().all(|c| c.is_ascii_digit()) {
             continue;
         }
-        let pid: i32 = name_str.parse().ok()?;
+        let pid: i32 = match name_str.parse() {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
 
         let cmdline_path = entry.path().join("cmdline");
         let cmdline_bytes = match fs::read(cmdline_path) {
@@ -216,10 +242,19 @@ pub fn sync_process_threads(
     topology: &CpuTopology,
 ) {
     let task_dir = format!("/proc/{}/task", pid);
-    let entries = match fs::read_dir(task_dir) {
+    let entries = match fs::read_dir(&task_dir) {
         Ok(e) => e,
         Err(_) => return,
     };
+
+    let task_entries: Vec<_> = entries.flatten().collect();
+    let mut alive_tids: HashSet<i32> = HashSet::new();
+    for entry in &task_entries {
+        if let Ok(tid) = entry.file_name().to_string_lossy().parse::<i32>() {
+            alive_tids.insert(tid);
+        }
+    }
+    tracked_tids.retain(|tid| alive_tids.contains(tid));
 
     let mut newly_bound = 0;
     let mut fast_names: Vec<String> = Vec::new();
@@ -228,7 +263,7 @@ pub fn sync_process_threads(
     let mut big_counts: HashMap<String, usize> = HashMap::new();
     let mut worker_count = 0;
 
-    for entry in entries.flatten() {
+    for entry in task_entries {
         if let Ok(tid) = entry.file_name().to_string_lossy().parse::<i32>() {
             if !tracked_tids.contains(&tid) {
                 let comm_path = format!("/proc/{}/task/{}/comm", pid, tid);

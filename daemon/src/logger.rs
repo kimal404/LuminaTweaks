@@ -82,15 +82,11 @@ pub fn write_log_with_level(level: LogLevel, msg: &str) {
 
     println!("{}", msg);
 
-    let priority = match level {
-        LogLevel::Info => "i",
-        LogLevel::Debug => "d",
-        LogLevel::Verbose => "v",
-    };
-
-    let _ = Command::new("log")
-        .args(["-t", "luminad", "-p", priority, msg])
-        .status();
+    if level == LogLevel::Info {
+        let _ = Command::new("log")
+            .args(["-t", "luminad", "-p", "i", msg])
+            .status();
+    }
 
     let _guard = LOG_LOCK.lock().unwrap();
     let _ = fs::create_dir_all("/data/adb/luminatweaks");

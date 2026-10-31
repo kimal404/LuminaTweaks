@@ -47,10 +47,12 @@ struct EngineRuntime {
     current_applied_renderer: String,
     original_zen_mode: Option<String>,
     dnd_overridden: bool,
+    current_applied_zen_mode: Option<String>,
     topology: CpuTopology,
     tracked_tids: HashSet<i32>,
     current_target_pid: Option<i32>,
-    last_config_mtime: Option<SystemTime>,
+    last_app_config_mtime: Option<SystemTime>,
+    last_global_config_mtime: Option<SystemTime>,
 }
 
 impl EngineRuntime {
@@ -69,10 +71,12 @@ impl EngineRuntime {
             current_applied_renderer: renderer::get_saved_renderer(),
             original_zen_mode: None,
             dnd_overridden: false,
+            current_applied_zen_mode: None,
             topology: topo,
             tracked_tids: HashSet::new(),
             current_target_pid: None,
-            last_config_mtime: None,
+            last_app_config_mtime: None,
+            last_global_config_mtime: None,
         }
     }
 
@@ -178,14 +182,10 @@ impl EngineRuntime {
                     affinity::sync_process_threads(pid, &mut self.tracked_tids, &self.topology);
 
                     if entering_performance {
-                        let topo = self.topology.clone();
-                        thread::spawn(move || {
-                            let mut burst_tracked = HashSet::new();
-                            for _ in 0..3 {
-                                thread::sleep(Duration::from_millis(200));
-                                affinity::sync_process_threads(pid, &mut burst_tracked, &topo);
-                            }
-                        });
+                        for _ in 0..3 {
+                            thread::sleep(Duration::from_millis(200));
+                            affinity::sync_process_threads(pid, &mut self.tracked_tids, &self.topology);
+                        }
                     }
                 }
             }
@@ -209,6 +209,9 @@ impl EngineRuntime {
             if let Some(id) = desired_rr {
                 display::apply_refresh_rate_id(id);
                 log!("[DISPLAY] Refresh rate applied: Mode ID {}", id);
+            } else {
+                display::apply_refresh_rate_id(-1);
+                log!("[DISPLAY] Refresh rate reset to system default");
             }
             self.current_applied_rr = desired_rr;
         }
@@ -235,16 +238,23 @@ impl EngineRuntime {
                 "on" => {
                     if !self.dnd_overridden {
                         self.original_zen_mode = get_zen_mode();
-                        set_zen_mode("1");
                         self.dnd_overridden = true;
+                    }
+                    if self.current_applied_zen_mode.as_deref() != Some("1") {
+                        set_zen_mode("1");
+                        self.current_applied_zen_mode = Some("1".to_string());
                         log!("[DND] Zen mode enabled for target application");
                     }
                 }
                 "off" => {
                     if !self.dnd_overridden {
                         self.original_zen_mode = get_zen_mode();
-                        set_zen_mode("0");
                         self.dnd_overridden = true;
+                    }
+                    if self.current_applied_zen_mode.as_deref() != Some("0") {
+                        set_zen_mode("0");
+                        self.current_applied_zen_mode = Some("0".to_string());
+                        log!("[DND] Zen mode disabled for target application");
                     }
                 }
                 _ => {
@@ -254,6 +264,7 @@ impl EngineRuntime {
                         }
                         self.dnd_overridden = false;
                         self.original_zen_mode = None;
+                        self.current_applied_zen_mode = None;
                         log!("[DND] Zen mode restored");
                     }
                 }
@@ -264,6 +275,7 @@ impl EngineRuntime {
             }
             self.dnd_overridden = false;
             self.original_zen_mode = None;
+            self.current_applied_zen_mode = None;
             log!("[DND] Zen mode restored");
         }
     }
@@ -283,6 +295,8 @@ impl EngineRuntime {
             if global_rr != self.current_applied_rr {
                 if let Some(id) = global_rr {
                     display::apply_refresh_rate_id(id);
+                } else {
+                    display::apply_refresh_rate_id(-1);
                 }
                 self.current_applied_rr = global_rr;
             }
@@ -299,6 +313,7 @@ impl EngineRuntime {
                 }
                 self.dnd_overridden = false;
                 self.original_zen_mode = None;
+                self.current_applied_zen_mode = None;
             }
 
             clear_all_notifications();
@@ -328,8 +343,16 @@ fn main() {
         let mut config_just_changed = false;
         if let Ok(meta) = std::fs::metadata("/data/adb/luminatweaks/app_config.json") {
             if let Ok(mtime) = meta.modified() {
-                if runtime.last_config_mtime != Some(mtime) {
-                    runtime.last_config_mtime = Some(mtime);
+                if runtime.last_app_config_mtime != Some(mtime) {
+                    runtime.last_app_config_mtime = Some(mtime);
+                    config_just_changed = true;
+                }
+            }
+        }
+        if let Ok(meta) = std::fs::metadata("/data/adb/luminatweaks/config.json") {
+            if let Ok(mtime) = meta.modified() {
+                if runtime.last_global_config_mtime != Some(mtime) {
+                    runtime.last_global_config_mtime = Some(mtime);
                     config_just_changed = true;
                 }
             }

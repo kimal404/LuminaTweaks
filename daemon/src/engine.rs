@@ -33,22 +33,6 @@ pub fn is_disable_thermal_enabled() -> bool {
 }
 
 fn apply_thermal_kill(disable: bool) {
-    if disable {
-        log!("[THERMAL] Disabling system thermal throttling for Performance");
-        let _ = Command::new("stop").arg("mi_thermald").status();
-        let _ = Command::new("stop").arg("thermal-engine").status();
-        let _ = Command::new("stop").arg("thermald").status();
-        let _ = Command::new("stop").arg("thermal").status();
-        let _ = Command::new("stop").arg("sprd_thermald").status();
-    } else {
-        log!("[THERMAL] Restoring system thermal management");
-        let _ = Command::new("start").arg("mi_thermald").status();
-        let _ = Command::new("start").arg("thermal-engine").status();
-        let _ = Command::new("start").arg("thermald").status();
-        let _ = Command::new("start").arg("thermal").status();
-        let _ = Command::new("start").arg("sprd_thermal").status();
-    }
-
     let mode_str = if disable { "disabled" } else { "enabled" };
     if let Ok(entries) = fs::read_dir("/sys/class/thermal") {
         for entry in entries.flatten() {
@@ -99,8 +83,8 @@ fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool) {
                         .find(|&f| f >= 900000)
                         .unwrap_or(hw_min);
 
-                    write_sysfs(&min_path, &target_min.to_string(), true);
-                    write_sysfs(&max_path, &hw_max.to_string(), true);
+                    write_sysfs(&min_path, &target_min.to_string(), false);
+                    write_sysfs(&max_path, &hw_max.to_string(), false);
                 } else {
                     write_sysfs(&min_path, &hw_min.to_string(), false);
                     write_sysfs(&max_path, &hw_max.to_string(), false);
@@ -120,7 +104,7 @@ fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool) {
     }
 
     let ra_val = if min_clamp { "1024" } else { "128" };
-    for block in ["sda", "sdb", "sdc"] {
+    for block in ["sda", "sdb", "sdc", "mmcblk0", "dm-0"] {
         let ra_path = format!("/sys/block/{}/queue/read_ahead_kb", block);
         write_sysfs(&ra_path, ra_val, min_clamp);
     }
@@ -140,9 +124,13 @@ pub fn performance_profile() {
 }
 
 pub fn performance_lite_profile() {
-    log!("[ENGINE] Applying Performance Lite Profile (Vendor Chipset Tweaks Skipped)");
+    log!("[ENGINE] Applying Performance Lite Profile (Vendor Chipset Tweaks Reset)");
     apply_universal_cpu("schedutil", true, false);
     apply_thermal_kill(false);
+
+    crate::mediatek::apply_mtk_balance();
+    crate::snapdragon::SnapdragonEngine::apply_balance();
+    crate::unisoc::UnisocEngine::apply_balance();
 }
 
 pub fn balance_profile() {

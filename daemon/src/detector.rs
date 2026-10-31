@@ -28,11 +28,14 @@ pub fn get_focused_package() -> Option<String> {
 
     for line in stdout.lines() {
         if line.contains("mCurrentFocus") || line.contains("mFocusedApp") {
-            if let Some(token) = line.split_whitespace().find(|t| t.contains('/')) {
-                let cleaned = token.trim_start_matches('{').trim_end_matches('}');
-                if let Some(pkg) = cleaned.split('/').next() {
-                    if !pkg.is_empty() && pkg != "null" {
-                        return Some(pkg.to_string());
+            for token in line.split_whitespace() {
+                if token.contains('/') && token.contains('.') {
+                    let cleaned = token.trim_matches(|c: char| !c.is_alphanumeric() && c != '.' && c != '/' && c != '_');
+                    if let Some(pkg) = cleaned.split('/').next() {
+                        let pkg = pkg.trim();
+                        if !pkg.is_empty() && pkg != "null" && pkg.contains('.') {
+                            return Some(pkg.to_string());
+                        }
                     }
                 }
             }
@@ -97,9 +100,7 @@ pub fn is_lite_mode_active() -> bool {
         if let Ok(content) = std::fs::read_to_string(path) {
             if let Ok(json) = serde_json::from_str::<Value>(&content) {
                 if let Some(val) = json.get("lite_mode_global") {
-                    if is_truthy(val) {
-                        return true;
-                    }
+                    return is_truthy(val);
                 }
             }
         }
