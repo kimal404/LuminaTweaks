@@ -3,6 +3,7 @@ package com.luminatweaks.ui.screen
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import coil.compose.AsyncImage
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -121,8 +122,8 @@ fun AboutScreen(
                             .padding(20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Image(
-                            painter = painterResource(id = context.applicationInfo.icon),
+                        AsyncImage(
+                            model = com.luminatweaks.R.mipmap.ic_launcher,
                             contentDescription = "Logo LuminaTweaks",
                             modifier = Modifier
                                 .size(72.dp)
