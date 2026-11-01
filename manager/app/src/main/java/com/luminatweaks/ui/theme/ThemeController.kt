@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2026-2027 KowX
  * Copyright (C) 2026-2027 Zexshia
+ * Copyright (C) 2026 kimal
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -68,10 +69,15 @@ data class AppThemeSettings(
     val colorMode: ColorMode,
     val keyColor: Int,
     val colorSpec: ColorEngine,
-    val accentIntensity: AccentIntensity
+    val accentIntensity: AccentIntensity,
+    val cornerRadius: Int = ThemeController.DEFAULT_CORNER_RADIUS
 )
 
 object ThemeController {
+    const val DEFAULT_CORNER_RADIUS = 18
+    const val MIN_CORNER_RADIUS = 0
+    const val MAX_CORNER_RADIUS = 32
+
     fun getAppSettings(context: Context): AppThemeSettings {
         val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
         val colorMode = ColorMode.fromValue(
@@ -83,7 +89,10 @@ object ThemeController {
             prefs.getString("pers_accent_intensity", null)?.toIntOrNull()
                 ?: prefs.getInt("pers_accent_intensity", AccentIntensity.Balanced.ordinal)
         )
-        return AppThemeSettings(colorMode, keyColor, colorSpec, accentIntensity)
+        val cornerRadius = prefs.getInt("ui_corner_radius", DEFAULT_CORNER_RADIUS)
+            .coerceIn(MIN_CORNER_RADIUS, MAX_CORNER_RADIUS)
+
+        return AppThemeSettings(colorMode, keyColor, colorSpec, accentIntensity, cornerRadius)
     }
 
     fun saveTheme(
@@ -91,14 +100,26 @@ object ThemeController {
         mode: ColorMode,
         key: Int,
         spec: ColorEngine,
-        intensity: AccentIntensity
+        intensity: AccentIntensity,
+        cornerRadius: Int? = null
     ) {
         val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-        prefs.edit()
+        val editor = prefs.edit()
             .putInt("color_mode", mode.value)
             .putInt("key_color", key)
             .putString("color_spec", spec.persistedName)
             .putString("pers_accent_intensity", intensity.ordinal.toString())
+
+        if (cornerRadius != null) {
+            editor.putInt("ui_corner_radius", cornerRadius.coerceIn(MIN_CORNER_RADIUS, MAX_CORNER_RADIUS))
+        }
+        editor.apply()
+    }
+
+    fun saveCornerRadius(context: Context, radius: Int) {
+        val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        prefs.edit()
+            .putInt("ui_corner_radius", radius.coerceIn(MIN_CORNER_RADIUS, MAX_CORNER_RADIUS))
             .apply()
     }
 }

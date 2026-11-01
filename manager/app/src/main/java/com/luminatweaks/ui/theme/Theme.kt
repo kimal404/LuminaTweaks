@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2026-2027 KowX
  * Copyright (C) 2026-2027 Zexshia
+ * Copyright (C) 2026 kimal
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +29,7 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsControllerCompat
 import com.materialkolor.rememberDynamicColorScheme
 
@@ -138,6 +141,10 @@ fun LuminaTheme(
         targetColorScheme = baseScheme.withAccentIntensity(themeState.accentIntensity)
     )
 
+    val dynamicShapes = remember(themeState.cornerRadius) {
+        createLuminaShapes(themeState.cornerRadius)
+    }
+
     val view = LocalView.current
     LaunchedEffect(isDark) {
         val window = (context as? Activity)?.window ?: return@LaunchedEffect
@@ -148,7 +155,11 @@ fun LuminaTheme(
 
     MaterialTheme(
         colorScheme = animatedColorScheme,
-        shapes = LuminaShapes,
-        content = content
-    )
+        shapes = dynamicShapes
+    ) {
+        CompositionLocalProvider(
+            LocalCornerRadius provides themeState.cornerRadius.dp,
+            content = content
+        )
+    }
 }

@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2026-2027 KowX
  * Copyright (C) 2026-2027 Zexshia
+ * Copyright (C) 2026 kimal
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -70,12 +71,21 @@ import androidx.compose.material.icons.rounded.Brightness4
 import androidx.compose.material.icons.rounded.Brightness7
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.RoundedCorner
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -87,6 +97,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -101,13 +112,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.luminatweaks.ui.theme.AccentIntensity
 import com.luminatweaks.ui.theme.ColorEngine
 import com.luminatweaks.ui.theme.ColorMode
@@ -131,6 +144,10 @@ fun PersonalisasiScreen(
     var currentKeyColor by remember { mutableIntStateOf(savedSettings.keyColor) }
     var currentColorSpec by remember { mutableStateOf(savedSettings.colorSpec) }
     var currentIntensity by remember { mutableStateOf(savedSettings.accentIntensity) }
+    var currentCornerRadius by remember { mutableIntStateOf(savedSettings.cornerRadius) }
+
+    var showRadiusSheet by rememberSaveable { mutableStateOf(false) }
+    val radiusSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val isDark = currentColorMode.getDarkThemeValue(isSystemInDarkTheme())
 
@@ -141,9 +158,7 @@ fun PersonalisasiScreen(
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                 if (available.y < -12f) {
-                    if (isPreviewExpanded) {
-                        isPreviewExpanded = false
-                    }
+                    if (isPreviewExpanded) isPreviewExpanded = false
                 } else if (available.y > 12f) {
                     if (!isPreviewExpanded && (!lazyListState.canScrollBackward || lazyListState.firstVisibleItemIndex == 0)) {
                         isPreviewExpanded = true
@@ -158,13 +173,15 @@ fun PersonalisasiScreen(
         mode: ColorMode = currentColorMode,
         key: Int = currentKeyColor,
         spec: ColorEngine = currentColorSpec,
-        intensity: AccentIntensity = currentIntensity
+        intensity: AccentIntensity = currentIntensity,
+        radius: Int = currentCornerRadius
     ) {
         currentColorMode = mode
         currentKeyColor = key
         currentColorSpec = spec
         currentIntensity = intensity
-        ThemeController.saveTheme(context, mode, key, spec, intensity)
+        currentCornerRadius = radius
+        ThemeController.saveTheme(context, mode, key, spec, intensity, radius)
     }
 
     Scaffold(
@@ -200,6 +217,7 @@ fun PersonalisasiScreen(
         ) {
             PinnedPreviewHeader(
                 expanded = isPreviewExpanded,
+                cornerRadius = currentCornerRadius,
                 onToggle = { isPreviewExpanded = !isPreviewExpanded },
                 onCollapse = { isPreviewExpanded = false },
                 onExpand = { isPreviewExpanded = true }
@@ -441,7 +459,290 @@ fun PersonalisasiScreen(
                                 )
                             }
                         }
+
+                        item {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(top = 10.dp, bottom = 2.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.RoundedCorner,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = "Bentuk & Tampilan",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+
+                        item {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .clickable { showRadiusSheet = true },
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                                ),
+                                shape = RoundedCornerShape(18.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Radius Sudut",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "Kelengkungan kartu, tombol, dan bilah antarmuka",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.primaryContainer
+                                    ) {
+                                        Text(
+                                            text = "${currentCornerRadius} dp",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Icon(
+                                        imageVector = Icons.Rounded.ChevronRight,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
+                }
+            }
+        }
+    }
+
+    if (showRadiusSheet) {
+        val haptic = LocalHapticFeedback.current
+        var tempRadius by remember(currentCornerRadius) {
+            mutableFloatStateOf(currentCornerRadius.toFloat())
+        }
+        val hasBeenAdjusted = tempRadius.roundToInt() != ThemeController.DEFAULT_CORNER_RADIUS
+
+        ModalBottomSheet(
+            onDismissRequest = { showRadiusSheet = false },
+            sheetState = radiusSheetState,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            dragHandle = {
+                Box(
+                    modifier = Modifier
+                        .padding(vertical = 12.dp)
+                        .size(width = 44.dp, height = 4.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                )
+            }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 28.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Sesuaikan Radius Sudut",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Cocokkan bentuk sudut elemen antarmuka agar sesuai dengan gaya visual perangkat Anda.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                val previewRatio = (tempRadius / 18f).coerceIn(0f, 2f)
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(64.dp),
+                    shape = RoundedCornerShape((16f * previewRatio).dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Pratinjau Elemen",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Surface(
+                            shape = RoundedCornerShape((10f * previewRatio).dp),
+                            color = MaterialTheme.colorScheme.primary
+                        ) {
+                            Text(
+                                text = "Tombol",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Radius Sudut",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+
+                            if (hasBeenAdjusted) {
+                                FilledTonalButton(
+                                    onClick = {
+                                        tempRadius = ThemeController.DEFAULT_CORNER_RADIUS.toFloat()
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        updateTheme(radius = ThemeController.DEFAULT_CORNER_RADIUS)
+                                    },
+                                    colors = ButtonDefaults.filledTonalButtonColors(
+                                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(30.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Refresh,
+                                        contentDescription = "Reset",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Reset",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.RoundedCorner,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+
+                            Slider(
+                                value = tempRadius,
+                                onValueChange = { newVal ->
+                                    if (newVal.roundToInt() != tempRadius.roundToInt()) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    }
+                                    tempRadius = newVal
+                                    val rounded = newVal.roundToInt().coerceIn(
+                                        ThemeController.MIN_CORNER_RADIUS,
+                                        ThemeController.MAX_CORNER_RADIUS
+                                    )
+                                    if (rounded != currentCornerRadius) {
+                                        updateTheme(radius = rounded)
+                                    }
+                                },
+                                valueRange = ThemeController.MIN_CORNER_RADIUS.toFloat()..ThemeController.MAX_CORNER_RADIUS.toFloat(),
+                                colors = SliderDefaults.colors(
+                                    thumbColor = MaterialTheme.colorScheme.primary,
+                                    activeTrackColor = MaterialTheme.colorScheme.primary
+                                ),
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            Text(
+                                text = "${tempRadius.roundToInt()} dp",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.width(44.dp),
+                                textAlign = TextAlign.End
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Button(
+                    onClick = { showRadiusSheet = false },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Selesai",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelLarge
+                    )
                 }
             }
         }
@@ -489,6 +790,7 @@ private fun SheetHandle(
 @Composable
 private fun PinnedPreviewHeader(
     expanded: Boolean,
+    cornerRadius: Int,
     onToggle: () -> Unit,
     onCollapse: () -> Unit,
     onExpand: () -> Unit,
@@ -540,7 +842,10 @@ private fun PinnedPreviewHeader(
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                 shadowElevation = 8.dp
             ) {
-                MockLuminaScreen(isCollapsed = !expanded)
+                MockLuminaScreen(
+                    cornerRadius = cornerRadius,
+                    isCollapsed = !expanded
+                )
             }
         }
     }
@@ -548,9 +853,12 @@ private fun PinnedPreviewHeader(
 
 @Composable
 private fun MockLuminaScreen(
+    cornerRadius: Int = 18,
     isCollapsed: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    val ratio = (cornerRadius / 18f).coerceIn(0f, 2f)
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -568,7 +876,7 @@ private fun MockLuminaScreen(
 
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp),
+            shape = RoundedCornerShape((14f * ratio).dp),
             color = MaterialTheme.colorScheme.primaryContainer
         ) {
             Row(
@@ -601,7 +909,7 @@ private fun MockLuminaScreen(
                 modifier = Modifier
                     .weight(1f)
                     .height(48.dp),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape((12f * ratio).dp),
                 color = MaterialTheme.colorScheme.secondaryContainer
             ) {}
 
@@ -609,7 +917,7 @@ private fun MockLuminaScreen(
                 modifier = Modifier
                     .weight(1f)
                     .height(48.dp),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape((12f * ratio).dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHighest
             ) {}
         }
@@ -619,7 +927,7 @@ private fun MockLuminaScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape((16f * ratio).dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHighest
             ) {}
 
@@ -627,7 +935,7 @@ private fun MockLuminaScreen(
                 modifier = Modifier
                     .align(Alignment.CenterHorizontally)
                     .padding(bottom = 2.dp),
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape((20f * ratio).dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh
             ) {
                 Row(
