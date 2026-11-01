@@ -3,6 +3,9 @@ package com.luminatweaks
 import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
@@ -17,6 +20,29 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            val pkg = packageName
+            val cmds = arrayOf(
+                "pm grant $pkg android.permission.QUERY_ALL_PACKAGES",
+                "pm grant $pkg com.android.permission.GET_INSTALLED_APPS",
+                "appops set $pkg android:query_all_packages allow",
+                "appops set $pkg query_all_packages allow",
+                "appops set $pkg android:get_installed_apps allow",
+                "appops set $pkg GET_INSTALLED_APPS allow",
+                "appops set $pkg 10022 allow"
+            )
+            try {
+                val p = Runtime.getRuntime().exec("su")
+                val os = java.io.DataOutputStream(p.outputStream)
+                for (cmd in cmds) {
+                    os.writeBytes("$cmd 2>/dev/null\n")
+                }
+                os.writeBytes("exit\n")
+                os.flush()
+                p.waitFor()
+            } catch (_: Exception) {}
+        }
 
         val prefs = getSharedPreferences("lumina_prefs", Context.MODE_PRIVATE)
 
