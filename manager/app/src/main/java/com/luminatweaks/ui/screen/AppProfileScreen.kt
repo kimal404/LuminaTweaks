@@ -642,31 +642,9 @@ fun AppProfileScreen(
                                     Box(
                                         modifier = Modifier
                                             .background(
-                                                color = if (profile.textureEnabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
-                                                shape = RoundedCornerShape(8.dp)
-                                            )
-                                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        val statusText = if (!profile.textureEnabled) {
-                                            "Mati"
-                                        } else {
-                                            when (profile.textureDetail) {
-                                                0 -> "Asli"
-                                                1 -> "Ringan"
-                                                2 -> "Retro"
-                                                3 -> "Kotak Total"
-                                                else -> "Aktif"
-                                            }
-                                        }
-                                        Text(
-                                            text = statusText,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = if (profile.textureEnabled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer
+                                                color = if (profile.textureEnabled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer
+                                        )
                                     }
-                                    
-                                    )
                                 }
                             }
                         }
