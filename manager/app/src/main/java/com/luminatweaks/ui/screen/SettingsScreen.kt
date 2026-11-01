@@ -22,6 +22,7 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -55,7 +56,8 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    onNavigateToAbout: (() -> Unit)? = null
+    onNavigateToAbout: (() -> Unit)? = null,
+    onNavigateToPersonalisasi: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -63,10 +65,16 @@ fun SettingsScreen(
     var showLogBottomSheet by remember { mutableStateOf(false) }
     var isGeneratingLog by remember { mutableStateOf(false) }
     var showAboutScreen by remember { mutableStateOf(false) }
+    var showPersonalisasiScreen by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
 
     if (showAboutScreen && onNavigateToAbout == null) {
         AboutScreen(onBackClick = { showAboutScreen = false })
+        return
+    }
+
+    if (showPersonalisasiScreen && onNavigateToPersonalisasi == null) {
+        PersonalisasiScreen(onBackClick = { showPersonalisasiScreen = false })
         return
     }
 
@@ -145,6 +153,59 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                    }
+                }
+            }
+
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            if (onNavigateToPersonalisasi != null) {
+                                onNavigateToPersonalisasi()
+                            } else {
+                                showPersonalisasiScreen = true
+                            }
+                        },
+                    shape = getConnectedContainerShape(ContainerPosition.Single, outerRadius = 18.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Palette,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Personalisasi",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Tema, warna, dan kustomisasi antarmuka",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Rounded.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                 }
             }
