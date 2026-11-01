@@ -1,7 +1,9 @@
+package com.luminatweaks.ui.screen
+
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
-package com.luminatweaks.ui.screen
+
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable

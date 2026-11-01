@@ -344,7 +344,7 @@ fun HomeDashboardContent(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = innerPadding.calculateTopPadding(),
-                bottom = if (isFloating) 100.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() else 16.dp,
+                bottom = if (LocalFloatingNavBar.current) 100.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() else 16.dp,
                 start = 16.dp,
                 end = 16.dp
             ),
