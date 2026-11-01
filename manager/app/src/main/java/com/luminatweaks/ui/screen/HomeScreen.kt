@@ -110,6 +110,7 @@ fun HomeScreen() {
     val deviceModel = remember { DeviceUtil.getMarketDeviceName(context) }
 
     var batteryTemp by remember { mutableStateOf(DeviceUtil.getBatteryTemperature(context)) }
+    var isChecking by remember { mutableStateOf(true) }
     var daemonPid by remember { mutableStateOf<String?>(null) }
     var currentProfile by remember { mutableStateOf("Balanced") }
 
@@ -117,21 +118,30 @@ fun HomeScreen() {
         DaemonManager.startDaemon(context)
 
         withContext(Dispatchers.IO) {
+            // Buffer check pertama (Inisialisasi awal ala AZenith)
+            val initialTemp = DeviceUtil.getBatteryTemperature(context)
+            val initialPid = DaemonManager.getDaemonPid()
+            val initialProfile = if (initialPid != null) ConfigRepository.getCurrentProfile() else "-"
+
+            withContext(Dispatchers.Main) {
+                batteryTemp = initialTemp
+                daemonPid = initialPid
+                currentProfile = initialProfile
+                isChecking = false // Buffer check selesai
+            }
+
+            // Loop monitoring berkelanjutan
             while (isActive) {
+                delay(1500L)
                 val currentTemp = DeviceUtil.getBatteryTemperature(context)
                 val currentPid = DaemonManager.getDaemonPid()
-                val profileText = if (currentPid != null) {
-                    ConfigRepository.getCurrentProfile()
-                } else {
-                    "-"
-                }
+                val profileText = if (currentPid != null) ConfigRepository.getCurrentProfile() else "-"
 
                 withContext(Dispatchers.Main) {
                     batteryTemp = currentTemp
                     daemonPid = currentPid
                     currentProfile = profileText
                 }
-                delay(1500L)
             }
         }
     }
@@ -177,6 +187,7 @@ fun HomeScreen() {
                 0 -> HomeDashboardContent(
                     batteryTemp = batteryTemp,
                     daemonPid = daemonPid,
+                    isChecking = isChecking,
                     currentProfile = currentProfile,
                     kernelVersion = kernelVersion,
                     deviceModel = deviceModel,
@@ -199,6 +210,7 @@ fun HomeScreen() {
 fun HomeDashboardContent(
     batteryTemp: String,
     daemonPid: String?,
+    isChecking: Boolean = false,
     currentProfile: String,
     kernelVersion: String,
     deviceModel: String,
@@ -260,11 +272,38 @@ fun HomeDashboardContent(
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item {
+                val bannerToneColor = when {
+                    isChecking -> MaterialTheme.colorScheme.surfaceContainerHighest
+                    isRunning -> MaterialTheme.colorScheme.secondaryContainer
+                    else -> MaterialTheme.colorScheme.errorContainer
+                }
+                val bannerContentColor = when {
+                    isChecking -> MaterialTheme.colorScheme.onSurfaceVariant
+                    isRunning -> MaterialTheme.colorScheme.onSecondaryContainer
+                    else -> MaterialTheme.colorScheme.onErrorContainer
+                }
+                val bannerIcon = when {
+                    isChecking -> Icons.Rounded.Memory
+                    isRunning -> Icons.Rounded.CheckCircle
+                    else -> Icons.Rounded.ErrorOutline
+                }
+                val bannerTitle = when {
+                    isChecking -> "Checking Core..."
+                    isRestarting -> "Starting Core..."
+                    isRunning -> "Working"
+                    else -> "Core Inactive"
+                }
+                val bannerSubtitle = when {
+                    isChecking -> "Scanning daemon process..."
+                    isRunning -> "PID: $daemonPid (Active background)"
+                    else -> "Tap to start or restart daemon"
+                }
+
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
-                            if (!isRunning && !isRestarting) {
+                            if (!isChecking && !isRunning && !isRestarting) {
                                 isRestarting = true
                                 coroutineScope.launch {
                                     onRestartDaemon()
@@ -273,13 +312,7 @@ fun HomeDashboardContent(
                             }
                         },
                     shape = MaterialTheme.shapes.medium,
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isRunning) {
-                            MaterialTheme.colorScheme.secondaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.errorContainer
-                        }
-                    )
+                    colors = CardDefaults.cardColors(containerColor = bannerToneColor)
                 ) {
                     Row(
                         modifier = Modifier
@@ -288,44 +321,32 @@ fun HomeDashboardContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = if (isRunning) Icons.Rounded.CheckCircle else Icons.Rounded.ErrorOutline,
+                            imageVector = bannerIcon,
                             contentDescription = null,
-                            tint = if (isRunning) {
-                                MaterialTheme.colorScheme.onSecondaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.onErrorContainer
-                            },
+                            tint = bannerContentColor,
                             modifier = Modifier.size(30.dp)
                         )
                         Spacer(modifier = Modifier.width(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (isRunning) "Working" else if (isRestarting) "Starting Core..." else "Core Inactive",
+                                text = bannerTitle,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isRunning) {
-                                    MaterialTheme.colorScheme.onSecondaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.onErrorContainer
-                                }
+                                color = bannerContentColor
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = if (isRunning) "PID: $daemonPid (Active background)" else "Tap to start or restart daemon",
+                                text = bannerSubtitle,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = if (isRunning) {
-                                    MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f)
-                                } else {
-                                    MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f)
-                                }
+                                color = bannerContentColor.copy(alpha = 0.8f)
                             )
                         }
 
-                        if (!isRunning) {
+                        if (!isRunning && !isChecking) {
                             Icon(
                                 imageVector = Icons.Rounded.PlayArrow,
                                 contentDescription = "Start",
-                                tint = MaterialTheme.colorScheme.onErrorContainer,
+                                tint = bannerContentColor,
                                 modifier = Modifier.size(24.dp)
                             )
                         }
