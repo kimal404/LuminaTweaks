@@ -71,12 +71,10 @@ import androidx.compose.material.icons.rounded.Brightness4
 import androidx.compose.material.icons.rounded.Brightness7
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.RoundedCorner
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -85,7 +83,6 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -98,7 +95,6 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -120,7 +116,6 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.luminatweaks.ui.theme.AccentIntensity
 import com.luminatweaks.ui.theme.ColorEngine
@@ -139,6 +134,7 @@ fun PersonalisasiScreen(
     BackHandler(onBack = onBackClick)
 
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val savedSettings = remember { ThemeController.getAppSettings(context) }
 
     var currentColorMode by remember { mutableStateOf(savedSettings.colorMode) }
@@ -147,9 +143,6 @@ fun PersonalisasiScreen(
     var currentIntensity by remember { mutableStateOf(savedSettings.accentIntensity) }
     var currentCornerRadius by remember { mutableIntStateOf(savedSettings.cornerRadius) }
     var isFloatingNavBar by remember { mutableStateOf(savedSettings.floatingNavBar) }
-
-    var showRadiusSheet by rememberSaveable { mutableStateOf(false) }
-    val radiusSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val isDark = currentColorMode.getDarkThemeValue(isSystemInDarkTheme())
 
@@ -531,267 +524,112 @@ fun PersonalisasiScreen(
                         }
 
                         item {
-                            Card(
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(18.dp))
-                                    .clickable { showRadiusSheet = true },
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                                ),
-                                shape = RoundedCornerShape(18.dp)
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                    .padding(horizontal = 16.dp, vertical = 14.dp)
                             ) {
+                                var sliderRadius by remember(currentCornerRadius) {
+                                    mutableFloatStateOf(currentCornerRadius.toFloat())
+                                }
+                                val hasBeenAdjusted = sliderRadius.roundToInt() != ThemeController.DEFAULT_CORNER_RADIUS
+
                                 Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.RoundedCorner,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
                                         Text(
                                             text = "Radius Sudut",
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.SemiBold,
+                                            style = MaterialTheme.typography.bodyMedium,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text(
-                                            text = "Kelengkungan kartu, tombol, dan bilah antarmuka",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
                                     }
 
-                                    Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = MaterialTheme.colorScheme.primaryContainer
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        Text(
-                                            text = "${currentCornerRadius} dp",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        if (hasBeenAdjusted) {
+                                            FilledTonalButton(
+                                                onClick = {
+                                                    sliderRadius = ThemeController.DEFAULT_CORNER_RADIUS.toFloat()
+                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    updateTheme(radius = ThemeController.DEFAULT_CORNER_RADIUS)
+                                                },
+                                                colors = ButtonDefaults.filledTonalButtonColors(
+                                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                                ),
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                modifier = Modifier.height(28.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Refresh,
+                                                    contentDescription = "Reset",
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = "Reset",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = MaterialTheme.colorScheme.primaryContainer
+                                        ) {
+                                            Text(
+                                                text = "${sliderRadius.roundToInt()} dp",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Slider(
+                                    value = sliderRadius,
+                                    onValueChange = { newVal ->
+                                        if (newVal.roundToInt() != sliderRadius.roundToInt()) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        }
+                                        sliderRadius = newVal
+                                        val rounded = newVal.roundToInt().coerceIn(
+                                            ThemeController.MIN_CORNER_RADIUS,
+                                            ThemeController.MAX_CORNER_RADIUS
                                         )
-                                    }
-
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Icon(
-                                        imageVector = Icons.Rounded.ChevronRight,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if (showRadiusSheet) {
-        val haptic = LocalHapticFeedback.current
-        var tempRadius by remember(currentCornerRadius) {
-            mutableFloatStateOf(currentCornerRadius.toFloat())
-        }
-        val hasBeenAdjusted = tempRadius.roundToInt() != ThemeController.DEFAULT_CORNER_RADIUS
-
-        ModalBottomSheet(
-            onDismissRequest = { showRadiusSheet = false },
-            sheetState = radiusSheetState,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-            dragHandle = {
-                Box(
-                    modifier = Modifier
-                        .padding(vertical = 12.dp)
-                        .size(width = 44.dp, height = 4.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
-                )
-            }
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
-                    .padding(bottom = 28.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "Sesuaikan Radius Sudut",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "Cocokkan bentuk sudut elemen antarmuka agar sesuai dengan gaya visual perangkat Anda.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                val previewRatio = (tempRadius / 18f).coerceIn(0f, 2f)
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(64.dp),
-                    shape = RoundedCornerShape((16f * previewRatio).dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "Pratinjau Elemen",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Surface(
-                            shape = RoundedCornerShape((10f * previewRatio).dp),
-                            color = MaterialTheme.colorScheme.primary
-                        ) {
-                            Text(
-                                text = "Tombol",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(18.dp))
-
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Radius Sudut",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-
-                            if (hasBeenAdjusted) {
-                                FilledTonalButton(
-                                    onClick = {
-                                        tempRadius = ThemeController.DEFAULT_CORNER_RADIUS.toFloat()
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        updateTheme(radius = ThemeController.DEFAULT_CORNER_RADIUS)
+                                        if (rounded != currentCornerRadius) {
+                                            updateTheme(radius = rounded)
+                                        }
                                     },
-                                    colors = ButtonDefaults.filledTonalButtonColors(
-                                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                    valueRange = ThemeController.MIN_CORNER_RADIUS.toFloat()..ThemeController.MAX_CORNER_RADIUS.toFloat(),
+                                    colors = SliderDefaults.colors(
+                                        thumbColor = MaterialTheme.colorScheme.primary,
+                                        activeTrackColor = MaterialTheme.colorScheme.primary
                                     ),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                    modifier = Modifier.height(30.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Refresh,
-                                        contentDescription = "Reset",
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "Reset",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
+                                    modifier = Modifier.fillMaxWidth()
+                                )
                             }
                         }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.RoundedCorner,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
-                            )
-
-                            Slider(
-                                value = tempRadius,
-                                onValueChange = { newVal ->
-                                    if (newVal.roundToInt() != tempRadius.roundToInt()) {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    }
-                                    tempRadius = newVal
-                                    val rounded = newVal.roundToInt().coerceIn(
-                                        ThemeController.MIN_CORNER_RADIUS,
-                                        ThemeController.MAX_CORNER_RADIUS
-                                    )
-                                    if (rounded != currentCornerRadius) {
-                                        updateTheme(radius = rounded)
-                                    }
-                                },
-                                valueRange = ThemeController.MIN_CORNER_RADIUS.toFloat()..ThemeController.MAX_CORNER_RADIUS.toFloat(),
-                                colors = SliderDefaults.colors(
-                                    thumbColor = MaterialTheme.colorScheme.primary,
-                                    activeTrackColor = MaterialTheme.colorScheme.primary
-                                ),
-                                modifier = Modifier.weight(1f)
-                            )
-
-                            Text(
-                                text = "${tempRadius.roundToInt()} dp",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.width(44.dp),
-                                textAlign = TextAlign.End
-                            )
-                        }
                     }
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                Button(
-                    onClick = { showRadiusSheet = false },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Check,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Selesai",
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.labelLarge
-                    )
                 }
             }
         }
