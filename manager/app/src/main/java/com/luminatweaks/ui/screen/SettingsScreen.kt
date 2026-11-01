@@ -1,3 +1,6 @@
+import com.luminatweaks.ui.theme.LocalFloatingNavBar
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 package com.luminatweaks.ui.screen
 
 import android.widget.Toast
@@ -102,7 +105,7 @@ fun SettingsScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = innerPadding.calculateTopPadding(),
-                bottom = 16.dp,
+                bottom = if (LocalFloatingNavBar.current) 100.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() else 16.dp,
                 start = 16.dp,
                 end = 16.dp
             ),

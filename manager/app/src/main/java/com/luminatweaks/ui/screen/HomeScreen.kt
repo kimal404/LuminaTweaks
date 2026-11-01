@@ -66,6 +66,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DaemonManager
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
+import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.ui.component.LuminaBottomBar
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.util.DeviceUtil
@@ -149,67 +153,132 @@ fun HomeScreen() {
         }
     }
 
+        val isFloating = LocalFloatingNavBar.current
+
     if (currentSubscreen == "personalisasi") {
         PersonalisasiScreen(onBackClick = { currentSubscreen = null })
         return
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
-        bottomBar = {
-            if (currentSubscreen == null) {
-                LuminaBottomBar(
-                    selectedTab = selectedTab,
-                    onTabSelected = { selectedTab = it }
-                )
-            }
-        }
-    ) { innerPadding ->
-        AnimatedContent(
-            targetState = selectedTab,
-            transitionSpec = {
-                val direction = if (targetState >= initialState) {
-                    AnimatedContentTransitionScope.SlideDirection.Left
-                } else {
-                    AnimatedContentTransitionScope.SlideDirection.Right
-                }
+    if (isFloating) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            AnimatedContent(
+                targetState = selectedTab,
+                transitionSpec = {
+                    val direction = if (targetState >= initialState) {
+                        AnimatedContentTransitionScope.SlideDirection.Left
+                    } else {
+                        AnimatedContentTransitionScope.SlideDirection.Right
+                    }
 
-                (slideIntoContainer(
-                    towards = direction,
-                    animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
-                ) + fadeIn(
-                    animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
-                )).togetherWith(
-                    slideOutOfContainer(
+                    (slideIntoContainer(
                         towards = direction,
                         animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
-                    ) + fadeOut(
+                    ) + fadeIn(
                         animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
+                    )).togetherWith(
+                        slideOutOfContainer(
+                            towards = direction,
+                            animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
+                        ) + fadeOut(
+                            animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
+                        )
                     )
-                )
-            },
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = innerPadding.calculateBottomPadding()),
-            label = "ScreenTransition"
-        ) { targetTab ->
-            when (targetTab) {
-                0 -> HomeDashboardContent(
-                    batteryTemp = batteryTemp,
-                    daemonPid = daemonPid,
-                    isChecking = isChecking,
-                    currentProfile = currentProfile,
-                    kernelVersion = kernelVersion,
-                    deviceModel = deviceModel,
-                    onRestartDaemon = {
-                        daemonPid = null
-                        currentProfile = "-"
-                        DaemonManager.restartDaemon(context)
+                },
+                modifier = Modifier.fillMaxSize(),
+                label = "ScreenTransition"
+            ) { targetTab ->
+                when (targetTab) {
+                    0 -> HomeDashboardContent(
+                        batteryTemp = batteryTemp,
+                        daemonPid = daemonPid,
+                        isChecking = isChecking,
+                        currentProfile = currentProfile,
+                        kernelVersion = kernelVersion,
+                        deviceModel = deviceModel,
+                        onRestartDaemon = {
+                            daemonPid = null
+                            currentProfile = "-"
+                            DaemonManager.restartDaemon(context)
+                        }
+                    )
+                    1 -> AppsScreen()
+                    2 -> TweaksScreen()
+                    3 -> SettingsScreen(onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" })
+                }
+            }
+
+            if (currentSubscreen == null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                ) {
+                    LuminaBottomBar(
+                        selectedTab = selectedTab,
+                        onTabSelected = { selectedTab = it }
+                    )
+                }
+            }
+        }
+    } else {
+        Scaffold(
+            contentWindowInsets = WindowInsets(0.dp),
+            bottomBar = {
+                if (currentSubscreen == null) {
+                    LuminaBottomBar(
+                        selectedTab = selectedTab,
+                        onTabSelected = { selectedTab = it }
+                    )
+                }
+            }
+        ) { innerPadding ->
+            AnimatedContent(
+                targetState = selectedTab,
+                transitionSpec = {
+                    val direction = if (targetState >= initialState) {
+                        AnimatedContentTransitionScope.SlideDirection.Left
+                    } else {
+                        AnimatedContentTransitionScope.SlideDirection.Right
                     }
-                )
-                1 -> AppsScreen()
-                2 -> TweaksScreen()
-                3 -> SettingsScreen(onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" })
+
+                    (slideIntoContainer(
+                        towards = direction,
+                        animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
+                    ) + fadeIn(
+                        animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
+                    )).togetherWith(
+                        slideOutOfContainer(
+                            towards = direction,
+                            animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
+                        ) + fadeOut(
+                            animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
+                        )
+                    )
+                },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = innerPadding.calculateBottomPadding()),
+                label = "ScreenTransition"
+            ) { targetTab ->
+                when (targetTab) {
+                    0 -> HomeDashboardContent(
+                        batteryTemp = batteryTemp,
+                        daemonPid = daemonPid,
+                        isChecking = isChecking,
+                        currentProfile = currentProfile,
+                        kernelVersion = kernelVersion,
+                        deviceModel = deviceModel,
+                        onRestartDaemon = {
+                            daemonPid = null
+                            currentProfile = "-"
+                            DaemonManager.restartDaemon(context)
+                        }
+                    )
+                    1 -> AppsScreen()
+                    2 -> TweaksScreen()
+                    3 -> SettingsScreen(onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" })
+                }
             }
         }
     }
@@ -275,7 +344,7 @@ fun HomeDashboardContent(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = innerPadding.calculateTopPadding(),
-                bottom = 16.dp,
+                bottom = if (isFloating) 100.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() else 16.dp,
                 start = 16.dp,
                 end = 16.dp
             ),
