@@ -1,3 +1,12 @@
+
+val gitCommit = runCatching {
+    val proc = ProcessBuilder("git", "rev-parse", "--short", "HEAD").start()
+    proc.inputStream.bufferedReader().readText().trim()
+}.getOrDefault("0ed5ba6")
+
+val ciRun = System.getenv("GITHUB_RUN_NUMBER") ?: "119"
+val dynamicBuildInfo = "ci$ciRun-$gitCommit"
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -9,6 +18,7 @@ android {
     compileSdk = 34
 
     defaultConfig {
+        buildConfigField("String", "BUILD_INFO", "\"$dynamicBuildInfo\"")
         applicationId = "com.luminatweaks"
         minSdk = 26
         targetSdk = 34
@@ -38,6 +48,7 @@ android {
     }
 
     buildFeatures {
+        buildConfig = true
         compose = true
     }
 }
