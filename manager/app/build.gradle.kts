@@ -15,13 +15,13 @@ plugins {
 
 android {
     namespace = "com.luminatweaks"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         buildConfigField("String", "BUILD_INFO", "\"$dynamicBuildInfo\"")
         applicationId = "com.luminatweaks"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "2.0.1"
 
