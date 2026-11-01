@@ -504,38 +504,38 @@ fun TeksturRinganScreen(
             }
 
             item {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.28f),
-                    border = BorderStroke(
-                        1.dp,
-                        MaterialTheme.colorScheme.error.copy(alpha = 0.45f)
-                    ),
-                    modifier = Modifier.fillMaxWidth()
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.65f)
+                    )
                 ) {
                     Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.Top
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Info,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Column {
                             Text(
-                                text = "Kompatibilitas Engine & Latensi Input",
-                                style = MaterialTheme.typography.labelLarge,
+                                text = "Fitur Eksperimental",
+                                style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.error
+                                color = MaterialTheme.colorScheme.onSurface
                             )
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Driver ANGLE bekerja maksimal di game engine Unity (Free Fire, Mobile Legends, dll). Pada game berbasis Unreal Engine (seperti PUBG Mobile), penerjemahan grafis dapat memicu antrean frame buffer sehingga aiming giroskop atau respon sentuhan terasa delay/berat. Jika terjadi delay, matikan fitur ini untuk game tersebut.",
+                                text = "Efek resolusi tekstur ANGLE bergantung pada game engine & GPU perangkat. Beberapa game mungkin tidak menunjukkan perbedaan visual.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                lineHeight = 18.sp
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }

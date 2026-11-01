@@ -35,7 +35,6 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.Brush
-import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.PowerSettingsNew
@@ -80,7 +79,6 @@ import com.luminatweaks.data.DisplayRrMode
 import com.luminatweaks.model.AppItem
 
 enum class OptionItem(val label: String, val value: String) {
-                                        val statusText = if (!profile.textureEnabled) {
     OFF("Mati", "off"),
     DEFAULT("Default", "default"),
     ON("Hidup", "on");
@@ -626,12 +624,32 @@ fun AppProfileScreen(
                                     )
                                     Spacer(modifier = Modifier.width(16.dp))
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = "Tekstur Ringan",
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.Medium,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Text(
+                                                text = "Tekstur Ringan",
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.Medium,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(
+                                                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                                                        shape = RoundedCornerShape(4.dp)
+                                                    )
+                                                    .padding(horizontal = 5.dp, vertical = 1.dp)
+                                            ) {
+                                                Text(
+                                                    text = "Eksperimental",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                                    fontWeight = FontWeight.SemiBold
+                                                )
+                                            }
+                                        }
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
                                             text = "Tweak resolusi tekstur & LOD untuk dongkrak FPS",
@@ -649,6 +667,7 @@ fun AppProfileScreen(
                                             .padding(horizontal = 10.dp, vertical = 6.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
+                                        val statusText = if (!profile.textureEnabled) {
                                             "Mati"
                                         } else {
                                             when (profile.textureDetail) {
