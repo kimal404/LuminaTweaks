@@ -18,6 +18,7 @@
 
 package com.luminatweaks.ui.component
 
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -40,104 +41,123 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.luminatweaks.ui.theme.LocalCornerRadius
+import com.luminatweaks.ui.theme.LocalFloatingNavBar
 
 @Composable
 fun LuminaBottomBar(
     selectedTab: Int,
     onTabSelected: (Int) -> Unit
 ) {
+    val isFloating = LocalFloatingNavBar.current
     val cornerRadius = LocalCornerRadius.current
 
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, bottom = 10.dp)
-            .navigationBarsPadding(),
-        shape = RoundedCornerShape(cornerRadius),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        tonalElevation = 3.dp,
-        shadowElevation = 4.dp
-    ) {
-        NavigationBar(
-            containerColor = Color.Transparent,
-            tonalElevation = 0.dp,
-            windowInsets = WindowInsets(0.dp)
+    if (isFloating) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, bottom = 10.dp)
+                .navigationBarsPadding(),
+            shape = RoundedCornerShape(cornerRadius),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 3.dp,
+            shadowElevation = 4.dp
         ) {
-            NavigationBarItem(
-                selected = selectedTab == 0,
-                onClick = { onTabSelected(0) },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Rounded.Home,
-                        contentDescription = "Home"
-                    )
-                },
-                label = { Text("Home") },
-                colors = NavigationBarItemDefaults.colors(
-                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                    selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            )
-
-            NavigationBarItem(
-                selected = selectedTab == 1,
-                onClick = { onTabSelected(1) },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Rounded.Apps,
-                        contentDescription = "Apps"
-                    )
-                },
-                label = { Text("Apps") },
-                colors = NavigationBarItemDefaults.colors(
-                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                    selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            )
-
-            NavigationBarItem(
-                selected = selectedTab == 2,
-                onClick = { onTabSelected(2) },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Rounded.Tune,
-                        contentDescription = "Tweaks"
-                    )
-                },
-                label = { Text("Tweaks") },
-                colors = NavigationBarItemDefaults.colors(
-                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                    selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            )
-
-            NavigationBarItem(
-                selected = selectedTab == 3,
-                onClick = { onTabSelected(3) },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Rounded.Settings,
-                        contentDescription = "Settings"
-                    )
-                },
-                label = { Text("Settings") },
-                colors = NavigationBarItemDefaults.colors(
-                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                    selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            )
+            NavigationBar(
+                containerColor = Color.Transparent,
+                tonalElevation = 0.dp,
+                windowInsets = WindowInsets(0.dp)
+            ) {
+                LuminaBottomBarItems(selectedTab = selectedTab, onTabSelected = onTabSelected)
+            }
+        }
+    } else {
+        NavigationBar(
+            containerColor = MaterialTheme.colorScheme.background,
+            tonalElevation = 0.dp
+        ) {
+            LuminaBottomBarItems(selectedTab = selectedTab, onTabSelected = onTabSelected)
         }
     }
+}
+
+@Composable
+private fun RowScope.LuminaBottomBarItems(
+    selectedTab: Int,
+    onTabSelected: (Int) -> Unit
+) {
+    NavigationBarItem(
+        selected = selectedTab == 0,
+        onClick = { onTabSelected(0) },
+        icon = {
+            Icon(
+                imageVector = Icons.Rounded.Home,
+                contentDescription = "Home"
+            )
+        },
+        label = { Text("Home") },
+        colors = NavigationBarItemDefaults.colors(
+            indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+            selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            selectedTextColor = MaterialTheme.colorScheme.onSurface,
+            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    )
+
+    NavigationBarItem(
+        selected = selectedTab == 1,
+        onClick = { onTabSelected(1) },
+        icon = {
+            Icon(
+                imageVector = Icons.Rounded.Apps,
+                contentDescription = "Apps"
+            )
+        },
+        label = { Text("Apps") },
+        colors = NavigationBarItemDefaults.colors(
+            indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+            selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            selectedTextColor = MaterialTheme.colorScheme.onSurface,
+            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    )
+
+    NavigationBarItem(
+        selected = selectedTab == 2,
+        onClick = { onTabSelected(2) },
+        icon = {
+            Icon(
+                imageVector = Icons.Rounded.Tune,
+                contentDescription = "Tweaks"
+            )
+        },
+        label = { Text("Tweaks") },
+        colors = NavigationBarItemDefaults.colors(
+            indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+            selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            selectedTextColor = MaterialTheme.colorScheme.onSurface,
+            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    )
+
+    NavigationBarItem(
+        selected = selectedTab == 3,
+        onClick = { onTabSelected(3) },
+        icon = {
+            Icon(
+                imageVector = Icons.Rounded.Settings,
+                contentDescription = "Settings"
+            )
+        },
+        label = { Text("Settings") },
+        colors = NavigationBarItemDefaults.colors(
+            indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+            selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            selectedTextColor = MaterialTheme.colorScheme.onSurface,
+            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    )
 }

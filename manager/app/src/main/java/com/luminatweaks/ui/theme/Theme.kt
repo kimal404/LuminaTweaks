@@ -159,6 +159,7 @@ fun LuminaTheme(
     ) {
         CompositionLocalProvider(
             LocalCornerRadius provides themeState.cornerRadius.dp,
+            LocalFloatingNavBar provides themeState.floatingNavBar,
             content = content
         )
     }

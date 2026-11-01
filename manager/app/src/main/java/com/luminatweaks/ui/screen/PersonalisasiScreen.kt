@@ -90,6 +90,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -145,6 +146,7 @@ fun PersonalisasiScreen(
     var currentColorSpec by remember { mutableStateOf(savedSettings.colorSpec) }
     var currentIntensity by remember { mutableStateOf(savedSettings.accentIntensity) }
     var currentCornerRadius by remember { mutableIntStateOf(savedSettings.cornerRadius) }
+    var isFloatingNavBar by remember { mutableStateOf(savedSettings.floatingNavBar) }
 
     var showRadiusSheet by rememberSaveable { mutableStateOf(false) }
     val radiusSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -174,14 +176,16 @@ fun PersonalisasiScreen(
         key: Int = currentKeyColor,
         spec: ColorEngine = currentColorSpec,
         intensity: AccentIntensity = currentIntensity,
-        radius: Int = currentCornerRadius
+        radius: Int = currentCornerRadius,
+        floating: Boolean = isFloatingNavBar
     ) {
         currentColorMode = mode
         currentKeyColor = key
         currentColorSpec = spec
         currentIntensity = intensity
         currentCornerRadius = radius
-        ThemeController.saveTheme(context, mode, key, spec, intensity, radius)
+        isFloatingNavBar = floating
+        ThemeController.saveTheme(context, mode, key, spec, intensity, radius, floating)
     }
 
     Scaffold(
@@ -218,6 +222,7 @@ fun PersonalisasiScreen(
             PinnedPreviewHeader(
                 expanded = isPreviewExpanded,
                 cornerRadius = currentCornerRadius,
+                isFloatingNavBar = isFloatingNavBar,
                 onToggle = { isPreviewExpanded = !isPreviewExpanded },
                 onCollapse = { isPreviewExpanded = false },
                 onExpand = { isPreviewExpanded = true }
@@ -478,6 +483,50 @@ fun PersonalisasiScreen(
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
+                            }
+                        }
+
+                        item {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .clickable {
+                                        updateTheme(floating = !isFloatingNavBar)
+                                    },
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                                ),
+                                shape = RoundedCornerShape(18.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Bilah Navigasi Mengambang",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "Gaya dock melayang dengan sudut melengkung",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+
+                                    Switch(
+                                        checked = isFloatingNavBar,
+                                        onCheckedChange = { checked ->
+                                            updateTheme(floating = checked)
+                                        }
+                                    )
+                                }
                             }
                         }
 
@@ -791,6 +840,7 @@ private fun SheetHandle(
 private fun PinnedPreviewHeader(
     expanded: Boolean,
     cornerRadius: Int,
+    isFloatingNavBar: Boolean,
     onToggle: () -> Unit,
     onCollapse: () -> Unit,
     onExpand: () -> Unit,
@@ -844,6 +894,7 @@ private fun PinnedPreviewHeader(
             ) {
                 MockLuminaScreen(
                     cornerRadius = cornerRadius,
+                    isFloatingNavBar = isFloatingNavBar,
                     isCollapsed = !expanded
                 )
             }
@@ -854,6 +905,7 @@ private fun PinnedPreviewHeader(
 @Composable
 private fun MockLuminaScreen(
     cornerRadius: Int = 18,
+    isFloatingNavBar: Boolean = false,
     isCollapsed: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -931,30 +983,62 @@ private fun MockLuminaScreen(
                 color = MaterialTheme.colorScheme.surfaceContainerHighest
             ) {}
 
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(bottom = 2.dp),
-                shape = RoundedCornerShape((20f * ratio).dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            if (isFloatingNavBar) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(bottom = 2.dp),
+                    shape = RoundedCornerShape((20f * ratio).dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
                 ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(14.dp)
-                    ) {}
-                    repeat(3) {
-                        Box(
-                            modifier = Modifier
-                                .size(width = 16.dp, height = 5.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f))
-                        )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp)
+                        ) {}
+                        repeat(3) {
+                            Box(
+                                modifier = Modifier
+                                    .size(width = 16.dp, height = 5.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f))
+                            )
+                        }
+                    }
+                }
+            } else {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(28.dp),
+                    shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceAround,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(12.dp)
+                        ) {}
+                        repeat(3) {
+                            Box(
+                                modifier = Modifier
+                                    .size(width = 14.dp, height = 4.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f))
+                            )
+                        }
                     }
                 }
             }

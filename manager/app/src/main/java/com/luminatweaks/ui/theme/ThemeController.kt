@@ -70,7 +70,8 @@ data class AppThemeSettings(
     val keyColor: Int,
     val colorSpec: ColorEngine,
     val accentIntensity: AccentIntensity,
-    val cornerRadius: Int = ThemeController.DEFAULT_CORNER_RADIUS
+    val cornerRadius: Int = ThemeController.DEFAULT_CORNER_RADIUS,
+    val floatingNavBar: Boolean = false
 )
 
 object ThemeController {
@@ -91,8 +92,9 @@ object ThemeController {
         )
         val cornerRadius = prefs.getInt("ui_corner_radius", DEFAULT_CORNER_RADIUS)
             .coerceIn(MIN_CORNER_RADIUS, MAX_CORNER_RADIUS)
+        val floatingNavBar = prefs.getBoolean("floating_nav_bar", false)
 
-        return AppThemeSettings(colorMode, keyColor, colorSpec, accentIntensity, cornerRadius)
+        return AppThemeSettings(colorMode, keyColor, colorSpec, accentIntensity, cornerRadius, floatingNavBar)
     }
 
     fun saveTheme(
@@ -101,7 +103,8 @@ object ThemeController {
         key: Int,
         spec: ColorEngine,
         intensity: AccentIntensity,
-        cornerRadius: Int? = null
+        cornerRadius: Int? = null,
+        floatingNavBar: Boolean? = null
     ) {
         val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
         val editor = prefs.edit()
@@ -113,6 +116,9 @@ object ThemeController {
         if (cornerRadius != null) {
             editor.putInt("ui_corner_radius", cornerRadius.coerceIn(MIN_CORNER_RADIUS, MAX_CORNER_RADIUS))
         }
+        if (floatingNavBar != null) {
+            editor.putBoolean("floating_nav_bar", floatingNavBar)
+        }
         editor.apply()
     }
 
@@ -120,6 +126,13 @@ object ThemeController {
         val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
         prefs.edit()
             .putInt("ui_corner_radius", radius.coerceIn(MIN_CORNER_RADIUS, MAX_CORNER_RADIUS))
+            .apply()
+    }
+
+    fun saveFloatingNavBar(context: Context, enabled: Boolean) {
+        val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        prefs.edit()
+            .putBoolean("floating_nav_bar", enabled)
             .apply()
     }
 }

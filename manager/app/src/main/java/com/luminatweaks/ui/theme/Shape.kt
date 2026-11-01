@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 val LocalCornerRadius = compositionLocalOf { 18.dp }
+val LocalFloatingNavBar = compositionLocalOf { false }
 
 val LuminaShapes = Shapes(
     extraSmall = RoundedCornerShape(8.dp),
