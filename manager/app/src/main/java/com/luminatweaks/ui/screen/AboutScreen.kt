@@ -2,9 +2,6 @@ package com.luminatweaks.ui.screen
 
 import android.content.Intent
 import android.net.Uri
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -61,7 +58,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,17 +68,6 @@ fun AboutScreen(
     val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     var showLicenseDialog by remember { mutableStateOf(false) }
-
-    val appIconBitmap = remember(context) {
-        val drawable = context.packageManager.getApplicationIcon(context.packageName)
-        val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 144
-        val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 144
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        drawable.setBounds(0, 0, canvas.width, canvas.height)
-        drawable.draw(canvas)
-        bitmap.asImageBitmap()
-    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
@@ -137,7 +122,7 @@ fun AboutScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Image(
-                            bitmap = appIconBitmap,
+                            painter = painterResource(id = context.applicationInfo.icon),
                             contentDescription = "Logo LuminaTweaks",
                             modifier = Modifier
                                 .size(72.dp)
@@ -310,15 +295,13 @@ fun AboutScreen(
                             .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        AsyncImage(
-                            model = "https://avatars.githubusercontent.com/kimal404",
+                        Image(
+                            painter = rememberVectorPainter(Icons.Rounded.Person),
                             contentDescription = "Avatar MalCLA",
                             modifier = Modifier
                                 .size(46.dp)
                                 .clip(CircleShape),
-                            contentScale = ContentScale.Crop,
-                            placeholder = rememberVectorPainter(Icons.Rounded.Person),
-                            error = rememberVectorPainter(Icons.Rounded.Person)
+                            contentScale = ContentScale.Crop
                         )
                         Spacer(modifier = Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f)) {
