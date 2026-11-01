@@ -68,12 +68,8 @@ fun AboutScreen(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     var showLicenseDialog by remember { mutableStateOf(false) }
 
-    val appIconRes = remember(context) {
-        if (context.applicationInfo.icon != 0) {
-            context.applicationInfo.icon
-        } else {
-            com.luminatweaks.R.mipmap.ic_launcher
-        }
+    val appIcon = remember(context) {
+        context.packageManager.getApplicationIcon(context.packageName)
     }
 
     Scaffold(
@@ -128,12 +124,13 @@ fun AboutScreen(
                             .padding(20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Image(
-                            painter = painterResource(id = appIconRes),
+                        AsyncImage(
+                            model = appIcon,
                             contentDescription = "Logo LuminaTweaks",
                             modifier = Modifier
                                 .size(72.dp)
-                                .clip(CircleShape)
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Fit
                         )
                         Spacer(modifier = Modifier.height(14.dp))
                         Text(
