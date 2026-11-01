@@ -82,21 +82,14 @@ impl TextureController {
         let mut features = Vec::new();
 
         match lod.clamp(-3, 3) {
-            // Negative values: Enhance quality
             -3 => {
-                // Force maximum anisotropic filtering for crisp high-resolution textures
                 features.push("maximumAnisotropy");
             }
             -2 => {
-                // High quality texture filtering
                 features.push("highQualityFiltering");
             }
-            -1 => {
-                // Slightly sharper: standard linear filtering, nearest filtering explicitly off
-            }
-            // 0: Default, no overrides
+            -1 => {}
             0 => {}
-            // Positive values: Downscale for performance
             1 => {
                 features.push("forceTextureLodOffset1");
             }
@@ -117,7 +110,6 @@ impl TextureController {
     pub fn apply(pkg: &str, driver: TextureDriver, lod: i32) {
         match driver {
             TextureDriver::Native => {
-                // Revert package to system native GPU driver
                 let current_pkgs = get_global_setting("angle_gl_driver_selection_pkgs");
                 if let Some(pkgs_str) = current_pkgs {
                     let filtered: Vec<&str> = pkgs_str
@@ -143,7 +135,6 @@ impl TextureController {
                 log!("[TEXTURE] Reverted [{}] to Native GPU driver", pkg);
             }
             TextureDriver::Angle => {
-                // Activate ANGLE runtime and apply LOD feature overrides
                 let mut pkgs: Vec<String> = get_global_setting("angle_gl_driver_selection_pkgs")
                     .map(|s| {
                         s.split(',')
@@ -218,7 +209,6 @@ impl TextureController {
                 .map(is_truthy)
                 .unwrap_or(false);
 
-            // Read driver selection (defaults to Native)
             let driver_str = item
                 .get("texture_driver")
                 .or_else(|| item.get("textureDriver"))
@@ -227,7 +217,6 @@ impl TextureController {
             let driver = match driver_str {
                 Some(s) => TextureDriver::from_str(s),
                 None => {
-                    // Fallback to legacy texture_enabled flag if texture_driver is absent
                     let legacy_enabled = item
                         .get("texture_enabled")
                         .or_else(|| item.get("textureEnabled"))
@@ -242,7 +231,6 @@ impl TextureController {
                 }
             };
 
-            // Read bidirectional LOD offset (-3 to +3)
             let raw_lod = item
                 .get("texture_lod")
                 .or_else(|| item.get("textureLod"))
@@ -269,7 +257,6 @@ impl TextureController {
                 .map(|s| s.to_string())
                 .or(key_opt);
 
-            // ANGLE is only enabled when master switch is active and driver is set to Angle
             if master && driver == TextureDriver::Angle {
                 if let Some(pkg) = pkg_name {
                     active_pkgs.push(pkg.clone());
@@ -319,7 +306,6 @@ impl TextureController {
         Self::sync_config(Some(pkg));
     }
 
-    /// Resets all ANGLE driver settings and feature overrides
     pub fn restore() {
         let _ = Command::new("setprop")
             .args(["debug.angle.feature_overrides_enabled", ""])

@@ -70,7 +70,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -79,14 +78,11 @@ import com.luminatweaks.data.AppProfileConfig
 import com.luminatweaks.data.ConfigRepository
 
 /**
- * Generates procedural texture bitmap reflecting LOD from -3 to +3
+ * Generates procedural texture bitmap reflecting bidirectional LOD (-3 to +3)
  */
 fun generateTextureBitmap(lod: Int): ImageBitmap {
     val scale = when (lod.coerceIn(-3, 3)) {
-        -3 -> 1
-        -2 -> 1
-        -1 -> 1
-        0 -> 1
+        -3, -2, -1, 0 -> 1
         1 -> 2
         2 -> 4
         3 -> 8
@@ -171,9 +167,7 @@ fun TextureComparisonPreview(
             .height(210.dp),
         shape = RoundedCornerShape(26.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF141416)
-        )
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF141416))
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val totalWidth = constraints.maxWidth.toFloat()
@@ -316,7 +310,7 @@ fun TextureComparisonPreview(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun KualitasTeksturScreen(
+fun TeksturRinganScreen(
     appName: String,
     profile: AppProfileConfig,
     onProfileChanged: (AppProfileConfig) -> Unit,
@@ -424,7 +418,6 @@ fun KualitasTeksturScreen(
                             color = MaterialTheme.colorScheme.onSurface
                         )
 
-                        // Segmented Button [ Native ] [ ANGLE ]
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -444,7 +437,6 @@ fun KualitasTeksturScreen(
                                 label = "angleBg"
                             )
 
-                            // Native Option
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
@@ -468,7 +460,6 @@ fun KualitasTeksturScreen(
                                 )
                             }
 
-                            // ANGLE Option
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
@@ -697,9 +688,7 @@ fun KualitasTeksturScreen(
                             .weight(1f)
                             .height(50.dp),
                         shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = primaryAccent
-                        )
+                        colors = ButtonDefaults.buttonColors(containerColor = primaryAccent)
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Check,
@@ -714,3 +703,12 @@ fun KualitasTeksturScreen(
         }
     }
 }
+
+// Alias composable for external callers
+@Composable
+fun KualitasTeksturScreen(
+    appName: String,
+    profile: AppProfileConfig,
+    onProfileChanged: (AppProfileConfig) -> Unit,
+    onBack: () -> Unit
+) = TeksturRinganScreen(appName, profile, onProfileChanged, onBack)
