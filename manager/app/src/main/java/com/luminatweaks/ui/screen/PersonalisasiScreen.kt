@@ -33,6 +33,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -67,11 +70,7 @@ import androidx.compose.material.icons.rounded.Brightness4
 import androidx.compose.material.icons.rounded.Brightness7
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material.icons.rounded.Security
-import androidx.compose.material.icons.rounded.Speed
-import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -91,8 +90,6 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -103,14 +100,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.luminatweaks.ui.theme.AccentIntensity
 import com.luminatweaks.ui.theme.ColorEngine
 import com.luminatweaks.ui.theme.ColorMode
@@ -141,21 +141,24 @@ fun PersonalisasiScreen(
     val isDark = currentColorMode.getDarkThemeValue(isSystemInDarkTheme())
 
     val lazyListState = rememberLazyListState()
-    var previewExpandedByTap by rememberSaveable { mutableStateOf(false) }
-    var previewMoved by rememberSaveable { mutableStateOf(false) }
+    var isPreviewExpanded by rememberSaveable { mutableStateOf(true) }
 
-    val listScrolled by remember(lazyListState) {
-        derivedStateOf { lazyListState.isScrollInProgress || lazyListState.canScrollBackward }
-    }
-
-    LaunchedEffect(listScrolled) {
-        if (listScrolled) {
-            previewMoved = true
-            previewExpandedByTap = false
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (available.y < -10f) {
+                    if (isPreviewExpanded) {
+                        isPreviewExpanded = false
+                    }
+                } else if (available.y > 10f) {
+                    if (!isPreviewExpanded && (!lazyListState.canScrollBackward || lazyListState.firstVisibleItemIndex == 0)) {
+                        isPreviewExpanded = true
+                    }
+                }
+                return Offset.Zero
+            }
         }
     }
-
-    val isPreviewExpanded = previewExpandedByTap || !previewMoved
 
     fun updateTheme(
         mode: ColorMode = currentColorMode,
@@ -203,7 +206,9 @@ fun PersonalisasiScreen(
         ) {
             PinnedPreviewHeader(
                 expanded = isPreviewExpanded,
-                onToggle = { previewExpandedByTap = !previewExpandedByTap }
+                onToggle = { isPreviewExpanded = !isPreviewExpanded },
+                onCollapse = { isPreviewExpanded = false },
+                onExpand = { isPreviewExpanded = true }
             )
 
             Surface(
@@ -215,8 +220,16 @@ fun PersonalisasiScreen(
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
                 tonalElevation = 2.dp
             ) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    SheetHandle(onClick = { previewExpandedByTap = !previewExpandedByTap })
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .nestedScroll(nestedScrollConnection)
+                ) {
+                    SheetHandle(
+                        onToggle = { isPreviewExpanded = !isPreviewExpanded },
+                        onCollapse = { isPreviewExpanded = false },
+                        onExpand = { isPreviewExpanded = true }
+                    )
 
                     LazyColumn(
                         state = lazyListState,
@@ -446,23 +459,39 @@ fun PersonalisasiScreen(
 }
 
 @Composable
-private fun SheetHandle(onClick: () -> Unit) {
+private fun SheetHandle(
+    onToggle: () -> Unit,
+    onCollapse: () -> Unit,
+    onExpand: () -> Unit
+) {
+    val draggableState = rememberDraggableState { delta ->
+        if (delta < -6f) {
+            onCollapse()
+        } else if (delta > 6f) {
+            onExpand()
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .height(38.dp)
+            .draggable(
+                state = draggableState,
+                orientation = Orientation.Vertical
+            )
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-                onClick = onClick
-            )
-            .padding(vertical = 12.dp),
+                onClick = onToggle
+            ),
         contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
-                .size(width = 36.dp, height = 4.dp)
+                .size(width = 42.dp, height = 4.dp)
                 .clip(RoundedCornerShape(percent = 50))
-                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f))
         )
     }
 }
@@ -471,11 +500,21 @@ private fun SheetHandle(onClick: () -> Unit) {
 private fun PinnedPreviewHeader(
     expanded: Boolean,
     onToggle: () -> Unit,
+    onCollapse: () -> Unit,
+    onExpand: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val draggableState = rememberDraggableState { delta ->
+        if (delta < -8f) {
+            onCollapse()
+        } else if (delta > 8f) {
+            onExpand()
+        }
+    }
+
     BoxWithConstraints(modifier = modifier) {
         val mockAspect = MOCK_HEIGHT / MOCK_WIDTH
-        val targetHeight = if (expanded) maxWidth * 1.32f else maxWidth * 0.38f * mockAspect
+        val targetHeight = if (expanded) maxWidth * 1.30f else maxWidth * 0.35f * mockAspect
         val height by animateDpAsState(
             targetValue = targetHeight,
             animationSpec = spring(
@@ -486,7 +525,7 @@ private fun PinnedPreviewHeader(
         )
 
         val fullWidth = maxWidth
-        val targetWidth = if (expanded) fullWidth * 0.82f else fullWidth * 0.36f
+        val targetWidth = if (expanded) fullWidth * 0.82f else fullWidth * 0.35f
         val frameWidth by animateDpAsState(
             targetValue = targetWidth,
             animationSpec = spring(
@@ -511,6 +550,10 @@ private fun PinnedPreviewHeader(
                     .align(Alignment.Center)
                     .width(frameWidth)
                     .fillMaxHeight()
+                    .draggable(
+                        state = draggableState,
+                        orientation = Orientation.Vertical
+                    )
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -546,7 +589,7 @@ private fun MockLuminaScreen(
                     transformOrigin = TransformOrigin(0.5f, 0.5f)
                 )
                 .background(MaterialTheme.colorScheme.background)
-                .padding(horizontal = 10.dp, vertical = if (isCollapsed) 4.dp else 10.dp)
+                .padding(horizontal = 10.dp, vertical = if (isCollapsed) 6.dp else 10.dp)
         ) {
             Column(
                 modifier = Modifier.fillMaxSize(),
@@ -572,30 +615,24 @@ private fun MockLuminaScreen(
                     color = MaterialTheme.colorScheme.primaryContainer
                 ) {
                     Row(
-                        modifier = Modifier.padding(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.CheckCircle,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(
-                                text = "Lumina Daemon",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                            Text(
-                                text = "Aktif • PID 1024",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 8.sp,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                            )
-                        }
+                        Text(
+                            text = "Working",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
                     }
                 }
 
@@ -606,74 +643,18 @@ private fun MockLuminaScreen(
                     Surface(
                         modifier = Modifier
                             .weight(1f)
-                            .height(54.dp),
+                            .height(52.dp),
                         shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHighest
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(8.dp),
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Thermostat,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "Thermal",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontSize = 8.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "36.5°C",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {}
 
                     Surface(
                         modifier = Modifier
                             .weight(1f)
-                            .height(54.dp),
+                            .height(52.dp),
                         shape = RoundedCornerShape(12.dp),
                         color = MaterialTheme.colorScheme.surfaceContainerHighest
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(8.dp),
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Speed,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "Profile",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontSize = 8.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Dynamic",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
+                    ) {}
                 }
 
                 Surface(
@@ -682,85 +663,33 @@ private fun MockLuminaScreen(
                         .weight(1f),
                     shape = RoundedCornerShape(14.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHighest
-                ) {
-                    Column(
-                        modifier = Modifier.padding(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Rounded.Memory,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "System Scheduler",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
-                        )
-
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Rounded.Security,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "SELinux Enforcing",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
+                ) {}
 
                 Surface(
                     modifier = Modifier
                         .align(Alignment.CenterHorizontally)
-                        .padding(bottom = 4.dp),
+                        .padding(bottom = 2.dp),
                     shape = RoundedCornerShape(20.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHigh
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Surface(
                             shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.size(20.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Rounded.CheckCircle,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(12.dp)
-                                )
-                            }
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp)
+                        ) {}
+                        repeat(3) {
+                            Box(
+                                modifier = Modifier
+                                    .size(width = 16.dp, height = 5.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f))
+                            )
                         }
-                        Box(
-                            modifier = Modifier
-                                .size(width = 30.dp, height = 8.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
-                        )
                     }
                 }
             }
