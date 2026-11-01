@@ -1,4 +1,3 @@
-import com.luminatweaks.ui.screen.PersonalisasiScreen
 package com.luminatweaks.ui.screen
 
 import androidx.compose.animation.AnimatedContent
@@ -107,6 +106,7 @@ fun getConnectedContainerShape(
 fun HomeScreen() {
     val context = LocalContext.current
     var selectedTab by remember { mutableIntStateOf(0) }
+    var currentSubscreen by remember { mutableStateOf<String?>(null) }
     val kernelVersion = remember { System.getProperty("os.version") ?: "Unknown" }
     val deviceModel = remember { DeviceUtil.getMarketDeviceName(context) }
 
