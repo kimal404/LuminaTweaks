@@ -331,8 +331,6 @@ impl EngineRuntime {
                 self.current_applied_zen_mode = None;
             }
 
-            TextureController::restore();
-
             clear_all_notifications();
         }
     }
