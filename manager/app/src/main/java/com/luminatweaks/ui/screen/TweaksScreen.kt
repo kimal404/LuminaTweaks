@@ -593,7 +593,7 @@ fun TweaksScreen() {
                 ) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = getConnectedContainerShape(litePos, outerRadius = 20.dp, innerRadius = 4.dp),
+                        shape = getConnectedContainerShape(litePos, innerRadius = 4.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                         )
@@ -652,7 +652,7 @@ fun TweaksScreen() {
 
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = getConnectedContainerShape(thermalPos, outerRadius = 20.dp, innerRadius = 4.dp),
+                        shape = getConnectedContainerShape(thermalPos, innerRadius = 4.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                         )
@@ -714,7 +714,7 @@ fun TweaksScreen() {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { inMtkSubpage = true },
-                            shape = getConnectedContainerShape(mtkPos, outerRadius = 20.dp, innerRadius = 4.dp),
+                            shape = getConnectedContainerShape(mtkPos, innerRadius = 4.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                             )

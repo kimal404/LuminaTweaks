@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DaemonManager
 import com.luminatweaks.ui.component.LuminaBottomBar
+import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.util.DeviceUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -78,10 +79,11 @@ enum class ContainerPosition {
     Top, Middle, Bottom, Single
 }
 
+@Composable
 fun getConnectedContainerShape(
     position: ContainerPosition,
-    outerRadius: Dp = 18.dp,
-    innerRadius: Dp = 4.dp
+    outerRadius: Dp = LocalCornerRadius.current,
+    innerRadius: Dp = if (outerRadius <= 4.dp) outerRadius else 4.dp
 ): RoundedCornerShape {
     return when (position) {
         ContainerPosition.Top -> RoundedCornerShape(

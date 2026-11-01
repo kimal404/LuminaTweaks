@@ -113,7 +113,7 @@ fun SettingsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable(enabled = !isGeneratingLog) { showLogBottomSheet = true },
-                    shape = getConnectedContainerShape(ContainerPosition.Single, outerRadius = 18.dp),
+                    shape = getConnectedContainerShape(ContainerPosition.Single),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                     )
@@ -168,7 +168,7 @@ fun SettingsScreen(
                                 if (onNavigateToPersonalisasi != null) onNavigateToPersonalisasi() else showPersonalisasiScreen = true
                             }
                         },
-                    shape = getConnectedContainerShape(ContainerPosition.Single, outerRadius = 18.dp),
+                    shape = getConnectedContainerShape(ContainerPosition.Single),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                     )
@@ -221,7 +221,7 @@ fun SettingsScreen(
                                 showAboutScreen = true
                             }
                         },
-                    shape = getConnectedContainerShape(ContainerPosition.Single, outerRadius = 18.dp),
+                    shape = getConnectedContainerShape(ContainerPosition.Single),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                     )
