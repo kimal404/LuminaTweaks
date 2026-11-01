@@ -1,3 +1,4 @@
+import com.luminatweaks.ui.screen.PersonalisasiScreen
 package com.luminatweaks.ui.screen
 
 import androidx.compose.animation.AnimatedContent
@@ -146,13 +147,20 @@ fun HomeScreen() {
         }
     }
 
+    if (currentSubscreen == "personalisasi") {
+        PersonalisasiScreen(onBackClick = { currentSubscreen = null })
+        return
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
         bottomBar = {
-            LuminaBottomBar(
-                selectedTab = selectedTab,
-                onTabSelected = { selectedTab = it }
-            )
+            if (currentSubscreen == null) {
+                LuminaBottomBar(
+                    selectedTab = selectedTab,
+                    onTabSelected = { selectedTab = it }
+                )
+            }
         }
     ) { innerPadding ->
         AnimatedContent(
@@ -199,7 +207,7 @@ fun HomeScreen() {
                 )
                 1 -> AppsScreen()
                 2 -> TweaksScreen()
-                3 -> SettingsScreen()
+                3 -> SettingsScreen(onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" })
             }
         }
     }

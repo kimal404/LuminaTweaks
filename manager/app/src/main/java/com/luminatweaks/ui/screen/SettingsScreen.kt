@@ -165,7 +165,7 @@ fun SettingsScreen(
                             if (onNavigateToPersonalisasi != null) {
                                 onNavigateToPersonalisasi()
                             } else {
-                                showPersonalisasiScreen = true
+                                if (onNavigateToPersonalisasi != null) onNavigateToPersonalisasi() else showPersonalisasiScreen = true
                             }
                         },
                     shape = getConnectedContainerShape(ContainerPosition.Single, outerRadius = 18.dp),

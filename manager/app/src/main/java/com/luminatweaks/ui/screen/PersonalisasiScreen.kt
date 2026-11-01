@@ -72,8 +72,6 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -102,15 +100,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.luminatweaks.ui.theme.AccentIntensity
 import com.luminatweaks.ui.theme.ColorEngine
 import com.luminatweaks.ui.theme.ColorMode
@@ -119,9 +116,6 @@ import com.luminatweaks.ui.theme.animateColorSchemeAsState
 import com.luminatweaks.ui.theme.keyColorOptions
 import com.materialkolor.rememberDynamicColorScheme
 import kotlin.math.roundToInt
-
-private val MOCK_WIDTH = 190.dp
-private val MOCK_HEIGHT = 396.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -146,11 +140,11 @@ fun PersonalisasiScreen(
     val nestedScrollConnection = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (available.y < -10f) {
+                if (available.y < -12f) {
                     if (isPreviewExpanded) {
                         isPreviewExpanded = false
                     }
-                } else if (available.y > 10f) {
+                } else if (available.y > 12f) {
                     if (!isPreviewExpanded && (!lazyListState.canScrollBackward || lazyListState.firstVisibleItemIndex == 0)) {
                         isPreviewExpanded = true
                     }
@@ -237,218 +231,214 @@ fun PersonalisasiScreen(
                             .weight(1f)
                             .fillMaxWidth(),
                         contentPadding = PaddingValues(
-                            top = 4.dp,
-                            bottom = 24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
-                            start = 16.dp,
-                            end = 16.dp
+                            top = 2.dp,
+                            bottom = 28.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
+                            start = 20.dp,
+                            end = 20.dp
                         ),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         item {
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(24.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                                )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
                             ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                Icon(
+                                    imageVector = Icons.Rounded.Palette,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = "Warna",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                    .padding(4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                val engines = listOf(
+                                    ColorEngine.MaterialYou to "Materi Anda",
+                                    ColorEngine.MaterialExpressive to "Ekspresif Materi"
+                                )
+
+                                engines.forEach { (engine, label) ->
+                                    val isSelected = currentColorSpec == engine
+                                    Surface(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(42.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .clickable { updateTheme(spec = engine) },
+                                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = label,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        item {
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                contentPadding = PaddingValues(vertical = 4.dp)
+                            ) {
+                                item {
+                                    SwatchButton(
+                                        color = Color.Unspecified,
+                                        isSelected = currentKeyColor == 0,
+                                        isDark = isDark,
+                                        colorSpec = currentColorSpec,
+                                        onClick = { updateTheme(key = 0) }
+                                    )
+                                }
+
+                                items(keyColorOptions) { colorInt ->
+                                    SwatchButton(
+                                        color = Color(colorInt),
+                                        isSelected = currentKeyColor == colorInt,
+                                        isDark = isDark,
+                                        colorSpec = currentColorSpec,
+                                        onClick = { updateTheme(key = colorInt) }
+                                    )
+                                }
+                            }
+                        }
+
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                    .padding(4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                val modes = listOf(
+                                    ColorMode.SYSTEM to Icons.Rounded.Brightness4,
+                                    ColorMode.LIGHT to Icons.Rounded.Brightness7,
+                                    ColorMode.DARK to Icons.Rounded.Brightness3,
+                                    ColorMode.DARKAMOLED to Icons.Rounded.Brightness1
+                                )
+
+                                modes.forEach { (mode, icon) ->
+                                    val isSelected = currentColorMode == mode
+                                    Surface(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(44.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .clickable { updateTheme(mode = mode) },
+                                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = icon,
+                                                contentDescription = mode.name,
+                                                tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        item {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                    .padding(horizontal = 16.dp, vertical = 14.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
-                                            imageVector = Icons.Rounded.Palette,
+                                            imageVector = Icons.Rounded.Tune,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(22.dp)
+                                            modifier = Modifier.size(18.dp)
                                         )
-                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
                                         Text(
-                                            text = "Warna",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
+                                            text = "Intensitas aksen",
+                                            style = MaterialTheme.typography.bodyMedium,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
                                     }
 
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(16.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                                            .padding(4.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.primaryContainer
                                     ) {
-                                        val engines = listOf(
-                                            ColorEngine.MaterialYou to "Materi Anda",
-                                            ColorEngine.MaterialExpressive to "Ekspresif Materi"
-                                        )
-
-                                        engines.forEach { (engine, label) ->
-                                            val isSelected = currentColorSpec == engine
-                                            Surface(
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .height(40.dp)
-                                                    .clip(RoundedCornerShape(12.dp))
-                                                    .clickable { updateTheme(spec = engine) },
-                                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                                                shape = RoundedCornerShape(12.dp)
-                                            ) {
-                                                Box(
-                                                    modifier = Modifier.fillMaxSize(),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    Text(
-                                                        text = label,
-                                                        style = MaterialTheme.typography.labelMedium,
-                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    LazyRow(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
-                                    ) {
-                                        item {
-                                            SwatchButton(
-                                                color = Color.Unspecified,
-                                                isSelected = currentKeyColor == 0,
-                                                isDark = isDark,
-                                                colorSpec = currentColorSpec,
-                                                onClick = { updateTheme(key = 0) }
-                                            )
-                                        }
-
-                                        items(keyColorOptions) { colorInt ->
-                                            SwatchButton(
-                                                color = Color(colorInt),
-                                                isSelected = currentKeyColor == colorInt,
-                                                isDark = isDark,
-                                                colorSpec = currentColorSpec,
-                                                onClick = { updateTheme(key = colorInt) }
-                                            )
-                                        }
-                                    }
-
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(16.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                                            .padding(4.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        val modes = listOf(
-                                            ColorMode.SYSTEM to Icons.Rounded.Brightness4,
-                                            ColorMode.LIGHT to Icons.Rounded.Brightness7,
-                                            ColorMode.DARK to Icons.Rounded.Brightness3,
-                                            ColorMode.DARKAMOLED to Icons.Rounded.Brightness1
-                                        )
-
-                                        modes.forEach { (mode, icon) ->
-                                            val isSelected = currentColorMode == mode
-                                            Surface(
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .height(44.dp)
-                                                    .clip(RoundedCornerShape(12.dp))
-                                                    .clickable { updateTheme(mode = mode) },
-                                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                                                shape = RoundedCornerShape(12.dp)
-                                            ) {
-                                                Box(
-                                                    modifier = Modifier.fillMaxSize(),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    Icon(
-                                                        imageVector = icon,
-                                                        contentDescription = mode.name,
-                                                        tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                        modifier = Modifier.size(20.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(16.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                                            .padding(horizontal = 14.dp, vertical = 12.dp)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.Tune,
-                                                    contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.primary,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Text(
-                                                    text = "Intensitas aksen",
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    color = MaterialTheme.colorScheme.onSurface
-                                                )
-                                            }
-
-                                            Surface(
-                                                shape = RoundedCornerShape(8.dp),
-                                                color = MaterialTheme.colorScheme.primaryContainer
-                                            ) {
-                                                Text(
-                                                    text = currentIntensity.label,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                                )
-                                            }
-                                        }
-
-                                        var sliderPosition by remember(currentIntensity) {
-                                            mutableFloatStateOf(currentIntensity.ordinal.toFloat())
-                                        }
-
-                                        Slider(
-                                            value = sliderPosition,
-                                            onValueChange = { rawVal ->
-                                                sliderPosition = rawVal
-                                                val index = rawVal.roundToInt().coerceIn(0, 3)
-                                                val newIntensity = AccentIntensity.fromValue(index)
-                                                if (newIntensity != currentIntensity) {
-                                                    updateTheme(intensity = newIntensity)
-                                                }
-                                            },
-                                            onValueChangeFinished = {
-                                                val index = sliderPosition.roundToInt().coerceIn(0, 3)
-                                                sliderPosition = index.toFloat()
-                                                updateTheme(intensity = AccentIntensity.fromValue(index))
-                                            },
-                                            valueRange = 0f..3f,
-                                            steps = 2,
-                                            colors = SliderDefaults.colors(
-                                                thumbColor = MaterialTheme.colorScheme.primary,
-                                                activeTrackColor = MaterialTheme.colorScheme.primary
-                                            )
+                                        Text(
+                                            text = currentIntensity.label,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                         )
                                     }
                                 }
+
+                                var sliderPosition by remember(currentIntensity) {
+                                    mutableFloatStateOf(currentIntensity.ordinal.toFloat())
+                                }
+
+                                Slider(
+                                    value = sliderPosition,
+                                    onValueChange = { rawVal ->
+                                        sliderPosition = rawVal
+                                        val index = rawVal.roundToInt().coerceIn(0, 3)
+                                        val newIntensity = AccentIntensity.fromValue(index)
+                                        if (newIntensity != currentIntensity) {
+                                            updateTheme(intensity = newIntensity)
+                                        }
+                                    },
+                                    onValueChangeFinished = {
+                                        val index = sliderPosition.roundToInt().coerceIn(0, 3)
+                                        sliderPosition = index.toFloat()
+                                        updateTheme(intensity = AccentIntensity.fromValue(index))
+                                    },
+                                    valueRange = 0f..3f,
+                                    steps = 2,
+                                    colors = SliderDefaults.colors(
+                                        thumbColor = MaterialTheme.colorScheme.primary,
+                                        activeTrackColor = MaterialTheme.colorScheme.primary
+                                    )
+                                )
                             }
                         }
                     }
@@ -465,9 +455,9 @@ private fun SheetHandle(
     onExpand: () -> Unit
 ) {
     val draggableState = rememberDraggableState { delta ->
-        if (delta < -6f) {
+        if (delta < -8f) {
             onCollapse()
-        } else if (delta > 6f) {
+        } else if (delta > 8f) {
             onExpand()
         }
     }
@@ -475,7 +465,7 @@ private fun SheetHandle(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(38.dp)
+            .height(36.dp)
             .draggable(
                 state = draggableState,
                 orientation = Orientation.Vertical
@@ -489,9 +479,9 @@ private fun SheetHandle(
     ) {
         Box(
             modifier = Modifier
-                .size(width = 42.dp, height = 4.dp)
+                .size(width = 44.dp, height = 4.dp)
                 .clip(RoundedCornerShape(percent = 50))
-                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f))
+                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
         )
     }
 }
@@ -513,8 +503,7 @@ private fun PinnedPreviewHeader(
     }
 
     BoxWithConstraints(modifier = modifier) {
-        val mockAspect = MOCK_HEIGHT / MOCK_WIDTH
-        val targetHeight = if (expanded) maxWidth * 1.30f else maxWidth * 0.35f * mockAspect
+        val targetHeight = if (expanded) maxWidth * 1.25f else 170.dp
         val height by animateDpAsState(
             targetValue = targetHeight,
             animationSpec = spring(
@@ -524,16 +513,7 @@ private fun PinnedPreviewHeader(
             label = "previewHeight"
         )
 
-        val fullWidth = maxWidth
-        val targetWidth = if (expanded) fullWidth * 0.82f else fullWidth * 0.35f
-        val frameWidth by animateDpAsState(
-            targetValue = targetWidth,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioLowBouncy,
-                stiffness = Spring.StiffnessMediumLow
-            ),
-            label = "previewWidth"
-        )
+        val frameWidth = maxWidth * 0.82f
 
         Box(
             modifier = Modifier
@@ -541,10 +521,6 @@ private fun PinnedPreviewHeader(
                 .height(height)
                 .padding(horizontal = 16.dp)
         ) {
-            val cornerScale = frameWidth / fullWidth
-            val base = 28.dp * cornerScale
-            val scaledShape = RoundedCornerShape(base)
-
             Surface(
                 modifier = Modifier
                     .align(Alignment.Center)
@@ -560,7 +536,7 @@ private fun PinnedPreviewHeader(
                         onClick = onToggle
                     ),
                 color = MaterialTheme.colorScheme.surface,
-                shape = scaledShape,
+                shape = RoundedCornerShape(26.dp),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                 shadowElevation = 8.dp
             ) {
@@ -575,121 +551,102 @@ private fun MockLuminaScreen(
     isCollapsed: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val fit = minOf(maxWidth / MOCK_WIDTH, maxHeight / MOCK_HEIGHT)
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text(
+            text = "Lumina Tweaks",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.padding(horizontal = 2.dp)
+        )
 
-        Box(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .width(MOCK_WIDTH)
-                .height(MOCK_HEIGHT)
-                .graphicsLayer(
-                    scaleX = fit,
-                    scaleY = fit,
-                    transformOrigin = TransformOrigin(0.5f, 0.5f)
-                )
-                .background(MaterialTheme.colorScheme.background)
-                .padding(horizontal = 10.dp, vertical = if (isCollapsed) 6.dp else 10.dp)
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.primaryContainer
         ) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.CheckCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "Working",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Surface(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer
+            ) {}
+
+            Surface(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest
+            ) {}
+        }
+
+        if (!isCollapsed) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest
+            ) {}
+
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(bottom = 2.dp),
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Lumina Tweaks",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                }
-
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.CheckCircle,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Working",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
                     Surface(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(52.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(14.dp)
                     ) {}
-
-                    Surface(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(52.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHighest
-                    ) {}
-                }
-
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest
-                ) {}
-
-                Surface(
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .padding(bottom = 2.dp),
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(14.dp)
-                        ) {}
-                        repeat(3) {
-                            Box(
-                                modifier = Modifier
-                                    .size(width = 16.dp, height = 5.dp)
-                                    .clip(RoundedCornerShape(3.dp))
-                                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f))
-                            )
-                        }
+                    repeat(3) {
+                        Box(
+                            modifier = Modifier
+                                .size(width = 16.dp, height = 5.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f))
+                        )
                     }
                 }
             }
