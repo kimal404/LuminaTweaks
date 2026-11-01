@@ -77,9 +77,15 @@ impl TextureController {
         Self::sync_config(None);
     }
 
-    /// Builds the ANGLE feature overrides string for a given LOD (-3 to +3)
-    pub fn build_features_string(lod: i32) -> String {
+    /// Builds ANGLE feature overrides string.
+    /// If pixel_sharp is true -> forceNearestFiltering (kotak-kotak).
+    /// If pixel_sharp is false -> linear filtering remains active (potato / blurry graphics).
+    pub fn build_features_string(lod: i32, pixel_sharp: bool) -> String {
         let mut features = Vec::new();
+
+        if pixel_sharp {
+            features.push("forceNearestFiltering");
+        }
 
         match lod.clamp(-3, 3) {
             -3 => {
@@ -98,7 +104,6 @@ impl TextureController {
             }
             3 => {
                 features.push("forceTextureLodOffset3");
-                features.push("forceNearestFiltering");
             }
             _ => (),
         }
@@ -106,68 +111,7 @@ impl TextureController {
         features.join(":")
     }
 
-    /// Directly applies driver and LOD configuration for a specific package
-    pub fn apply(pkg: &str, driver: TextureDriver, lod: i32) {
-        match driver {
-            TextureDriver::Native => {
-                let current_pkgs = get_global_setting("angle_gl_driver_selection_pkgs");
-                if let Some(pkgs_str) = current_pkgs {
-                    let filtered: Vec<&str> = pkgs_str
-                        .split(',')
-                        .map(|s| s.trim())
-                        .filter(|p| !p.is_empty() && *p != pkg)
-                        .collect();
-
-                    if filtered.is_empty() {
-                        Self::restore();
-                    } else {
-                        let values = vec!["angle"; filtered.len()].join(",");
-                        set_global_setting("angle_gl_driver_selection_pkgs", &filtered.join(","));
-                        set_global_setting("angle_gl_driver_selection_values", &values);
-                        let _ = Command::new("setprop")
-                            .args(["debug.angle.feature_overrides_enabled", ""])
-                            .status();
-                    }
-                } else {
-                    Self::restore();
-                }
-
-                log!("[TEXTURE] Reverted [{}] to Native GPU driver", pkg);
-            }
-            TextureDriver::Angle => {
-                let mut pkgs: Vec<String> = get_global_setting("angle_gl_driver_selection_pkgs")
-                    .map(|s| {
-                        s.split(',')
-                            .map(|p| p.trim().to_string())
-                            .filter(|p| !p.is_empty())
-                            .collect()
-                    })
-                    .unwrap_or_default();
-
-                if !pkgs.contains(&pkg.to_string()) {
-                    pkgs.push(pkg.to_string());
-                }
-
-                let values = vec!["angle"; pkgs.len()].join(",");
-                set_global_setting("angle_gl_driver_selection_pkgs", &pkgs.join(","));
-                set_global_setting("angle_gl_driver_selection_values", &values);
-
-                let features = Self::build_features_string(lod);
-                let _ = Command::new("setprop")
-                    .args(["debug.angle.feature_overrides_enabled", &features])
-                    .status();
-
-                log!(
-                    "[TEXTURE] Applied ANGLE for [{}] with LOD [{}] -> Overrides: [{}]",
-                    pkg,
-                    lod,
-                    features
-                );
-            }
-        }
-    }
-
-    /// Reads app_config.json and synchronizes global ANGLE settings across all packages
+    /// Reads app_config.json and synchronizes global ANGLE settings
     pub fn sync_config(focused_pkg: Option<&str>) {
         let config_path = "/data/adb/luminatweaks/app_config.json";
         let content = match fs::read_to_string(config_path) {
@@ -249,6 +193,12 @@ impl TextureController {
 
             let lod = raw_lod.clamp(-3, 3);
 
+            let pixel_sharp = item
+                .get("pixel_sharp")
+                .or_else(|| item.get("pixelSharp"))
+                .map(is_truthy)
+                .unwrap_or(false);
+
             let pkg_name = item
                 .get("pkg")
                 .or_else(|| item.get("package"))
@@ -261,7 +211,7 @@ impl TextureController {
                 if let Some(pkg) = pkg_name {
                     active_pkgs.push(pkg.clone());
 
-                    let feat = Self::build_features_string(lod);
+                    let feat = Self::build_features_string(lod, pixel_sharp);
                     if let Some(f_pkg) = focused_pkg {
                         if pkg == f_pkg {
                             target_features = Some(feat.clone());

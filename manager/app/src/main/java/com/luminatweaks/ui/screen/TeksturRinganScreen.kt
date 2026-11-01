@@ -202,7 +202,7 @@ fun TextureComparisonPreview(
                     drawImage(
                         image = afterBitmap,
                         dstSize = IntSize(size.width.toInt(), size.height.toInt()),
-                        filterQuality = if (isAngle && (lod == 3 || pixelSharp)) FilterQuality.None else FilterQuality.Medium
+                        filterQuality = if (isAngle && pixelSharp && lod > 0) FilterQuality.None else FilterQuality.Medium
                     )
                 }
 
