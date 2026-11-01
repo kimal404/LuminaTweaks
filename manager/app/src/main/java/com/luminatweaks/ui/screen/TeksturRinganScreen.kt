@@ -2,6 +2,8 @@ package com.luminatweaks.ui.screen
 
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -47,8 +49,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -59,6 +59,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
@@ -77,23 +78,39 @@ import androidx.compose.ui.unit.sp
 import com.luminatweaks.data.AppProfileConfig
 import com.luminatweaks.data.ConfigRepository
 
-fun generateTextureBitmap(detailLevel: Int): ImageBitmap {
-    val scale = when (detailLevel.coerceIn(0, 3)) {
+/**
+ * Generates procedural texture bitmap reflecting LOD from -3 to +3
+ */
+fun generateTextureBitmap(lod: Int): ImageBitmap {
+    val scale = when (lod.coerceIn(-3, 3)) {
+        -3 -> 1
+        -2 -> 1
+        -1 -> 1
         0 -> 1
         1 -> 2
         2 -> 4
         3 -> 8
         else -> 1
     }
-    val width = (96 / scale).coerceAtLeast(4)
-    val height = (96 / scale).coerceAtLeast(4)
+
+    val width = when (lod) {
+        -3 -> 128
+        -2 -> 112
+        else -> (96 / scale).coerceAtLeast(4)
+    }
+    val height = when (lod) {
+        -3 -> 128
+        -2 -> 112
+        else -> (96 / scale).coerceAtLeast(4)
+    }
+
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val wallHeight = (height * 0.62f).toInt()
 
     for (y in 0 until height) {
         for (x in 0 until width) {
             val pixelColor = if (y < wallHeight) {
-                val brickRow = y / 4.coerceAtLeast(1)
+                val brickRow = (y / (4 * (if (lod <= -2) 2 else 1))).coerceAtLeast(1)
                 val shift = if (brickRow % 2 == 0) 0 else 3
                 val isMortar = (y % 4 == 0) || ((x + shift) % 8 == 0)
                 if (isMortar) {
@@ -118,14 +135,29 @@ fun generateTextureBitmap(detailLevel: Int): ImageBitmap {
     return bitmap.asImageBitmap()
 }
 
+fun getLodTitle(lod: Int): String {
+    return when (lod) {
+        -3 -> "Kualitas Maksimal"
+        -2 -> "Kualitas Tinggi"
+        -1 -> "Sedikit Lebih Tajam"
+        0 -> "Default"
+        1 -> "Ringan"
+        2 -> "Retro"
+        3 -> "Kotak Total"
+        else -> "Default"
+    }
+}
+
 @Composable
 fun TextureComparisonPreview(
-    detailLevel: Int,
-    pixelSharp: Boolean,
+    isAngle: Boolean,
+    lod: Int,
     modifier: Modifier = Modifier
 ) {
     val beforeBitmap = remember { generateTextureBitmap(0) }
-    val afterBitmap = remember(detailLevel) { generateTextureBitmap(detailLevel) }
+    val afterBitmap = remember(lod, isAngle) {
+        if (isAngle) generateTextureBitmap(lod) else beforeBitmap
+    }
     var splitFraction by remember { mutableFloatStateOf(0.5f) }
 
     val handleWidth = 32.dp
@@ -170,7 +202,7 @@ fun TextureComparisonPreview(
                     drawImage(
                         image = afterBitmap,
                         dstSize = IntSize(size.width.toInt(), size.height.toInt()),
-                        filterQuality = if (pixelSharp) FilterQuality.None else FilterQuality.Medium
+                        filterQuality = if (isAngle && lod == 3) FilterQuality.None else FilterQuality.Medium
                     )
                 }
 
@@ -236,7 +268,8 @@ fun TextureComparisonPreview(
 
             Surface(
                 shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f),
+                color = if (isAngle) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f)
+                else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.92f),
                 tonalElevation = 2.dp,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -250,14 +283,14 @@ fun TextureComparisonPreview(
                         modifier = Modifier
                             .size(6.dp)
                             .clip(CircleShape)
-                            .background(primaryColor)
+                            .background(if (isAngle) Color(0xFF4CAF50) else Color.Gray)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "HASIL",
+                        text = if (isAngle) "AKTIF" else "NONAKTIF",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        color = if (isAngle) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                         letterSpacing = 0.6.sp
                     )
                 }
@@ -283,7 +316,7 @@ fun TextureComparisonPreview(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TeksturRinganScreen(
+fun KualitasTeksturScreen(
     appName: String,
     profile: AppProfileConfig,
     onProfileChanged: (AppProfileConfig) -> Unit,
@@ -291,8 +324,9 @@ fun TeksturRinganScreen(
 ) {
     BackHandler(onBack = onBack)
 
-    val detailLabels = listOf("Asli", "Ringan", "Retro", "Kotak Total")
     val primaryAccent = MaterialTheme.colorScheme.primary
+    val isAngle = profile.textureDriver.equals("angle", ignoreCase = true)
+    val currentLod = profile.textureLod.coerceIn(-3, 3)
 
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
@@ -301,7 +335,7 @@ fun TeksturRinganScreen(
                 title = {
                     Column {
                         Text(
-                            text = "Tekstur Ringan",
+                            text = "Kualitas Tekstur",
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.titleMedium
                         )
@@ -323,7 +357,7 @@ fun TeksturRinganScreen(
                 actions = {
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = if (profile.textureEnabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
+                        color = if (isAngle) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
                         modifier = Modifier.padding(end = 12.dp)
                     ) {
                         Row(
@@ -334,13 +368,13 @@ fun TeksturRinganScreen(
                                 modifier = Modifier
                                     .size(8.dp)
                                     .clip(CircleShape)
-                                    .background(if (profile.textureEnabled) Color(0xFF4CAF50) else Color.Gray)
+                                    .background(if (isAngle) Color(0xFF4CAF50) else Color.Gray)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (profile.textureEnabled) "AKTIF" else "NONAKTIF",
+                                text = if (isAngle) "AKTIF" else "NONAKTIF",
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = if (profile.textureEnabled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (isAngle) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -364,14 +398,124 @@ fun TeksturRinganScreen(
         ) {
             item {
                 TextureComparisonPreview(
-                    detailLevel = profile.textureDetail.coerceIn(0, 3),
-                    pixelSharp = profile.pixelSharp
+                    isAngle = isAngle,
+                    lod = currentLod
                 )
             }
 
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "Driver Grafis",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+
+                        // Segmented Button [ Native ] [ ANGLE ]
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                .padding(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            val nativeBg by animateColorAsState(
+                                targetValue = if (!isAngle) primaryAccent else Color.Transparent,
+                                animationSpec = tween(200),
+                                label = "nativeBg"
+                            )
+                            val angleBg by animateColorAsState(
+                                targetValue = if (isAngle) primaryAccent else Color.Transparent,
+                                animationSpec = tween(200),
+                                label = "angleBg"
+                            )
+
+                            // Native Option
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(42.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(nativeBg)
+                                    .clickable {
+                                        onProfileChanged(
+                                            profile.copy(
+                                                textureDriver = "native",
+                                                textureEnabled = false
+                                            )
+                                        )
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "Native",
+                                    fontWeight = if (!isAngle) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (!isAngle) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            // ANGLE Option
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(42.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(angleBg)
+                                    .clickable {
+                                        onProfileChanged(
+                                            profile.copy(
+                                                textureDriver = "angle",
+                                                textureEnabled = true
+                                            )
+                                        )
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "ANGLE",
+                                    fontWeight = if (isAngle) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isAngle) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        if (!isAngle) {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = "Menggunakan driver GPU asli",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .alpha(if (isAngle) 1f else 0.45f),
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
@@ -397,7 +541,7 @@ fun TeksturRinganScreen(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Detail Tekstur",
+                                    text = "Offset Detail Tekstur",
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -409,7 +553,7 @@ fun TeksturRinganScreen(
                                 color = primaryAccent.copy(alpha = 0.15f)
                             ) {
                                 Text(
-                                    text = detailLabels.getOrElse(profile.textureDetail.coerceIn(0, 3)) { "Asli" },
+                                    text = getLodTitle(currentLod),
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = primaryAccent,
@@ -421,18 +565,21 @@ fun TeksturRinganScreen(
                         Spacer(modifier = Modifier.height(4.dp))
 
                         Slider(
-                            value = profile.textureDetail.coerceIn(0, 3).toFloat(),
+                            value = currentLod.toFloat(),
                             onValueChange = { newVal ->
-                                val detail = newVal.toInt()
-                                onProfileChanged(
-                                    profile.copy(
-                                        textureDetail = detail,
-                                        textureEnabled = if (detail > 0) true else profile.textureEnabled
+                                if (isAngle) {
+                                    val lod = newVal.toInt()
+                                    onProfileChanged(
+                                        profile.copy(
+                                            textureLod = lod,
+                                            textureDetail = lod.coerceAtLeast(0)
+                                        )
                                     )
-                                )
+                                }
                             },
-                            valueRange = 0f..3f,
-                            steps = 2,
+                            valueRange = -3f..3f,
+                            steps = 5,
+                            enabled = isAngle,
                             colors = SliderDefaults.colors(
                                 thumbColor = primaryAccent,
                                 activeTrackColor = primaryAccent
@@ -443,62 +590,25 @@ fun TeksturRinganScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            detailLabels.forEachIndexed { idx, label ->
-                                Text(
-                                    text = label,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (profile.textureDetail == idx) primaryAccent else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontWeight = if (profile.textureDetail == idx) FontWeight.Bold else FontWeight.Normal,
-                                    textAlign = TextAlign.Center
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                onProfileChanged(profile.copy(pixelSharp = !profile.pixelSharp))
-                            }
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Piksel Tajam",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                text = "Kualitas Tinggi",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (currentLod < 0 && isAngle) primaryAccent else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = if (currentLod < 0 && isAngle) FontWeight.Bold else FontWeight.Normal
                             )
-                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Tepi tekstur kotak-kotak. Matikan untuk efek buram halus.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = "Default",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (currentLod == 0 && isAngle) primaryAccent else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = if (currentLod == 0 && isAngle) FontWeight.Bold else FontWeight.Normal
+                            )
+                            Text(
+                                text = "Performa",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (currentLod > 0 && isAngle) primaryAccent else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = if (currentLod > 0 && isAngle) FontWeight.Bold else FontWeight.Normal
                             )
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Switch(
-                            checked = profile.pixelSharp,
-                            onCheckedChange = { newState ->
-                                onProfileChanged(profile.copy(pixelSharp = newState))
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                checkedTrackColor = primaryAccent
-                            )
-                        )
                     }
                 }
             }
@@ -533,55 +643,11 @@ fun TeksturRinganScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Efek resolusi tekstur ANGLE bergantung pada game engine & GPU perangkat. Beberapa game mungkin tidak menunjukkan perbedaan visual.",
+                                text = "Menggunakan ANGLE runtime (Android 15+). Hanya berlaku untuk game berbasis OpenGL ES — game Vulkan native tidak terpengaruh. Restart game setelah menyimpan.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                    }
-                }
-            }
-
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (profile.textureEnabled) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                        else MaterialTheme.colorScheme.surfaceContainerHighest
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = appName,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Aktifkan Tekstur Ringan untuk game ini",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = profile.textureEnabled,
-                            onCheckedChange = { newState ->
-                                onProfileChanged(profile.copy(textureEnabled = newState))
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                checkedTrackColor = primaryAccent
-                            )
-                        )
                     }
                 }
             }
@@ -594,6 +660,8 @@ fun TeksturRinganScreen(
                     OutlinedButton(
                         onClick = {
                             val resetProfile = profile.copy(
+                                textureDriver = "native",
+                                textureLod = 0,
                                 textureEnabled = false,
                                 textureDetail = 0,
                                 pixelSharp = false,
@@ -620,7 +688,7 @@ fun TeksturRinganScreen(
 
                     Button(
                         onClick = {
-                            if (profile.textureEnabled && profile.pkg.isNotBlank()) {
+                            if (profile.pkg.isNotBlank()) {
                                 ConfigRepository.killApp(profile.pkg)
                             }
                             onBack()
