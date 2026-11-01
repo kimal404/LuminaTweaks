@@ -642,12 +642,7 @@ fun AppProfileScreen(
                                                     )
                                                     .padding(horizontal = 5.dp, vertical = 1.dp)
                                             ) {
-                                                Text(
-                                                    text = "Eksperimental",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.onErrorContainer,
-                                                    fontWeight = FontWeight.SemiBold
-                                                )
+                                                
                                             }
                                         }
                                         Spacer(modifier = Modifier.height(2.dp))

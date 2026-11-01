@@ -708,7 +708,7 @@ fun TeksturRinganScreen(
                 }
             }
 
-            // 5. Card Info Fitur Eksperimental
+            // 5. Card Info Informasi
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -732,14 +732,14 @@ fun TeksturRinganScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "Fitur Eksperimental",
+                                text = "Informasi",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Menggunakan ANGLE runtime (Android 15+). Hanya berlaku untuk game berbasis OpenGL ES — game Vulkan native tidak terpengaruh. Restart game setelah menyimpan.",
+                                text = "Menggunakan ANGLE runtime (Android 14+). Hanya berlaku untuk game berbasis OpenGL ES — game Vulkan native tidak terpengaruh. Restart game setelah menyimpan.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
