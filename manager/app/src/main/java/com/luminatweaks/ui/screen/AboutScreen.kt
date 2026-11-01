@@ -5,6 +5,7 @@ import android.net.Uri
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -67,6 +68,7 @@ import coil.compose.AsyncImage
 fun AboutScreen(
     onBackClick: () -> Unit = {}
 ) {
+    BackHandler(onBack = onBackClick)
     val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     var showLicenseDialog by remember { mutableStateOf(false) }
