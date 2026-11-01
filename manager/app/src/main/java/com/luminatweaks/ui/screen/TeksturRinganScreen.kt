@@ -1,6 +1,8 @@
 package com.luminatweaks.ui.screen
 
 import android.graphics.Bitmap
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -131,16 +133,11 @@ fun generateTextureBitmap(lod: Int): ImageBitmap {
     return bitmap.asImageBitmap()
 }
 
-fun getLodTitle(lod: Int): String {
-    return when (lod) {
-        -3 -> "Kualitas Maksimal"
-        -2 -> "Kualitas Tinggi"
-        -1 -> "Sedikit Lebih Tajam"
-        0 -> "Default"
-        1 -> "Ringan"
-        2 -> "Retro"
-        3 -> "Kotak Total"
-        else -> "Default"
+fun getLodBadge(lod: Int): String {
+    return when {
+        lod == 0 -> "Default"
+        lod > 0 -> "+$lod"
+        else -> "$lod"
     }
 }
 
@@ -503,6 +500,8 @@ fun TeksturRinganScreen(
             }
 
             item {
+                var sliderPosition by remember(currentLod) { mutableFloatStateOf(currentLod.toFloat()) }
+
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -544,7 +543,7 @@ fun TeksturRinganScreen(
                                 color = primaryAccent.copy(alpha = 0.15f)
                             ) {
                                 Text(
-                                    text = getLodTitle(currentLod),
+                                    text = getLodBadge(currentLod),
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = primaryAccent,
@@ -556,20 +555,35 @@ fun TeksturRinganScreen(
                         Spacer(modifier = Modifier.height(4.dp))
 
                         Slider(
-                            value = currentLod.toFloat(),
-                            onValueChange = { newVal ->
+                            value = sliderPosition,
+                            onValueChange = { rawVal ->
                                 if (isAngle) {
-                                    val lod = newVal.toInt()
+                                    val snapped = if (abs(rawVal) <= 0.3f) 0f else rawVal
+                                    sliderPosition = snapped
+                                    val targetLod = snapped.roundToInt().coerceIn(-3, 3)
+                                    if (targetLod != profile.textureLod) {
+                                        onProfileChanged(
+                                            profile.copy(
+                                                textureLod = targetLod,
+                                                textureDetail = targetLod.coerceAtLeast(0)
+                                            )
+                                        )
+                                    }
+                                }
+                            },
+                            onValueChangeFinished = {
+                                if (isAngle) {
+                                    val finalLod = sliderPosition.roundToInt().coerceIn(-3, 3)
+                                    sliderPosition = finalLod.toFloat()
                                     onProfileChanged(
                                         profile.copy(
-                                            textureLod = lod,
-                                            textureDetail = lod.coerceAtLeast(0)
+                                            textureLod = finalLod,
+                                            textureDetail = finalLod.coerceAtLeast(0)
                                         )
                                     )
                                 }
                             },
                             valueRange = -3f..3f,
-                            steps = 5,
                             enabled = isAngle,
                             colors = SliderDefaults.colors(
                                 thumbColor = primaryAccent,
@@ -578,27 +592,38 @@ fun TeksturRinganScreen(
                         )
 
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "Kualitas Tinggi",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (currentLod < 0 && isAngle) primaryAccent else MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = if (currentLod < 0 && isAngle) FontWeight.Bold else FontWeight.Normal
-                            )
-                            Text(
-                                text = "Default",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (currentLod == 0 && isAngle) primaryAccent else MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = if (currentLod == 0 && isAngle) FontWeight.Bold else FontWeight.Normal
-                            )
-                            Text(
-                                text = "Performa",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (currentLod > 0 && isAngle) primaryAccent else MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = if (currentLod > 0 && isAngle) FontWeight.Bold else FontWeight.Normal
-                            )
+                            val tickLabels = listOf("-3", "-2", "-1", "|  0  |", "+1", "+2", "+3")
+                            val tickValues = listOf(-3, -2, -1, 0, 1, 2, 3)
+
+                            tickLabels.forEachIndexed { index, label ->
+                                val pointVal = tickValues[index]
+                                val isSelected = currentLod == pointVal
+
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (isSelected && isAngle) primaryAccent else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = if (isSelected && isAngle) FontWeight.Bold else FontWeight.Normal,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .clickable(enabled = isAngle) {
+                                            sliderPosition = pointVal.toFloat()
+                                            onProfileChanged(
+                                                profile.copy(
+                                                    textureLod = pointVal,
+                                                    textureDetail = pointVal.coerceAtLeast(0)
+                                                )
+                                            )
+                                        }
+                                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                                )
+                            }
                         }
                     }
                 }
