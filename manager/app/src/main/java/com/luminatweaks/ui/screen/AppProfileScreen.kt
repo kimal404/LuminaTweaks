@@ -80,6 +80,7 @@ import com.luminatweaks.data.DisplayRrMode
 import com.luminatweaks.model.AppItem
 
 enum class OptionItem(val label: String, val value: String) {
+                                        val statusText = if (!profile.textureEnabled) {
     OFF("Mati", "off"),
     DEFAULT("Default", "default"),
     ON("Hidup", "on");
