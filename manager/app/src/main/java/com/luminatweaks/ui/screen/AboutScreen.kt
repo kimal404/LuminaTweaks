@@ -2,6 +2,9 @@ package com.luminatweaks.ui.screen
 
 import android.content.Intent
 import android.net.Uri
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -68,8 +71,15 @@ fun AboutScreen(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     var showLicenseDialog by remember { mutableStateOf(false) }
 
-    val appIcon = remember(context) {
-        context.packageManager.getApplicationIcon(context.packageName)
+    val appIconBitmap = remember(context) {
+        val drawable = context.packageManager.getApplicationIcon(context.packageName)
+        val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 144
+        val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 144
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        drawable.setBounds(0, 0, canvas.width, canvas.height)
+        drawable.draw(canvas)
+        bitmap.asImageBitmap()
     }
 
     Scaffold(
@@ -124,8 +134,8 @@ fun AboutScreen(
                             .padding(20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        AsyncImage(
-                            model = appIcon,
+                        Image(
+                            bitmap = appIconBitmap,
                             contentDescription = "Logo LuminaTweaks",
                             modifier = Modifier
                                 .size(72.dp)
