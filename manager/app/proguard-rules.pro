@@ -19,3 +19,18 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+# --- Lumina Model & Reflection Keep ---
+-keep class com.luminatweaks.model.** { *; }
+-keep class com.luminatweaks.data.** { *; }
+
+# --- Compose Runtime & Navigation Optimization ---
+-keepattributes *Annotation*
+-dontwarn sun.misc.**
+-dontwarn java.lang.invoke.**
+
+# --- Strip Log Calls in Release ---
+-assumenosideeffects class android.util.Log {
+    public static boolean isLoggable(java.lang.String, int);
+    public static int v(...);
+    public static int d(...);
+}

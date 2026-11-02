@@ -15,10 +15,23 @@ plugins {
 }
 
 android {
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "/META-INF/*.version"
+            excludes += "DebugProbesKt.bin"
+            excludes += "/META-INF/*.kotlin_module"
+            excludes += "/META-INF/DEPENDENCIES"
+        }
+    }
+
     namespace = "com.luminatweaks"
     compileSdk = 35
 
     defaultConfig {
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
         buildConfigField("String", "BUILD_INFO", "\"$dynamicBuildInfo\"")
         applicationId = "com.luminatweaks"
         minSdk = 26
@@ -31,11 +44,13 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 

@@ -1,10 +1,28 @@
+/*
+ * Copyright (C) 2026 kimal
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 use std::process::Command;
-use std::sync::Mutex;
+use std::sync::{Mutex, Once};
 
 static LOG_LOCK: Mutex<()> = Mutex::new(());
+static INIT_LOGGER_ONCE: Once = Once::new();
+
 const LOG_FILE: &str = "/data/adb/luminatweaks/luminad.log";
 const LOG_FILE_OLD: &str = "/data/adb/luminatweaks/luminad.log.old";
 const LOG_LEVEL_FILE: &str = "/data/adb/luminatweaks/log_level.txt";
@@ -74,7 +92,33 @@ fn get_timestamp() -> String {
         .unwrap_or_default()
 }
 
+pub fn init_logger() {
+    INIT_LOGGER_ONCE.call_once(|| {
+        let _guard = LOG_LOCK.lock().unwrap();
+        let _ = fs::create_dir_all("/data/adb/luminatweaks");
+
+        if Path::new(LOG_FILE).exists() {
+            if Path::new(LOG_FILE_OLD).exists() {
+                let _ = fs::remove_file(LOG_FILE_OLD);
+            }
+            let _ = fs::rename(LOG_FILE, LOG_FILE_OLD);
+        }
+
+        if let Ok(mut file) = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(LOG_FILE)
+        {
+            let ts = get_timestamp();
+            let _ = writeln!(file, "[{}] === Luminad Session Started ===", ts);
+        }
+    });
+}
+
 pub fn write_log_with_level(level: LogLevel, msg: &str) {
+    init_logger();
+
     let current_level = get_configured_log_level();
     if level > current_level {
         return;
