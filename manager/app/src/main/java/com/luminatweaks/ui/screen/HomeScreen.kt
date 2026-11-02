@@ -78,6 +78,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import com.luminatweaks.util.RootUtil
 import com.luminatweaks.data.DaemonManager
 import androidx.compose.foundation.layout.Box
@@ -397,7 +398,6 @@ fun HomeDashboardContent(
                                         iconBg = MaterialTheme.colorScheme.primaryContainer,
                                         iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
                                         title = "Mulai Ulang",
-                                        subtitle = "Nyalakan ulang sistem normal",
                                         cornerRadius = currentRadius,
                                         onClick = {
                                             showPowerDialog = false
@@ -414,7 +414,6 @@ fun HomeDashboardContent(
                                         iconBg = MaterialTheme.colorScheme.secondaryContainer,
                                         iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
                                         title = "Mode Recovery",
-                                        subtitle = "Masuk ke TWRP, OrangeFox, atau Recovery bawaan",
                                         cornerRadius = currentRadius,
                                         onClick = {
                                             showPowerDialog = false
@@ -431,7 +430,6 @@ fun HomeDashboardContent(
                                         iconBg = MaterialTheme.colorScheme.tertiaryContainer,
                                         iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
                                         title = "Restart Service",
-                                        subtitle = "Muat ulang latar belakang daemon Lumina",
                                         cornerRadius = currentRadius,
                                         onClick = {
                                             showPowerDialog = false
@@ -624,10 +622,17 @@ fun HomeDashboardContent(
                             }
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(
-                                text = currentProfile,
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                            text = currentProfile,
+                            style = when {
+                                currentProfile.length > 12 -> MaterialTheme.typography.titleSmall
+                                currentProfile.length > 8 -> MaterialTheme.typography.titleMedium
+                                else -> MaterialTheme.typography.titleLarge
+                            },
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                         }
                     }
                 }
@@ -641,7 +646,6 @@ fun HomeDashboardContent(
                     ConnectedCardRow(
                         icon = Icons.Rounded.DeveloperBoard,
                         title = "Manager Version",
-                        subtitle = "v2.0.0 (Remastered)",
                         position = ContainerPosition.Top
                     )
                     ConnectedCardRow(
@@ -667,13 +671,11 @@ fun HomeDashboardContent(
                     ConnectedCardRow(
                         icon = Icons.Rounded.Security,
                         title = "Root Access",
-                        subtitle = "Granted (Superuser)",
                         position = ContainerPosition.Top
                     )
                     ConnectedCardRow(
                         icon = Icons.Rounded.Security,
                         title = "SELinux Status",
-                        subtitle = "Enforcing",
                         position = ContainerPosition.Bottom
                     )
                 }
@@ -687,14 +689,12 @@ fun HomeDashboardContent(
                     ConnectedActionCardRow(
                         icon = Icons.Rounded.Favorite,
                         title = "Support Us",
-                        subtitle = "LuminaTweaks is free and open source forever. Support development through donations.",
                         position = ContainerPosition.Top,
                         onClick = { }
                     )
                     ConnectedActionCardRow(
                         icon = Icons.Rounded.MenuBook,
                         title = "Learn LuminaTweaks",
-                        subtitle = "Explore documentation, kernel tweak parameters, and optimization guides.",
                         position = ContainerPosition.Bottom,
                         onClick = { }
                     )
@@ -822,7 +822,6 @@ private fun PowerMenuItem(
     iconBg: androidx.compose.ui.graphics.Color,
     iconTint: androidx.compose.ui.graphics.Color,
     title: String,
-    subtitle: String,
     cornerRadius: androidx.compose.ui.unit.Dp,
     onClick: () -> Unit
 ) {
@@ -838,7 +837,7 @@ private fun PowerMenuItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(horizontal = 14.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
@@ -855,21 +854,14 @@ private fun PowerMenuItem(
                     modifier = Modifier.size(20.dp)
                 )
             }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }
