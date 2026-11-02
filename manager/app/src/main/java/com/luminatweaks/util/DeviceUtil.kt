@@ -1,5 +1,10 @@
 package com.luminatweaks.util
 
+import android.app.ActivityManager
+import java.io.File
+import kotlin.math.ceil
+import kotlin.math.roundToInt
+
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -110,4 +115,90 @@ object DeviceUtil {
             "N/A"
         }
     }
+
+    fun getTotalRamGb(context: Context): Int {
+        return try {
+            val actManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val memInfo = ActivityManager.MemoryInfo()
+            actManager.getMemoryInfo(memInfo)
+            val totalGb = memInfo.totalMem.toDouble() / (1024.0 * 1024.0 * 1024.0)
+            ceil(totalGb).toInt().coerceAtLeast(2)
+        } catch (_: Exception) {
+            8
+        }
+    }
+
+    fun getCurrentZramDisksizeGb(): Int {
+        val raw = try {
+            val f = File("/sys/block/zram0/disksize")
+            if (f.exists() && f.canRead()) {
+                f.readText().trim()
+            } else {
+                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat /sys/block/zram0/disksize"))
+                val out = process.inputStream.bufferedReader().readText().trim()
+                process.waitFor()
+                out
+            }
+        } catch (_: Exception) {
+            ""
+        }
+        val bytes = raw.toLongOrNull() ?: return 8
+        val gb = (bytes.toDouble() / (1024.0 * 1024.0 * 1024.0)).roundToInt()
+        return gb.coerceAtLeast(1)
+    }
+
+    fun getSwappiness(): Int {
+        val raw = try {
+            val f = File("/proc/sys/vm/swappiness")
+            if (f.exists() && f.canRead()) {
+                f.readText().trim()
+            } else {
+                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat /proc/sys/vm/swappiness"))
+                val out = process.inputStream.bufferedReader().readText().trim()
+                process.waitFor()
+                out
+            }
+        } catch (_: Exception) {
+            ""
+        }
+        return raw.toIntOrNull()?.coerceIn(0, 200) ?: 100
+    }
+
+    fun getActiveZramAlgorithm(): String {
+        val raw = try {
+            val f = File("/sys/block/zram0/comp_algorithm")
+            if (f.exists() && f.canRead()) {
+                f.readText().trim()
+            } else {
+                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat /sys/block/zram0/comp_algorithm"))
+                val out = process.inputStream.bufferedReader().readText().trim()
+                process.waitFor()
+                out
+            }
+        } catch (_: Exception) {
+            ""
+        }
+        val match = Regex("\[(.*?)\]").find(raw)
+        return match?.groupValues?.get(1) ?: "zstd"
+    }
+
+    fun getAvailableZramAlgorithms(): List<String> {
+        val raw = try {
+            val f = File("/sys/block/zram0/comp_algorithm")
+            if (f.exists() && f.canRead()) {
+                f.readText().trim()
+            } else {
+                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat /sys/block/zram0/comp_algorithm"))
+                val out = process.inputStream.bufferedReader().readText().trim()
+                process.waitFor()
+                out
+            }
+        } catch (_: Exception) {
+            ""
+        }
+        val cleaned = raw.replace("[", "").replace("]", "").trim()
+        val list = cleaned.split(Regex("\s+")).filter { it.isNotBlank() }
+        return if (list.isNotEmpty()) list else listOf("zstd", "lz4", "lzo-rle", "lzo")
+    }
+
 }

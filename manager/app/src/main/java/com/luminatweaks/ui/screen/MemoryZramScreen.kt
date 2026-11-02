@@ -66,8 +66,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -83,6 +85,7 @@ import androidx.compose.ui.unit.dp
 import com.luminatweaks.R
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
+import com.luminatweaks.util.DeviceUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -100,12 +103,36 @@ fun MemoryZramScreen(
     val cornerRadius = LocalCornerRadius.current
     val isFloating = LocalFloatingNavBar.current
 
+    var physicalRamGb by remember { mutableIntStateOf(8) }
     var zramSizeGb by remember { mutableFloatStateOf(8f) }
     var selectedAlgorithm by remember { mutableStateOf("zstd") }
+    var algorithms by remember { mutableStateOf(listOf("zstd", "lz4", "lzo-rle", "lzo")) }
     var swappinessValue by remember { mutableFloatStateOf(100f) }
+
     var showAlgorithmDialog by remember { mutableStateOf(false) }
 
-    val algorithms = listOf("zstd", "lz4", "lzo-rle", "lzo")
+    val maxZramLimit = remember(physicalRamGb) {
+        (physicalRamGb * 1.5).roundToInt().coerceAtLeast(4)
+    }
+
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            val totalRam = DeviceUtil.getTotalRamGb(context)
+            val currentZram = DeviceUtil.getCurrentZramDisksizeGb()
+            val currentSwap = DeviceUtil.getSwappiness()
+            val activeAlgo = DeviceUtil.getActiveZramAlgorithm()
+            val availableAlgos = DeviceUtil.getAvailableZramAlgorithms()
+
+            withContext(Dispatchers.Main) {
+                physicalRamGb = totalRam
+                val dynamicMax = (totalRam * 1.5).roundToInt().coerceAtLeast(4)
+                zramSizeGb = currentZram.toFloat().coerceIn(1f, dynamicMax.toFloat())
+                swappinessValue = currentSwap.toFloat()
+                selectedAlgorithm = activeAlgo
+                algorithms = availableAlgos
+            }
+        }
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
@@ -211,10 +238,22 @@ fun MemoryZramScreen(
                                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                                 ) {
                                     Text(
-                                        text = "ZRAM ${zramSizeGb.roundToInt()} GB",
+                                        text = "RAM $physicalRamGb GB",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainerHighest
+                                ) {
+                                    Text(
+                                        text = "ZRAM ${zramSizeGb.roundToInt()} GB",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                     )
                                 }
@@ -333,8 +372,8 @@ fun MemoryZramScreen(
                             Slider(
                                 value = zramSizeGb,
                                 onValueChange = { zramSizeGb = it },
-                                valueRange = 1f..16f,
-                                steps = 14,
+                                valueRange = 1f..maxZramLimit.toFloat(),
+                                steps = (maxZramLimit - 2).coerceAtLeast(0),
                                 colors = SliderDefaults.colors(
                                     thumbColor = MaterialTheme.colorScheme.primary,
                                     activeTrackColor = MaterialTheme.colorScheme.primary
