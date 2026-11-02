@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 kimal
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.luminatweaks.ui.screen
 
 import android.content.Intent
@@ -56,9 +72,10 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.luminatweaks.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,7 +94,7 @@ fun AboutScreen(
             MediumTopAppBar(
                 title = {
                     Text(
-                        text = "Tentang",
+                        text = stringResource(R.string.about_title),
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -85,7 +102,7 @@ fun AboutScreen(
                     IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.Rounded.ArrowBack,
-                            contentDescription = "Kembali"
+                            contentDescription = stringResource(R.string.action_back)
                         )
                     }
                 },
@@ -139,13 +156,13 @@ fun AboutScreen(
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Versi 2.0.0 (Release)",
+                            text = stringResource(R.string.about_version_format, "2.0.0"),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Advanced dynamic performance daemon & kernel optimizer with Material 3 Expressive UI.",
+                            text = stringResource(R.string.about_app_desc),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -156,7 +173,7 @@ fun AboutScreen(
 
             item {
                 Text(
-                    text = "Sumber Terbuka",
+                    text = stringResource(R.string.about_section_opensource),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.SemiBold,
@@ -190,14 +207,14 @@ fun AboutScreen(
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Lisensi",
+                                    text = stringResource(R.string.about_license_title),
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Apache License, Version 2.0",
+                                    text = stringResource(R.string.about_license_desc),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -241,14 +258,14 @@ fun AboutScreen(
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Kode Sumber",
+                                    text = stringResource(R.string.about_source_title),
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Lihat kode sumber di GitHub",
+                                    text = stringResource(R.string.about_source_desc),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -266,7 +283,7 @@ fun AboutScreen(
 
             item {
                 Text(
-                    text = "Maintainer",
+                    text = stringResource(R.string.about_section_maintainer),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.SemiBold,
@@ -314,14 +331,14 @@ fun AboutScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Pembuat & Maintainer",
+                                text = stringResource(R.string.about_maintainer_role),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         Icon(
                             imageVector = Icons.Rounded.OpenInNew,
-                            contentDescription = "Buka Profil GitHub",
+                            contentDescription = stringResource(R.string.about_open_github_profile),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp)
                         )
@@ -376,7 +393,7 @@ fun AboutScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showLicenseDialog = false }) {
-                    Text("Tutup")
+                    Text(stringResource(R.string.action_close))
                 }
             }
         )

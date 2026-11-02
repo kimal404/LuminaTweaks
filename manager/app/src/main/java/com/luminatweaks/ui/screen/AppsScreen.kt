@@ -1,9 +1,20 @@
+/*
+ * Copyright (C) 2026 kimal
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.luminatweaks.ui.screen
-
-import com.luminatweaks.ui.theme.LocalFloatingNavBar
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.navigationBars
-
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -14,9 +25,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -59,14 +72,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.luminatweaks.R
 import com.luminatweaks.data.AppProfileConfig
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.model.AppItem
+import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -145,7 +161,7 @@ fun AppsScreen(
             MediumTopAppBar(
                 title = {
                     Text(
-                        text = "Applications",
+                        text = stringResource(R.string.apps_title),
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -154,7 +170,7 @@ fun AppsScreen(
                         IconButton(onClick = { showMoreMenu = true }) {
                             Icon(
                                 imageVector = Icons.Rounded.MoreVert,
-                                contentDescription = "More",
+                                contentDescription = stringResource(R.string.action_more),
                                 tint = MaterialTheme.colorScheme.onSurface
                             )
                         }
@@ -165,7 +181,13 @@ fun AppsScreen(
                         ) {
                             DropdownMenuItem(
                                 text = {
-                                    Text(if (hideSystemApps) "Show system apps" else "Hide system apps")
+                                    Text(
+                                        if (hideSystemApps) {
+                                            stringResource(R.string.apps_show_system)
+                                        } else {
+                                            stringResource(R.string.apps_hide_system)
+                                        }
+                                    )
                                 },
                                 onClick = {
                                     hideSystemApps = !hideSystemApps
@@ -210,7 +232,7 @@ fun AppsScreen(
                         onValueChange = { searchQuery = it },
                         placeholder = {
                             Text(
-                                text = "Search apps or packages...",
+                                text = stringResource(R.string.apps_search_placeholder),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -227,7 +249,7 @@ fun AppsScreen(
                                 IconButton(onClick = { searchQuery = "" }) {
                                     Icon(
                                         imageVector = Icons.Rounded.Clear,
-                                        contentDescription = "Clear",
+                                        contentDescription = stringResource(R.string.action_clear),
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
@@ -332,7 +354,7 @@ fun AppRowCard(
                 if (app.isGame) {
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "Rekomendasi",
+                        text = stringResource(R.string.apps_badge_recommended),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary
@@ -373,7 +395,7 @@ fun AppRowCard(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = if (isEnabled) "AKTIF" else "NONAKTIF",
+                    text = if (isEnabled) stringResource(R.string.status_active_upper) else stringResource(R.string.status_inactive_upper),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = badgeContent

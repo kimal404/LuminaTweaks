@@ -39,7 +39,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.luminatweaks.R
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 
@@ -91,10 +93,10 @@ private fun RowScope.LuminaBottomBarItems(
         icon = {
             Icon(
                 imageVector = Icons.Rounded.Home,
-                contentDescription = "Home"
+                contentDescription = stringResource(R.string.nav_home)
             )
         },
-        label = { Text("Home") },
+        label = { Text(stringResource(R.string.nav_home)) },
         colors = NavigationBarItemDefaults.colors(
             indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
             selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -110,10 +112,10 @@ private fun RowScope.LuminaBottomBarItems(
         icon = {
             Icon(
                 imageVector = Icons.Rounded.Apps,
-                contentDescription = "Apps"
+                contentDescription = stringResource(R.string.nav_apps)
             )
         },
-        label = { Text("Apps") },
+        label = { Text(stringResource(R.string.nav_apps)) },
         colors = NavigationBarItemDefaults.colors(
             indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
             selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -129,10 +131,10 @@ private fun RowScope.LuminaBottomBarItems(
         icon = {
             Icon(
                 imageVector = Icons.Rounded.Tune,
-                contentDescription = "Tweaks"
+                contentDescription = stringResource(R.string.nav_tweaks)
             )
         },
-        label = { Text("Tweaks") },
+        label = { Text(stringResource(R.string.nav_tweaks)) },
         colors = NavigationBarItemDefaults.colors(
             indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
             selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -148,10 +150,10 @@ private fun RowScope.LuminaBottomBarItems(
         icon = {
             Icon(
                 imageVector = Icons.Rounded.Settings,
-                contentDescription = "Settings"
+                contentDescription = stringResource(R.string.nav_settings)
             )
         },
-        label = { Text("Settings") },
+        label = { Text(stringResource(R.string.nav_settings)) },
         colors = NavigationBarItemDefaults.colors(
             indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
             selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,

@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 kimal
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.luminatweaks.ui.screen
 
 import android.graphics.Bitmap
@@ -74,11 +90,13 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.luminatweaks.R
 import com.luminatweaks.data.AppProfileConfig
 import com.luminatweaks.data.ConfigRepository
 import kotlin.math.abs
@@ -251,7 +269,7 @@ fun TextureComparisonPreview(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "ASLI",
+                        text = stringResource(R.string.texture_badge_original),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -281,7 +299,7 @@ fun TextureComparisonPreview(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = if (isActive) "AKTIF" else "NONAKTIF",
+                        text = if (isActive) stringResource(R.string.texture_badge_active) else stringResource(R.string.texture_badge_inactive),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = if (isActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -298,7 +316,7 @@ fun TextureComparisonPreview(
                     .padding(bottom = 8.dp)
             ) {
                 Text(
-                    text = "Geser pemisah untuk membandingkan",
+                    text = stringResource(R.string.texture_drag_compare),
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
@@ -329,7 +347,7 @@ fun TeksturRinganScreen(
                 title = {
                     Column {
                         Text(
-                            text = "Kualitas Tekstur",
+                            text = stringResource(R.string.texture_quality_title),
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.titleMedium
                         )
@@ -344,7 +362,7 @@ fun TeksturRinganScreen(
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = "Kembali"
+                            contentDescription = stringResource(R.string.action_back)
                         )
                     }
                 },
@@ -366,7 +384,7 @@ fun TeksturRinganScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (isTweakActive) "AKTIF" else "NONAKTIF",
+                                text = if (isTweakActive) stringResource(R.string.texture_badge_active) else stringResource(R.string.texture_badge_inactive),
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                 color = if (isTweakActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -428,7 +446,7 @@ fun TeksturRinganScreen(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Offset Detail Tekstur",
+                                    text = stringResource(R.string.texture_detail_offset),
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -552,14 +570,14 @@ fun TeksturRinganScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Piksel Tajam",
+                                    text = stringResource(R.string.texture_pixel_sharp),
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Tepi tekstur kotak-kotak. Matikan untuk grafik buram kentang (potato).",
+                                    text = stringResource(R.string.texture_pixel_sharp_desc),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -603,14 +621,14 @@ fun TeksturRinganScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "Informasi",
+                                text = stringResource(R.string.texture_info_title),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Hanya berlaku untuk game berbasis OpenGL ES di Android 14+. Restart game setelah menyimpan perubahan.",
+                                text = stringResource(R.string.texture_info_desc),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -650,7 +668,7 @@ fun TeksturRinganScreen(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Reset ke Asli")
+                        Text(stringResource(R.string.texture_action_reset))
                     }
 
                     Button(
@@ -672,7 +690,7 @@ fun TeksturRinganScreen(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Selesai", fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.texture_action_done), fontWeight = FontWeight.Bold)
                     }
                 }
             }

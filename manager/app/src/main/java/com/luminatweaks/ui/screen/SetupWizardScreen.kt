@@ -1,6 +1,21 @@
+/*
+ * Copyright (C) 2026 kimal
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.luminatweaks.ui.screen
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,9 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -39,7 +52,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.luminatweaks.R
 import com.luminatweaks.util.RootUtil
 import kotlinx.coroutines.launch
 
@@ -79,7 +94,7 @@ fun SetupWizardScreen(
                         .height(54.dp)
                 ) {
                     Text(
-                        text = "Next",
+                        text = stringResource(R.string.setup_next),
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
@@ -97,27 +112,26 @@ fun SetupWizardScreen(
                 modifier = Modifier.padding(top = 48.dp)
             ) {
                 Text(
-                    text = "Hello",
+                    text = stringResource(R.string.setup_hello),
                     style = MaterialTheme.typography.displayMedium,
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Welcome to LuminaTweaks. Root permission is required to manage system parameters and kernel interfaces.",
+                    text = stringResource(R.string.setup_welcome_desc),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            // Root Verification Status Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.large,
                 colors = CardDefaults.cardColors(
                     containerColor = when {
                         isChecking -> MaterialTheme.colorScheme.surfaceContainerHigh
-                        isRootGranted -> Color(0xFF1E3A2B) // Soft green dark tint
-                        else -> Color(0xFF3E1C1C) // Soft red dark tint
+                        isRootGranted -> Color(0xFF1E3A2B)
+                        else -> Color(0xFF3E1C1C)
                     }
                 )
             ) {
@@ -165,7 +179,7 @@ fun SetupWizardScreen(
 
                         Column {
                             Text(
-                                text = "Root Privilege",
+                                text = stringResource(R.string.setup_root_privilege),
                                 style = MaterialTheme.typography.titleMedium,
                                 color = when {
                                     isChecking -> MaterialTheme.colorScheme.onSurface
@@ -176,9 +190,9 @@ fun SetupWizardScreen(
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = when {
-                                    isChecking -> "Checking superuser access..."
-                                    isRootGranted -> "Granted (Superuser ready)"
-                                    else -> "Access denied or missing"
+                                    isChecking -> stringResource(R.string.setup_root_checking)
+                                    isRootGranted -> stringResource(R.string.setup_root_granted)
+                                    else -> stringResource(R.string.setup_root_denied)
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = when {
@@ -194,7 +208,7 @@ fun SetupWizardScreen(
                         IconButton(onClick = { verifyRoot() }) {
                             Icon(
                                 imageVector = Icons.Rounded.Refresh,
-                                contentDescription = "Retry",
+                                contentDescription = stringResource(R.string.setup_retry),
                                 tint = Color(0xFFFFDAD6)
                             )
                         }

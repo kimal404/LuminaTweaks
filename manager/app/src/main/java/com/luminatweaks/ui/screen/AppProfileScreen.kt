@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 kimal
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.luminatweaks.ui.screen
 
 import android.content.Intent
@@ -68,24 +84,33 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.luminatweaks.R
 import com.luminatweaks.data.AppProfileConfig
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DisplayRrMode
 import com.luminatweaks.model.AppItem
 
-enum class OptionItem(val label: String, val value: String) {
-    OFF("Mati", "off"),
-    DEFAULT("Default", "default"),
-    ON("Hidup", "on");
+enum class OptionItem(val value: String) {
+    OFF("off"),
+    DEFAULT("default"),
+    ON("on");
 
     companion object {
         fun fromValue(v: String): OptionItem = entries.find { it.value == v } ?: DEFAULT
     }
+}
+
+@Composable
+fun OptionItem.getLabel(): String = when (this) {
+    OptionItem.OFF -> stringResource(R.string.opt_off)
+    OptionItem.DEFAULT -> stringResource(R.string.opt_default)
+    OptionItem.ON -> stringResource(R.string.opt_on)
 }
 
 data class RendererOption(val id: String, val label: String)
@@ -135,9 +160,10 @@ fun AppProfileScreen(
         )
     }
 
-    val rendererOptions = remember {
+    val defaultRendererLabel = stringResource(R.string.opt_default)
+    val rendererOptions = remember(defaultRendererLabel) {
         listOf(
-            RendererOption("default", "Default"),
+            RendererOption("default", defaultRendererLabel),
             RendererOption("skiavk", "Skia Vulkan"),
             RendererOption("skiavkthreaded", "Skia Vulkan Threaded"),
             RendererOption("skiagl", "Skia OpenGL"),
@@ -148,13 +174,11 @@ fun AppProfileScreen(
         )
     }
 
-    val currentHzLabel = remember(profile.refreshRate, rrModes) {
-        if (profile.refreshRate == "default" || profile.refreshRate.isBlank()) {
-            "Default"
-        } else {
-            val matched = rrModes.find { it.id.toString() == profile.refreshRate || it.hz.toString() == profile.refreshRate }
-            if (matched != null) "${matched.hz} Hz" else "Mode ${profile.refreshRate}"
-        }
+    val currentHzLabel = if (profile.refreshRate == "default" || profile.refreshRate.isBlank()) {
+        stringResource(R.string.opt_default)
+    } else {
+        val matched = rrModes.find { it.id.toString() == profile.refreshRate || it.hz.toString() == profile.refreshRate }
+        if (matched != null) "${matched.hz} Hz" else stringResource(R.string.profile_mode_format, profile.refreshRate)
     }
 
     val packageInfo = remember(app.packageName) {
@@ -176,7 +200,7 @@ fun AppProfileScreen(
             MediumTopAppBar(
                 title = {
                     Text(
-                        text = "App Profile",
+                        text = stringResource(R.string.profile_title),
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -184,7 +208,7 @@ fun AppProfileScreen(
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = stringResource(R.string.action_back),
                             tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
@@ -201,7 +225,7 @@ fun AppProfileScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.Info,
-                            contentDescription = "App Info",
+                            contentDescription = stringResource(R.string.profile_app_info),
                             tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
@@ -306,7 +330,7 @@ fun AppProfileScreen(
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "Pengaturan di sini hanya berlaku untuk aplikasi ini dan akan mengabaikan pengaturan global yang sudah ada",
+                            text = stringResource(R.string.profile_override_notice),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -347,7 +371,7 @@ fun AppProfileScreen(
                             )
                             Spacer(modifier = Modifier.width(16.dp))
                             Text(
-                                text = "Saklar Utama",
+                                text = stringResource(R.string.profile_master_switch),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -396,14 +420,14 @@ fun AppProfileScreen(
                                     Spacer(modifier = Modifier.width(16.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = "Lite Mode",
+                                            text = stringResource(R.string.profile_lite_mode),
                                             style = MaterialTheme.typography.titleSmall,
                                             fontWeight = FontWeight.Medium,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
-                                            text = "Profil gaming yang lebih ringan untuk hemat baterai",
+                                            text = stringResource(R.string.profile_lite_mode_desc),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -418,7 +442,7 @@ fun AppProfileScreen(
                                             .padding(horizontal = 10.dp, vertical = 6.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        val currentLiteLabel = OptionItem.fromValue(profile.liteMode).label
+                                        val currentLiteLabel = OptionItem.fromValue(profile.liteMode).getLabel()
                                         Text(
                                             text = currentLiteLabel,
                                             style = MaterialTheme.typography.labelMedium,
@@ -453,14 +477,14 @@ fun AppProfileScreen(
                                     Spacer(modifier = Modifier.width(16.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = "Refresh Rate",
+                                            text = stringResource(R.string.profile_refresh_rate),
                                             style = MaterialTheme.typography.titleSmall,
                                             fontWeight = FontWeight.Medium,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
-                                            text = "Kunci Hz layar khusus saat game ini dibuka",
+                                            text = stringResource(R.string.profile_refresh_rate_desc),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -509,14 +533,14 @@ fun AppProfileScreen(
                                     Spacer(modifier = Modifier.width(16.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = "Graphics Renderer",
+                                            text = stringResource(R.string.profile_renderer),
                                             style = MaterialTheme.typography.titleSmall,
                                             fontWeight = FontWeight.Medium,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
-                                            text = "Backend render grafik aplikasi",
+                                            text = stringResource(R.string.profile_renderer_desc),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -531,7 +555,7 @@ fun AppProfileScreen(
                                             .padding(horizontal = 10.dp, vertical = 6.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        val currentRendererLabel = rendererOptions.find { it.id == profile.renderer }?.label ?: "Default"
+                                        val currentRendererLabel = rendererOptions.find { it.id == profile.renderer }?.label ?: defaultRendererLabel
                                         Text(
                                             text = currentRendererLabel,
                                             style = MaterialTheme.typography.labelMedium,
@@ -568,14 +592,14 @@ fun AppProfileScreen(
                                     Spacer(modifier = Modifier.width(16.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = "DND saat Gaming",
+                                            text = stringResource(R.string.profile_dnd),
                                             style = MaterialTheme.typography.titleSmall,
                                             fontWeight = FontWeight.Medium,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
-                                            text = "Matikan notifikasi otomatis saat aplikasi aktif",
+                                            text = stringResource(R.string.profile_dnd_desc),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -590,7 +614,7 @@ fun AppProfileScreen(
                                             .padding(horizontal = 10.dp, vertical = 6.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        val currentDndLabel = OptionItem.fromValue(profile.dnd).label
+                                        val currentDndLabel = OptionItem.fromValue(profile.dnd).getLabel()
                                         Text(
                                             text = currentDndLabel,
                                             style = MaterialTheme.typography.labelMedium,
@@ -629,7 +653,7 @@ fun AppProfileScreen(
                                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
                                             Text(
-                                                text = "Tekstur Ringan",
+                                                text = stringResource(R.string.profile_texture),
                                                 style = MaterialTheme.typography.titleSmall,
                                                 fontWeight = FontWeight.Medium,
                                                 color = MaterialTheme.colorScheme.onSurface
@@ -641,13 +665,11 @@ fun AppProfileScreen(
                                                         shape = RoundedCornerShape(4.dp)
                                                     )
                                                     .padding(horizontal = 5.dp, vertical = 1.dp)
-                                            ) {
-                                                
-                                            }
+                                            ) {}
                                         }
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
-                                            text = "Tweak resolusi tekstur & LOD untuk dongkrak FPS",
+                                            text = stringResource(R.string.profile_texture_desc),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -663,14 +685,14 @@ fun AppProfileScreen(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         val statusText = if (!profile.textureEnabled) {
-                                            "Mati"
+                                            stringResource(R.string.opt_off)
                                         } else {
                                             when (profile.textureDetail) {
-                                                0 -> "Asli"
-                                                1 -> "Ringan"
-                                                2 -> "Retro"
-                                                3 -> "Kotak Total"
-                                                else -> "Aktif"
+                                                0 -> stringResource(R.string.texture_detail_original)
+                                                1 -> stringResource(R.string.texture_detail_light)
+                                                2 -> stringResource(R.string.texture_detail_retro)
+                                                3 -> stringResource(R.string.texture_detail_blocky)
+                                                else -> stringResource(R.string.opt_active)
                                             }
                                         }
                                         Text(
@@ -694,7 +716,7 @@ fun AppProfileScreen(
             onDismissRequest = { showLiteModeDialog = false },
             title = {
                 Text(
-                    text = "Pilih Lite Mode",
+                    text = stringResource(R.string.dialog_select_lite_mode),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -729,7 +751,7 @@ fun AppProfileScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = item.label,
+                                text = item.getLabel(),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -740,7 +762,7 @@ fun AppProfileScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showLiteModeDialog = false }) {
-                    Text("Selesai")
+                    Text(stringResource(R.string.action_done))
                 }
             }
         )
@@ -751,7 +773,7 @@ fun AppProfileScreen(
             onDismissRequest = { showRefreshRateDialog = false },
             title = {
                 Text(
-                    text = "Pilih Refresh Rate",
+                    text = stringResource(R.string.dialog_select_refresh_rate),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -786,7 +808,7 @@ fun AppProfileScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Default",
+                                text = stringResource(R.string.opt_default),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = if (isDefault) FontWeight.Bold else FontWeight.Normal,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -828,7 +850,7 @@ fun AppProfileScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showRefreshRateDialog = false }) {
-                    Text("Selesai")
+                    Text(stringResource(R.string.action_done))
                 }
             }
         )
@@ -839,7 +861,7 @@ fun AppProfileScreen(
             onDismissRequest = { showRendererDialog = false },
             title = {
                 Text(
-                    text = "Pilih Renderer",
+                    text = stringResource(R.string.dialog_select_renderer),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -885,7 +907,7 @@ fun AppProfileScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showRendererDialog = false }) {
-                    Text("Selesai")
+                    Text(stringResource(R.string.action_done))
                 }
             }
         )
@@ -896,7 +918,7 @@ fun AppProfileScreen(
             onDismissRequest = { showDndDialog = false },
             title = {
                 Text(
-                    text = "Pilih Mode DND",
+                    text = stringResource(R.string.dialog_select_dnd),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -931,7 +953,7 @@ fun AppProfileScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = item.label,
+                                text = item.getLabel(),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -942,7 +964,7 @@ fun AppProfileScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showDndDialog = false }) {
-                    Text("Selesai")
+                    Text(stringResource(R.string.action_done))
                 }
             }
         )

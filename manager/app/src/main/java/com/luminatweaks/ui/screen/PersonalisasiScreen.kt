@@ -115,8 +115,10 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.luminatweaks.R
 import com.luminatweaks.ui.theme.AccentIntensity
 import com.luminatweaks.ui.theme.ColorEngine
 import com.luminatweaks.ui.theme.ColorMode
@@ -187,7 +189,7 @@ fun PersonalisasiScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Personalisasi",
+                        text = stringResource(R.string.personalization_title),
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium
                     )
@@ -196,7 +198,7 @@ fun PersonalisasiScreen(
                     IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = "Kembali"
+                            contentDescription = stringResource(R.string.action_back)
                         )
                     }
                 },
@@ -267,7 +269,7 @@ fun PersonalisasiScreen(
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(
-                                    text = "Warna",
+                                    text = stringResource(R.string.personalization_color),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -285,8 +287,8 @@ fun PersonalisasiScreen(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 val engines = listOf(
-                                    ColorEngine.MaterialYou to "Materi Anda",
-                                    ColorEngine.MaterialExpressive to "Ekspresif Materi"
+                                    ColorEngine.MaterialYou to stringResource(R.string.personalization_engine_material_you),
+                                    ColorEngine.MaterialExpressive to stringResource(R.string.personalization_engine_expressive)
                                 )
 
                                 engines.forEach { (engine, label) ->
@@ -409,7 +411,7 @@ fun PersonalisasiScreen(
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text(
-                                            text = "Intensitas aksen",
+                                            text = stringResource(R.string.personalization_accent_intensity),
                                             style = MaterialTheme.typography.bodyMedium,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
@@ -471,7 +473,7 @@ fun PersonalisasiScreen(
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(
-                                    text = "Bentuk & Tampilan",
+                                    text = stringResource(R.string.personalization_shape_display),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -500,14 +502,14 @@ fun PersonalisasiScreen(
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = "Bilah Navigasi Mengambang",
+                                            text = stringResource(R.string.personalization_floating_navbar),
                                             style = MaterialTheme.typography.titleSmall,
                                             fontWeight = FontWeight.SemiBold,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
-                                            text = "Gaya dock melayang dengan sudut melengkung",
+                                            text = stringResource(R.string.personalization_floating_navbar_desc),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -550,7 +552,7 @@ fun PersonalisasiScreen(
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text(
-                                            text = "Radius Sudut",
+                                            text = stringResource(R.string.personalization_corner_radius),
                                             style = MaterialTheme.typography.bodyMedium,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
@@ -576,12 +578,12 @@ fun PersonalisasiScreen(
                                             ) {
                                                 Icon(
                                                     imageVector = Icons.Rounded.Refresh,
-                                                    contentDescription = "Reset",
+                                                    contentDescription = stringResource(R.string.action_reset),
                                                     modifier = Modifier.size(12.dp)
                                                 )
                                                 Spacer(modifier = Modifier.width(4.dp))
                                                 Text(
-                                                    text = "Reset",
+                                                    text = stringResource(R.string.action_reset),
                                                     style = MaterialTheme.typography.labelSmall,
                                                     fontWeight = FontWeight.Bold
                                                 )
@@ -757,7 +759,7 @@ private fun MockLuminaScreen(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Text(
-            text = "Lumina Tweaks",
+            text = "LuminaTweaks",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground,
@@ -783,7 +785,7 @@ private fun MockLuminaScreen(
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
-                    text = "Working",
+                    text = stringResource(R.string.home_core_working),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimaryContainer

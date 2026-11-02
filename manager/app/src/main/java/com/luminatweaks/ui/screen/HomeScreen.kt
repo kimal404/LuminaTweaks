@@ -1,5 +1,22 @@
+/*
+ * Copyright (C) 2026 kimal
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.luminatweaks.ui.screen
 
+import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -7,22 +24,28 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -34,21 +57,22 @@ import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PowerSettingsNew
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Thermostat
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.draw.clip
-import androidx.compose.material3.Surface
 import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
@@ -61,33 +85,26 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-import com.luminatweaks.data.ConfigRepository
-import android.widget.Toast
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TextButton
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import com.luminatweaks.util.RootUtil
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import com.luminatweaks.R
+import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DaemonManager
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.navigationBars
-import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.ui.component.LuminaBottomBar
 import com.luminatweaks.ui.theme.LocalCornerRadius
+import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.DeviceUtil
+import com.luminatweaks.util.RootUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -140,7 +157,6 @@ fun HomeScreen() {
         DaemonManager.startDaemon(context)
 
         withContext(Dispatchers.IO) {
-            // Buffer check pertama (Inisialisasi awal ala AZenith)
             val initialTemp = DeviceUtil.getBatteryTemperature(context)
             val initialPid = DaemonManager.getDaemonPid()
             val initialProfile = if (initialPid != null) ConfigRepository.getCurrentProfile() else "-"
@@ -149,10 +165,9 @@ fun HomeScreen() {
                 batteryTemp = initialTemp
                 daemonPid = initialPid
                 currentProfile = initialProfile
-                isChecking = false // Buffer check selesai
+                isChecking = false
             }
 
-            // Loop monitoring berkelanjutan
             while (isActive) {
                 delay(1500L)
                 val currentTemp = DeviceUtil.getBatteryTemperature(context)
@@ -168,7 +183,7 @@ fun HomeScreen() {
         }
     }
 
-        val isFloating = LocalFloatingNavBar.current
+    val isFloating = LocalFloatingNavBar.current
 
     if (currentSubscreen == "personalisasi") {
         PersonalisasiScreen(onBackClick = { currentSubscreen = null })
@@ -331,7 +346,7 @@ fun HomeDashboardContent(
                         fontWeight = FontWeight.Bold
                     )
                 },
-                                actions = {
+                actions = {
                     val context = LocalContext.current
                     val haptic = LocalHapticFeedback.current
                     var showPowerDialog by remember { mutableStateOf(false) }
@@ -350,7 +365,7 @@ fun HomeDashboardContent(
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     if (!isRestarting) {
                                         isRestarting = true
-                                        Toast.makeText(context, "Memulai ulang layanan...", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, context.getString(R.string.toast_restarting_service), Toast.LENGTH_SHORT).show()
                                         coroutineScope.launch {
                                             onRestartDaemon()
                                             isRestarting = false
@@ -362,7 +377,7 @@ fun HomeDashboardContent(
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.PowerSettingsNew,
-                            contentDescription = "Menu Daya",
+                            contentDescription = stringResource(R.string.power_menu_title),
                             tint = if (isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                             modifier = Modifier.size(24.dp)
                         )
@@ -382,7 +397,7 @@ fun HomeDashboardContent(
                             },
                             title = {
                                 Text(
-                                    text = "Menu Daya",
+                                    text = stringResource(R.string.power_menu_title),
                                     style = MaterialTheme.typography.titleLarge,
                                     fontWeight = FontWeight.Bold,
                                     textAlign = TextAlign.Center
@@ -397,12 +412,12 @@ fun HomeDashboardContent(
                                         icon = Icons.Rounded.Refresh,
                                         iconBg = MaterialTheme.colorScheme.primaryContainer,
                                         iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        title = "Mulai Ulang",
-                                                                                cornerRadius = currentRadius,
+                                        title = stringResource(R.string.power_action_reboot),
+                                        cornerRadius = currentRadius,
                                         onClick = {
                                             showPowerDialog = false
                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            Toast.makeText(context, "Memulai ulang perangkat...", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, context.getString(R.string.toast_rebooting_device), Toast.LENGTH_SHORT).show()
                                             coroutineScope.launch {
                                                 RootUtil.rebootDevice("")
                                             }
@@ -413,12 +428,12 @@ fun HomeDashboardContent(
                                         icon = Icons.Rounded.Memory,
                                         iconBg = MaterialTheme.colorScheme.secondaryContainer,
                                         iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                        title = "Mode Recovery",
-                                                                                cornerRadius = currentRadius,
+                                        title = stringResource(R.string.power_action_recovery),
+                                        cornerRadius = currentRadius,
                                         onClick = {
                                             showPowerDialog = false
                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            Toast.makeText(context, "Memulai ulang ke Recovery...", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, context.getString(R.string.toast_rebooting_recovery), Toast.LENGTH_SHORT).show()
                                             coroutineScope.launch {
                                                 RootUtil.rebootDevice("recovery")
                                             }
@@ -429,14 +444,14 @@ fun HomeDashboardContent(
                                         icon = Icons.Rounded.PowerSettingsNew,
                                         iconBg = MaterialTheme.colorScheme.tertiaryContainer,
                                         iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
-                                        title = "Restart Service",
-                                                                                cornerRadius = currentRadius,
+                                        title = stringResource(R.string.power_action_restart_service),
+                                        cornerRadius = currentRadius,
                                         onClick = {
                                             showPowerDialog = false
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                             if (!isRestarting) {
                                                 isRestarting = true
-                                                Toast.makeText(context, "Memulai ulang layanan...", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, context.getString(R.string.toast_restarting_service), Toast.LENGTH_SHORT).show()
                                                 coroutineScope.launch {
                                                     onRestartDaemon()
                                                     isRestarting = false
@@ -450,7 +465,7 @@ fun HomeDashboardContent(
                             dismissButton = {
                                 TextButton(onClick = { showPowerDialog = false }) {
                                     Text(
-                                        text = "Batal",
+                                        text = stringResource(R.string.action_cancel),
                                         fontWeight = FontWeight.SemiBold
                                     )
                                 }
@@ -496,15 +511,15 @@ fun HomeDashboardContent(
                     else -> Icons.Rounded.ErrorOutline
                 }
                 val bannerTitle = when {
-                    isChecking -> "Checking Core..."
-                    isRestarting -> "Starting Core..."
-                    isRunning -> "Working"
-                    else -> "Core Inactive"
+                    isChecking -> stringResource(R.string.home_core_checking)
+                    isRestarting -> stringResource(R.string.home_core_starting)
+                    isRunning -> stringResource(R.string.home_core_working)
+                    else -> stringResource(R.string.home_core_inactive)
                 }
                 val bannerSubtitle = when {
-                    isChecking -> "Scanning daemon process..."
-                    isRunning -> "PID: $daemonPid (Active background)"
-                    else -> "Tap to start or restart daemon"
+                    isChecking -> stringResource(R.string.home_core_scanning)
+                    isRunning -> stringResource(R.string.home_core_running_format, daemonPid ?: "-")
+                    else -> stringResource(R.string.home_core_tap_start)
                 }
 
                 Card(
@@ -553,7 +568,7 @@ fun HomeDashboardContent(
                         if (!isRunning && !isChecking) {
                             Icon(
                                 imageVector = Icons.Rounded.PlayArrow,
-                                contentDescription = "Start",
+                                contentDescription = stringResource(R.string.action_start),
                                 tint = bannerContentColor,
                                 modifier = Modifier.size(24.dp)
                             )
@@ -584,7 +599,7 @@ fun HomeDashboardContent(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Thermal",
+                                    text = stringResource(R.string.home_thermal),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -615,24 +630,24 @@ fun HomeDashboardContent(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Profile",
+                                    text = stringResource(R.string.home_profile),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(
-                            text = currentProfile,
-                            style = when {
-                                currentProfile.length > 12 -> MaterialTheme.typography.titleSmall
-                                currentProfile.length > 8 -> MaterialTheme.typography.titleMedium
-                                else -> MaterialTheme.typography.titleLarge
-                            },
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                                text = currentProfile,
+                                style = when {
+                                    currentProfile.length > 12 -> MaterialTheme.typography.titleSmall
+                                    currentProfile.length > 8 -> MaterialTheme.typography.titleMedium
+                                    else -> MaterialTheme.typography.titleLarge
+                                },
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
                         }
                     }
                 }
@@ -645,19 +660,19 @@ fun HomeDashboardContent(
                 ) {
                     ConnectedCardRow(
                         icon = Icons.Rounded.DeveloperBoard,
-                        title = "Manager Version",
+                        title = stringResource(R.string.home_manager_version),
                         subtitle = "v2.0.0 (Remastered)",
                         position = ContainerPosition.Top
                     )
                     ConnectedCardRow(
                         icon = Icons.Rounded.Memory,
-                        title = "Kernel Version",
+                        title = stringResource(R.string.home_kernel_version),
                         subtitle = kernelVersion,
                         position = ContainerPosition.Middle
                     )
                     ConnectedCardRow(
                         icon = Icons.Rounded.Smartphone,
-                        title = "Device Model",
+                        title = stringResource(R.string.home_device_model),
                         subtitle = deviceModel,
                         position = ContainerPosition.Bottom
                     )
@@ -671,13 +686,13 @@ fun HomeDashboardContent(
                 ) {
                     ConnectedCardRow(
                         icon = Icons.Rounded.Security,
-                        title = "Root Access",
-                        subtitle = "Granted (Superuser)",
+                        title = stringResource(R.string.home_root_access),
+                        subtitle = stringResource(R.string.home_root_granted),
                         position = ContainerPosition.Top
                     )
                     ConnectedCardRow(
                         icon = Icons.Rounded.Security,
-                        title = "SELinux Status",
+                        title = stringResource(R.string.home_selinux_status),
                         subtitle = "Enforcing",
                         position = ContainerPosition.Bottom
                     )
@@ -691,15 +706,15 @@ fun HomeDashboardContent(
                 ) {
                     ConnectedActionCardRow(
                         icon = Icons.Rounded.Favorite,
-                        title = "Support Us",
-                        subtitle = "LuminaTweaks is free and open source forever. Support development through donations.",
+                        title = stringResource(R.string.home_support_us),
+                        subtitle = stringResource(R.string.home_support_us_desc),
                         position = ContainerPosition.Top,
                         onClick = { }
                     )
                     ConnectedActionCardRow(
                         icon = Icons.Rounded.MenuBook,
-                        title = "Learn LuminaTweaks",
-                        subtitle = "Explore documentation, kernel tweak parameters, and optimization guides.",
+                        title = stringResource(R.string.home_learn_more),
+                        subtitle = stringResource(R.string.home_learn_more_desc),
                         position = ContainerPosition.Bottom,
                         onClick = { }
                     )
@@ -819,7 +834,6 @@ fun ConnectedActionCardRow(
         }
     }
 }
-
 
 @Composable
 private fun PowerMenuItem(

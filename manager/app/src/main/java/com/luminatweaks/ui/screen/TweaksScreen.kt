@@ -1,9 +1,20 @@
+/*
+ * Copyright (C) 2026 kimal
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.luminatweaks.ui.screen
-
-import com.luminatweaks.ui.theme.LocalFloatingNavBar
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.navigationBars
-
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -15,9 +26,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -63,28 +76,45 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.luminatweaks.R
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DisplayRrMode
+import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import kotlinx.coroutines.launch
 
 data class RendererItem(
     val id: String,
-    val label: String
+    val labelRes: Int
 )
 
 val RENDERER_OPTIONS = listOf(
-    RendererItem("default", "System Default"),
-    RendererItem("skiavk", "Skia Vulkan"),
-    RendererItem("skiavkthreaded", "Skia Vulkan (Threaded)"),
-    RendererItem("skiagl", "Skia OpenGL"),
-    RendererItem("skiaglthreaded", "Skia OpenGL (Threaded)"),
-    RendererItem("opengl", "OpenGL ES"),
-    RendererItem("openglthreaded", "OpenGL ES (Threaded)"),
-    RendererItem("vulkan", "Vulkan")
+    RendererItem("default", R.string.tweaks_renderer_system_default),
+    RendererItem("skiavk", R.string.opt_default),
+    RendererItem("skiavkthreaded", R.string.opt_default),
+    RendererItem("skiagl", R.string.opt_default),
+    RendererItem("skiaglthreaded", R.string.opt_default),
+    RendererItem("opengl", R.string.opt_default),
+    RendererItem("openglthreaded", R.string.opt_default),
+    RendererItem("vulkan", R.string.opt_default)
 )
+
+fun getRendererDisplayLabel(id: String, defaultLabel: String): String {
+    return when (id.lowercase()) {
+        "default" -> defaultLabel
+        "skiavk" -> "Skia Vulkan"
+        "skiavkthreaded" -> "Skia Vulkan (Threaded)"
+        "skiagl" -> "Skia OpenGL"
+        "skiaglthreaded" -> "Skia OpenGL (Threaded)"
+        "opengl" -> "OpenGL ES"
+        "openglthreaded" -> "OpenGL ES (Threaded)"
+        "vulkan" -> "Vulkan"
+        else -> id
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -101,7 +131,7 @@ fun MediaTekEngineScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "MediaTek Engine",
+                        text = stringResource(R.string.tweaks_mtk_title),
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -109,7 +139,7 @@ fun MediaTekEngineScreen(
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = "Kembali"
+                            contentDescription = stringResource(R.string.action_back)
                         )
                     }
                 },
@@ -153,14 +183,14 @@ fun MediaTekEngineScreen(
                         Spacer(modifier = Modifier.width(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Informasi Profil",
+                                text = stringResource(R.string.tweaks_mtk_info_title),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "FPSGO adalah modul kernel MediaTek yang mengatur clock CPU/GPU secara dinamis berdasarkan frame rate real-time. Saat FPS stabil, clock diturunkan untuk hemat daya — namun di adegan berat, pembatasan ini bisa menyebabkan frame drop.\n\nFitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. Pada profil Balanced atau Eco, subsistem kembali ke baseline standar.",
+                                text = stringResource(R.string.tweaks_mtk_info_desc),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -202,7 +232,7 @@ fun MediaTekEngineScreen(
                             Spacer(modifier = Modifier.width(14.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Bypass Frame Limiter (FPSGo)",
+                                    text = stringResource(R.string.tweaks_fpsgo_title),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -219,7 +249,7 @@ fun MediaTekEngineScreen(
                         }
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = "Nonaktifkan regulasi FPSGO agar clock CPU/GPU bebas naik sesuai kebutuhan render, tanpa dibatasi saat FPS terlihat stabil. Konsumsi daya dan suhu lebih tinggi.",
+                            text = stringResource(R.string.tweaks_fpsgo_desc),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -260,7 +290,7 @@ fun MediaTekEngineScreen(
                             Spacer(modifier = Modifier.width(14.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Mali GED GPU Boost",
+                                    text = stringResource(R.string.tweaks_ged_title),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -277,7 +307,7 @@ fun MediaTekEngineScreen(
                         }
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = "Kirim sinyal boost proaktif ke GPU Mali via Graphics Event Daemon saat terdeteksi lonjakan beban render, mengurangi frame drop sebelum bottleneck terjadi.",
+                            text = stringResource(R.string.tweaks_ged_desc),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -311,6 +341,9 @@ fun TweaksScreen() {
     var showRenderDialog by remember { mutableStateOf(false) }
     var inMtkSubpage by remember { mutableStateOf(false) }
 
+    val defaultDynamicLabel = stringResource(R.string.tweaks_rr_default_dynamic)
+    val defaultRendererLabel = stringResource(R.string.tweaks_renderer_system_default)
+
     LaunchedEffect(Unit) {
         val state = ConfigRepository.getTweaksState()
         isGlobalLiteMode = state.isGlobalLiteMode
@@ -323,17 +356,17 @@ fun TweaksScreen() {
         isBoostGed = state.isBoostGed
     }
 
-    val currentRrText = remember(currentRrId, rrModes) {
+    val currentRrText = remember(currentRrId, rrModes, defaultDynamicLabel) {
         if (currentRrId == null) {
-            "Default / Dynamic"
+            defaultDynamicLabel
         } else {
             val matched = rrModes.find { it.id == currentRrId }
             if (matched != null) "${matched.hz} Hz" else "Mode $currentRrId"
         }
     }
 
-    val currentRendererText = remember(currentRendererId) {
-        RENDERER_OPTIONS.find { it.id.equals(currentRendererId, ignoreCase = true) }?.label ?: currentRendererId
+    val currentRendererText = remember(currentRendererId, defaultRendererLabel) {
+        getRendererDisplayLabel(currentRendererId, defaultRendererLabel)
     }
 
     if (inMtkSubpage) {
@@ -365,7 +398,7 @@ fun TweaksScreen() {
             onDismissRequest = { showRefreshRateDialog = false },
             title = {
                 Text(
-                    text = "Pilih Refresh Rate",
+                    text = stringResource(R.string.tweaks_dialog_select_rr),
                     fontWeight = FontWeight.Bold
                 )
             },
@@ -409,7 +442,7 @@ fun TweaksScreen() {
             },
             confirmButton = {
                 TextButton(onClick = { showRefreshRateDialog = false }) {
-                    Text("Batal")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         )
@@ -420,7 +453,7 @@ fun TweaksScreen() {
             onDismissRequest = { showRenderDialog = false },
             title = {
                 Text(
-                    text = "Pilih Graphics Renderer",
+                    text = stringResource(R.string.tweaks_dialog_select_renderer),
                     fontWeight = FontWeight.Bold
                 )
             },
@@ -429,18 +462,19 @@ fun TweaksScreen() {
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    RENDERER_OPTIONS.forEach { item ->
-                        val isSelected = item.id.equals(currentRendererId, ignoreCase = true)
+                    listOf("default", "skiavk", "skiavkthreaded", "skiagl", "skiaglthreaded", "opengl", "openglthreaded", "vulkan").forEach { rawId ->
+                        val isSelected = rawId.equals(currentRendererId, ignoreCase = true)
+                        val displayLabel = getRendererDisplayLabel(rawId, defaultRendererLabel)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .selectable(
                                     selected = isSelected,
                                     onClick = {
-                                        currentRendererId = item.id
+                                        currentRendererId = rawId
                                         showRenderDialog = false
                                         coroutineScope.launch {
-                                            ConfigRepository.setRenderer(item.id)
+                                            ConfigRepository.setRenderer(rawId)
                                         }
                                     },
                                     role = Role.RadioButton
@@ -454,7 +488,7 @@ fun TweaksScreen() {
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                text = item.label,
+                                text = displayLabel,
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -464,7 +498,7 @@ fun TweaksScreen() {
             },
             confirmButton = {
                 TextButton(onClick = { showRenderDialog = false }) {
-                    Text("Batal")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         )
@@ -477,7 +511,7 @@ fun TweaksScreen() {
             MediumTopAppBar(
                 title = {
                     Text(
-                        text = "Tweaks Suite",
+                        text = stringResource(R.string.tweaks_title),
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -524,14 +558,14 @@ fun TweaksScreen() {
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Display",
+                                    text = stringResource(R.string.tweaks_display_section),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(
-                                text = "Refresh Rate",
+                                text = stringResource(R.string.tweaks_refresh_rate),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -564,14 +598,14 @@ fun TweaksScreen() {
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Graphics",
+                                    text = stringResource(R.string.tweaks_graphics_section),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(
-                                text = "Renderer",
+                                text = stringResource(R.string.tweaks_renderer),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -626,14 +660,14 @@ fun TweaksScreen() {
                             Spacer(modifier = Modifier.width(14.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Lite Mode",
+                                    text = stringResource(R.string.tweaks_lite_mode),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Batasi frekuensi CPU.",
+                                    text = stringResource(R.string.tweaks_lite_mode_desc),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -685,14 +719,14 @@ fun TweaksScreen() {
                             Spacer(modifier = Modifier.width(14.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Disable Thermal",
+                                    text = stringResource(R.string.tweaks_disable_thermal),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Matikan thermal sepenuhnya pada profil Performance.",
+                                    text = stringResource(R.string.tweaks_disable_thermal_desc),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -747,14 +781,14 @@ fun TweaksScreen() {
                                 Spacer(modifier = Modifier.width(14.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "MediaTek Engine",
+                                        text = stringResource(R.string.tweaks_mtk_title),
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = "Subsistem FPSGo dan GPU Mali",
+                                        text = stringResource(R.string.tweaks_mtk_desc),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
