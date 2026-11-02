@@ -127,7 +127,7 @@
     <string name="texture_pixel_sharp">Pixel Sharp</string>
     <string name="texture_pixel_sharp_desc">Blocky texture edges. Turn off for potato blur graphics.</string>
     <string name="texture_info_title">Information</string>
-    <string name="texture_info_desc">Only applies to OpenGL ES games on Android 14+. Restart game after saving changes.</string>
+    <string name="texture_info_desc">Android 14+, some games may not produce changes.</string>
     <string name="texture_action_reset">Reset to Original</string>
     <string name="texture_action_done">Done</string>
     <string name="tweaks_title">Tweaks Suite</string>

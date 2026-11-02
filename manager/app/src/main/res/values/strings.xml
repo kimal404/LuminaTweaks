@@ -129,7 +129,7 @@
     <string name="texture_pixel_sharp">Piksel Tajam</string>
     <string name="texture_pixel_sharp_desc">Tepi tekstur kotak-kotak. Matikan untuk grafik buram kentang (potato).</string>
     <string name="texture_info_title">Informasi</string>
-    <string name="texture_info_desc">Hanya berlaku untuk game berbasis OpenGL ES di Android 14+. Restart game setelah menyimpan perubahan.</string>
+    <string name="texture_info_desc">Android 14+, beberapa game mungkin tidak menghasilkan perubahan.</string>
     <string name="texture_action_reset">Reset ke Asli</string>
     <string name="texture_action_done">Selesai</string>
     <string name="tweaks_title">Tweaks Suite</string>
