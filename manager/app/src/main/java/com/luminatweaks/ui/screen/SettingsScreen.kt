@@ -16,7 +16,6 @@
 
 package com.luminatweaks.ui.screen
 
-import android.app.Activity
 import android.app.LocaleManager
 import android.content.Context
 import android.os.Build
@@ -83,6 +82,7 @@ import androidx.compose.ui.unit.dp
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.LogUtil
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -159,10 +159,11 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
                     )
+                    val singleShape = getConnectedContainerShape(ContainerPosition.Single)
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(cornerRadius))
+                            .clip(singleShape)
                             .clickable {
                                 if (onNavigateToPersonalisasi != null) {
                                     onNavigateToPersonalisasi()
@@ -170,7 +171,7 @@ fun SettingsScreen(
                                     showPersonalisasiScreen = true
                                 }
                             },
-                        shape = RoundedCornerShape(cornerRadius),
+                        shape = singleShape,
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                         )
@@ -216,22 +217,25 @@ fun SettingsScreen(
             item {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
                     Text(
                         text = "Lainnya",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 4.dp)
+                        modifier = Modifier.padding(start = 4.dp, bottom = 5.dp)
                     )
+
+                    val topShape = getConnectedContainerShape(ContainerPosition.Top)
+                    val bottomShape = getConnectedContainerShape(ContainerPosition.Bottom)
 
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(cornerRadius))
+                            .clip(topShape)
                             .clickable(enabled = !isGeneratingLog) { showLogBottomSheet = true },
-                        shape = RoundedCornerShape(cornerRadius),
+                        shape = topShape,
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                         )
@@ -277,9 +281,9 @@ fun SettingsScreen(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(cornerRadius))
+                            .clip(bottomShape)
                             .clickable { showLanguageDialog = true },
-                        shape = RoundedCornerShape(cornerRadius),
+                        shape = bottomShape,
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                         )
@@ -331,10 +335,11 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
                     )
+                    val singleShape = getConnectedContainerShape(ContainerPosition.Single)
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(cornerRadius))
+                            .clip(singleShape)
                             .clickable {
                                 if (onNavigateToAbout != null) {
                                     onNavigateToAbout()
@@ -342,7 +347,7 @@ fun SettingsScreen(
                                     showAboutScreen = true
                                 }
                             },
-                        shape = RoundedCornerShape(cornerRadius),
+                        shape = singleShape,
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                         )
@@ -424,7 +429,10 @@ fun SettingsScreen(
                             showLanguageDialog = false
                             if (currentLanguage != "id") {
                                 currentLanguage = "id"
-                                setAppLanguage(context, "id")
+                                coroutineScope.launch {
+                                    delay(120L)
+                                    setAppLanguage(context, "id")
+                                }
                             }
                         }
                     )
@@ -437,7 +445,10 @@ fun SettingsScreen(
                             showLanguageDialog = false
                             if (currentLanguage != "en") {
                                 currentLanguage = "en"
-                                setAppLanguage(context, "en")
+                                coroutineScope.launch {
+                                    delay(120L)
+                                    setAppLanguage(context, "en")
+                                }
                             }
                         }
                     )
@@ -587,7 +598,6 @@ private fun setAppLanguage(context: Context, languageTag: String) {
         val config = context.resources.configuration
         config.setLocale(locale)
         context.resources.updateConfiguration(config, context.resources.displayMetrics)
-        (context as? Activity)?.recreate()
     }
 }
 

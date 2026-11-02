@@ -19,6 +19,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.LuminaTweaks">
         <activity
+            android:configChanges="locale|layoutDirection|orientation|screenSize|screenLayout|keyboardHidden"
             android:name=".MainActivity"
             android:exported="true"
             android:theme="@style/Theme.LuminaTweaks">
