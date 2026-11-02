@@ -83,6 +83,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.luminatweaks.R
+import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.DeviceUtil
@@ -123,12 +124,17 @@ fun MemoryZramScreen(
             val activeAlgo = DeviceUtil.getActiveZramAlgorithm()
             val availableAlgos = DeviceUtil.getAvailableZramAlgorithms()
 
+            val state = ConfigRepository.getTweaksState()
+            val targetZramSize = if (state.zramSizeGb > 0) state.zramSizeGb else currentZram
+            val targetAlgo = if (state.zramAlgorithm.isNotBlank()) state.zramAlgorithm else activeAlgo
+            val targetSwap = if (state.swappiness in 0..200) state.swappiness else currentSwap
+
             withContext(Dispatchers.Main) {
                 physicalRamGb = totalRam
                 val dynamicMax = (totalRam * 1.5).roundToInt().coerceAtLeast(4)
-                zramSizeGb = currentZram.toFloat().coerceIn(1f, dynamicMax.toFloat())
-                swappinessValue = currentSwap.toFloat()
-                selectedAlgorithm = activeAlgo
+                zramSizeGb = targetZramSize.toFloat().coerceIn(1f, dynamicMax.toFloat())
+                swappinessValue = targetSwap.toFloat()
+                selectedAlgorithm = targetAlgo
                 algorithms = availableAlgos
             }
         }
@@ -372,6 +378,15 @@ fun MemoryZramScreen(
                             Slider(
                                 value = zramSizeGb,
                                 onValueChange = { zramSizeGb = it },
+                                onValueChangeFinished = {
+                                    coroutineScope.launch {
+                                        ConfigRepository.setZramConfig(
+                                            sizeGb = zramSizeGb.roundToInt(),
+                                            algorithm = selectedAlgorithm,
+                                            swappiness = swappinessValue.roundToInt()
+                                        )
+                                    }
+                                },
                                 valueRange = 1f..maxZramLimit.toFloat(),
                                 steps = (maxZramLimit - 2).coerceAtLeast(0),
                                 colors = SliderDefaults.colors(
@@ -508,6 +523,15 @@ fun MemoryZramScreen(
                             Slider(
                                 value = swappinessValue,
                                 onValueChange = { swappinessValue = it },
+                                onValueChangeFinished = {
+                                    coroutineScope.launch {
+                                        ConfigRepository.setZramConfig(
+                                            sizeGb = zramSizeGb.roundToInt(),
+                                            algorithm = selectedAlgorithm,
+                                            swappiness = swappinessValue.roundToInt()
+                                        )
+                                    }
+                                },
                                 valueRange = 0f..200f,
                                 colors = SliderDefaults.colors(
                                     thumbColor = MaterialTheme.colorScheme.primary,
@@ -565,7 +589,7 @@ fun MemoryZramScreen(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(36.dp)
+                                    .size(40.dp)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.primaryContainer),
                                 contentAlignment = Alignment.Center
@@ -574,10 +598,10 @@ fun MemoryZramScreen(
                                     imageVector = Icons.Rounded.CleaningServices,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
-                            Spacer(modifier = Modifier.width(12.dp))
+                            Spacer(modifier = Modifier.width(14.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = stringResource(R.string.memory_action_drop_caches),
@@ -622,7 +646,7 @@ fun MemoryZramScreen(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(36.dp)
+                                    .size(40.dp)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.primaryContainer),
                                 contentAlignment = Alignment.Center
@@ -631,10 +655,10 @@ fun MemoryZramScreen(
                                     imageVector = Icons.Rounded.Storage,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
-                            Spacer(modifier = Modifier.width(12.dp))
+                            Spacer(modifier = Modifier.width(14.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = stringResource(R.string.memory_action_fstrim),
@@ -680,6 +704,13 @@ fun MemoryZramScreen(
                                     onClick = {
                                         selectedAlgorithm = algo
                                         showAlgorithmDialog = false
+                                        coroutineScope.launch {
+                                            ConfigRepository.setZramConfig(
+                                                sizeGb = zramSizeGb.roundToInt(),
+                                                algorithm = algo,
+                                                swappiness = swappinessValue.roundToInt()
+                                            )
+                                        }
                                     },
                                     role = Role.RadioButton
                                 )

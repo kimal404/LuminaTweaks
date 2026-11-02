@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 kimal
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
@@ -42,6 +58,99 @@ pub fn apply_thermal_kill(disable: bool) {
                 write_sysfs(&path, mode_str, false);
             }
         }
+    }
+}
+
+pub fn apply_zram(size_gb: u32, algorithm: &str) {
+    if size_gb == 0 {
+        return;
+    }
+    let zram_block = if Path::new("/dev/block/zram0").exists() {
+        "/dev/block/zram0"
+    } else if Path::new("/dev/zram0").exists() {
+        "/dev/zram0"
+    } else {
+        log!("[ZRAM] No zram device found on system");
+        return;
+    };
+
+    let current_algo = fs::read_to_string("/sys/block/zram0/comp_algorithm").unwrap_or_default();
+    let current_disksize_bytes = fs::read_to_string("/sys/block/zram0/disksize")
+        .unwrap_or_default()
+        .trim()
+        .parse::<u64>()
+        .unwrap_or(0);
+    let target_disksize_bytes = (size_gb as u64) * 1024 * 1024 * 1024;
+
+    let algo_matches = if !algorithm.is_empty() {
+        current_algo.contains(&format!("[{}]", algorithm))
+    } else {
+        true
+    };
+
+    let size_matches = current_disksize_bytes == target_disksize_bytes;
+
+    if algo_matches && size_matches {
+        log!("[ZRAM] Target config already active ({}GB, {})", size_gb, algorithm);
+        return;
+    }
+
+    log!("[ZRAM] Applying config: {}GB, compression: {}", size_gb, algorithm);
+
+    let _ = Command::new("swapoff").arg(zram_block).status();
+    write_sysfs("/sys/block/zram0/reset", "1", false);
+
+    if !algorithm.is_empty() {
+        write_sysfs("/sys/block/zram0/comp_algorithm", algorithm, false);
+    }
+
+    let size_str = format!("{}", target_disksize_bytes);
+    write_sysfs("/sys/block/zram0/disksize", &size_str, false);
+
+    let _ = Command::new("mkswap").arg(zram_block).status();
+    let _ = Command::new("swapon").args([zram_block, "-p", "32767"]).status();
+
+    log!("[ZRAM] Successfully applied {}GB with {}", size_gb, algorithm);
+}
+
+pub fn apply_swappiness(val: u32) {
+    let s = val.clamp(0, 200).to_string();
+    write_sysfs("/proc/sys/vm/swappiness", &s, false);
+    log!("[VM] Swappiness set to {}", s);
+}
+
+pub fn apply_io_scheduler(scheduler: &str) {
+    if scheduler.is_empty() {
+        return;
+    }
+    let mut applied_count = 0;
+    if let Ok(entries) = fs::read_dir("/sys/block") {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with("loop") || name.starts_with("zram") || name.starts_with("ram") || name.starts_with("dm-") {
+                continue;
+            }
+            let sched_path = format!("/sys/block/{}/queue/scheduler", name);
+            if Path::new(&sched_path).exists() && write_sysfs(&sched_path, scheduler, false) {
+                applied_count += 1;
+            }
+        }
+    }
+    if applied_count > 0 {
+        log!("[IO] Applied scheduler '{}' across {} block device(s)", scheduler, applied_count);
+    }
+}
+
+pub fn sync_global_tweaks() {
+    let (zram_size, zram_algo, swappiness) = crate::detector::get_global_zram_config();
+    if let (Some(size), Some(algo)) = (zram_size, zram_algo) {
+        apply_zram(size, &algo);
+    }
+    if let Some(swap) = swappiness {
+        apply_swappiness(swap);
+    }
+    if let Some(sched) = crate::detector::get_global_io_scheduler() {
+        apply_io_scheduler(&sched);
     }
 }
 

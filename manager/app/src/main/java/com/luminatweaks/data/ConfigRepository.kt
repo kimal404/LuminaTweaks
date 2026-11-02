@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 kimal
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.luminatweaks.data
 
 import android.content.pm.ApplicationInfo
@@ -24,6 +40,11 @@ data class TweaksUiState(
     val isMtkDevice: Boolean = false,
     val isBypassFpsgo: Boolean = false,
     val isBoostGed: Boolean = true,
+    val isAutoDnd: Boolean = false,
+    val currentIoScheduler: String = "mq-deadline",
+    val zramSizeGb: Int = 8,
+    val zramAlgorithm: String = "zstd",
+    val swappiness: Int = 100,
     val isLoaded: Boolean = false
 )
 
@@ -57,7 +78,7 @@ object ConfigRepository {
             }
             process.waitFor()
             output.toString().trim()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             ""
         }
     }
@@ -68,6 +89,19 @@ object ConfigRepository {
 
     private fun ensureDir() {
         runSuCmd("mkdir -p $CONFIG_DIR")
+    }
+
+    private fun updateGlobalConfigInternal(updater: (JSONObject) -> Unit) {
+        ensureDir()
+        val currentContent = runSuCmd("cat $GLOBAL_CONFIG_PATH 2>/dev/null")
+        val json = try {
+            if (currentContent.isNotBlank()) JSONObject(currentContent) else JSONObject()
+        } catch (_: Exception) {
+            JSONObject()
+        }
+        updater(json)
+        val raw = json.toString()
+        runSuCmd("echo '$raw' > $GLOBAL_CONFIG_PATH")
     }
 
     suspend fun getTweaksState(forceRefresh: Boolean = false): TweaksUiState = withContext(Dispatchers.IO) {
@@ -96,13 +130,20 @@ object ConfigRepository {
         val output = runSuCmd(batchScript)
         val parts = output.split(BATCH_SEP).map { it.trim() }
 
-        val isLite = if (parts.isNotEmpty() && parts[0].isNotBlank()) {
+        val globalJson = if (parts.isNotEmpty() && parts[0].isNotBlank()) {
             try {
-                JSONObject(parts[0]).optBoolean("lite_mode_global", false)
+                JSONObject(parts[0])
             } catch (_: Exception) {
-                false
+                null
             }
-        } else false
+        } else null
+
+        val isLite = globalJson?.optBoolean("lite_mode_global", false) ?: false
+        val isAutoDnd = globalJson?.optBoolean("auto_dnd", false) ?: false
+        val currentIoSched = globalJson?.optString("io_scheduler", "mq-deadline")?.takeIf { it.isNotBlank() } ?: "mq-deadline"
+        val zramSize = globalJson?.optInt("zram_size_gb", 8) ?: 8
+        val zramAlgo = globalJson?.optString("zram_algorithm", "zstd")?.takeIf { it.isNotBlank() } ?: "zstd"
+        val swappiness = globalJson?.optInt("swappiness", 100) ?: 100
 
         val isDisableThermal = if (parts.size > 1) parts[1] == "1" else false
 
@@ -135,6 +176,11 @@ object ConfigRepository {
             isMtkDevice = isMtk,
             isBypassFpsgo = isBypassFpsgo,
             isBoostGed = isBoostGed,
+            isAutoDnd = isAutoDnd,
+            currentIoScheduler = currentIoSched,
+            zramSizeGb = zramSize,
+            zramAlgorithm = zramAlgo,
+            swappiness = swappiness,
             isLoaded = true
         )
         cachedTweaksState = newState
@@ -174,29 +220,43 @@ object ConfigRepository {
         if (prop.isNotBlank()) prop else "Balanced"
     }
 
-    suspend fun getGlobalLiteMode(): Boolean = withContext(Dispatchers.IO) {
-        cachedTweaksState?.let { return@withContext it.isGlobalLiteMode }
-        fileMutex.withLock {
-            val content = runSuCmd("cat $GLOBAL_CONFIG_PATH 2>/dev/null")
-            if (content.isBlank()) return@withLock false
-            try {
-                JSONObject(content).optBoolean("lite_mode_global", false)
-            } catch (_: Exception) {
-                false
-            }
-        }
-    }
-
     suspend fun setGlobalLiteMode(enabled: Boolean) = withContext(Dispatchers.IO) {
         cachedTweaksState = cachedTweaksState?.copy(isGlobalLiteMode = enabled)
         fileMutex.withLock {
-            ensureDir()
-            val json = JSONObject().apply {
-                put("lite_mode_global", enabled)
-            }.toString()
-            runSuCmd("echo '$json' > $GLOBAL_CONFIG_PATH")
+            updateGlobalConfigInternal { it.put("lite_mode_global", enabled) }
             val propVal = if (enabled) "1" else "0"
             runSuCmd("setprop persist.lumina.litemode $propVal")
+        }
+    }
+
+    suspend fun setAutoDnd(enabled: Boolean) = withContext(Dispatchers.IO) {
+        cachedTweaksState = cachedTweaksState?.copy(isAutoDnd = enabled)
+        fileMutex.withLock {
+            updateGlobalConfigInternal { it.put("auto_dnd", enabled) }
+            val propVal = if (enabled) "1" else "0"
+            runSuCmd("setprop persist.lumina.autodnd $propVal")
+        }
+    }
+
+    suspend fun setIoScheduler(scheduler: String) = withContext(Dispatchers.IO) {
+        cachedTweaksState = cachedTweaksState?.copy(currentIoScheduler = scheduler)
+        fileMutex.withLock {
+            updateGlobalConfigInternal { it.put("io_scheduler", scheduler) }
+        }
+    }
+
+    suspend fun setZramConfig(sizeGb: Int, algorithm: String, swappiness: Int) = withContext(Dispatchers.IO) {
+        cachedTweaksState = cachedTweaksState?.copy(
+            zramSizeGb = sizeGb,
+            zramAlgorithm = algorithm,
+            swappiness = swappiness
+        )
+        fileMutex.withLock {
+            updateGlobalConfigInternal {
+                it.put("zram_size_gb", sizeGb)
+                it.put("zram_algorithm", algorithm)
+                it.put("swappiness", swappiness)
+            }
         }
     }
 

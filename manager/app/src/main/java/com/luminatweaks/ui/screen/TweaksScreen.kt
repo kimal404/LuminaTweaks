@@ -339,8 +339,8 @@ fun TweaksScreen() {
     var isBypassFpsgo by remember { mutableStateOf(cached?.isBypassFpsgo ?: false) }
     var isBoostGed by remember { mutableStateOf(cached?.isBoostGed ?: true) }
 
-    var isAutoDnd by remember { mutableStateOf(false) }
-    var currentIoScheduler by remember { mutableStateOf("mq-deadline") }
+    var isAutoDnd by remember { mutableStateOf(cached?.isAutoDnd ?: false) }
+    var currentIoScheduler by remember { mutableStateOf(cached?.currentIoScheduler ?: "mq-deadline") }
 
     var showRefreshRateDialog by remember { mutableStateOf(false) }
     var showRenderDialog by remember { mutableStateOf(false) }
@@ -361,6 +361,8 @@ fun TweaksScreen() {
         isMtkDevice = state.isMtkDevice
         isBypassFpsgo = state.isBypassFpsgo
         isBoostGed = state.isBoostGed
+        isAutoDnd = state.isAutoDnd
+        currentIoScheduler = state.currentIoScheduler
     }
 
     val currentRrText = remember(currentRrId, rrModes, defaultDynamicLabel) {
@@ -545,6 +547,9 @@ fun TweaksScreen() {
                                     onClick = {
                                         currentIoScheduler = scheduler
                                         showIoSchedulerDialog = false
+                                        coroutineScope.launch {
+                                            ConfigRepository.setIoScheduler(scheduler)
+                                        }
                                     },
                                     role = Role.RadioButton
                                 )
@@ -994,7 +999,12 @@ fun TweaksScreen() {
                             Spacer(modifier = Modifier.width(8.dp))
                             Switch(
                                 checked = isAutoDnd,
-                                onCheckedChange = { isAutoDnd = it },
+                                onCheckedChange = { newState ->
+                                    isAutoDnd = newState
+                                    coroutineScope.launch {
+                                        ConfigRepository.setAutoDnd(newState)
+                                    }
+                                },
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                                     checkedTrackColor = MaterialTheme.colorScheme.primary

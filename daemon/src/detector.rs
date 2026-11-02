@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 kimal
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 use std::process::Command;
 use serde_json::Value;
 
@@ -92,17 +108,24 @@ fn is_truthy(val: &Value) -> bool {
     false
 }
 
-pub fn is_lite_mode_active() -> bool {
+pub fn read_global_json() -> Option<Value> {
     for path in [
         "/data/adb/luminatweaks/config.json",
         "/data/adb/luminatweaks/configs/config.json",
     ] {
         if let Ok(content) = std::fs::read_to_string(path) {
             if let Ok(json) = serde_json::from_str::<Value>(&content) {
-                if let Some(val) = json.get("lite_mode_global") {
-                    return is_truthy(val);
-                }
+                return Some(json);
             }
+        }
+    }
+    None
+}
+
+pub fn is_lite_mode_active() -> bool {
+    if let Some(json) = read_global_json() {
+        if let Some(val) = json.get("lite_mode_global") {
+            return is_truthy(val);
         }
     }
 
@@ -129,6 +152,73 @@ pub fn is_lite_mode_active() -> bool {
     }
 
     false
+}
+
+pub fn is_auto_dnd_active() -> bool {
+    if let Some(json) = read_global_json() {
+        if let Some(val) = json.get("auto_dnd")
+            .or_else(|| json.get("autoDnd"))
+            .or_else(|| json.get("dnd_auto"))
+        {
+            return is_truthy(val);
+        }
+    }
+
+    if let Ok(output) = Command::new("getprop").arg("persist.lumina.autodnd").output() {
+        let val = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if val == "1" || val == "true" {
+            return true;
+        }
+    }
+
+    false
+}
+
+pub fn get_global_zram_config() -> (Option<u32>, Option<String>, Option<u32>) {
+    let json = match read_global_json() {
+        Some(j) => j,
+        None => return (None, None, None),
+    };
+
+    let size_gb = json.get("zram_size_gb")
+        .or_else(|| json.get("zram_size"))
+        .or_else(|| json.get("zramSize"))
+        .and_then(|v| {
+            if let Some(n) = v.as_u64() {
+                Some(n as u32)
+            } else if let Some(s) = v.as_str() {
+                s.replace("GB", "").replace("gb", "").trim().parse::<u32>().ok()
+            } else {
+                None
+            }
+        });
+
+    let algo = json.get("zram_algorithm")
+        .or_else(|| json.get("zramAlgorithm"))
+        .or_else(|| json.get("zram_algo"))
+        .and_then(|v| v.as_str().map(|s| s.trim().to_string()));
+
+    let swappiness = json.get("swappiness")
+        .or_else(|| json.get("vm_swappiness"))
+        .and_then(|v| {
+            if let Some(n) = v.as_u64() {
+                Some(n as u32)
+            } else if let Some(s) = v.as_str() {
+                s.trim().parse::<u32>().ok()
+            } else {
+                None
+            }
+        });
+
+    (size_gb, algo, swappiness)
+}
+
+pub fn get_global_io_scheduler() -> Option<String> {
+    let json = read_global_json()?;
+    json.get("io_scheduler")
+        .or_else(|| json.get("ioScheduler"))
+        .or_else(|| json.get("scheduler"))
+        .and_then(|v| v.as_str().map(|s| s.trim().to_string()))
 }
 
 fn extract_app_config(item: &Value) -> AppConfig {

@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 kimal
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 mod texture;
 use texture::TextureController;
 #[macro_use]
@@ -21,7 +37,7 @@ use std::time::{Duration, SystemTime};
 use affinity::CpuTopology;
 use detector::{
     get_app_config, get_focused_package, get_zen_mode, is_app_enabled, is_app_retained,
-    is_lite_mode_active, is_low_power_active, is_master_enabled, set_zen_mode,
+    is_auto_dnd_active, is_lite_mode_active, is_low_power_active, is_master_enabled, set_zen_mode,
 };
 use engine::apply_thermal_kill;
 use notifier::{clear_all_notifications, send_notification, NotificationPayload};
@@ -248,50 +264,57 @@ impl EngineRuntime {
             self.current_applied_renderer = desired_renderer;
         }
 
-        if let Some(ref cfg) = target_cfg {
+        let auto_dnd = is_auto_dnd_active();
+        let desired_dnd = if let Some(ref cfg) = target_cfg {
             match cfg.dnd.as_str() {
-                "on" => {
-                    if !self.dnd_overridden {
-                        self.original_zen_mode = get_zen_mode();
-                        self.dnd_overridden = true;
-                    }
-                    if self.current_applied_zen_mode.as_deref() != Some("1") {
-                        set_zen_mode("1");
-                        self.current_applied_zen_mode = Some("1".to_string());
-                        log!("[DND] Zen mode enabled for target application");
-                    }
-                }
-                "off" => {
-                    if !self.dnd_overridden {
-                        self.original_zen_mode = get_zen_mode();
-                        self.dnd_overridden = true;
-                    }
-                    if self.current_applied_zen_mode.as_deref() != Some("0") {
-                        set_zen_mode("0");
-                        self.current_applied_zen_mode = Some("0".to_string());
-                        log!("[DND] Zen mode disabled for target application");
-                    }
-                }
-                _ => {
-                    if self.dnd_overridden {
-                        if let Some(ref orig) = self.original_zen_mode {
-                            set_zen_mode(orig);
-                        }
-                        self.dnd_overridden = false;
-                        self.original_zen_mode = None;
-                        self.current_applied_zen_mode = None;
-                        log!("[DND] Zen mode restored");
-                    }
+                "on" => Some(true),
+                "off" => Some(false),
+                _ => if auto_dnd && (target_profile == Profile::Performance || target_profile == Profile::PerformanceLite) {
+                    Some(true)
+                } else {
+                    None
                 }
             }
-        } else if self.dnd_overridden {
-            if let Some(ref orig) = self.original_zen_mode {
-                set_zen_mode(orig);
+        } else if auto_dnd && (target_profile == Profile::Performance || target_profile == Profile::PerformanceLite) {
+            Some(true)
+        } else {
+            None
+        };
+
+        match desired_dnd {
+            Some(true) => {
+                if !self.dnd_overridden {
+                    self.original_zen_mode = get_zen_mode();
+                    self.dnd_overridden = true;
+                }
+                if self.current_applied_zen_mode.as_deref() != Some("1") {
+                    set_zen_mode("1");
+                    self.current_applied_zen_mode = Some("1".to_string());
+                    log!("[DND] Zen mode enabled (target or auto-dnd)");
+                }
             }
-            self.dnd_overridden = false;
-            self.original_zen_mode = None;
-            self.current_applied_zen_mode = None;
-            log!("[DND] Zen mode restored");
+            Some(false) => {
+                if !self.dnd_overridden {
+                    self.original_zen_mode = get_zen_mode();
+                    self.dnd_overridden = true;
+                }
+                if self.current_applied_zen_mode.as_deref() != Some("0") {
+                    set_zen_mode("0");
+                    self.current_applied_zen_mode = Some("0".to_string());
+                    log!("[DND] Zen mode disabled for target application");
+                }
+            }
+            None => {
+                if self.dnd_overridden {
+                    if let Some(ref orig) = self.original_zen_mode {
+                        set_zen_mode(orig);
+                    }
+                    self.dnd_overridden = false;
+                    self.original_zen_mode = None;
+                    self.current_applied_zen_mode = None;
+                    log!("[DND] Zen mode restored");
+                }
+            }
         }
     }
 
@@ -345,6 +368,7 @@ fn main() {
     log!("[DAEMON] Initializing luminad subsystem...");
     display::init_display_subsystem();
     renderer::init_renderer_subsystem();
+    engine::sync_global_tweaks();
 
     send_notification(NotificationPayload {
         title: "Lumina: Active",
@@ -385,6 +409,10 @@ fn main() {
                     config_just_changed = true;
                 }
             }
+        }
+
+        if config_just_changed {
+            engine::sync_global_tweaks();
         }
 
         if is_master_enabled() {
