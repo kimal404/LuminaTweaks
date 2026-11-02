@@ -398,7 +398,7 @@ fun HomeDashboardContent(
                                         iconBg = MaterialTheme.colorScheme.primaryContainer,
                                         iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
                                         title = "Mulai Ulang",
-                                        cornerRadius = currentRadius,
+                                                                                cornerRadius = currentRadius,
                                         onClick = {
                                             showPowerDialog = false
                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -414,7 +414,7 @@ fun HomeDashboardContent(
                                         iconBg = MaterialTheme.colorScheme.secondaryContainer,
                                         iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
                                         title = "Mode Recovery",
-                                        cornerRadius = currentRadius,
+                                                                                cornerRadius = currentRadius,
                                         onClick = {
                                             showPowerDialog = false
                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -430,7 +430,7 @@ fun HomeDashboardContent(
                                         iconBg = MaterialTheme.colorScheme.tertiaryContainer,
                                         iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
                                         title = "Restart Service",
-                                        cornerRadius = currentRadius,
+                                                                                cornerRadius = currentRadius,
                                         onClick = {
                                             showPowerDialog = false
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -646,6 +646,7 @@ fun HomeDashboardContent(
                     ConnectedCardRow(
                         icon = Icons.Rounded.DeveloperBoard,
                         title = "Manager Version",
+                        subtitle = "v2.0.0 (Remastered)",
                         position = ContainerPosition.Top
                     )
                     ConnectedCardRow(
@@ -671,11 +672,13 @@ fun HomeDashboardContent(
                     ConnectedCardRow(
                         icon = Icons.Rounded.Security,
                         title = "Root Access",
+                        subtitle = "Granted (Superuser)",
                         position = ContainerPosition.Top
                     )
                     ConnectedCardRow(
                         icon = Icons.Rounded.Security,
                         title = "SELinux Status",
+                        subtitle = "Enforcing",
                         position = ContainerPosition.Bottom
                     )
                 }
@@ -689,12 +692,14 @@ fun HomeDashboardContent(
                     ConnectedActionCardRow(
                         icon = Icons.Rounded.Favorite,
                         title = "Support Us",
+                        subtitle = "LuminaTweaks is free and open source forever. Support development through donations.",
                         position = ContainerPosition.Top,
                         onClick = { }
                     )
                     ConnectedActionCardRow(
                         icon = Icons.Rounded.MenuBook,
                         title = "Learn LuminaTweaks",
+                        subtitle = "Explore documentation, kernel tweak parameters, and optimization guides.",
                         position = ContainerPosition.Bottom,
                         onClick = { }
                     )
