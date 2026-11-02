@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -65,6 +66,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.luminatweaks.data.ConfigRepository
+import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.style.TextAlign
+import com.luminatweaks.util.RootUtil
 import com.luminatweaks.data.DaemonManager
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.asPaddingValues
@@ -161,7 +173,11 @@ fun HomeScreen() {
     }
 
     if (isFloating) {
-        Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
             AnimatedContent(
                 targetState = selectedTab,
                 transitionSpec = {
@@ -284,7 +300,7 @@ fun HomeScreen() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HomeDashboardContent(
     batteryTemp: String,
@@ -312,22 +328,135 @@ fun HomeDashboardContent(
                         fontWeight = FontWeight.Bold
                     )
                 },
-                actions = {
-                    IconButton(
-                        onClick = {
-                            if (!isRestarting) {
-                                isRestarting = true
-                                coroutineScope.launch {
-                                    onRestartDaemon()
-                                    isRestarting = false
+                                actions = {
+                    val context = LocalContext.current
+                    val haptic = LocalHapticFeedback.current
+                    var showPowerDialog by remember { mutableStateOf(false) }
+
+                    Box(
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .combinedClickable(
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    showPowerDialog = true
+                                },
+                                onLongClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    if (!isRestarting) {
+                                        isRestarting = true
+                                        Toast.makeText(context, "Memulai ulang layanan...", Toast.LENGTH_SHORT).show()
+                                        coroutineScope.launch {
+                                            onRestartDaemon()
+                                            isRestarting = false
+                                        }
+                                    }
                                 }
-                            }
-                        }
+                            ),
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.PowerSettingsNew,
-                            contentDescription = "Restart Core",
-                            tint = if (isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                            contentDescription = "Menu Daya",
+                            tint = if (isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    if (showPowerDialog) {
+                        val currentRadius = LocalCornerRadius.current
+                        AlertDialog(
+                            onDismissRequest = { showPowerDialog = false },
+                            icon = {
+                                Icon(
+                                    imageVector = Icons.Rounded.PowerSettingsNew,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            },
+                            title = {
+                                Text(
+                                    text = "Menu Daya",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center
+                                )
+                            },
+                            text = {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    PowerMenuItem(
+                                        icon = Icons.Rounded.Refresh,
+                                        iconBg = MaterialTheme.colorScheme.primaryContainer,
+                                        iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        title = "Mulai Ulang",
+                                        subtitle = "Nyalakan ulang sistem normal",
+                                        cornerRadius = currentRadius,
+                                        onClick = {
+                                            showPowerDialog = false
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            Toast.makeText(context, "Memulai ulang perangkat...", Toast.LENGTH_SHORT).show()
+                                            coroutineScope.launch {
+                                                RootUtil.rebootDevice("")
+                                            }
+                                        }
+                                    )
+
+                                    PowerMenuItem(
+                                        icon = Icons.Rounded.Memory,
+                                        iconBg = MaterialTheme.colorScheme.secondaryContainer,
+                                        iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        title = "Mode Recovery",
+                                        subtitle = "Masuk ke TWRP, OrangeFox, atau Recovery bawaan",
+                                        cornerRadius = currentRadius,
+                                        onClick = {
+                                            showPowerDialog = false
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            Toast.makeText(context, "Memulai ulang ke Recovery...", Toast.LENGTH_SHORT).show()
+                                            coroutineScope.launch {
+                                                RootUtil.rebootDevice("recovery")
+                                            }
+                                        }
+                                    )
+
+                                    PowerMenuItem(
+                                        icon = Icons.Rounded.PowerSettingsNew,
+                                        iconBg = MaterialTheme.colorScheme.tertiaryContainer,
+                                        iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        title = "Restart Service",
+                                        subtitle = "Muat ulang latar belakang daemon Lumina",
+                                        cornerRadius = currentRadius,
+                                        onClick = {
+                                            showPowerDialog = false
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            if (!isRestarting) {
+                                                isRestarting = true
+                                                Toast.makeText(context, "Memulai ulang layanan...", Toast.LENGTH_SHORT).show()
+                                                coroutineScope.launch {
+                                                    onRestartDaemon()
+                                                    isRestarting = false
+                                                }
+                                            }
+                                        }
+                                    )
+                                }
+                            },
+                            confirmButton = {},
+                            dismissButton = {
+                                TextButton(onClick = { showPowerDialog = false }) {
+                                    Text(
+                                        text = "Batal",
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            },
+                            shape = RoundedCornerShape(currentRadius.coerceAtLeast(16.dp)),
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                         )
                     }
                 },
@@ -680,6 +809,65 @@ fun ConnectedActionCardRow(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                 modifier = Modifier.size(20.dp)
             )
+        }
+    }
+}
+
+
+@Composable
+private fun PowerMenuItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconBg: androidx.compose.ui.graphics.Color,
+    iconTint: androidx.compose.ui.graphics.Color,
+    title: String,
+    subtitle: String,
+    cornerRadius: androidx.compose.ui.unit.Dp,
+    onClick: () -> Unit
+) {
+    val itemRadius = (cornerRadius * 0.75f).coerceIn(8.dp, 20.dp)
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(itemRadius))
+            .clickable(onClick = onClick),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        shape = RoundedCornerShape(itemRadius)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(iconBg),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
