@@ -179,4 +179,7 @@ Fitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. P
     <string name="toast_drop_caches_success">Cache memori sistem berhasil dibersihkan</string>
     <string name="toast_fstrim_success">Partisi penyimpanan berhasil ditrim</string>
     <string name="dialog_select_compression">Pilih Algoritma Kompresi</string>
+    <string name="memory_zram_size">Kapasitas ZRAM</string>
+    <string name="memory_zram_size_desc">Alokasi total batas ukuran swap ZRAM</string>
+    <string name="dialog_select_zram_size">Pilih Kapasitas ZRAM</string>
 </resources>

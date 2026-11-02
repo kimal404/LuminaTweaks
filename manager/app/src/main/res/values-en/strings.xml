@@ -177,4 +177,7 @@ Features on this page are only active when the system is in the Performance prof
     <string name="toast_drop_caches_success">System memory cache successfully cleared</string>
     <string name="toast_fstrim_success">Storage partitions successfully trimmed</string>
     <string name="dialog_select_compression">Select Compression Algorithm</string>
+    <string name="memory_zram_size">ZRAM Capacity</string>
+    <string name="memory_zram_size_desc">Total allocated ZRAM swap disksize limit</string>
+    <string name="dialog_select_zram_size">Select ZRAM Capacity</string>
 </resources>
