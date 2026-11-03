@@ -21,7 +21,6 @@
 
 ### 🤖 Optimization
 
-* **Universal Boot Baseline:** Automatically configures TCP BBR, applies low-latency storage I/O schedulers (Kyber / mq-deadline), and locks thermal zones to a predictable `step_wise` governor at boot.
 * **Dynamic Profile Switcher:** Automatically switches system profiles (**Performance**, **Performance Lite**, **Balanced**, or **Eco**) based on active foreground state.
 
 ### 🌐 Core Features
