@@ -35,10 +35,12 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -82,6 +84,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -95,6 +98,9 @@ import com.luminatweaks.data.AppProfileConfig
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DisplayRrMode
 import com.luminatweaks.model.AppItem
+import com.luminatweaks.ui.theme.LocalCornerRadius
+import com.luminatweaks.ui.theme.LocalFloatingNavBar
+import java.util.Locale
 
 enum class OptionItem(val value: String) {
     OFF("off"),
@@ -140,6 +146,13 @@ fun AppProfileScreen(
     val context = LocalContext.current
     val packageManager = remember { context.packageManager }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    val cornerRadius = LocalCornerRadius.current
+    val isFloating = LocalFloatingNavBar.current
+
+    val isIndonesian = remember {
+        val lang = Locale.getDefault().language
+        lang == "in" || lang == "id"
+    }
 
     var rrModes by remember { mutableStateOf<List<DisplayRrMode>>(emptyList()) }
 
@@ -193,6 +206,12 @@ fun AppProfileScreen(
         packageInfo?.versionCode?.toLong() ?: 1L
     }
 
+    val bottomPadding = if (isFloating) {
+        110.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    } else {
+        28.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -243,7 +262,7 @@ fun AppProfileScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = innerPadding.calculateTopPadding(),
-                bottom = 24.dp,
+                bottom = bottomPadding,
                 start = 16.dp,
                 end = 16.dp
             ),
@@ -252,7 +271,7 @@ fun AppProfileScreen(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
+                    shape = RoundedCornerShape(cornerRadius),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                     )
@@ -339,68 +358,72 @@ fun AppProfileScreen(
             }
 
             item {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onProfileChanged(profile.copy(saklarUtama = !profile.saklarUtama))
+                        },
+                    shape = getConnectedContainerShape(ContainerPosition.Single, outerRadius = cornerRadius),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                    )
                 ) {
-                    Card(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
-                                onProfileChanged(profile.copy(saklarUtama = !profile.saklarUtama))
-                            },
-                        shape = getConnectedContainerShape(
-                            if (profile.saklarUtama) ContainerPosition.Top else ContainerPosition.Single,
-                            outerRadius = 18.dp
-                        ),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.PowerSettingsNew,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(24.dp)
                         )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.PowerSettingsNew,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(24.dp)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text(
+                            text = stringResource(R.string.profile_master_switch),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Switch(
+                            checked = profile.saklarUtama,
+                            onCheckedChange = { newState ->
+                                onProfileChanged(profile.copy(saklarUtama = newState))
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                checkedTrackColor = MaterialTheme.colorScheme.primary
                             )
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Text(
-                                text = stringResource(R.string.profile_master_switch),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Switch(
-                                checked = profile.saklarUtama,
-                                onCheckedChange = { newState ->
-                                    onProfileChanged(profile.copy(saklarUtama = newState))
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                    checkedTrackColor = MaterialTheme.colorScheme.primary
-                                )
-                            )
-                        }
+                        )
                     }
+                }
+            }
 
-                    AnimatedVisibility(
-                        visible = profile.saklarUtama,
-                        enter = fadeIn() + expandVertically(),
-                        exit = fadeOut() + shrinkVertically()
+            item {
+                AnimatedVisibility(
+                    visible = profile.saklarUtama,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ProfileSectionTitle(
+                                title = if (isIndonesian) "Performa" else "Performance",
+                                icon = Icons.Rounded.Speed
+                            )
+
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable { showLiteModeDialog = true },
-                                shape = getConnectedContainerShape(ContainerPosition.Middle, outerRadius = 18.dp),
+                                shape = getConnectedContainerShape(ContainerPosition.Single, outerRadius = cornerRadius),
                                 colors = CardDefaults.cardColors(
                                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                                 )
@@ -452,127 +475,223 @@ fun AppProfileScreen(
                                     }
                                 }
                             }
+                        }
 
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { showRefreshRateDialog = true },
-                                shape = getConnectedContainerShape(ContainerPosition.Middle, outerRadius = 18.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                                )
-                            ) {
-                                Row(
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ProfileSectionTitle(
+                                title = if (isIndonesian) "Tampilan & Render" else "Display & Render",
+                                icon = Icons.Rounded.Brush
+                            )
+
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Speed,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(24.dp)
+                                        .clickable { inTeksturRinganScreen = true },
+                                    shape = getConnectedContainerShape(ContainerPosition.Top, outerRadius = cornerRadius),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                                     )
-                                    Spacer(modifier = Modifier.width(16.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = stringResource(R.string.profile_refresh_rate),
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.Medium,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text(
-                                            text = stringResource(R.string.profile_refresh_rate_desc),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Box(
+                                ) {
+                                    Row(
                                         modifier = Modifier
-                                            .background(
-                                                color = MaterialTheme.colorScheme.secondaryContainer,
-                                                shape = RoundedCornerShape(8.dp)
-                                            )
-                                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                                        contentAlignment = Alignment.Center
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text(
-                                            text = currentHzLabel,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                                        Icon(
+                                            imageVector = Icons.Rounded.Tune,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(24.dp)
                                         )
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Text(
+                                                    text = stringResource(R.string.profile_texture),
+                                                    style = MaterialTheme.typography.titleSmall,
+                                                    fontWeight = FontWeight.Medium,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                                Box(
+                                                    modifier = Modifier
+                                                        .background(
+                                                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                                                            shape = RoundedCornerShape(4.dp)
+                                                        )
+                                                        .padding(horizontal = 5.dp, vertical = 1.dp)
+                                                ) {}
+                                            }
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = stringResource(R.string.profile_texture_desc),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .background(
+                                                    color = if (profile.textureEnabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
+                                                    shape = RoundedCornerShape(8.dp)
+                                                )
+                                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            val statusText = if (!profile.textureEnabled) {
+                                                stringResource(R.string.opt_off)
+                                            } else {
+                                                when (profile.textureDetail) {
+                                                    0 -> stringResource(R.string.texture_detail_original)
+                                                    1 -> stringResource(R.string.texture_detail_light)
+                                                    2 -> stringResource(R.string.texture_detail_retro)
+                                                    3 -> stringResource(R.string.texture_detail_blocky)
+                                                    else -> stringResource(R.string.opt_active)
+                                                }
+                                            }
+                                            Text(
+                                                text = statusText,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = if (profile.textureEnabled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { showRefreshRateDialog = true },
+                                    shape = getConnectedContainerShape(ContainerPosition.Middle, outerRadius = cornerRadius),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Speed,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = stringResource(R.string.profile_refresh_rate),
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.Medium,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = stringResource(R.string.profile_refresh_rate_desc),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .background(
+                                                    color = MaterialTheme.colorScheme.secondaryContainer,
+                                                    shape = RoundedCornerShape(8.dp)
+                                                )
+                                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = currentHzLabel,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { showRendererDialog = true },
+                                    shape = getConnectedContainerShape(ContainerPosition.Bottom, outerRadius = cornerRadius),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Brush,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = stringResource(R.string.profile_renderer),
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.Medium,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = stringResource(R.string.profile_renderer_desc),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .background(
+                                                    color = MaterialTheme.colorScheme.secondaryContainer,
+                                                    shape = RoundedCornerShape(8.dp)
+                                                )
+                                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            val currentRendererLabel = rendererOptions.find { it.id == profile.renderer }?.label ?: defaultRendererLabel
+                                            Text(
+                                                text = currentRendererLabel,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
                                     }
                                 }
                             }
+                        }
 
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { showRendererDialog = true },
-                                shape = getConnectedContainerShape(ContainerPosition.Middle, outerRadius = 18.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Brush,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(16.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = stringResource(R.string.profile_renderer),
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.Medium,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text(
-                                            text = stringResource(R.string.profile_renderer_desc),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Box(
-                                        modifier = Modifier
-                                            .background(
-                                                color = MaterialTheme.colorScheme.secondaryContainer,
-                                                shape = RoundedCornerShape(8.dp)
-                                            )
-                                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        val currentRendererLabel = rendererOptions.find { it.id == profile.renderer }?.label ?: defaultRendererLabel
-                                        Text(
-                                            text = currentRendererLabel,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                }
-                            }
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ProfileSectionTitle(
+                                title = if (isIndonesian) "Pengaturan Tambahan" else "Additional Settings",
+                                icon = Icons.Rounded.Tune
+                            )
 
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable { showDndDialog = true },
-                                shape = getConnectedContainerShape(ContainerPosition.Middle, outerRadius = 18.dp),
+                                shape = getConnectedContainerShape(ContainerPosition.Single, outerRadius = cornerRadius),
                                 colors = CardDefaults.cardColors(
                                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                                 )
@@ -620,86 +739,6 @@ fun AppProfileScreen(
                                             style = MaterialTheme.typography.labelMedium,
                                             fontWeight = FontWeight.SemiBold,
                                             color = MaterialTheme.colorScheme.onSecondaryContainer
-                                        )
-                                    }
-                                }
-                            }
-
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { inTeksturRinganScreen = true },
-                                shape = getConnectedContainerShape(ContainerPosition.Bottom, outerRadius = 18.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Tune,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(16.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            Text(
-                                                text = stringResource(R.string.profile_texture),
-                                                style = MaterialTheme.typography.titleSmall,
-                                                fontWeight = FontWeight.Medium,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Box(
-                                                modifier = Modifier
-                                                    .background(
-                                                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
-                                                        shape = RoundedCornerShape(4.dp)
-                                                    )
-                                                    .padding(horizontal = 5.dp, vertical = 1.dp)
-                                            ) {}
-                                        }
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text(
-                                            text = stringResource(R.string.profile_texture_desc),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Box(
-                                        modifier = Modifier
-                                            .background(
-                                                color = if (profile.textureEnabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
-                                                shape = RoundedCornerShape(8.dp)
-                                            )
-                                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        val statusText = if (!profile.textureEnabled) {
-                                            stringResource(R.string.opt_off)
-                                        } else {
-                                            when (profile.textureDetail) {
-                                                0 -> stringResource(R.string.texture_detail_original)
-                                                1 -> stringResource(R.string.texture_detail_light)
-                                                2 -> stringResource(R.string.texture_detail_retro)
-                                                3 -> stringResource(R.string.texture_detail_blocky)
-                                                else -> stringResource(R.string.opt_active)
-                                            }
-                                        }
-                                        Text(
-                                            text = statusText,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = if (profile.textureEnabled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer
                                         )
                                     }
                                 }
@@ -967,6 +1006,34 @@ fun AppProfileScreen(
                     Text(stringResource(R.string.action_done))
                 }
             }
+        )
+    }
+}
+
+@Composable
+fun ProfileSectionTitle(
+    title: String,
+    icon: ImageVector,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(start = 4.dp, top = 8.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }
