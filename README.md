@@ -39,11 +39,9 @@
 
 This is a root module compatible across modern Android root environments. Install via your preferred root manager:
 
-* **KernelSU** (v0.9.0+)
-* **APatch** (v10763+)
-* **Magisk** (v26.0+)
-
-> **Requirement:** Android 11 or higher (Android 11+).
+* **KernelSU**
+* **APatch**
+* **Magisk**
 
 ---
 
@@ -62,7 +60,7 @@ We welcome contributions to make **LuminaTweaks** even better!
 
 | Role | Developer |
 | :--- | :--- |
-| **Author & Daemon Developer** | [@MalCLA](https://github.com/kimal404) |
+| **Author** | [@kimal404](https://github.com/kimal404) |
 
 ### Source Code & Inspirations
 
@@ -70,7 +68,6 @@ We welcome contributions to make **LuminaTweaks** even better!
 | :--- | :--- |
 | **AZenith** | [@Liliya2727](https://github.com/Liliya2727) |
 | **Encore Tweaks** | [@Rem01Gaming](https://github.com/Rem01Gaming) |
-| **Google ANGLE** | [ANGLE Graphics Project](https://chromium.googlesource.com/angle/angle) |
 
 ---
 
