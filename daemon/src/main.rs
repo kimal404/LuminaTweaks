@@ -19,12 +19,14 @@ mod logger;
 mod detector;
 mod display;
 mod engine;
+mod fast_charge;
 mod mediatek;
 mod notifier;
 mod renderer;
 mod snapdragon;
 mod unisoc;
 
+use fast_charge::FastChargeController;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
@@ -317,6 +319,8 @@ fn main() {
     engine::sync_global_tweaks();
     engine::apply_boot_profile();
 
+    let mut fast_charge = FastChargeController::new();
+
     send_notification(NotificationPayload {
         title: "Lumina: Active",
         text: "System is now at Dynamic State",
@@ -336,9 +340,12 @@ fn main() {
             runtime.reset_to_balance();
             engine::restore_balance();
             apply_thermal_kill(false);
+            fast_charge.restore();
             TextureController::restore();
             break;
         }
+
+        fast_charge.tick();
 
         let mut config_just_changed = false;
         if let Ok(meta) = std::fs::metadata("/data/adb/luminatweaks/app_config.json") {

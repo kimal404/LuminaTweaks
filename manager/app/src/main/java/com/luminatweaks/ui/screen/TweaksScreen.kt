@@ -98,9 +98,11 @@ import com.luminatweaks.data.DisplayRrMode
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class RendererItem(
     val id: String,
@@ -339,7 +341,20 @@ fun MediaTekEngineScreen(
 fun UtilityScreen(
     onBack: () -> Unit
 ) {
+    val coroutineScope = rememberCoroutineScope()
     var isFastCharge by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            val output = runCatching {
+                val proc = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat /data/adb/luminatweaks/fast_charge 2>/dev/null"))
+                proc.inputStream.bufferedReader().use { it.readText().trim() }
+            }.getOrDefault("0")
+            withContext(Dispatchers.Main) {
+                isFastCharge = output == "1"
+            }
+        }
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
@@ -419,6 +434,12 @@ fun UtilityScreen(
                                 checked = isFastCharge,
                                 onCheckedChange = { newState ->
                                     isFastCharge = newState
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        val cmdVal = if (newState) "1" else "0"
+                                        runCatching {
+                                            Runtime.getRuntime().exec(arrayOf("su", "-c", "echo $cmdVal > /data/adb/luminatweaks/fast_charge"))
+                                        }
+                                    }
                                 },
                                 thumbContent = {
                                     if (isFastCharge) {
