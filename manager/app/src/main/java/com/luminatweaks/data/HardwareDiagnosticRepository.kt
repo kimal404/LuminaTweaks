@@ -37,43 +37,43 @@ object HardwareDiagnosticRepository {
 
         val probeScript = """
             for b_dir in /sys/class/power_supply/battery /sys/class/power_supply/bms; do
-                if [ -d "$b_dir" ]; then
-                    echo "B_DIR=$b_dir"
-                    [ -f "$b_dir/charge_full" ] && echo "B_FULL=$(cat "$b_dir/charge_full")"
-                    [ -f "$b_dir/charge_full_design" ] && echo "B_DESIGN=$(cat "$b_dir/charge_full_design")"
-                    [ -f "$b_dir/cycle_count" ] && echo "B_CYCLE=$(cat "$b_dir/cycle_count")"
-                    [ -f "$b_dir/temp" ] && echo "B_TEMP=$(cat "$b_dir/temp")"
-                    [ -f "$b_dir/voltage_now" ] && echo "B_VOLT=$(cat "$b_dir/voltage_now")"
-                    [ -f "$b_dir/status" ] && echo "B_STATUS=$(cat "$b_dir/status")"
+                if [ -d "${'$'}b_dir" ]; then
+                    echo "B_DIR=${'$'}b_dir"
+                    [ -f "${'$'}b_dir/charge_full" ] && echo "B_FULL=${'$'}(cat ${'$'}b_dir/charge_full)"
+                    [ -f "${'$'}b_dir/charge_full_design" ] && echo "B_DESIGN=${'$'}(cat ${'$'}b_dir/charge_full_design)"
+                    [ -f "${'$'}b_dir/cycle_count" ] && echo "B_CYCLE=${'$'}(cat ${'$'}b_dir/cycle_count)"
+                    [ -f "${'$'}b_dir/temp" ] && echo "B_TEMP=${'$'}(cat ${'$'}b_dir/temp)"
+                    [ -f "${'$'}b_dir/voltage_now" ] && echo "B_VOLT=${'$'}(cat ${'$'}b_dir/voltage_now)"
+                    [ -f "${'$'}b_dir/status" ] && echo "B_STATUS=${'$'}(cat ${'$'}b_dir/status)"
                     break
                 fi
             done
 
             UFS_FOUND=0
             for u_dir in /sys/class/block/sda/device /sys/block/sda/device /sys/devices/platform/soc/*.ufshc; do
-                if [ -d "$u_dir" ]; then
+                if [ -d "${'$'}u_dir" ]; then
                     echo "S_TYPE=UFS"
-                    echo "S_DIR=$u_dir"
-                    [ -f "$u_dir/model" ] && echo "S_MODEL=$(cat "$u_dir/model")"
-                    [ -f "$u_dir/rev" ] && echo "S_REV=$(cat "$u_dir/rev")"
+                    echo "S_DIR=${'$'}u_dir"
+                    [ -f "${'$'}u_dir/model" ] && echo "S_MODEL=${'$'}(cat ${'$'}u_dir/model)"
+                    [ -f "${'$'}u_dir/rev" ] && echo "S_REV=${'$'}(cat ${'$'}u_dir/rev)"
                     for target in life_time_estimation_a life_time_estimation_b pre_eol_info; do
-                        node_path=$(find "$u_dir" -name "$target" -print -quit 2>/dev/null)
-                        [ -n "$node_path" ] && echo "S_${target}=$(cat "$node_path")"
+                        node_path=${'$'}(find "${'$'}u_dir" -name "${'$'}target" -print -quit 2>/dev/null)
+                        [ -n "${'$'}node_path" ] && echo "S_${'$'}{target}=${'$'}(cat "${'$'}node_path")"
                     done
                     UFS_FOUND=1
                     break
                 fi
             done
 
-            if [ "$UFS_FOUND" -eq 0 ]; then
+            if [ "${'$'}UFS_FOUND" -eq 0 ]; then
                 for m_dir in /sys/class/block/mmcblk0/device /sys/block/mmcblk0/device; do
-                    if [ -d "$m_dir" ]; then
+                    if [ -d "${'$'}m_dir" ]; then
                         echo "S_TYPE=eMMC"
-                        echo "S_DIR=$m_dir"
-                        [ -f "$m_dir/name" ] && echo "S_MODEL=$(cat "$m_dir/name")"
-                        [ -f "$m_dir/rev" ] && echo "S_REV=$(cat "$m_dir/rev")"
-                        [ -f "$m_dir/life_time" ] && echo "S_EMMC_LIFE=$(cat "$m_dir/life_time")"
-                        [ -f "$m_dir/pre_eol_info" ] && echo "S_pre_eol_info=$(cat "$m_dir/pre_eol_info")"
+                        echo "S_DIR=${'$'}m_dir"
+                        [ -f "${'$'}m_dir/name" ] && echo "S_MODEL=${'$'}(cat ${'$'}m_dir/name)"
+                        [ -f "${'$'}m_dir/rev" ] && echo "S_REV=${'$'}(cat ${'$'}m_dir/rev)"
+                        [ -f "${'$'}m_dir/life_time" ] && echo "S_EMMC_LIFE=${'$'}(cat ${'$'}m_dir/life_time)"
+                        [ -f "${'$'}m_dir/pre_eol_info" ] && echo "S_pre_eol_info=${'$'}(cat ${'$'}m_dir/pre_eol_info)"
                         break
                     fi
                 done
