@@ -15,39 +15,78 @@
  */
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 const BATT_STATUS: &str = "/sys/class/power_supply/battery/status";
 const SCONFIG_PATH: &str = "/sys/devices/virtual/thermal/thermal_message/sconfig";
-const CHARGE_CONTROL_LIMIT: &str = "/sys/class/power_supply/battery/charge_control_limit";
-const STEP_CHARGING: &str = "/sys/class/power_supply/battery/step_charging_enabled";
-const COOL_DOWN: &str = "/sys/class/power_supply/battery/cool_down";
 const FAST_CHARGE_FLAG: &str = "/data/adb/luminatweaks/fast_charge";
 
 pub struct FastChargeController {
-    is_active: bool,
+    battery_dirs: Vec<PathBuf>,
+    thermal_services: Vec<String>,
+    thermal_disabled: bool,
 }
 
 impl FastChargeController {
     pub fn new() -> Self {
-        Self { is_active: false }
+        let battery_dirs = Self::discover_battery_dirs();
+        let thermal_services = Self::discover_thermal_services();
+
+        Self {
+            battery_dirs,
+            thermal_services,
+            thermal_disabled: false,
+        }
+    }
+
+    fn discover_battery_dirs() -> Vec<PathBuf> {
+        let output = Command::new("sh")
+            .arg("-c")
+            .arg("find /sys/devices -name health -exec dirname {} + 2>/dev/null")
+            .output();
+
+        if let Ok(out) = output {
+            String::from_utf8_lossy(&out.stdout)
+                .lines()
+                .map(|line| PathBuf::from(line.trim()))
+                .filter(|p| p.exists())
+                .collect()
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn discover_thermal_services() -> Vec<String> {
+        let output = Command::new("sh")
+            .arg("-c")
+            .arg("find /system/etc/init /vendor/etc/init /odm/etc/init -type f 2>/dev/null | xargs grep -Eh '^service .*thermal' 2>/dev/null | awk '{print $2}'")
+            .output();
+
+        if let Ok(out) = output {
+            String::from_utf8_lossy(&out.stdout)
+                .lines()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        } else {
+            Vec::new()
+        }
     }
 
     pub fn tick(&mut self) {
         let is_enabled = self.is_flag_enabled();
 
         if !is_enabled {
-            if self.is_active {
+            if self.thermal_disabled {
                 self.restore();
             }
             return;
         }
 
         if self.is_charging() {
-            if !self.is_active {
-                self.apply();
-            }
-        } else if self.is_active {
+            self.apply();
+        } else if self.thermal_disabled {
             self.restore();
         }
     }
@@ -65,34 +104,93 @@ impl FastChargeController {
     }
 
     fn apply(&mut self) {
-        if Path::new(CHARGE_CONTROL_LIMIT).exists() {
-            let _ = fs::write(CHARGE_CONTROL_LIMIT, "0");
+        for dir in &self.battery_dirs {
+            let limit_path = dir.join("charge_control_limit");
+            if limit_path.exists() {
+                let _ = fs::write(&limit_path, "0");
+            }
+            let health_path = dir.join("health");
+            if health_path.exists() {
+                let _ = fs::write(&health_path, "Good");
+            }
         }
 
-        if Path::new(STEP_CHARGING).exists() {
-            let _ = fs::write(STEP_CHARGING, "0");
+        if let Ok(entries) = fs::read_dir("/sys/devices/virtual/thermal") {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+                    if file_name.starts_with("thermal_zone") {
+                        let cur_state = path.join("cur_state");
+                        if cur_state.exists() {
+                            let _ = fs::write(&cur_state, "0");
+                        }
+                        let mode = path.join("mode");
+                        if mode.exists() {
+                            let _ = fs::write(&mode, "disabled");
+                        }
+                    }
+                }
+            }
         }
 
-        if Path::new(COOL_DOWN).exists() {
-            let _ = fs::write(COOL_DOWN, "0");
+        for svc in &self.thermal_services {
+            let status = Command::new("getprop")
+                .arg(format!("init.svc.{}", svc))
+                .output()
+                .ok()
+                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                .unwrap_or_default();
+
+            if status == "running" {
+                let _ = Command::new("stop").arg(svc).status();
+            }
         }
 
-        if Path::new(SCONFIG_PATH).exists() {
-            let _ = fs::write(SCONFIG_PATH, "6");
+        if !self.thermal_disabled {
+            if Path::new(SCONFIG_PATH).exists() {
+                let _ = Command::new("chmod").args(["644", SCONFIG_PATH]).status();
+                let _ = fs::write(SCONFIG_PATH, "6");
+                let _ = Command::new("chmod").args(["444", SCONFIG_PATH]).status();
+            }
+            self.thermal_disabled = true;
         }
-
-        self.is_active = true;
     }
 
     pub fn restore(&mut self) {
-        if Path::new(SCONFIG_PATH).exists() {
-            let _ = fs::write(SCONFIG_PATH, "0");
-        }
+        if self.thermal_disabled {
+            if Path::new(SCONFIG_PATH).exists() {
+                let _ = Command::new("chmod").args(["644", SCONFIG_PATH]).status();
+                let _ = fs::write(SCONFIG_PATH, "0");
+            }
 
-        if Path::new(STEP_CHARGING).exists() {
-            let _ = fs::write(STEP_CHARGING, "1");
-        }
+            if let Ok(entries) = fs::read_dir("/sys/devices/virtual/thermal") {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+                        if file_name.starts_with("thermal_zone") {
+                            let mode = path.join("mode");
+                            if mode.exists() {
+                                let _ = fs::write(&mode, "enabled");
+                            }
+                        }
+                    }
+                }
+            }
 
-        self.is_active = false;
+            for svc in &self.thermal_services {
+                let status = Command::new("getprop")
+                    .arg(format!("init.svc.{}", svc))
+                    .output()
+                    .ok()
+                    .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                    .unwrap_or_default();
+
+                if status != "running" {
+                    let _ = Command::new("start").arg(svc).status();
+                }
+            }
+
+            self.thermal_disabled = false;
+        }
     }
 }
