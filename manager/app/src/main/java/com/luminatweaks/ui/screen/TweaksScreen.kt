@@ -309,7 +309,7 @@ fun MediaTekEngineScreen(
                             }
                             Switch(
                                 checked = isBoostGed,
-                                onBoostGedChange = onBoostGedChange,
+                                onCheckedChange = onBoostGedChange,
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                                     checkedTrackColor = MaterialTheme.colorScheme.primary
