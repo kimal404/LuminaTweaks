@@ -119,6 +119,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.luminatweaks.R
 import com.luminatweaks.ui.theme.AccentIntensity
@@ -191,10 +192,14 @@ fun PersonalisasiScreen(
     val nestedScrollConnection = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (available.y < -12f) {
-                    if (isPreviewExpanded) isPreviewExpanded = false
-                } else if (available.y > 12f) {
+                if (available.y < -14f) {
+                    if (isPreviewExpanded) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        isPreviewExpanded = false
+                    }
+                } else if (available.y > 14f) {
                     if (!isPreviewExpanded && (!lazyListState.canScrollBackward || lazyListState.firstVisibleItemIndex == 0)) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         isPreviewExpanded = true
                     }
                 }
@@ -256,9 +261,22 @@ fun PersonalisasiScreen(
                 colorScheme = previewColorScheme,
                 cornerRadius = currentCornerRadius,
                 isFloatingNavBar = isFloatingNavBar,
-                onToggle = { isPreviewExpanded = !isPreviewExpanded },
-                onCollapse = { isPreviewExpanded = false },
-                onExpand = { isPreviewExpanded = true }
+                onToggle = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    isPreviewExpanded = !isPreviewExpanded
+                },
+                onCollapse = {
+                    if (isPreviewExpanded) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        isPreviewExpanded = false
+                    }
+                },
+                onExpand = {
+                    if (!isPreviewExpanded) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        isPreviewExpanded = true
+                    }
+                }
             )
 
             Surface(
@@ -276,9 +294,22 @@ fun PersonalisasiScreen(
                         .nestedScroll(nestedScrollConnection)
                 ) {
                     SheetHandle(
-                        onToggle = { isPreviewExpanded = !isPreviewExpanded },
-                        onCollapse = { isPreviewExpanded = false },
-                        onExpand = { isPreviewExpanded = true }
+                        onToggle = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            isPreviewExpanded = !isPreviewExpanded
+                        },
+                        onCollapse = {
+                            if (isPreviewExpanded) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                isPreviewExpanded = false
+                            }
+                        },
+                        onExpand = {
+                            if (!isPreviewExpanded) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                isPreviewExpanded = true
+                            }
+                        }
                     )
 
                     LazyColumn(
@@ -336,7 +367,10 @@ fun PersonalisasiScreen(
                                             .weight(1f)
                                             .height(42.dp)
                                             .clip(RoundedCornerShape(12.dp))
-                                            .clickable { updateTheme(spec = engine) },
+                                            .clickable {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                updateTheme(spec = engine)
+                                            },
                                         color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
                                         shape = RoundedCornerShape(12.dp)
                                     ) {
@@ -368,7 +402,10 @@ fun PersonalisasiScreen(
                                         isSelected = currentKeyColor == 0,
                                         isDark = isDark,
                                         colorSpec = currentColorSpec,
-                                        onClick = { updateTheme(key = 0) }
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            updateTheme(key = 0)
+                                        }
                                     )
                                 }
 
@@ -378,7 +415,10 @@ fun PersonalisasiScreen(
                                         isSelected = currentKeyColor == colorInt,
                                         isDark = isDark,
                                         colorSpec = currentColorSpec,
-                                        onClick = { updateTheme(key = colorInt) }
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            updateTheme(key = colorInt)
+                                        }
                                     )
                                 }
                             }
@@ -407,7 +447,10 @@ fun PersonalisasiScreen(
                                             .weight(1f)
                                             .height(44.dp)
                                             .clip(RoundedCornerShape(12.dp))
-                                            .clickable { updateTheme(mode = mode) },
+                                            .clickable {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                updateTheme(mode = mode)
+                                            },
                                         color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
                                         shape = RoundedCornerShape(12.dp)
                                     ) {
@@ -476,8 +519,12 @@ fun PersonalisasiScreen(
                                 Slider(
                                     value = sliderPosition,
                                     onValueChange = { rawVal ->
+                                        val oldIndex = sliderPosition.roundToInt()
                                         sliderPosition = rawVal
                                         val index = rawVal.roundToInt().coerceIn(0, 3)
+                                        if (index != oldIndex) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        }
                                         val newIntensity = AccentIntensity.fromValue(index)
                                         if (newIntensity != currentIntensity) {
                                             updateTheme(intensity = newIntensity)
@@ -525,6 +572,7 @@ fun PersonalisasiScreen(
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(18.dp))
                                     .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         updateTheme(floating = !isFloatingNavBar)
                                     },
                                 colors = CardDefaults.cardColors(
@@ -556,6 +604,7 @@ fun PersonalisasiScreen(
                                     Switch(
                                         checked = isFloatingNavBar,
                                         onCheckedChange = { checked ->
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                             updateTheme(floating = checked)
                                         }
                                     )
@@ -683,9 +732,9 @@ private fun SheetHandle(
     onExpand: () -> Unit
 ) {
     val draggableState = rememberDraggableState { delta ->
-        if (delta < -8f) {
+        if (delta < -10f) {
             onCollapse()
-        } else if (delta > 8f) {
+        } else if (delta > 10f) {
             onExpand()
         }
     }
@@ -726,9 +775,9 @@ private fun PinnedPreviewHeader(
     modifier: Modifier = Modifier
 ) {
     val draggableState = rememberDraggableState { delta ->
-        if (delta < -8f) {
+        if (delta < -10f) {
             onCollapse()
-        } else if (delta > 8f) {
+        } else if (delta > 10f) {
             onExpand()
         }
     }
@@ -736,21 +785,21 @@ private fun PinnedPreviewHeader(
     val baseWidth = 200.dp
     val baseHeight = 400.dp
 
-    val targetHeaderHeight = if (expanded) 410.dp else 205.dp
+    val targetHeaderHeight = if (expanded) 400.dp else 190.dp
     val headerHeight by animateDpAsState(
         targetValue = targetHeaderHeight,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
+            dampingRatio = 0.45f,
             stiffness = Spring.StiffnessMediumLow
         ),
         label = "previewHeight"
     )
 
-    val targetScale = if (expanded) 0.95f else 0.46f
+    val targetScale = if (expanded) 0.94f else 0.44f
     val scale by animateFloatAsState(
         targetValue = targetScale,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
+            dampingRatio = 0.45f,
             stiffness = Spring.StiffnessMediumLow
         ),
         label = "previewScale"
@@ -1006,7 +1055,14 @@ private fun SwatchButton(
                 )
             }
 
-            val scale by animateFloatAsState(targetValue = if (isSelected) 1.1f else 1.0f, label = "scale")
+            val scale by animateFloatAsState(
+                targetValue = if (isSelected) 1.1f else 1.0f,
+                animationSpec = spring(
+                    dampingRatio = 0.5f,
+                    stiffness = Spring.StiffnessMediumLow
+                ),
+                label = "scale"
+            )
 
             Box(
                 modifier = Modifier.graphicsLayer {
@@ -1017,7 +1073,10 @@ private fun SwatchButton(
             ) {
                 AnimatedVisibility(
                     visible = isSelected,
-                    enter = fadeIn() + scaleIn(initialScale = 0.8f),
+                    enter = fadeIn() + scaleIn(
+                        initialScale = 0.8f,
+                        animationSpec = spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessMediumLow)
+                    ),
                     exit = fadeOut() + scaleOut(targetScale = 0.8f)
                 ) {
                     Box(
