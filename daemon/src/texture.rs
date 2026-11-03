@@ -97,7 +97,7 @@ impl TextureController {
             features.push("forceNearestFiltering");
         }
 
-        match lod.clamp(-3, 5) {
+        match lod.clamp(-3, 4) {
             -3 => {
                 features.push("maximumAnisotropy");
             }
@@ -117,9 +117,6 @@ impl TextureController {
             }
             4 => {
                 features.push("forceTextureLodOffset4");
-            }
-            5 => {
-                features.push("forceTextureLodOffset5");
             }
             _ => (),
         }
@@ -206,7 +203,7 @@ impl TextureController {
                 })
                 .unwrap_or(0);
 
-            let lod = raw_lod.clamp(-3, 5);
+            let lod = raw_lod.clamp(-3, 4);
 
             let pixel_sharp = item
                 .get("pixel_sharp")

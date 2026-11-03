@@ -104,13 +104,12 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 fun generateTextureBitmap(lod: Int): ImageBitmap {
-    val scale = when (lod.coerceIn(-3, 5)) {
+    val scale = when (lod.coerceIn(-3, 4)) {
         -3, -2, -1, 0 -> 1
         1 -> 2
         2 -> 4
         3 -> 8
         4 -> 16
-        5 -> 32
         else -> 1
     }
 
@@ -340,12 +339,12 @@ fun TeksturRinganScreen(
     BackHandler(onBack = onBack)
 
     val primaryAccent = MaterialTheme.colorScheme.primary
-    val currentLod = profile.textureLod.coerceIn(-3, 5)
+    val currentLod = profile.textureLod.coerceIn(-3, 4)
     val isTweakActive = currentLod != 0
     val isFloating = LocalFloatingNavBar.current
 
     val bottomPadding = if (isFloating) {
-        110.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        120.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     } else {
         32.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     }
@@ -459,7 +458,7 @@ fun TeksturRinganScreen(
                             onValueChange = { rawVal ->
                                 val snapped = if (abs(rawVal) <= 0.3f) 0f else rawVal
                                 sliderPosition = snapped
-                                val targetLod = snapped.roundToInt().coerceIn(-3, 5)
+                                val targetLod = snapped.roundToInt().coerceIn(-3, 4)
                                 if (targetLod != profile.textureLod) {
                                     onProfileChanged(
                                         profile.copy(
@@ -472,7 +471,7 @@ fun TeksturRinganScreen(
                                 }
                             },
                             onValueChangeFinished = {
-                                val finalLod = sliderPosition.roundToInt().coerceIn(-3, 5)
+                                val finalLod = sliderPosition.roundToInt().coerceIn(-3, 4)
                                 sliderPosition = finalLod.toFloat()
                                 onProfileChanged(
                                     profile.copy(
@@ -483,8 +482,8 @@ fun TeksturRinganScreen(
                                     )
                                 )
                             },
-                            valueRange = -3f..5f,
-                            steps = 7,
+                            valueRange = -3f..4f,
+                            steps = 6,
                             colors = SliderDefaults.colors(
                                 thumbColor = primaryAccent,
                                 activeTrackColor = primaryAccent
@@ -498,8 +497,8 @@ fun TeksturRinganScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            val tickLabels = listOf("-3", "-2", "-1", "|  0  |", "+1", "+2", "+3", "+4", "+5")
-                            val tickValues = listOf(-3, -2, -1, 0, 1, 2, 3, 4, 5)
+                            val tickLabels = listOf("-3", "-2", "-1", "|  0  |", "+1", "+2", "+3", "+4")
+                            val tickValues = listOf(-3, -2, -1, 0, 1, 2, 3, 4)
 
                             tickLabels.forEachIndexed { index, label ->
                                 val pointVal = tickValues[index]
@@ -523,7 +522,7 @@ fun TeksturRinganScreen(
                                                 )
                                             )
                                         }
-                                        .padding(horizontal = 3.dp, vertical = 2.dp)
+                                        .padding(horizontal = 4.dp, vertical = 2.dp)
                                 )
                             }
                         }
