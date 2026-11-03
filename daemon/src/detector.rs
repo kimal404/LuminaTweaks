@@ -31,34 +31,38 @@ pub struct AppConfig {
 }
 
 pub fn get_focused_package() -> Option<String> {
-    let output = Command::new("dumpsys")
-        .args(["window"])
-        .output()
-        .ok()?;
+    let parse_output = |sub_arg: Option<&str>| -> Option<String> {
+        let mut cmd = Command::new("dumpsys");
+        cmd.arg("window");
+        if let Some(arg) = sub_arg {
+            cmd.arg(arg);
+        }
 
-    if !output.status.success() {
-        return None;
-    }
+        let output = cmd.output().ok()?;
+        if !output.status.success() {
+            return None;
+        }
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    for line in stdout.lines() {
-        if line.contains("mCurrentFocus") || line.contains("mFocusedApp") {
-            for token in line.split_whitespace() {
-                if token.contains('/') && token.contains('.') {
-                    let cleaned = token.trim_matches(|c: char| !c.is_alphanumeric() && c != '.' && c != '/' && c != '_');
-                    if let Some(pkg) = cleaned.split('/').next() {
-                        let pkg = pkg.trim();
-                        if !pkg.is_empty() && pkg != "null" && pkg.contains('.') {
-                            return Some(pkg.to_string());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            if line.contains("mCurrentFocus") || line.contains("mFocusedApp") {
+                for token in line.split_whitespace() {
+                    if token.contains('/') && token.contains('.') {
+                        let cleaned = token.trim_matches(|c: char| !c.is_alphanumeric() && c != '.' && c != '/' && c != '_');
+                        if let Some(pkg) = cleaned.split('/').next() {
+                            let pkg = pkg.trim();
+                            if !pkg.is_empty() && pkg != "null" && pkg.contains('.') {
+                                return Some(pkg.to_string());
+                            }
                         }
                     }
                 }
             }
         }
-    }
+        None
+    };
 
-    None
+    parse_output(Some("displays")).or_else(|| parse_output(None))
 }
 
 pub fn is_master_enabled() -> bool {
