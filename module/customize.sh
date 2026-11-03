@@ -5,6 +5,7 @@ ui_print "************************************"
 BASE_DIR="/data/adb/luminatweaks"
 mkdir -p "$BASE_DIR/bin"
 mkdir -p "$BASE_DIR/configs"
+mkdir -p "$BASE_DIR/logs"
 
 ui_print "- Cleaning conflicting legacy daemons..."
 killall -9 luminad 2>/dev/null
@@ -45,6 +46,7 @@ if [ -f "$MODPATH/manager.apk" ]; then
         ui_print "! Gagal memasang Manager APK: $install_out"
     fi
 
+    # Izin esensial & penghindaran pembatasan latar belakang
     pm grant com.luminatweaks android.permission.POST_NOTIFICATIONS >/dev/null 2>&1
     pm grant com.luminatweaks android.permission.QUERY_ALL_PACKAGES >/dev/null 2>&1
     pm grant com.luminatweaks com.android.permission.GET_INSTALLED_APPS >/dev/null 2>&1
@@ -57,6 +59,9 @@ if [ -f "$MODPATH/manager.apk" ]; then
     appops set com.luminatweaks android:get_installed_apps allow >/dev/null 2>&1
     appops set com.luminatweaks GET_INSTALLED_APPS allow >/dev/null 2>&1
     appops set com.luminatweaks 10022 allow >/dev/null 2>&1
+
+    # Cegah Doze / pembatasan baterai HyperOS
+    dumpsys deviceidle whitelist +com.luminatweaks >/dev/null 2>&1
 fi
 
 set_perm "$MODPATH/service.sh" 0 0 0755

@@ -26,6 +26,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -48,6 +49,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DeveloperBoard
@@ -497,28 +499,23 @@ fun HomeDashboardContent(
             item {
                 val bannerToneColor = when {
                     isChecking -> MaterialTheme.colorScheme.surfaceContainerHighest
-                    isRunning -> MaterialTheme.colorScheme.secondaryContainer
+                    isRunning -> MaterialTheme.colorScheme.primaryContainer
                     else -> MaterialTheme.colorScheme.errorContainer
                 }
                 val bannerContentColor = when {
                     isChecking -> MaterialTheme.colorScheme.onSurfaceVariant
-                    isRunning -> MaterialTheme.colorScheme.onSecondaryContainer
+                    isRunning -> MaterialTheme.colorScheme.onPrimaryContainer
                     else -> MaterialTheme.colorScheme.onErrorContainer
-                }
-                val bannerIcon = when {
-                    isChecking -> Icons.Rounded.Memory
-                    isRunning -> Icons.Rounded.CheckCircle
-                    else -> Icons.Rounded.ErrorOutline
                 }
                 val bannerTitle = when {
                     isChecking -> stringResource(R.string.home_core_checking)
                     isRestarting -> stringResource(R.string.home_core_starting)
-                    isRunning -> stringResource(R.string.home_core_working)
+                    isRunning -> "Alive"
                     else -> stringResource(R.string.home_core_inactive)
                 }
                 val bannerSubtitle = when {
                     isChecking -> stringResource(R.string.home_core_scanning)
-                    isRunning -> stringResource(R.string.home_core_running_format, daemonPid ?: "-")
+                    isRunning -> "PID: ${daemonPid ?: "-"}"
                     else -> stringResource(R.string.home_core_tap_start)
                 }
 
@@ -534,34 +531,69 @@ fun HomeDashboardContent(
                                 }
                             }
                         },
-                    shape = MaterialTheme.shapes.medium,
+                    shape = MaterialTheme.shapes.large,
                     colors = CardDefaults.cardColors(containerColor = bannerToneColor)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(18.dp),
+                            .padding(horizontal = 20.dp, vertical = 18.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = bannerIcon,
-                            contentDescription = null,
-                            tint = bannerContentColor,
-                            modifier = Modifier.size(30.dp)
+                        if (isRunning) {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .border(2.5.dp, bannerContentColor, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Check,
+                                    contentDescription = null,
+                                    tint = bannerContentColor,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        } else if (isChecking) {
+                            Icon(
+                                imageVector = Icons.Rounded.Memory,
+                                contentDescription = null,
+                                tint = bannerContentColor,
+                                modifier = Modifier.size(34.dp)
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Rounded.ErrorOutline,
+                                contentDescription = null,
+                                tint = bannerContentColor,
+                                modifier = Modifier.size(34.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(16.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .height(34.dp)
+                                .width(1.5.dp)
+                                .background(bannerContentColor.copy(alpha = 0.35f))
                         )
-                        Spacer(modifier = Modifier.width(14.dp))
+
+                        Spacer(modifier = Modifier.width(16.dp))
+
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = bannerTitle,
-                                style = MaterialTheme.typography.titleMedium,
+                                style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = bannerContentColor
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = bannerSubtitle,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = bannerContentColor.copy(alpha = 0.8f)
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Normal,
+                                color = bannerContentColor.copy(alpha = 0.85f)
                             )
                         }
 
@@ -570,7 +602,7 @@ fun HomeDashboardContent(
                                 imageVector = Icons.Rounded.PlayArrow,
                                 contentDescription = stringResource(R.string.action_start),
                                 tint = bannerContentColor,
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(28.dp)
                             )
                         }
                     }
