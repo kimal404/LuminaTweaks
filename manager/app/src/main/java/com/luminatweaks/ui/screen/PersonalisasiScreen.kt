@@ -53,6 +53,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
@@ -732,59 +733,58 @@ private fun PinnedPreviewHeader(
         }
     }
 
-    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-        val baseWidth = 220.dp
-        val baseHeight = 440.dp
+    val baseWidth = 200.dp
+    val baseHeight = 400.dp
 
-        val targetHeight = if (expanded) (maxWidth * 1.05f).coerceIn(340.dp, 385.dp) else 135.dp
-        val height by animateDpAsState(
-            targetValue = targetHeight,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioLowBouncy,
-                stiffness = Spring.StiffnessMediumLow
-            ),
-            label = "previewHeight"
-        )
+    val targetHeaderHeight = if (expanded) 410.dp else 205.dp
+    val headerHeight by animateDpAsState(
+        targetValue = targetHeaderHeight,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "previewHeight"
+    )
 
-        val targetScale = if (expanded) {
-            (targetHeight / baseHeight * 0.92f).coerceIn(0.72f, 0.82f)
-        } else {
-            (135.dp / baseHeight * 0.86f).coerceIn(0.24f, 0.28f)
-        }
+    val targetScale = if (expanded) 0.95f else 0.46f
+    val scale by animateFloatAsState(
+        targetValue = targetScale,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "previewScale"
+    )
 
-        val scale by animateFloatAsState(
-            targetValue = targetScale,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioLowBouncy,
-                stiffness = Spring.StiffnessMediumLow
-            ),
-            label = "previewScale"
-        )
-
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(headerHeight)
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.Center
+    ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(height)
-                .padding(horizontal = 16.dp),
+                .size(width = baseWidth * scale, height = baseHeight * scale)
+                .draggable(
+                    state = draggableState,
+                    orientation = Orientation.Vertical
+                )
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onToggle
+                ),
             contentAlignment = Alignment.Center
         ) {
             Surface(
                 modifier = Modifier
-                    .size(width = baseWidth, height = baseHeight)
+                    .requiredSize(width = baseWidth, height = baseHeight)
                     .graphicsLayer {
                         scaleX = scale
                         scaleY = scale
                         transformOrigin = TransformOrigin.Center
-                    }
-                    .draggable(
-                        state = draggableState,
-                        orientation = Orientation.Vertical
-                    )
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onToggle
-                    ),
+                    },
                 color = colorScheme.surface,
                 shape = RoundedCornerShape(30.dp),
                 border = BorderStroke(2.dp, colorScheme.outlineVariant.copy(alpha = 0.5f)),
