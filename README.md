@@ -49,7 +49,7 @@ This is a root module compatible across modern Android root environments. Instal
 
 We welcome contributions to make **LuminaTweaks** even better!
 
-* **Report Bugs:** Open an [Issue](https://github.com/kimal404/lumina-tweaks/issues) with detailed logs from `/data/adb/luminatweaks/luminad.log` or logcat.
+* **Report Bugs:** Open an [Issue](https://github.com/kimal404/LuminaTweaks/issues) with detailed logs from `/data/adb/luminatweaks/luminad.log` or logcat.
 * **Pull Requests:** Fork the repository, create a branch for your feature, and submit a PR with clear documentation.
 
 ---
@@ -76,10 +76,10 @@ We welcome contributions to make **LuminaTweaks** even better!
 Get the latest updates, experimental builds, and discussions through our official channels:
 
 <p align="left">
-  <a href="https://github.com/kimal404/lumina-tweaks">
+  <a href="https://github.com/kimal404/LuminaTweaks">
     <img src="https://img.shields.io/badge/GitHub-Repository-black?style=for-the-badge&logo=github" alt="GitHub Repo">
   </a>
-  <a href="https://t.me/">
+  <a href="https://t.me/MallArchiven">
     <img src="https://img.shields.io/badge/Telegram-Channel-blue?style=for-the-badge&logo=telegram" alt="Telegram Channel">
   </a>
 </p>
