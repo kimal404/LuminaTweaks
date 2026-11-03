@@ -16,6 +16,9 @@
 
 package com.luminatweaks.ui.screen
 
+import android.content.Context
+import android.os.Build
+import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -70,6 +73,7 @@ import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -78,6 +82,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -86,6 +91,10 @@ import com.luminatweaks.R
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DisplayRrMode
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
+import java.util.Locale
+import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 data class RendererItem(
@@ -300,7 +309,7 @@ fun MediaTekEngineScreen(
                             }
                             Switch(
                                 checked = isBoostGed,
-                                onCheckedChange = onBoostGedChange,
+                                onBoostGedChange = onBoostGedChange,
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                                     checkedTrackColor = MaterialTheme.colorScheme.primary
@@ -323,8 +332,14 @@ fun MediaTekEngineScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TweaksScreen() {
+    val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val coroutineScope = rememberCoroutineScope()
+
+    val isIndonesian = remember {
+        val lang = Locale.getDefault().language
+        lang == "in" || lang == "id"
+    }
 
     val cached = ConfigRepository.cachedTweaksState
     var isGlobalLiteMode by remember { mutableStateOf(cached?.isGlobalLiteMode ?: false) }
@@ -332,6 +347,8 @@ fun TweaksScreen() {
 
     var rrModes by remember { mutableStateOf<List<DisplayRrMode>>(cached?.rrModes ?: emptyList()) }
     var currentRrId by remember { mutableStateOf<Int?>(cached?.currentRrId) }
+
+    var liveRefreshRate by remember { mutableIntStateOf(120) }
 
     var currentRendererId by remember { mutableStateOf(cached?.currentRendererId ?: "default") }
 
@@ -366,12 +383,29 @@ fun TweaksScreen() {
         currentIoScheduler = state.currentIoScheduler
     }
 
-    val currentRrText = remember(currentRrId, rrModes, defaultDynamicLabel) {
-        if (currentRrId == null) {
-            defaultDynamicLabel
+    LaunchedEffect(Unit) {
+        val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+        while (isActive) {
+            val display = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                runCatching { context.display }.getOrNull() ?: windowManager?.defaultDisplay
+            } else {
+                @Suppress("DEPRECATION")
+                windowManager?.defaultDisplay
+            }
+            val currentHz = display?.refreshRate?.roundToInt() ?: 60
+            if (currentHz > 0) {
+                liveRefreshRate = currentHz
+            }
+            delay(1200L)
+        }
+    }
+
+    val currentRrText = remember(liveRefreshRate, currentRrId, rrModes, defaultDynamicLabel) {
+        val targetMode = rrModes.find { it.id == currentRrId }
+        if (targetMode != null && targetMode.hz != liveRefreshRate) {
+            "${liveRefreshRate} Hz (${targetMode.hz} Hz)"
         } else {
-            val matched = rrModes.find { it.id == currentRrId }
-            if (matched != null) "${matched.hz} Hz" else "Mode $currentRrId"
+            "${liveRefreshRate} Hz"
         }
     }
 
@@ -589,6 +623,13 @@ fun TweaksScreen() {
         )
     }
 
+    val isFloating = LocalFloatingNavBar.current
+    val bottomPadding = if (isFloating) {
+        110.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    } else {
+        24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -613,7 +654,7 @@ fun TweaksScreen() {
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = innerPadding.calculateTopPadding(),
-                bottom = if (LocalFloatingNavBar.current) 100.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() else 16.dp,
+                bottom = bottomPadding,
                 start = 16.dp,
                 end = 16.dp
             ),
@@ -704,6 +745,16 @@ fun TweaksScreen() {
                         }
                     }
                 }
+            }
+
+            item {
+                Text(
+                    text = if (isIndonesian) "Performa & Termal" else "Performance & Thermal",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 4.dp, top = 6.dp)
+                )
             }
 
             item {
