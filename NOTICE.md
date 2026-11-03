@@ -1,27 +1,30 @@
+# Notice & Legal Attribution
+
 LuminaTweaks
-Copyright (c) 2026 MalCLA
+Copyright (c) 2026 kimal404
 
-This project incorporates code, algorithms, ideas, and software libraries from the following third-party projects:
+This product includes software developed by kimal404 and is licensed under the Apache License, Version 2.0.
 
-## 1. AZenith
-* **Project**: AZenith
-* **Copyright**: (C) 2025-2026 Zexshia
-* **Author / Team**: @Zexshia, @rianixia, @kanaochar
-* **License**: Apache License, Version 2.0
-* **Usage**: HWUI graphics renderer configuration pipeline logic.
-* **License Link**: http://www.apache.org/licenses/LICENSE-2.0
+--------------------------------------------------------------------------------
 
-## 2. Encore Tweaks
-* **Project**: Encore Tweaks
-* **Copyright**: (C) 2024-2025 Rem01Gaming
-* **Author**: Rem01 (@Rem01Gaming)
-* **License**: Apache License, Version 2.0
-* **Usage**: Kernel tuning parameters and performance profile logic reference.
-* **License Link**: http://www.apache.org/licenses/LICENSE-2.0
+### Third-Party Acknowledgements & References
 
-## 3. libsu
-* **Project**: libsu
-* **Copyright**: (C) John Wu (topjohnwu)
-* **License**: Apache License, Version 2.0
-* **Usage**: Root process communication and root shell session management.
-* **License Link**: http://www.apache.org/licenses/LICENSE-2.0
+This project contains inspirations, logic architectures, and structural concepts from the following open-source developers and projects:
+
+* **AZenith**
+  Developed by @Liliya2727
+  Source: https://github.com/Liliya2727
+  Contribution: Architecture references and dynamic profile workflow inspirations.
+
+* **Encore Tweaks**
+  Developed by @Rem01Gaming
+  Source: https://github.com/Rem01Gaming
+  Contribution: System optimization methodology and tweak structure references.
+
+--------------------------------------------------------------------------------
+
+### Disclaimer
+
+This software is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+USE AT YOUR OWN RISK (DWYOR). The author (@kimal404) assumes no responsibility or liability for any bricked devices, damaged partitions, hardware degradation, or data loss resulting from the installation or usage of this module.
