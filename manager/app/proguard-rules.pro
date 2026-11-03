@@ -34,3 +34,7 @@
     public static int v(...);
     public static int d(...);
 }
+
+-keep class com.luminatweaks.model.BatteryHealthInfo { *; }
+-keep class com.luminatweaks.model.StorageHealthInfo { *; }
+-keep class com.luminatweaks.model.HardwareDiagnosticState { *; }

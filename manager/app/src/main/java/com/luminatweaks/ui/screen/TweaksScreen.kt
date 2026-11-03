@@ -347,6 +347,7 @@ fun TweaksScreen() {
     var showIoSchedulerDialog by remember { mutableStateOf(false) }
     var inMtkSubpage by remember { mutableStateOf(false) }
     var inMemoryZramSubpage by remember { mutableStateOf(false) }
+    var inHardwareDiagnosticSubpage by remember { mutableStateOf(false) }
 
     val defaultDynamicLabel = stringResource(R.string.tweaks_rr_default_dynamic)
     val defaultRendererLabel = stringResource(R.string.tweaks_renderer_system_default)
@@ -376,6 +377,16 @@ fun TweaksScreen() {
 
     val currentRendererText = remember(currentRendererId, defaultRendererLabel) {
         getRendererDisplayLabel(currentRendererId, defaultRendererLabel)
+    }
+
+    if (inHardwareDiagnosticSubpage) {
+        BackHandler {
+            inHardwareDiagnosticSubpage = false
+        }
+        HardwareDiagnosticScreen(
+            onBack = { inHardwareDiagnosticSubpage = false }
+        )
+        return
     }
 
     if (inMtkSubpage) {
@@ -1065,6 +1076,73 @@ fun TweaksScreen() {
                                 modifier = Modifier.size(20.dp)
                             )
                         }
+                    }
+                }
+            }
+
+            item {
+                Text(
+                    text = "Utilitas & Diagnostik",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 4.dp, top = 6.dp)
+                )
+            }
+
+            item {
+                val diagShape = getConnectedContainerShape(ContainerPosition.Single, innerRadius = 4.dp)
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(diagShape)
+                        .clickable { inHardwareDiagnosticSubpage = true },
+                    shape = diagShape,
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.DeveloperBoard,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Diagnostik Hardware",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Integritas baterai, siklus charge, dan masa pakai UFS",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Rounded.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                 }
             }
