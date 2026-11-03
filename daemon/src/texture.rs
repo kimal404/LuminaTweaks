@@ -1,9 +1,22 @@
+// Copyright (C) 2026 kimal
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use std::fs;
 use std::process::Command;
 use serde_json::Value;
 use crate::log;
 
-/// Supported GPU graphics drivers for game profiles
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextureDriver {
     Native,
@@ -77,9 +90,6 @@ impl TextureController {
         Self::sync_config(None);
     }
 
-    /// Builds ANGLE feature overrides string.
-    /// If pixel_sharp is true -> forceNearestFiltering (kotak-kotak).
-    /// If pixel_sharp is false -> linear filtering remains active (potato / blurry graphics).
     pub fn build_features_string(lod: i32, pixel_sharp: bool) -> String {
         let mut features = Vec::new();
 
@@ -87,7 +97,7 @@ impl TextureController {
             features.push("forceNearestFiltering");
         }
 
-        match lod.clamp(-3, 3) {
+        match lod.clamp(-3, 5) {
             -3 => {
                 features.push("maximumAnisotropy");
             }
@@ -105,13 +115,18 @@ impl TextureController {
             3 => {
                 features.push("forceTextureLodOffset3");
             }
+            4 => {
+                features.push("forceTextureLodOffset4");
+            }
+            5 => {
+                features.push("forceTextureLodOffset5");
+            }
             _ => (),
         }
 
         features.join(":")
     }
 
-    /// Reads app_config.json and synchronizes global ANGLE settings
     pub fn sync_config(focused_pkg: Option<&str>) {
         let config_path = "/data/adb/luminatweaks/app_config.json";
         let content = match fs::read_to_string(config_path) {
@@ -191,7 +206,7 @@ impl TextureController {
                 })
                 .unwrap_or(0);
 
-            let lod = raw_lod.clamp(-3, 3);
+            let lod = raw_lod.clamp(-3, 5);
 
             let pixel_sharp = item
                 .get("pixel_sharp")

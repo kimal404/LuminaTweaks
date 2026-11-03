@@ -1,18 +1,16 @@
-/*
- * Copyright (C) 2026 kimal
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright (C) 2026 kimal
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.luminatweaks.ui.screen
 
@@ -38,9 +36,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -99,27 +99,30 @@ import androidx.compose.ui.unit.sp
 import com.luminatweaks.R
 import com.luminatweaks.data.AppProfileConfig
 import com.luminatweaks.data.ConfigRepository
+import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
 fun generateTextureBitmap(lod: Int): ImageBitmap {
-    val scale = when (lod.coerceIn(-3, 3)) {
+    val scale = when (lod.coerceIn(-3, 5)) {
         -3, -2, -1, 0 -> 1
         1 -> 2
         2 -> 4
         3 -> 8
+        4 -> 16
+        5 -> 32
         else -> 1
     }
 
     val width = when (lod) {
         -3 -> 128
         -2 -> 112
-        else -> (96 / scale).coerceAtLeast(4)
+        else -> (96 / scale).coerceAtLeast(2)
     }
     val height = when (lod) {
         -3 -> 128
         -2 -> 112
-        else -> (96 / scale).coerceAtLeast(4)
+        else -> (96 / scale).coerceAtLeast(2)
     }
 
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -337,8 +340,15 @@ fun TeksturRinganScreen(
     BackHandler(onBack = onBack)
 
     val primaryAccent = MaterialTheme.colorScheme.primary
-    val currentLod = profile.textureLod.coerceIn(-3, 3)
+    val currentLod = profile.textureLod.coerceIn(-3, 5)
     val isTweakActive = currentLod != 0
+    val isFloating = LocalFloatingNavBar.current
+
+    val bottomPadding = if (isFloating) {
+        110.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    } else {
+        32.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
@@ -377,7 +387,7 @@ fun TeksturRinganScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = innerPadding.calculateTopPadding() + 8.dp,
-                bottom = 32.dp,
+                bottom = bottomPadding,
                 start = 16.dp,
                 end = 16.dp
             ),
@@ -449,7 +459,7 @@ fun TeksturRinganScreen(
                             onValueChange = { rawVal ->
                                 val snapped = if (abs(rawVal) <= 0.3f) 0f else rawVal
                                 sliderPosition = snapped
-                                val targetLod = snapped.roundToInt().coerceIn(-3, 3)
+                                val targetLod = snapped.roundToInt().coerceIn(-3, 5)
                                 if (targetLod != profile.textureLod) {
                                     onProfileChanged(
                                         profile.copy(
@@ -462,7 +472,7 @@ fun TeksturRinganScreen(
                                 }
                             },
                             onValueChangeFinished = {
-                                val finalLod = sliderPosition.roundToInt().coerceIn(-3, 3)
+                                val finalLod = sliderPosition.roundToInt().coerceIn(-3, 5)
                                 sliderPosition = finalLod.toFloat()
                                 onProfileChanged(
                                     profile.copy(
@@ -473,7 +483,8 @@ fun TeksturRinganScreen(
                                     )
                                 )
                             },
-                            valueRange = -3f..3f,
+                            valueRange = -3f..5f,
+                            steps = 7,
                             colors = SliderDefaults.colors(
                                 thumbColor = primaryAccent,
                                 activeTrackColor = primaryAccent
@@ -487,8 +498,8 @@ fun TeksturRinganScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            val tickLabels = listOf("-3", "-2", "-1", "|  0  |", "+1", "+2", "+3")
-                            val tickValues = listOf(-3, -2, -1, 0, 1, 2, 3)
+                            val tickLabels = listOf("-3", "-2", "-1", "|  0  |", "+1", "+2", "+3", "+4", "+5")
+                            val tickValues = listOf(-3, -2, -1, 0, 1, 2, 3, 4, 5)
 
                             tickLabels.forEachIndexed { index, label ->
                                 val pointVal = tickValues[index]
@@ -512,7 +523,7 @@ fun TeksturRinganScreen(
                                                 )
                                             )
                                         }
-                                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                                        .padding(horizontal = 3.dp, vertical = 2.dp)
                                 )
                             }
                         }
