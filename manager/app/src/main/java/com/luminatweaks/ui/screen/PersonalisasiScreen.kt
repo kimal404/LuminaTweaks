@@ -41,7 +41,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -732,69 +731,62 @@ private fun PinnedPreviewHeader(
         }
     }
 
-    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-        val baseWidth = 230.dp
-        val baseHeight = 460.dp
+    val baseWidth = 185.dp
+    val baseHeight = 380.dp
 
-        val targetHeight = if (expanded) (maxWidth * 1.05f).coerceIn(340.dp, 390.dp) else 165.dp
-        val height by animateDpAsState(
-            targetValue = targetHeight,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioLowBouncy,
-                stiffness = Spring.StiffnessMediumLow
-            ),
-            label = "previewHeight"
-        )
+    val targetHeight = if (expanded) 380.dp else 175.dp
+    val height by animateDpAsState(
+        targetValue = targetHeight,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "previewHeight"
+    )
 
-        val targetScale = if (expanded) {
-            (targetHeight / baseHeight * 0.94f).coerceIn(0.70f, 0.82f)
-        } else {
-            (165.dp / baseHeight * 0.96f).coerceIn(0.32f, 0.36f)
-        }
-        val scale by animateFloatAsState(
-            targetValue = targetScale,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioLowBouncy,
-                stiffness = Spring.StiffnessMediumLow
-            ),
-            label = "previewScale"
-        )
+    val scale by animateFloatAsState(
+        targetValue = if (expanded) 1.0f else (175f / 380f),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "previewScale"
+    )
 
-        Box(
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height)
+            .padding(vertical = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(height)
-                .padding(horizontal = 16.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Surface(
-                modifier = Modifier
-                    .size(width = baseWidth, height = baseHeight)
-                    .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
-                        transformOrigin = TransformOrigin.Center
-                    }
-                    .draggable(
-                        state = draggableState,
-                        orientation = Orientation.Vertical
-                    )
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onToggle
-                    ),
-                color = colorScheme.surface,
-                shape = RoundedCornerShape(32.dp),
-                border = BorderStroke(2.dp, colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                shadowElevation = 8.dp
-            ) {
-                MockLuminaScreen(
-                    colorScheme = colorScheme,
-                    cornerRadius = cornerRadius,
-                    isFloatingNavBar = isFloatingNavBar
+                .size(width = baseWidth, height = baseHeight)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    transformOrigin = TransformOrigin.Center
+                }
+                .draggable(
+                    state = draggableState,
+                    orientation = Orientation.Vertical
                 )
-            }
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onToggle
+                ),
+            color = colorScheme.surface,
+            shape = RoundedCornerShape(28.dp),
+            border = BorderStroke(2.dp, colorScheme.outlineVariant.copy(alpha = 0.6f)),
+            shadowElevation = 8.dp
+        ) {
+            MockLuminaScreen(
+                colorScheme = colorScheme,
+                cornerRadius = cornerRadius,
+                isFloatingNavBar = isFloatingNavBar
+            )
         }
     }
 }
@@ -815,8 +807,8 @@ private fun MockLuminaScreen(
             modifier = modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
                 text = "LuminaTweaks",
@@ -834,33 +826,40 @@ private fun MockLuminaScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.CheckCircle,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = stringResource(R.string.home_core_working),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = stringResource(R.string.home_core_working),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Text(
+                            text = "PID: 1337",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
+                        )
+                    }
                 }
             }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Surface(
                     modifier = Modifier
                         .weight(1f)
-                        .height(48.dp),
+                        .height(44.dp),
                     shape = RoundedCornerShape((12f * ratio).dp),
                     color = MaterialTheme.colorScheme.secondaryContainer
                 ) {}
@@ -868,7 +867,7 @@ private fun MockLuminaScreen(
                 Surface(
                     modifier = Modifier
                         .weight(1f)
-                        .height(48.dp),
+                        .height(44.dp),
                     shape = RoundedCornerShape((12f * ratio).dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHighest
                 ) {}
@@ -891,20 +890,27 @@ private fun MockLuminaScreen(
                     color = MaterialTheme.colorScheme.surfaceContainerHigh
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(14.dp)
-                        ) {}
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.primary
+                        ) {
+                            Text(
+                                text = "Apps",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
                         repeat(3) {
                             Box(
                                 modifier = Modifier
-                                    .size(width = 16.dp, height = 5.dp)
-                                    .clip(RoundedCornerShape(3.dp))
+                                    .size(width = 14.dp, height = 4.dp)
+                                    .clip(RoundedCornerShape(2.dp))
                                     .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f))
                             )
                         }
@@ -914,26 +920,26 @@ private fun MockLuminaScreen(
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(28.dp),
+                        .height(26.dp),
                     shape = RoundedCornerShape(topStart = (8f * ratio).dp, topEnd = (8f * ratio).dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHigh
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(horizontal = 16.dp),
+                            .padding(horizontal = 14.dp),
                         horizontalArrangement = Arrangement.SpaceAround,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(12.dp)
+                            modifier = Modifier.size(10.dp)
                         ) {}
                         repeat(3) {
                             Box(
                                 modifier = Modifier
-                                    .size(width = 14.dp, height = 4.dp)
+                                    .size(width = 12.dp, height = 3.dp)
                                     .clip(RoundedCornerShape(2.dp))
                                     .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f))
                             )
