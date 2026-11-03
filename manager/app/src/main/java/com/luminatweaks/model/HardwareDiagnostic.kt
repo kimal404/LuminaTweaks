@@ -16,32 +16,15 @@
 
 package com.luminatweaks.model
 
-data class BatteryHealthInfo(
-    val healthPercentage: Int?,
-    val currentCapacityMah: Int?,
-    val designCapacityMah: Int?,
-    val cycleCount: Int?,
-    val temperatureCelsius: Float?,
-    val voltageMv: Float?,
-    val status: String = "Unknown",
-    val isSupported: Boolean = false
-)
-
-data class StorageHealthInfo(
-    val storageType: String = "Unknown",
-    val model: String = "Internal Storage",
-    val revision: String = "",
-    val wearLevelA: String = "N/A",
-    val wearLevelB: String = "N/A",
-    val wearPercentageA: Int = 0,
-    val wearPercentageB: Int = 0,
-    val preEolStatus: String = "Normal",
-    val isCritical: Boolean = false,
-    val isSupported: Boolean = false
+data class DiagnosticLogEntry(
+    val tag: String,
+    val value: String,
+    val isHeader: Boolean = false,
+    val isWarning: Boolean = false
 )
 
 data class HardwareDiagnosticState(
-    val battery: BatteryHealthInfo = BatteryHealthInfo(null, null, null, null, null, null),
-    val storage: StorageHealthInfo = StorageHealthInfo(),
-    val isLoading: Boolean = true
+    val logs: List<DiagnosticLogEntry> = emptyList(),
+    val isScanning: Boolean = false,
+    val hasScanned: Boolean = false
 )
