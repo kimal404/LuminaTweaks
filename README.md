@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/kimal404/lumina-tweaks/main/assets/banner.png" alt="LuminaTweaks Banner" width="100%">
+  <img src="assets/banner.png" alt="LuminaTweaks Banner" width="100%">
 </p>
 
 <p align="center">
