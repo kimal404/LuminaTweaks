@@ -1,8 +1,21 @@
+// Copyright (C) 2026 kimal
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 mod texture;
 use texture::TextureController;
 #[macro_use]
 mod logger;
-mod affinity;
 mod detector;
 mod display;
 mod engine;
@@ -12,13 +25,11 @@ mod renderer;
 mod snapdragon;
 mod unisoc;
 
-use std::collections::HashSet;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
-use affinity::CpuTopology;
 use detector::{
     get_app_config, get_focused_package, get_zen_mode, is_app_enabled, is_app_retained,
     is_auto_dnd_active, is_lite_mode_active, is_low_power_active, is_master_enabled, set_zen_mode,
@@ -51,10 +62,6 @@ fn set_system_profile_prop(name: &str) {
     let _ = Command::new("setprop").args(["sys.lumina.profile", name]).status();
 }
 
-fn get_pkg_pid(pkg: &str) -> Option<i32> {
-    affinity::get_pkg_pid(pkg)
-}
-
 struct EngineRuntime {
     current_profile: Option<Profile>,
     active_target_pkg: Option<String>,
@@ -63,9 +70,6 @@ struct EngineRuntime {
     original_zen_mode: Option<String>,
     dnd_overridden: bool,
     current_applied_zen_mode: Option<String>,
-    topology: CpuTopology,
-    tracked_tids: HashSet<i32>,
-    current_target_pid: Option<i32>,
     last_app_config_mtime: Option<SystemTime>,
     last_global_config_mtime: Option<SystemTime>,
 }
@@ -73,10 +77,6 @@ struct EngineRuntime {
 impl EngineRuntime {
     fn new() -> Self {
         set_system_profile_prop("Balanced");
-        let topo = CpuTopology::detect();
-        log!("[TOPOLOGY] Cores: {} | Little Mask: 0x{:X} | Fast Mask: 0x{:X}", 
-             topo.total_cores, topo.little_mask, topo.fast_mask);
-
         TextureController::ensure_setup();
 
         Self {
@@ -87,9 +87,6 @@ impl EngineRuntime {
             original_zen_mode: None,
             dnd_overridden: false,
             current_applied_zen_mode: None,
-            topology: topo,
-            tracked_tids: HashSet::new(),
-            current_target_pid: None,
             last_app_config_mtime: None,
             last_global_config_mtime: None,
         }
@@ -117,15 +114,12 @@ impl EngineRuntime {
         };
 
         let is_profile_changing = self.current_profile != Some(target_profile);
-        let entering_performance = is_profile_changing
-            && (target_profile == Profile::Performance || target_profile == Profile::PerformanceLite);
 
         if is_profile_changing {
             match target_profile {
                 Profile::Performance => {
                     engine::performance_profile();
                     set_system_profile_prop("Performance");
-                    affinity::isolate_background(true, &self.topology);
                     log!("[PROFILE] Switched to Performance -> App: {:?}", target_pkg);
                     send_notification(NotificationPayload {
                         title: "Lumina: Performance",
@@ -139,7 +133,6 @@ impl EngineRuntime {
                 Profile::PerformanceLite => {
                     engine::performance_lite_profile();
                     set_system_profile_prop("Performance Lite");
-                    affinity::isolate_background(true, &self.topology);
                     log!("[PROFILE] Switched to Performance Lite -> App: {:?}", target_pkg);
                     send_notification(NotificationPayload {
                         title: "Lumina: Performance Lite",
@@ -151,11 +144,8 @@ impl EngineRuntime {
                     });
                 }
                 Profile::Eco => {
-                    affinity::restore_process_threads(&mut self.tracked_tids, &self.topology);
-                    self.current_target_pid = None;
                     engine::eco_profile();
                     set_system_profile_prop("Eco");
-                    affinity::isolate_background(false, &self.topology);
                     log!("[PROFILE] Switched to Eco (Power Save Active)");
                     send_notification(NotificationPayload {
                         title: "Lumina: Eco",
@@ -167,11 +157,8 @@ impl EngineRuntime {
                     });
                 }
                 Profile::Balance => {
-                    affinity::restore_process_threads(&mut self.tracked_tids, &self.topology);
-                    self.current_target_pid = None;
                     engine::balance_profile();
                     set_system_profile_prop("Balanced");
-                    affinity::isolate_background(false, &self.topology);
                     log!("[PROFILE] Switched to Balanced (Dynamic Idle)");
                     clear_all_notifications();
                     send_notification(NotificationPayload {
@@ -185,28 +172,6 @@ impl EngineRuntime {
                 }
             }
             self.current_profile = Some(target_profile);
-        }
-
-        if target_profile == Profile::Performance || target_profile == Profile::PerformanceLite {
-            if let Some(pkg) = target_pkg {
-                if let Some(pid) = get_pkg_pid(pkg) {
-                    if self.current_target_pid != Some(pid) {
-                        affinity::restore_process_threads(&mut self.tracked_tids, &self.topology);
-                        self.current_target_pid = Some(pid);
-                    }
-                    affinity::sync_process_threads(pid, &mut self.tracked_tids, &self.topology);
-
-                    if entering_performance {
-                        for _ in 0..3 {
-                            thread::sleep(Duration::from_millis(200));
-                            affinity::sync_process_threads(pid, &mut self.tracked_tids, &self.topology);
-                        }
-                    }
-                }
-            }
-        } else if !self.tracked_tids.is_empty() {
-            affinity::restore_process_threads(&mut self.tracked_tids, &self.topology);
-            self.current_target_pid = None;
         }
 
         let global_rr = display::get_saved_mode_id();
@@ -304,13 +269,10 @@ impl EngineRuntime {
 
     fn reset_to_balance(&mut self) {
         if self.current_profile != Some(Profile::Balance) {
-            affinity::restore_process_threads(&mut self.tracked_tids, &self.topology);
-            self.current_target_pid = None;
             self.active_target_pkg = None;
             self.current_profile = Some(Profile::Balance);
             engine::balance_profile();
             set_system_profile_prop("Balanced");
-            affinity::isolate_background(false, &self.topology);
             log!("[PROFILE] Target inactive -> Reverted to Balanced");
 
             let global_rr = display::get_saved_mode_id();
