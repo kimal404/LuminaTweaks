@@ -1,3 +1,17 @@
+// Copyright (C) 2026 kimal
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
@@ -276,19 +290,40 @@ pub fn sync_process_threads(
                     comm = "unnamed".to_string();
                 }
 
-                let target_mask = if tid == pid {
+                if tid != pid && (comm == "app_process64" || comm == "unnamed") {
+                    continue;
+                }
+
+                let comm_lower = comm.to_lowercase();
+
+                let is_fast = tid == pid
+                    || comm_lower.contains("render")
+                    || comm_lower.contains("rhi")
+                    || comm_lower.contains("gamethread")
+                    || comm_lower.contains("gamecore")
+                    || comm_lower.contains("unitymain")
+                    || comm_lower.contains("unitygfx")
+                    || comm_lower.contains("surfaceflinger")
+                    || comm_lower.contains("glthread")
+                    || comm_lower.contains("gpu")
+                    || comm_lower.contains("mali-cpu")
+                    || comm_lower.contains("mali-event")
+                    || comm_lower.contains("kgsl")
+                    || comm_lower.contains("taskgraphhp")
+                    || comm_lower.contains("main");
+
+                let is_big = !is_fast && (
+                    comm_lower.contains("audio")
+                    || comm_lower.contains("jobworker")
+                    || comm_lower.contains("taskgraph")
+                    || comm_lower.contains("asyncload")
+                    || comm_lower.contains("fasync")
+                    || comm_lower.contains("mali")
+                );
+
+                let target_mask = if is_fast {
                     topology.fast_mask
-                } else if comm.contains("Render")
-                    || comm.contains("GL")
-                    || comm.contains("GPU")
-                    || comm.contains("SurfaceFlinger")
-                    || comm.contains("RenderThread")
-                    || comm.contains("main")
-                    || comm.contains("GameCore")
-                    || comm.contains("UnityMain")
-                {
-                    topology.fast_mask
-                } else if comm.contains("Audio") {
+                } else if is_big {
                     topology.big_mask
                 } else {
                     topology.all_mask
