@@ -36,7 +36,6 @@ jobs:
           cargo build --target aarch64-linux-android --release
           cd ..
 
-          # SINKRONISASI: Salin biner terbaru ke dalam assets Manager sebelum APK di-build
           mkdir -p manager/app/src/main/assets/bin
           cp daemon/target/aarch64-linux-android/release/luminad manager/app/src/main/assets/bin/luminad
           chmod 755 manager/app/src/main/assets/bin/luminad
@@ -47,27 +46,17 @@ jobs:
       - name: Make Gradlew Executable
         run: chmod +x manager/gradlew
 
-      - name: Decode Keystore from Secrets
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      - name: Setup Persistent Signing Keystore
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            python3 -c "
-          import os, base64
-          raw = os.environ['KEYSTORE_BASE64'].strip().replace('\r', '').replace('\n', '').replace(' ', '')
-          padding = (-len(raw)) % 4
-          if padding:
-              raw += '=' * padding
-          with open('lumina-release.jks', 'wb') as f:
-              f.write(base64.b64decode(raw))
-          "
-            echo "KEYSTORE_SOURCE=secret" >> $GITHUB_ENV
+          if [ -f "keystore/release.jks" ]; then
+            echo "[+] Menggunakan keystore statis dari repositori."
+            cp keystore/release.jks lumina-release.jks
+          elif [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "[+] Mendekode keystore dari GitHub Secrets."
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > lumina-release.jks
           else
-            echo "Warning: KEYSTORE_BASE64 secret not found, generating temporary keystore."
-            keytool -genkey -v -keystore lumina-release.jks -alias LuminaTweaks021 -keyalg RSA -keysize 2048 -validity 10000 \
-              -dname "CN=LuminaTweaks, OU=Development, O=Lumina, L=Jakarta, ST=Jakarta, C=ID" \
-              -storepass LuminaTweaks021 -keypass LuminaTweaks021
-            echo "KEYSTORE_SOURCE=temp" >> $GITHUB_ENV
+            echo "[-] Error: File keystore/release.jks tidak ditemukan di repo!"
+            exit 1
           fi
 
       - name: Compile Release APK
@@ -79,17 +68,13 @@ jobs:
           BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | tail -n 1)
           mkdir -p dist
           find manager/app/build/outputs/apk/release -name "*.apk" | while read -r apk; do
-            if [[ "$apk" == *"unsigned"* ]]; then
-              base_name=$(basename "${apk%-unsigned.apk}")
-              aligned="dist/${base_name}-aligned.apk"
-              signed="dist/${base_name}-signed.apk"
-              $BUILD_TOOLS_DIR/zipalign -v -p 4 "$apk" "$aligned"
-              $BUILD_TOOLS_DIR/apksigner sign --ks lumina-release.jks --ks-pass pass:LuminaTweaks021 --ks-key-alias LuminaTweaks021 --key-pass pass:LuminaTweaks021 --out "$signed" "$aligned"
-              rm -f "$aligned"
-              echo "Successfully signed: $signed"
-            else
-              cp "$apk" dist/
-            fi
+            base_name=$(basename "$apk" .apk)
+            aligned="dist/${base_name}-aligned.apk"
+            signed="dist/${base_name}-signed.apk"
+            $BUILD_TOOLS_DIR/zipalign -v -p 4 "$apk" "$aligned" || cp "$apk" "$aligned"
+            $BUILD_TOOLS_DIR/apksigner sign --ks lumina-release.jks --ks-pass pass:LuminaTweaks021 --ks-key-alias LuminaTweaks021 --key-pass pass:LuminaTweaks021 --out "$signed" "$aligned"
+            rm -f "$aligned"
+            echo "Successfully signed: $signed"
           done
 
       - name: Package Flashable ZIP Module
@@ -100,17 +85,14 @@ jobs:
           ZIP_NAME="LuminaTweaks-v2.0.0-ci${{ github.run_number }}-${SHORT_SHA}.zip"
           ZIP_TARGET="${GITHUB_WORKSPACE}/dist/${ZIP_NAME}"
 
-          # Buat staging folder modul
           mkdir -p build_module
           if [ -d "module" ]; then
             cp -r module/* build_module/
           fi
 
-          # Masukkan biner daemon hasil kompilasi Rust
           cp daemon/target/aarch64-linux-android/release/luminad build_module/luminad
           chmod 755 build_module/luminad
 
-          # Ambil 1 APK signed rilis
           APK_FILE=$(ls dist/*-signed.apk 2>/dev/null | head -n 1)
           if [ -z "$APK_FILE" ]; then
             APK_FILE=$(find manager/app/build/outputs/apk/release -name "*.apk" | head -n 1)
@@ -118,10 +100,8 @@ jobs:
           echo "Mengemas APK ke dalam modul: $APK_FILE"
           cp "$APK_FILE" build_module/manager.apk
 
-          # Bersihkan subfolder common agar struktur modul tetap flat
           rm -rf build_module/common
 
-          # Kemas ke ZIP flashable
           cd build_module
           zip -r9 "$ZIP_TARGET" ./*
           cd ..
@@ -141,7 +121,6 @@ jobs:
           COMMIT_RAW_MSG: ${{ github.event.head_commit.message }}
         run: |
           TARGET_FILE="${ZIP_PATH}"
-
           if [ ! -f "$TARGET_FILE" ]; then
             echo "[!] File ZIP flashable tidak ditemukan!"
             exit 1
@@ -165,15 +144,9 @@ jobs:
             THUMB_ARG="-F thumbnail=@thumb.png"
           fi
 
-          RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
+          curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
             --form-string chat_id="${CHAT_ID}" \
             -F document=@"${TARGET_FILE}" \
             $THUMB_ARG \
             --form-string caption="${CAPTION}" \
-            --form-string parse_mode="HTML")
-
-          echo "Response Telegram: $RESPONSE"
-
-          if echo "$RESPONSE" | grep -q '"ok":false'; then
-            exit 1
-          fi
+            --form-string parse_mode="HTML"
