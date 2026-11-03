@@ -19,34 +19,32 @@ if [ -f "$MODPATH/luminad" ]; then
 fi
 
 if [ -f "$MODPATH/manager.apk" ]; then
-    ui_print "- Installing Lumina Manager APK (safe background install)..."
-    TMP_LOG="/data/local/tmp/lumina_install.log"
-    rm -f "$TMP_LOG"
+    ui_print "- Installing Lumina Manager APK..."
+    
+    TMP_APK="/data/local/tmp/lumina_manager.apk"
+    cp -f "$MODPATH/manager.apk" "$TMP_APK"
+    chmod 644 "$TMP_APK"
+    chcon u:object_r:shell_data_file:s0 "$TMP_APK" 2>/dev/null
 
-    (
-        install_out=$(pm install -r -d --user 0 "$MODPATH/manager.apk" 2>&1)
-        if ! echo "$install_out" | grep -iq "Success"; then
-            install_out=$(cmd package install -r -d --user 0 "$MODPATH/manager.apk" 2>&1)
-        fi
-        echo "$install_out" > "$TMP_LOG"
-    ) &
+    install_out=$(pm install -r -d --user 0 "$TMP_APK" 2>&1)
 
+    if echo "$install_out" | grep -q "INSTALL_FAILED_UPDATE_INCOMPATIBLE"; then
+        ui_print "! Signature berbeda terdeteksi. Membersihkan instalasi lama..."
+        pm uninstall --user 0 com.luminatweaks >/dev/null 2>&1
+        pm uninstall com.luminatweaks >/dev/null 2>&1
+        install_out=$(pm install --user 0 "$TMP_APK" 2>&1)
+    elif ! echo "$install_out" | grep -iq "Success"; then
+        install_out=$(cmd package install -r -d --user 0 "$TMP_APK" 2>&1)
+    fi
 
-    count=0
-    while [ $count -lt 24 ]; do
-        if [ -f "$TMP_LOG" ] && grep -iq "Success" "$TMP_LOG"; then
-            break
-        fi
-        if pm path com.luminatweaks >/dev/null 2>&1; then
-            break
-        fi
-        sleep 0.5
-        count=$((count + 1))
-    done
-    rm -f "$TMP_LOG"
-    ui_print "- Manager APK successfully configured."
+    rm -f "$TMP_APK"
 
-  
+    if echo "$install_out" | grep -iq "Success"; then
+        ui_print "- Manager APK successfully updated."
+    else
+        ui_print "! Gagal memasang Manager APK: $install_out"
+    fi
+
     pm grant com.luminatweaks android.permission.POST_NOTIFICATIONS >/dev/null 2>&1
     pm grant com.luminatweaks android.permission.QUERY_ALL_PACKAGES >/dev/null 2>&1
     pm grant com.luminatweaks com.android.permission.GET_INSTALLED_APPS >/dev/null 2>&1
