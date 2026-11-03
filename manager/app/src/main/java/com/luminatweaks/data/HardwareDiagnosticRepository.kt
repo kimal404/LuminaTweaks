@@ -45,6 +45,7 @@ object HardwareDiagnosticRepository {
             for b_dir in /sys/class/power_supply/battery /sys/class/power_supply/bms; do
                 if [ -d "${'$'}b_dir" ]; then
                     echo "B_DIR=${'$'}b_dir"
+                    [ -f "${'$'}b_dir/capacity" ] && echo "B_CAPACITY=${'$'}(cat "${'$'}b_dir/capacity")"
                     [ -f "${'$'}b_dir/charge_full" ] && echo "B_FULL=${'$'}(cat "${'$'}b_dir/charge_full")"
                     [ -f "${'$'}b_dir/charge_full_design" ] && echo "B_DESIGN=${'$'}(cat "${'$'}b_dir/charge_full_design")"
                     [ -f "${'$'}b_dir/cycle_count" ] && echo "B_CYCLE=${'$'}(cat "${'$'}b_dir/cycle_count")"
@@ -55,34 +56,32 @@ object HardwareDiagnosticRepository {
                 fi
             done
 
-            UFS_FOUND=0
-            for u_dir in /sys/class/block/sda/device /sys/block/sda/device /sys/devices/platform/soc/*.ufshc; do
-                if [ -d "${'$'}u_dir" ]; then
-                    echo "S_TYPE=UFS"
-                    echo "S_DIR=${'$'}u_dir"
-                    [ -f "${'$'}u_dir/model" ] && echo "S_MODEL=${'$'}(cat "${'$'}u_dir/model")"
-                    [ -f "${'$'}u_dir/rev" ] && echo "S_REV=${'$'}(cat "${'$'}u_dir/rev")"
-                    for target in life_time_estimation_a life_time_estimation_b pre_eol_info; do
-                        node_path=${'$'}(find "${'$'}u_dir" -name "${'$'}target" -print -quit 2>/dev/null)
-                        [ -n "${'$'}node_path" ] && echo "S_${'$'}{target}=${'$'}(cat "${'$'}node_path")"
-                    done
-                    UFS_FOUND=1
-                    break
-                fi
-            done
+            if [ -d /sys/class/block/sda ]; then
+                echo "S_TYPE=UFS"
+                echo "S_SUPPORTED=1"
+                [ -f /sys/class/block/sda/device/model ] && echo "S_MODEL=${'$'}(cat /sys/class/block/sda/device/model)"
+                [ -f /sys/class/block/sda/device/rev ] && echo "S_REV=${'$'}(cat /sys/class/block/sda/device/rev)"
 
-            if [ "${'$'}UFS_FOUND" -eq 0 ]; then
-                for m_dir in /sys/class/block/mmcblk0/device /sys/block/mmcblk0/device; do
-                    if [ -d "${'$'}m_dir" ]; then
-                        echo "S_TYPE=eMMC"
-                        echo "S_DIR=${'$'}m_dir"
-                        [ -f "${'$'}m_dir/name" ] && echo "S_MODEL=${'$'}(cat "${'$'}m_dir/name")"
-                        [ -f "${'$'}m_dir/rev" ] && echo "S_REV=${'$'}(cat "${'$'}m_dir/rev")"
-                        [ -f "${'$'}m_dir/life_time" ] && echo "S_EMMC_LIFE=${'$'}(cat "${'$'}m_dir/life_time")"
-                        [ -f "${'$'}m_dir/pre_eol_info" ] && echo "S_pre_eol_info=${'$'}(cat "${'$'}m_dir/pre_eol_info")"
-                        break
-                    fi
-                done
+                UFS_LIFE_A=${'$'}(find /sys/devices -path "*ufs*" \( -name "life_time_estimation_a" -o -name "device_life_time_est_a" -o -name "*life_time_a*" \) -print -quit 2>/dev/null)
+                [ -n "${'$'}UFS_LIFE_A" ] && echo "S_LIFE_A=${'$'}(cat "${'$'}UFS_LIFE_A")"
+
+                UFS_LIFE_B=${'$'}(find /sys/devices -path "*ufs*" \( -name "life_time_estimation_b" -o -name "device_life_time_est_b" -o -name "*life_time_b*" \) -print -quit 2>/dev/null)
+                [ -n "${'$'}UFS_LIFE_B" ] && echo "S_LIFE_B=${'$'}(cat "${'$'}UFS_LIFE_B")"
+
+                UFS_EOL=${'$'}(find /sys/devices -path "*ufs*" \( -name "eol_info" -o -name "pre_eol_info" -o -name "*eol*" \) -print -quit 2>/dev/null)
+                [ -n "${'$'}UFS_EOL" ] && echo "S_PRE_EOL_INFO=${'$'}(cat "${'$'}UFS_EOL")"
+
+            elif [ -d /sys/class/block/mmcblk0 ]; then
+                echo "S_TYPE=eMMC"
+                echo "S_SUPPORTED=1"
+                [ -f /sys/class/block/mmcblk0/device/name ] && echo "S_MODEL=${'$'}(cat /sys/class/block/mmcblk0/device/name)"
+                [ -f /sys/class/block/mmcblk0/device/rev ] && echo "S_REV=${'$'}(cat /sys/class/block/mmcblk0/device/rev)"
+
+                EMMC_LIFE=${'$'}(find /sys/devices -path "*mmc*" -name "life_time" -print -quit 2>/dev/null)
+                [ -n "${'$'}EMMC_LIFE" ] && echo "S_EMMC_LIFE=${'$'}(cat "${'$'}EMMC_LIFE")"
+
+                EMMC_EOL=${'$'}(find /sys/devices -path "*mmc*" \( -name "pre_eol_info" -o -name "*eol*" \) -print -quit 2>/dev/null)
+                [ -n "${'$'}EMMC_EOL" ] && echo "S_PRE_EOL_INFO=${'$'}(cat "${'$'}EMMC_EOL")"
             fi
         """.trimIndent()
 
@@ -92,6 +91,7 @@ object HardwareDiagnosticRepository {
             if (parts.size == 2) parts[0].trim().lowercase() to parts[1].trim() else null
         }.toMap()
 
+        val capacity = map["b_capacity"]?.toIntOrNull()
         var full = map["b_full"]?.toLongOrNull()
         var design = map["b_design"]?.toLongOrNull()
         val cycle = map["b_cycle"]?.toIntOrNull()
@@ -113,7 +113,10 @@ object HardwareDiagnosticRepository {
         newLogs.add(DiagnosticLogEntry("CORE", "Memulai inisialisasi telemetri sysfs kernel...", isHeader = true))
 
         if (map.containsKey("b_dir")) {
-            newLogs.add(DiagnosticLogEntry("BATTRE", "${healthPct ?: 100}%"))
+            if (capacity != null) {
+                newLogs.add(DiagnosticLogEntry("LEVEL", "$capacity%"))
+            }
+            newLogs.add(DiagnosticLogEntry("HEALTH", "${healthPct ?: 100}%"))
             newLogs.add(DiagnosticLogEntry("MAH", "${full ?: "-"} / ${design ?: "-"} mAh"))
             newLogs.add(DiagnosticLogEntry("CYCLE", "${cycle ?: "-"}"))
             newLogs.add(DiagnosticLogEntry("TEMP", "${temp ?: "-"} °C"))
@@ -135,15 +138,15 @@ object HardwareDiagnosticRepository {
             rawLifeA = tokens.getOrNull(0)
             rawLifeB = tokens.getOrNull(1)
         } else {
-            rawLifeA = map["s_life_time_estimation_a"]
-            rawLifeB = map["s_life_time_estimation_b"]
+            rawLifeA = map["s_life_a"]
+            rawLifeB = map["s_life_b"]
         }
 
         val (wearAStr, _) = parseJedecWear(rawLifeA)
         val (wearBStr, _) = parseJedecWear(rawLifeB)
         val (preEol, isCritical) = parsePreEol(map["s_pre_eol_info"])
 
-        if (map.containsKey("s_dir")) {
+        if (map.containsKey("s_supported")) {
             newLogs.add(DiagnosticLogEntry("STORAGE", "$storageType $model ${if (rev.isNotEmpty()) "($rev)" else ""}"))
             newLogs.add(DiagnosticLogEntry("PRE-EOL", preEol, isWarning = isCritical))
             newLogs.add(DiagnosticLogEntry("WEAR-A", wearAStr))
@@ -161,7 +164,8 @@ object HardwareDiagnosticRepository {
     }
 
     private fun parseJedecWear(hex: String?): Pair<String, Int> {
-        val value = hex?.removePrefix("0x")?.trim()?.toIntOrNull(16) ?: return "Tidak didukung" to 0
+        val clean = hex?.removePrefix("0x")?.removePrefix("0X")?.trim()
+        val value = clean?.toIntOrNull(16) ?: return "Tidak didukung" to 0
         return when (value) {
             0x01 -> "0% - 10% (Sangat Baik)" to 10
             0x02 -> "10% - 20% (Normal)" to 20
@@ -179,12 +183,13 @@ object HardwareDiagnosticRepository {
     }
 
     private fun parsePreEol(hex: String?): Pair<String, Boolean> {
-        val value = hex?.removePrefix("0x")?.trim()?.toIntOrNull(16) ?: return "Normal" to false
+        val clean = hex?.removePrefix("0x")?.removePrefix("0X")?.trim()
+        val value = clean?.toIntOrNull(16) ?: return "Tidak didukung" to false
         return when (value) {
             0x01 -> "Normal (Blok Cadangan Aman)" to false
             0x02 -> "Peringatan (Blok Cadangan Menipis)" to true
             0x03 -> "Kritis (Storage Terancam Read-Only)" to true
-            else -> "Normal" to false
+            else -> "Tidak didukung" to false
         }
     }
 
