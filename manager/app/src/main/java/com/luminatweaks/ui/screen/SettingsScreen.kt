@@ -378,11 +378,6 @@ fun SettingsScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                Text(
-                                    text = "(${com.luminatweaks.BuildConfig.BUILD_INFO})",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
-                                )
                             }
                             Icon(
                                 imageVector = Icons.Rounded.ChevronRight,

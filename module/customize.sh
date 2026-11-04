@@ -31,6 +31,10 @@ mkdir -p "$BASE_DIR/bin"
 mkdir -p "$BASE_DIR/configs"
 mkdir -p "$BASE_DIR/logs"
 
+# Bersihkan sisa webroot agar KernelSU tidak menampilkan tombol WebUI
+rm -rf "$MODPATH/webroot" 2>/dev/null
+rm -rf "/data/adb/modules/luminatweaks/webroot" 2>/dev/null
+
 ui_print "- Membersihkan daemon lama..."
 killall -9 luminad 2>/dev/null
 pkill -9 -f luminad 2>/dev/null
@@ -93,6 +97,7 @@ fi
 set_perm "$MODPATH/service.sh" 0 0 0755
 set_perm "$MODPATH/post-fs-data.sh" 0 0 0755
 set_perm "$MODPATH/action.sh" 0 0 0755
+set_perm "$MODPATH/uninstall.sh" 0 0 0755
 
 [ -f "$BASE_DIR/fast_load" ] || echo "1" > "$BASE_DIR/fast_load"
 [ -f "$BASE_DIR/aggressive_doze" ] || echo "0" > "$BASE_DIR/aggressive_doze"

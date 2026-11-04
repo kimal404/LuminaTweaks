@@ -82,7 +82,7 @@ jobs:
         run: |
           mkdir -p dist
           SHORT_SHA=$(git rev-parse --short HEAD)
-          ZIP_NAME="LuminaTweaks-v2.0.0-ci${{ github.run_number }}-${SHORT_SHA}.zip"
+          ZIP_NAME="LuminaTweaks-v2.0.1-ci${{ github.run_number }}-${SHORT_SHA}.zip"
           ZIP_TARGET="${GITHUB_WORKSPACE}/dist/${ZIP_NAME}"
 
           mkdir -p build_module

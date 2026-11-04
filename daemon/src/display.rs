@@ -154,8 +154,6 @@ pub fn init_display_subsystem() {
         let mod_path = "/data/adb/modules/luminatweaks";
         if std::path::Path::new(mod_path).exists() {
             let _ = fs::write(format!("{}/rr_modes.json", mod_path), &json_str);
-            let _ = fs::create_dir_all(format!("{}/webroot", mod_path));
-            let _ = fs::write(format!("{}/webroot/rr_modes.json", mod_path), &json_str);
         }
     }
 
