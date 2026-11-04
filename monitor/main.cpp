@@ -16,6 +16,7 @@
  */
 
 #include "BinderMonitor/BinderMonitor.hpp"
+#include "IpcClient.hpp"
 #include "Log.hpp"
 
 #include <csignal>
@@ -52,6 +53,9 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    auto &ipc = IpcClient::get();
+    ipc.init();
+
     auto &monitor = BinderMonitor::get();
 
     ProcessObserverCallbacks callbacks{};
@@ -62,10 +66,18 @@ int main(int argc, char *argv[]) {
         if (pkg.empty()) pkg = "unknown";
 
         LOGI_TAG(TAG, "[EVENT] Foreground -> PKG: %s | PID: %d | UID: %d", pkg.c_str(), pid, uid);
+
+        std::string payload = "{\"event\":\"foreground\",\"pkg\":\"" + pkg + 
+                              "\",\"pid\":" + std::to_string(pid) + 
+                              ",\"uid\":" + std::to_string(uid) + "}";
+        ipc.sendEvent(payload);
     };
 
     callbacks.onProcessDied = [](int32_t pid, int32_t uid) {
         LOGD_TAG(TAG, "[EVENT] Process Died -> PID: %d | UID: %d", pid, uid);
+        std::string payload = "{\"event\":\"died\",\"pid\":" + std::to_string(pid) + 
+                              ",\"uid\":" + std::to_string(uid) + "}";
+        ipc.sendEvent(payload);
     };
 
     monitor.setProcessObserverCallbacks(std::move(callbacks));
