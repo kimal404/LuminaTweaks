@@ -28,7 +28,8 @@ LOCAL_C_INCLUDES := \
     $(LOCAL_PATH)/BinderMonitor \
     $(LOCAL_PATH)/BinderNDK
 
-LOCAL_CPPFLAGS += -std=c++20 -O2
+# Aktifkan -fexceptions agar blok try-catch di BinderMonitor.cpp diizinkan
+LOCAL_CPPFLAGS += -std=c++20 -O2 -fexceptions
 LOCAL_CPPFLAGS += -Wall -Wextra -Wno-unused-parameter
 
 LOCAL_LDLIBS := -llog
