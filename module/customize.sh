@@ -1,4 +1,3 @@
-
 ui_print "************************************"
 ui_print "       LuminaTweaks Installer       "
 ui_print "************************************"
@@ -9,7 +8,7 @@ case "$ABI" in
         ui_print "- Arsitektur didukung: $ABI"
         ;;
     *)
-        abort "! Perangkat 32-bit ($ABI) tidak didukung oleh luminad engine."
+        abort "! Perangkat 32-bit ($ABI) tidak didukung."
         ;;
 esac
 
@@ -38,45 +37,19 @@ if [ -n "$DAEMON_SRC" ]; then
     cp -f "$DAEMON_SRC" "$BASE_DIR/bin/luminad"
     set_perm "$BASE_DIR/bin/luminad" 0 0 0755
     set_perm "$DAEMON_SRC" 0 0 0755
-else
-    ui_print "! Peringatan: Binary luminad tidak ditemukan di dalam paket modul."
 fi
 
 if [ -f "$MODPATH/manager.apk" ]; then
-    ui_print "- Memasang Lumina Manager APK..."
-
-    TMP_APK="/data/local/tmp/lumina_manager.apk"
-    cp -f "$MODPATH/manager.apk" "$TMP_APK"
-    chmod 644 "$TMP_APK"
-    chcon u:object_r:shell_data_file:s0 "$TMP_APK" 2>/dev/null
-
-    install_out=$(pm install -r -d --user 0 "$TMP_APK" 2>&1)
-
-    if echo "$install_out" | grep -q "INSTALL_FAILED_UPDATE_INCOMPATIBLE"; then
-        ui_print "! Signature berbeda. Membersihkan instalasi lama..."
-        pm uninstall --user 0 com.luminatweaks >/dev/null 2>&1
-        pm uninstall com.luminatweaks >/dev/null 2>&1
-        install_out=$(pm install --user 0 "$TMP_APK" 2>&1)
-    elif ! echo "$install_out" | grep -iq "Success"; then
-        install_out=$(cmd package install -r -d --user 0 "$TMP_APK" 2>&1)
-    fi
-
-    rm -f "$TMP_APK"
-
-    if echo "$install_out" | grep -iq "Success"; then
-        ui_print "- Manager APK berhasil dipasang/diperbarui."
-    else
-        ui_print "! Peringatan pemasangan APK: $install_out"
-    fi
-
-    pm grant com.luminatweaks android.permission.POST_NOTIFICATIONS >/dev/null 2>&1
-    pm grant com.luminatweaks android.permission.QUERY_ALL_PACKAGES >/dev/null 2>&1
-    pm grant com.luminatweaks com.android.permission.GET_INSTALLED_APPS >/dev/null 2>&1
-
-    appops set com.luminatweaks POST_NOTIFICATION allow >/dev/null 2>&1
-    appops set com.luminatweaks AUTO_START allow >/dev/null 2>&1
-    appops set com.luminatweaks RUN_IN_BACKGROUND allow >/dev/null 2>&1
-    dumpsys deviceidle whitelist +com.luminatweaks >/dev/null 2>&1
+    ui_print "- Memasang Lumina Manager APK di latar belakang..."
+    cp -f "$MODPATH/manager.apk" /data/local/tmp/lumina_manager.apk
+    chmod 644 /data/local/tmp/lumina_manager.apk
+    nohup sh -c '
+        sleep 1
+        pm install -r -d --user 0 /data/local/tmp/lumina_manager.apk >/dev/null 2>&1 || pm install -r -d /data/local/tmp/lumina_manager.apk >/dev/null 2>&1
+        rm -f /data/local/tmp/lumina_manager.apk
+        pm grant com.luminatweaks android.permission.POST_NOTIFICATIONS >/dev/null 2>&1
+        pm grant com.luminatweaks android.permission.QUERY_ALL_PACKAGES >/dev/null 2>&1
+    ' >/dev/null 2>&1 &
 fi
 
 set_perm "$MODPATH/service.sh" 0 0 0755
