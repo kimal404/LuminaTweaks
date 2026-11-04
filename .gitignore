@@ -1,27 +1,57 @@
-*.log
-*.img
+# Keystore & Signing Secrets
+keystore/
+*.jks
+*.keystore
+*keystore_base64*
+*.p12
+*.pem
+*.key
+
+# Rust & Cargo (Daemon)
 target/
 daemon/target/
+**/*.rs.bk
+Cargo.lock
 
-# Gradle & Build cache
+# Gradle & Android Build Outputs
 .gradle/
 manager/.gradle/
 build/
 manager/build/
 manager/app/build/
+**/build/
 captures/
+.cxx/
+manager/.cxx/
+manager/app/.cxx/
 
-# AndroidIDE & Editor metadata
+# Output Packages & Images
+*.apk
+*.aab
+*.img
+*.zip
+
+# IDE & Editor Metadata (AndroidIDE & Studio)
 .acside/
 manager/.acside/
 .idea/
 *.iml
+*.iws
+*.ipr
+.vscode/
+
+# Local Configurations & Secrets
 local.properties
+gradle.properties.local
+
+# Logs & OS Metadata
 .DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.bak
 
-# Keystore & Signing Secrets
-*.jks
-*.keystore
-*keystore_base64*
-
-# Proprietary / Closed Source Logic
+# Magisk / KernelSU / Root Module Artifacts
+module/bin/
+module/system/bin/*
+!module/system/bin/.gitkeep
