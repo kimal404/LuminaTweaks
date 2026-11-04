@@ -42,6 +42,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.Info
@@ -108,6 +109,8 @@ fun SettingsScreen(
     var isGeneratingLog by remember { mutableStateOf(false) }
     var showAboutScreen by remember { mutableStateOf(false) }
     var showPersonalisasiScreen by remember { mutableStateOf(false) }
+    var showUninstallDialog by remember { mutableStateOf(false) }
+    var isUninstalling by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
 
     if (showAboutScreen && onNavigateToAbout == null) {
@@ -389,7 +392,126 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            item {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Manajemen Modul",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                    )
+                    val singleShape = getConnectedContainerShape(ContainerPosition.Single)
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(singleShape)
+                            .clickable(enabled = !isUninstalling) { showUninstallDialog = true },
+                        shape = singleShape,
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.DeleteForever,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Copot Modul",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Hentikan daemon, bersihkan data, dan copot modul",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.Rounded.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+            }
         }
+    }
+
+    if (showUninstallDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!isUninstalling) showUninstallDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Rounded.DeleteForever,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(28.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Copot LuminaTweaks?",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+            },
+            text = {
+                Text(
+                    text = "Tindakan ini akan mematikan native daemon luminad seketika, menghapus berkas modul dari KernelSU, dan mencopot aplikasi Lumina Manager secara permanen tanpa perlu reboot.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        isUninstalling = true
+                        coroutineScope.launch {
+                            Toast.makeText(context, "Mencopot seluruh komponen...", Toast.LENGTH_SHORT).show()
+                            delay(500L)
+                            uninstallModule(context)
+                        }
+                    },
+                    enabled = !isUninstalling
+                ) {
+                    Text(
+                        text = if (isUninstalling) "Mencopot..." else "Copot Sekarang",
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showUninstallDialog = false },
+                    enabled = !isUninstalling
+                ) {
+                    Text(
+                        text = "Batal",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            },
+            shape = RoundedCornerShape(cornerRadius.coerceAtLeast(16.dp)),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        )
     }
 
     if (showLanguageDialog) {
@@ -525,6 +647,23 @@ fun SettingsScreen(
                 )
             }
         }
+    }
+}
+
+private fun uninstallModule(context: Context) {
+    try {
+        val script = """
+            killall -9 luminad 2>/dev/null
+            pkill -9 -f luminad 2>/dev/null
+            rm -rf /data/adb/luminatweaks
+            rm -rf /data/adb/modules/luminatweaks
+            rm -rf /data/adb/modules_update/luminatweaks
+            rm -f /dev/socket/luminad* 2>/dev/null
+            nohup sh -c 'sleep 1; pm uninstall --user 0 com.luminatweaks >/dev/null 2>&1; pm uninstall com.luminatweaks >/dev/null 2>&1; cmd package uninstall com.luminatweaks >/dev/null 2>&1' >/dev/null 2>&1 &
+        """.trimIndent()
+        Runtime.getRuntime().exec(arrayOf("su", "-c", script))
+    } catch (e: Exception) {
+        Toast.makeText(context, "Gagal mencopot modul: ${e.message}", Toast.LENGTH_SHORT).show()
     }
 }
 
