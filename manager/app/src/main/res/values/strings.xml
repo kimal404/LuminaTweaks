@@ -4,7 +4,7 @@
     <string name="about_title">Tentang</string>
     <string name="action_back">Kembali</string>
     <string name="about_app_desc">Daemon performa dinamis tingkat lanjut &amp; pengoptimal kernel dengan Material 3 Expressive UI.</string>
-    <string name="about_version_format">Versi %1$s (Release)</string>
+    <string name="about_version_format">Versi %1$s</string>
     <string name="about_section_opensource">Sumber Terbuka</string>
     <string name="about_license_title">Lisensi</string>
     <string name="about_license_desc">Apache License, Version 2.0</string>
@@ -183,7 +183,7 @@ Fitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. P
     <string name="memory_zram_size_desc">Alokasi total batas ukuran swap ZRAM</string>
     <string name="dialog_select_zram_size">Pilih Kapasitas ZRAM</string>
     <!-- Utilitas & FastLoad -->
-    <string name="tweak_fast_load">Lumina FastLoad</string>
+    <string name="tweak_fast_load">FastLoad</string>
     <string name="tweak_fast_load_desc">Akselerasi CPU &amp; I/O sementara saat game diluncurkan</string>
     <string name="section_utility_diagnostics">Utilitas &amp; Diagnostik</string>
     <string name="hardware_diag_title">Hardware</string>

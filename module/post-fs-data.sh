@@ -1,4 +1,17 @@
 #!/system/bin/sh
+# Copyright (C) 2026 kimal
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 MODDIR="${0%/*}"
 
@@ -28,26 +41,5 @@ patch_sepolicy_rule "allow magisk su process { sched_setscheduler }"
 patch_sepolicy_rule "allow * sysfs file mounton"
 patch_sepolicy_rule "allow * sysfs_devices_system_cpu file mounton"
 patch_sepolicy_rule "allow * proc file mounton"
-
-start_daemon_persistent() {
-    target_bin="$1"
-    if [ -f "$target_bin" ]; then
-        chmod 755 "$target_bin"
-        (
-            until [ "$(getprop sys.boot_completed)" = "1" ]; do
-                sleep 2
-            done
-            sleep 1
-            killall -9 luminad 2>/dev/null || true
-            nohup "$target_bin" >/dev/null 2>&1 &
-        ) &
-    fi
-}
-
-if [ -f "$MODDIR/system/bin/luminad" ]; then
-    start_daemon_persistent "$MODDIR/system/bin/luminad"
-elif [ -f "/data/adb/luminatweaks/luminad" ]; then
-    start_daemon_persistent "/data/adb/luminatweaks/luminad"
-fi
 
 exit 0

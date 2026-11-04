@@ -78,6 +78,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -144,6 +145,7 @@ fun getConnectedContainerShape(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen() {
+    val uriHandler = LocalUriHandler.current
     val context = LocalContext.current
     var selectedTab by remember { mutableIntStateOf(0) }
     var currentSubscreen by remember { mutableStateOf<String?>(null) }
@@ -686,6 +688,7 @@ fun HomeDashboardContent(
             }
 
             item {
+                val uriHandler = LocalUriHandler.current
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
@@ -693,7 +696,7 @@ fun HomeDashboardContent(
                     ConnectedCardRow(
                         icon = Icons.Rounded.DeveloperBoard,
                         title = stringResource(R.string.home_manager_version),
-                        subtitle = "v2.0.0 (Remastered)",
+                        subtitle = "v${com.luminatweaks.BuildConfig.VERSION_NAME} (Release)",
                         position = ContainerPosition.Top
                     )
                     ConnectedCardRow(
@@ -736,19 +739,20 @@ fun HomeDashboardContent(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
+                    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
                     ConnectedActionCardRow(
                         icon = Icons.Rounded.Favorite,
                         title = stringResource(R.string.home_support_us),
                         subtitle = stringResource(R.string.home_support_us_desc),
                         position = ContainerPosition.Top,
-                        onClick = { }
+                        onClick = { uriHandler.openUri("https://sociabuzz.com/kimal404") }
                     )
                     ConnectedActionCardRow(
                         icon = Icons.Rounded.MenuBook,
                         title = stringResource(R.string.home_learn_more),
                         subtitle = stringResource(R.string.home_learn_more_desc),
                         position = ContainerPosition.Bottom,
-                        onClick = { }
+                        onClick = { uriHandler.openUri("https://github.com/kimal404/LuminaTweaks") }
                     )
                 }
             }

@@ -349,7 +349,6 @@ fn main() {
             break;
         }
 
-        // Keep background power-saving utilities synchronized
         utility_ctrl.tick();
 
         let mut config_just_changed = false;

@@ -2,7 +2,7 @@
     <string name="about_title">About</string>
     <string name="action_back">Back</string>
     <string name="about_app_desc">Advanced dynamic performance daemon &amp; kernel optimizer with Material 3 Expressive UI.</string>
-    <string name="about_version_format">Version %1$s (Release)</string>
+    <string name="about_version_format">Version %1$s</string>
     <string name="about_section_opensource">Open Source</string>
     <string name="about_license_title">License</string>
     <string name="about_license_desc">Apache License, Version 2.0</string>
@@ -181,7 +181,7 @@ Features on this page are only active when the system is in the Performance prof
     <string name="memory_zram_size_desc">Total allocated ZRAM swap disksize limit</string>
     <string name="dialog_select_zram_size">Select ZRAM Capacity</string>
     <!-- Utility & FastLoad -->
-    <string name="tweak_fast_load">Lumina FastLoad</string>
+    <string name="tweak_fast_load">FastLoad</string>
     <string name="tweak_fast_load_desc">Temporary CPU &amp; I/O boost during game launch phase</string>
     <string name="section_utility_diagnostics">Utility &amp; Diagnostics</string>
     <string name="hardware_diag_title">Hardware</string>

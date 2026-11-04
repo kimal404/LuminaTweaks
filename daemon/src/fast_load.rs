@@ -110,14 +110,12 @@ impl FastLoadController {
             return;
         }
 
-        // Trigger burst mode on initial game launch
         if is_game && current_pkg != self.last_game_package {
             self.last_game_package = current_pkg.to_string();
             self.apply();
             return;
         }
 
-        // Handle boost timing and task switching
         if self.is_active {
             let timer_expired = self
                 .boost_start_time
@@ -140,7 +138,6 @@ impl FastLoadController {
     }
 
     fn apply(&mut self) {
-        // Save original dirty ratios before writing
         self.original_dirty_ratio = fs::read_to_string("/proc/sys/vm/dirty_ratio")
             .unwrap_or_else(|_| "20".to_string())
             .trim()
@@ -152,16 +149,13 @@ impl FastLoadController {
                 .trim()
                 .to_string();
 
-        // Boost I/O read-ahead buffer
         for node in &self.read_ahead_paths {
             let _ = fs::write(node, "1024");
         }
 
-        // Accelerate dirty page flushing
         let _ = fs::write("/proc/sys/vm/dirty_ratio", "10");
         let _ = fs::write("/proc/sys/vm/dirty_background_ratio", "5");
 
-        // Scale CPU min frequencies to max and lock permissions
         self.original_min_freqs.clear();
         for node in &self.cpu_min_freq_paths {
             let current = fs::read_to_string(node).unwrap_or_default().trim().to_string();
@@ -182,12 +176,10 @@ impl FastLoadController {
             return;
         }
 
-        // Restore I/O read-ahead buffer
         for node in &self.read_ahead_paths {
             let _ = fs::write(node, "128");
         }
 
-        // Restore original VM parameters
         if !self.original_dirty_ratio.is_empty() {
             let _ = fs::write("/proc/sys/vm/dirty_ratio", &self.original_dirty_ratio);
         }
@@ -198,7 +190,6 @@ impl FastLoadController {
             );
         }
 
-        // Unlock permissions and restore CPU scaling min frequencies
         for (i, node) in self.cpu_min_freq_paths.iter().enumerate() {
             if let Some(orig_freq) = self.original_min_freqs.get(i) {
                 if !orig_freq.is_empty() {

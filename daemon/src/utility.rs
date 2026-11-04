@@ -66,13 +66,11 @@ impl UtilityController {
 
         let current_screen_on = Self::is_screen_on();
 
-        // Screen transitioned from ON to OFF -> trigger immediate Deep Sleep
         if self.was_screen_on && !current_screen_on {
             let _ = Command::new("dumpsys").args(["deviceidle", "force-idle"]).status();
             self.doze_forced = true;
             log!("[DOZE] Screen turned off -> Forced Deep Sleep (deviceidle force-idle)");
         }
-        // Screen transitioned from OFF to ON -> restore normal idle monitoring
         else if !self.was_screen_on && current_screen_on {
             if self.doze_forced {
                 let _ = Command::new("dumpsys").args(["deviceidle", "unforce"]).status();
