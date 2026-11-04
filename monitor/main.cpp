@@ -73,7 +73,7 @@ int main(int argc, char *argv[]) {
         ipc.sendEvent(payload);
     };
 
-    callbacks.onProcessDied = [](int32_t pid, int32_t uid) {
+    callbacks.onProcessDied = [&](int32_t pid, int32_t uid) {
         LOGD_TAG(TAG, "[EVENT] Process Died -> PID: %d | UID: %d", pid, uid);
         std::string payload = "{\"event\":\"died\",\"pid\":" + std::to_string(pid) + 
                               ",\"uid\":" + std::to_string(uid) + "}";
