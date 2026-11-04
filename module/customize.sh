@@ -31,21 +31,20 @@ mkdir -p "$BASE_DIR/bin"
 mkdir -p "$BASE_DIR/configs"
 mkdir -p "$BASE_DIR/logs"
 
-# Bersihkan sisa webroot agar KernelSU tidak menampilkan tombol WebUI
+# Hapus mutlak folder webroot agar KernelSU tidak memicu WebUI
 rm -rf "$MODPATH/webroot" 2>/dev/null
 rm -rf "/data/adb/modules/luminatweaks/webroot" 2>/dev/null
+rm -rf "$MODPATH/system" 2>/dev/null
 
 ui_print "- Membersihkan daemon lama..."
 killall -9 luminad 2>/dev/null
 pkill -9 -f luminad 2>/dev/null
 
 DAEMON_SRC=""
-if [ -f "$MODPATH/system/bin/luminad" ]; then
-    DAEMON_SRC="$MODPATH/system/bin/luminad"
+if [ -f "$MODPATH/luminad" ]; then
+    DAEMON_SRC="$MODPATH/luminad"
 elif [ -f "$MODPATH/bin/luminad" ]; then
     DAEMON_SRC="$MODPATH/bin/luminad"
-elif [ -f "$MODPATH/luminad" ]; then
-    DAEMON_SRC="$MODPATH/luminad"
 fi
 
 if [ -n "$DAEMON_SRC" ]; then

@@ -90,6 +90,9 @@ jobs:
             cp -r module/* build_module/
           fi
 
+          # Bersihkan direktori redundan agar ZIP steril
+          rm -rf build_module/system build_module/webroot build_module/common
+
           cp daemon/target/aarch64-linux-android/release/luminad build_module/luminad
           chmod 755 build_module/luminad
 
