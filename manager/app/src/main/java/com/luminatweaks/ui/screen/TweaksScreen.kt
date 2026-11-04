@@ -46,9 +46,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.Bolt
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Memory
@@ -85,7 +83,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -338,150 +335,6 @@ fun MediaTekEngineScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun UtilityScreen(
-    onBack: () -> Unit
-) {
-    val coroutineScope = rememberCoroutineScope()
-    var isFastCharge by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            val output = runCatching {
-                val proc = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat /data/adb/luminatweaks/fast_charge 2>/dev/null"))
-                proc.inputStream.bufferedReader().use { it.readText().trim() }
-            }.getOrDefault("0")
-            withContext(Dispatchers.Main) {
-                isFastCharge = output == "1"
-            }
-        }
-    }
-
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Utilitas",
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = stringResource(R.string.action_back)
-                        )
-                    }
-                },
-                windowInsets = WindowInsets.statusBars,
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
-            )
-        }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding() + 8.dp,
-                bottom = 24.dp,
-                start = 16.dp,
-                end = 16.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(18.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Bolt,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Fast Charging",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                            Switch(
-                                checked = isFastCharge,
-                                onCheckedChange = { newState ->
-                                    isFastCharge = newState
-                                    coroutineScope.launch(Dispatchers.IO) {
-                                        val cmdVal = if (newState) "1" else "0"
-                                        runCatching {
-                                            Runtime.getRuntime().exec(arrayOf("su", "-c", "echo $cmdVal > /data/adb/luminatweaks/fast_charge"))
-                                        }
-                                    }
-                                },
-                                thumbContent = {
-                                    if (isFastCharge) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Check,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(SwitchDefaults.IconSize)
-                                        )
-                                    } else {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Close,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(SwitchDefaults.IconSize)
-                                        )
-                                    }
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MaterialTheme.colorScheme.primary,
-                                    checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
-                                    checkedIconColor = MaterialTheme.colorScheme.onPrimary,
-                                    uncheckedThumbColor = Color(0xFF6B6E77),
-                                    uncheckedTrackColor = Color(0xFF1E1F24),
-                                    uncheckedBorderColor = Color(0xFF484A54),
-                                    uncheckedIconColor = Color(0xFF1E1F24)
-                                )
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = "Memaksa profil pengisian arus maksimum dan mengabaikan pembatasan thermal standar saat mengisi daya.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
 fun TweaksScreen() {
     val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
@@ -509,6 +362,7 @@ fun TweaksScreen() {
 
     var isAutoDnd by remember { mutableStateOf(cached?.isAutoDnd ?: false) }
     var currentIoScheduler by remember { mutableStateOf(cached?.currentIoScheduler ?: "mq-deadline") }
+    var isFastLoad by remember { mutableStateOf(false) }
 
     var showRefreshRateDialog by remember { mutableStateOf(false) }
     var showRenderDialog by remember { mutableStateOf(false) }
@@ -533,6 +387,16 @@ fun TweaksScreen() {
         isBoostGed = state.isBoostGed
         isAutoDnd = state.isAutoDnd
         currentIoScheduler = state.currentIoScheduler
+
+        withContext(Dispatchers.IO) {
+            val fastLoadVal = runCatching {
+                val proc = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat /data/adb/luminatweaks/fast_load 2>/dev/null"))
+                proc.inputStream.bufferedReader().use { it.readText().trim() }
+            }.getOrDefault("0")
+            withContext(Dispatchers.Main) {
+                isFastLoad = fastLoadVal == "1"
+            }
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -1240,9 +1104,9 @@ fun TweaksScreen() {
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(addBottomShape)
+                            .clip(addMiddleShape)
                             .clickable { showIoSchedulerDialog = true },
-                        shape = addBottomShape,
+                        shape = addMiddleShape,
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                         )
@@ -1290,12 +1154,76 @@ fun TweaksScreen() {
                             )
                         }
                     }
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(addBottomShape),
+                        shape = addBottomShape,
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Bolt,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.tweak_fast_load),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = stringResource(R.string.tweak_fast_load_desc),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Switch(
+                                checked = isFastLoad,
+                                onCheckedChange = { newState ->
+                                    isFastLoad = newState
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        val cmdVal = if (newState) "1" else "0"
+                                        runCatching {
+                                            Runtime.getRuntime().exec(arrayOf("su", "-c", "echo $cmdVal > /data/adb/luminatweaks/fast_load"))
+                                        }
+                                    }
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                    checkedTrackColor = MaterialTheme.colorScheme.primary
+                                )
+                            )
+                        }
+                    }
                 }
             }
 
             item {
                 Text(
-                    text = "Utilitas & Diagnostik",
+                    text = stringResource(R.string.section_utility_diagnostics),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
@@ -1344,14 +1272,14 @@ fun TweaksScreen() {
                             Spacer(modifier = Modifier.width(14.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Hardware",
+                                    text = stringResource(R.string.hardware_diag_title),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Integritas baterai, siklus charge, dan masa pakai UFS",
+                                    text = stringResource(R.string.hardware_diag_desc),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -1398,14 +1326,14 @@ fun TweaksScreen() {
                             Spacer(modifier = Modifier.width(14.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Utilitas",
+                                    text = stringResource(R.string.utility_screen_title),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Pengaturan pengisian daya, fast charge, dan utilitas sistem",
+                                    text = stringResource(R.string.utility_screen_desc),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

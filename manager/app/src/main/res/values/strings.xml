@@ -182,4 +182,19 @@ Fitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. P
     <string name="memory_zram_size">Kapasitas ZRAM</string>
     <string name="memory_zram_size_desc">Alokasi total batas ukuran swap ZRAM</string>
     <string name="dialog_select_zram_size">Pilih Kapasitas ZRAM</string>
+    <!-- Utilitas & FastLoad -->
+    <string name="tweak_fast_load">Lumina FastLoad</string>
+    <string name="tweak_fast_load_desc">Akselerasi CPU &amp; I/O sementara saat game diluncurkan</string>
+    <string name="section_utility_diagnostics">Utilitas &amp; Diagnostik</string>
+    <string name="hardware_diag_title">Hardware</string>
+    <string name="hardware_diag_desc">Integritas baterai, siklus charge, dan masa pakai UFS</string>
+    <string name="utility_screen_title">Utilitas</string>
+    <string name="utility_screen_desc">Aggressive Doze, GMS limiter, dan penghemat daya standby</string>
+    <string name="utility_info_title">Optimasi Latar Belakang &amp; Baterai</string>
+    <string name="utility_info_desc">Fitur manajemen daya tingkat lanjut untuk mengeliminasi standby battery drain tanpa mengganggu notifikasi penting sistem.</string>
+    <string name="utility_section_power">Konsumsi Daya &amp; Standby</string>
+    <string name="utility_doze_title">Aggressive Doze</string>
+    <string name="utility_doze_desc">Memaksa perangkat segera masuk ke Deep Sleep sesaat setelah layar mati</string>
+    <string name="utility_gms_title">GMS Battery Limiter</string>
+    <string name="utility_gms_desc">Membatasi wakelock dan aktivitas background berlebih Google Play Services</string>
 </resources>

@@ -180,4 +180,19 @@ Features on this page are only active when the system is in the Performance prof
     <string name="memory_zram_size">ZRAM Capacity</string>
     <string name="memory_zram_size_desc">Total allocated ZRAM swap disksize limit</string>
     <string name="dialog_select_zram_size">Select ZRAM Capacity</string>
+    <!-- Utility & FastLoad -->
+    <string name="tweak_fast_load">Lumina FastLoad</string>
+    <string name="tweak_fast_load_desc">Temporary CPU &amp; I/O boost during game launch phase</string>
+    <string name="section_utility_diagnostics">Utility &amp; Diagnostics</string>
+    <string name="hardware_diag_title">Hardware</string>
+    <string name="hardware_diag_desc">Battery health, charge cycles, and UFS lifespan</string>
+    <string name="utility_screen_title">Utility</string>
+    <string name="utility_screen_desc">Aggressive Doze, GMS limiter, and standby battery saver</string>
+    <string name="utility_info_title">Background &amp; Battery Optimization</string>
+    <string name="utility_info_desc">Advanced power management to eliminate standby battery drain without affecting critical system notifications.</string>
+    <string name="utility_section_power">Power Consumption &amp; Standby</string>
+    <string name="utility_doze_title">Aggressive Doze</string>
+    <string name="utility_doze_desc">Force device into Deep Sleep immediately after screen turns off</string>
+    <string name="utility_gms_title">GMS Battery Limiter</string>
+    <string name="utility_gms_desc">Restrict excessive Google Play Services wakelocks and background activity</string>
 </resources>

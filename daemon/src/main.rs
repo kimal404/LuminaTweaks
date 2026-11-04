@@ -19,14 +19,14 @@ mod logger;
 mod detector;
 mod display;
 mod engine;
-mod fast_charge;
+mod fast_load;
 mod mediatek;
 mod notifier;
 mod renderer;
 mod snapdragon;
 mod unisoc;
 
-use fast_charge::FastChargeController;
+use fast_load::FastLoadController;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
@@ -319,7 +319,7 @@ fn main() {
     engine::sync_global_tweaks();
     engine::apply_boot_profile();
 
-    let mut fast_charge = FastChargeController::new();
+    let mut fast_loader = FastLoadController::new();
 
     send_notification(NotificationPayload {
         title: "Lumina: Active",
@@ -340,12 +340,10 @@ fn main() {
             runtime.reset_to_balance();
             engine::restore_balance();
             apply_thermal_kill(false);
-            fast_charge.restore();
+            fast_loader.restore();
             TextureController::restore();
             break;
         }
-
-        fast_charge.tick();
 
         let mut config_just_changed = false;
         if let Ok(meta) = std::fs::metadata("/data/adb/luminatweaks/app_config.json") {
@@ -369,8 +367,16 @@ fn main() {
             engine::sync_global_tweaks();
         }
 
+        let focused = get_focused_package();
+
         if is_master_enabled() {
-            let focused = get_focused_package();
+            if let Some(ref current_pkg) = focused {
+                let is_game = detector::is_app_enabled(current_pkg);
+                fast_loader.tick(current_pkg, is_game);
+            } else {
+                fast_loader.tick("", false);
+            }
+
             let newly_focused_target = focused.as_deref().filter(|pkg| is_app_enabled(pkg));
 
             let current_target = if let Some(pkg) = newly_focused_target {
@@ -399,6 +405,7 @@ fn main() {
 
             runtime.apply_target(current_target.as_deref());
         } else {
+            fast_loader.restore();
             runtime.reset_to_balance();
             if config_just_changed {
                 TextureController::restore();
