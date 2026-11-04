@@ -51,11 +51,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.BlurOn
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.GridOn
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material.icons.rounded.VideogameAsset
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -69,14 +73,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -100,12 +104,14 @@ import com.luminatweaks.R
 import com.luminatweaks.data.AppProfileConfig
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
-import kotlin.math.abs
+import java.io.File
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 fun generateTextureBitmap(lod: Int): ImageBitmap {
-    val scale = when (lod.coerceIn(-3, 4)) {
-        -3, -2, -1, 0 -> 1
+    val scale = when (lod.coerceIn(0, 4)) {
+        0 -> 1
         1 -> 2
         2 -> 4
         3 -> 8
@@ -113,16 +119,8 @@ fun generateTextureBitmap(lod: Int): ImageBitmap {
         else -> 1
     }
 
-    val width = when (lod) {
-        -3 -> 128
-        -2 -> 112
-        else -> (96 / scale).coerceAtLeast(2)
-    }
-    val height = when (lod) {
-        -3 -> 128
-        -2 -> 112
-        else -> (96 / scale).coerceAtLeast(2)
-    }
+    val width = (96 / scale).coerceAtLeast(2)
+    val height = (96 / scale).coerceAtLeast(2)
 
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val wallHeight = (height * 0.62f).toInt()
@@ -130,7 +128,7 @@ fun generateTextureBitmap(lod: Int): ImageBitmap {
     for (y in 0 until height) {
         for (x in 0 until width) {
             val pixelColor = if (y < wallHeight) {
-                val brickRow = (y / (4 * (if (lod <= -2) 2 else 1))).coerceAtLeast(1)
+                val brickRow = (y / 4).coerceAtLeast(1)
                 val shift = if (brickRow % 2 == 0) 0 else 3
                 val isMortar = (y % 4 == 0) || ((x + shift) % 8 == 0)
                 if (isMortar) {
@@ -157,9 +155,8 @@ fun generateTextureBitmap(lod: Int): ImageBitmap {
 
 fun getLodBadge(lod: Int): String {
     return when {
-        lod == 0 -> "Default"
-        lod > 0 -> "+$lod"
-        else -> "$lod"
+        lod <= 0 -> "Default (0)"
+        else -> "+$lod"
     }
 }
 
@@ -339,9 +336,35 @@ fun TeksturRinganScreen(
     BackHandler(onBack = onBack)
 
     val primaryAccent = MaterialTheme.colorScheme.primary
-    val currentLod = profile.textureLod.coerceIn(-3, 4)
-    val isTweakActive = currentLod != 0
+    val currentLod = profile.textureLod.coerceIn(0, 4)
+    val isTweakActive = currentLod > 0
     val isFloating = LocalFloatingNavBar.current
+
+    var isAngleSupported by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            val supported = runCatching {
+                val libAngle64 = File("/system/lib64/egl/libGLESv2_angle.so").exists()
+                val libAngle32 = File("/system/lib/egl/libGLESv2_angle.so").exists()
+                val vendorAngle64 = File("/vendor/lib64/egl/libGLESv2_angle.so").exists()
+                val apexAngle = File("/apex/com.android.angle").exists()
+                val privAppAngle = File("/system/product/priv-app/Angle").exists()
+
+                if (libAngle64 || libAngle32 || vendorAngle64 || apexAngle || privAppAngle) {
+                    true
+                } else {
+                    val p = Runtime.getRuntime().exec(arrayOf("sh", "-c", "pm list packages com.android.angle 2>/dev/null"))
+                    val res = p.inputStream.bufferedReader().use { it.readText() }
+                    res.contains("angle")
+                }
+            }.getOrDefault(false)
+
+            withContext(Dispatchers.Main) {
+                isAngleSupported = supported
+            }
+        }
+    }
 
     val bottomPadding = if (isFloating) {
         120.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -401,6 +424,68 @@ fun TeksturRinganScreen(
             }
 
             item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 13.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (isAngleSupported) Color(0xFF1B5E20).copy(alpha = 0.25f)
+                                    else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (isAngleSupported) Icons.Rounded.Check else Icons.Rounded.Close,
+                                contentDescription = null,
+                                tint = if (isAngleSupported) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "ANGLE Supporter",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (isAngleSupported) "Driver ANGLE terpasang di sistem" else "Driver ANGLE tidak ditemukan di sistem",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isAngleSupported) Color(0xFF2E7D32).copy(alpha = 0.2f) else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
+                        ) {
+                            Text(
+                                text = if (isAngleSupported) "Suport" else "Ga Suport",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isAngleSupported) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
                 var sliderPosition by remember(currentLod) { mutableFloatStateOf(currentLod.toFloat()) }
 
                 Card(
@@ -456,34 +541,33 @@ fun TeksturRinganScreen(
                         Slider(
                             value = sliderPosition,
                             onValueChange = { rawVal ->
-                                val snapped = if (abs(rawVal) <= 0.3f) 0f else rawVal
-                                sliderPosition = snapped
-                                val targetLod = snapped.roundToInt().coerceIn(-3, 4)
+                                sliderPosition = rawVal
+                                val targetLod = rawVal.roundToInt().coerceIn(0, 4)
                                 if (targetLod != profile.textureLod) {
                                     onProfileChanged(
                                         profile.copy(
                                             textureLod = targetLod,
-                                            textureDriver = if (targetLod != 0) "angle" else "native",
-                                            textureEnabled = targetLod != 0,
-                                            textureDetail = targetLod.coerceAtLeast(0)
+                                            textureDriver = if (targetLod > 0) "angle" else "native",
+                                            textureEnabled = targetLod > 0,
+                                            textureDetail = targetLod
                                         )
                                     )
                                 }
                             },
                             onValueChangeFinished = {
-                                val finalLod = sliderPosition.roundToInt().coerceIn(-3, 4)
+                                val finalLod = sliderPosition.roundToInt().coerceIn(0, 4)
                                 sliderPosition = finalLod.toFloat()
                                 onProfileChanged(
                                     profile.copy(
                                         textureLod = finalLod,
-                                        textureDriver = if (finalLod != 0) "angle" else "native",
-                                        textureEnabled = finalLod != 0,
-                                        textureDetail = finalLod.coerceAtLeast(0)
+                                        textureDriver = if (finalLod > 0) "angle" else "native",
+                                        textureEnabled = finalLod > 0,
+                                        textureDetail = finalLod
                                     )
                                 )
                             },
-                            valueRange = -3f..4f,
-                            steps = 6,
+                            valueRange = 0f..4f,
+                            steps = 3,
                             colors = SliderDefaults.colors(
                                 thumbColor = primaryAccent,
                                 activeTrackColor = primaryAccent
@@ -497,8 +581,8 @@ fun TeksturRinganScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            val tickLabels = listOf("-3", "-2", "-1", "|  0  |", "+1", "+2", "+3", "+4")
-                            val tickValues = listOf(-3, -2, -1, 0, 1, 2, 3, 4)
+                            val tickLabels = listOf("|  0  |", "+1", "+2", "+3", "+4")
+                            val tickValues = listOf(0, 1, 2, 3, 4)
 
                             tickLabels.forEachIndexed { index, label ->
                                 val pointVal = tickValues[index]
@@ -516,13 +600,13 @@ fun TeksturRinganScreen(
                                             onProfileChanged(
                                                 profile.copy(
                                                     textureLod = pointVal,
-                                                    textureDriver = if (pointVal != 0) "angle" else "native",
-                                                    textureEnabled = pointVal != 0,
-                                                    textureDetail = pointVal.coerceAtLeast(0)
+                                                    textureDriver = if (pointVal > 0) "angle" else "native",
+                                                    textureEnabled = pointVal > 0,
+                                                    textureDetail = pointVal
                                                 )
                                             )
                                         }
-                                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
                                 )
                             }
                         }
@@ -543,41 +627,124 @@ fun TeksturRinganScreen(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                         )
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
-                                    val nextState = !profile.pixelSharp
-                                    onProfileChanged(profile.copy(pixelSharp = nextState))
-                                }
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.VideogameAsset,
+                                    contentDescription = null,
+                                    tint = primaryAccent,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = stringResource(R.string.texture_pixel_sharp),
+                                    text = "Mode Tampilan Tekstur",
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = stringResource(R.string.texture_pixel_sharp_desc),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
                             }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Switch(
-                                checked = profile.pixelSharp,
-                                onCheckedChange = { newState ->
-                                    onProfileChanged(profile.copy(pixelSharp = newState))
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                    checkedTrackColor = primaryAccent
-                                )
-                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                val isBlurSelected = !profile.pixelSharp
+                                Card(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable {
+                                            onProfileChanged(profile.copy(pixelSharp = false))
+                                        },
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isBlurSelected) primaryAccent.copy(alpha = 0.22f)
+                                        else MaterialTheme.colorScheme.surfaceContainerHigh
+                                    ),
+                                    border = BorderStroke(
+                                        width = if (isBlurSelected) 1.5.dp else 1.dp,
+                                        color = if (isBlurSelected) primaryAccent else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                    )
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.BlurOn,
+                                            contentDescription = null,
+                                            tint = if (isBlurSelected) primaryAccent else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(26.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(
+                                            text = "Blur",
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = if (isBlurSelected) primaryAccent else MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "Halus / Kentang",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+
+                                val isPixelSelected = profile.pixelSharp
+                                Card(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable {
+                                            onProfileChanged(profile.copy(pixelSharp = true))
+                                        },
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isPixelSelected) primaryAccent.copy(alpha = 0.22f)
+                                        else MaterialTheme.colorScheme.surfaceContainerHigh
+                                    ),
+                                    border = BorderStroke(
+                                        width = if (isPixelSelected) 1.5.dp else 1.dp,
+                                        color = if (isPixelSelected) primaryAccent else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                    )
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.GridOn,
+                                            contentDescription = null,
+                                            tint = if (isPixelSelected) primaryAccent else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(26.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(
+                                            text = "Pixel",
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = if (isPixelSelected) primaryAccent else MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "Kotak-kotak Tajam",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }

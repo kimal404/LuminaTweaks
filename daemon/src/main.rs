@@ -25,8 +25,10 @@ mod notifier;
 mod renderer;
 mod snapdragon;
 mod unisoc;
+mod utility;
 
 use fast_load::FastLoadController;
+use utility::UtilityController;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
@@ -320,6 +322,7 @@ fn main() {
     engine::apply_boot_profile();
 
     let mut fast_loader = FastLoadController::new();
+    let mut utility_ctrl = UtilityController::new();
 
     send_notification(NotificationPayload {
         title: "Lumina: Active",
@@ -341,9 +344,13 @@ fn main() {
             engine::restore_balance();
             apply_thermal_kill(false);
             fast_loader.restore();
+            utility_ctrl.restore();
             TextureController::restore();
             break;
         }
+
+        // Keep background power-saving utilities synchronized
+        utility_ctrl.tick();
 
         let mut config_just_changed = false;
         if let Ok(meta) = std::fs::metadata("/data/adb/luminatweaks/app_config.json") {

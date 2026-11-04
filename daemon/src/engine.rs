@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 kimal
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
@@ -240,7 +256,7 @@ pub fn sync_global_tweaks() {
     }
 }
 
-fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool) {
+fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool, max_cap_ratio: Option<u64>) {
     if let Ok(entries) = fs::read_dir("/sys/devices/system/cpu/cpufreq") {
         for entry in entries.flatten() {
             let fname = entry.file_name().to_string_lossy().into_owned();
@@ -264,15 +280,17 @@ fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool) {
                     .and_then(|s| s.trim().parse::<u64>().ok())
                     .unwrap_or(2000000);
 
-                if min_clamp {
-                    let mut freqs: Vec<u64> = fs::read_to_string(&avail_path)
-                        .unwrap_or_default()
-                        .split_whitespace()
-                        .filter_map(|s| s.parse::<u64>().ok())
-                        .collect();
-                    freqs.sort_unstable();
+                let freqs: Vec<u64> = fs::read_to_string(&avail_path)
+                    .unwrap_or_default()
+                    .split_whitespace()
+                    .filter_map(|s| s.parse::<u64>().ok())
+                    .collect();
 
-                    let target_min = freqs
+                if min_clamp {
+                    let mut sorted_freqs = freqs.clone();
+                    sorted_freqs.sort_unstable();
+
+                    let target_min = sorted_freqs
                         .iter()
                         .copied()
                         .find(|&f| f >= 900000)
@@ -280,6 +298,23 @@ fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool) {
 
                     write_sysfs(&min_path, &target_min.to_string(), false);
                     write_sysfs(&max_path, &hw_max.to_string(), false);
+                } else if let Some(pct) = max_cap_ratio {
+                    let target_cap = (hw_max * pct) / 100;
+                    let target_max = if !freqs.is_empty() {
+                        freqs
+                            .iter()
+                            .copied()
+                            .filter(|&f| f <= target_cap)
+                            .max()
+                            .unwrap_or_else(|| freqs.iter().copied().min().unwrap_or(target_cap))
+                    } else {
+                        target_cap
+                    };
+                    let target_max = target_max.max(hw_min);
+
+                    write_sysfs(&min_path, &hw_min.to_string(), false);
+                    write_sysfs(&max_path, &target_max.to_string(), true);
+                    log!("[LITE] {}: Capped max freq to {} kHz (~{}% of {} kHz)", fname, target_max, pct, hw_max);
                 } else {
                     write_sysfs(&min_path, &hw_min.to_string(), false);
                     write_sysfs(&max_path, &hw_max.to_string(), false);
@@ -308,7 +343,7 @@ fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool) {
 
 pub fn performance_profile() {
     log!("[ENGINE] Applying Performance Profile");
-    apply_universal_cpu("performance", true, true);
+    apply_universal_cpu("performance", true, true, None);
     if is_disable_thermal_enabled() {
         apply_thermal_kill(true);
     }
@@ -319,8 +354,8 @@ pub fn performance_profile() {
 }
 
 pub fn performance_lite_profile() {
-    log!("[ENGINE] Applying Performance Lite Profile (Vendor Chipset Tweaks Reset)");
-    apply_universal_cpu("schedutil", true, false);
+    log!("[ENGINE] Applying Performance Lite Profile (72% Dynamic CPU Frequency Cap)");
+    apply_universal_cpu("schedutil", true, false, Some(72));
     apply_thermal_kill(false);
 
     crate::mediatek::apply_mtk_balance();
@@ -330,7 +365,7 @@ pub fn performance_lite_profile() {
 
 pub fn balance_profile() {
     log!("[ENGINE] Restoring Balanced Profile");
-    apply_universal_cpu("schedutil", false, false);
+    apply_universal_cpu("schedutil", false, false, None);
     apply_thermal_kill(false);
 
     crate::mediatek::apply_mtk_balance();
@@ -344,7 +379,7 @@ pub fn restore_balance() {
 
 pub fn eco_profile() {
     log!("[ENGINE] Applying Eco Profile");
-    apply_universal_cpu("powersave", false, false);
+    apply_universal_cpu("powersave", false, false, None);
     apply_thermal_kill(false);
 
     crate::mediatek::apply_mtk_eco();
