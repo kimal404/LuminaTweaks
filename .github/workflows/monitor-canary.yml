@@ -1,0 +1,38 @@
+name: Build Canary Monitor
+
+on:
+  push:
+    branches:
+      - canary
+    paths:
+      - 'monitor/**'
+      - '.github/workflows/monitor-canary.yml'
+  workflow_dispatch:
+
+jobs:
+  build-monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Build lumina-monitor with NDK
+        run: |
+          echo "Using Android NDK: $ANDROID_NDK_LATEST_HOME"
+          $ANDROID_NDK_LATEST_HOME/ndk-build -C monitor \
+            NDK_PROJECT_PATH=. \
+            APP_BUILD_SCRIPT=Android.mk \
+            NDK_APPLICATION_MK=Application.mk
+
+      - name: Verify Binary Output
+        run: |
+          ls -lh monitor/libs/arm64-v8a/lumina-monitor
+          file monitor/libs/arm64-v8a/lumina-monitor
+
+      - name: Upload Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lumina-monitor-arm64
+          path: monitor/libs/arm64-v8a/lumina-monitor
+          if-no-files-found: error
