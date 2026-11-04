@@ -16,6 +16,7 @@
 
 package com.luminatweaks.ui.screen
 
+import android.app.Activity
 import android.app.LocaleManager
 import android.content.Context
 import android.os.Build
@@ -83,8 +84,10 @@ import androidx.compose.ui.unit.dp
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.LogUtil
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -435,7 +438,7 @@ fun SettingsScreen(
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Hentikan daemon, bersihkan data, dan copot modul",
+                                    text = "Hapus modul dan seluruh data konfigurasi",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -466,7 +469,7 @@ fun SettingsScreen(
             },
             title = {
                 Text(
-                    text = "Copot LuminaTweaks?",
+                    text = "Copot Modul",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
@@ -474,7 +477,7 @@ fun SettingsScreen(
             },
             text = {
                 Text(
-                    text = "Tindakan ini akan mematikan native daemon luminad seketika, menghapus berkas modul dari KernelSU, dan mencopot aplikasi Lumina Manager secara permanen tanpa perlu reboot.",
+                    text = "Seluruh berkas modul, konfigurasi daemon, dan aplikasi Lumina Manager akan dihapus dari sistem.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -484,15 +487,13 @@ fun SettingsScreen(
                     onClick = {
                         isUninstalling = true
                         coroutineScope.launch {
-                            Toast.makeText(context, "Mencopot seluruh komponen...", Toast.LENGTH_SHORT).show()
-                            delay(500L)
                             uninstallModule(context)
                         }
                     },
                     enabled = !isUninstalling
                 ) {
                     Text(
-                        text = if (isUninstalling) "Mencopot..." else "Copot Sekarang",
+                        text = if (isUninstalling) "Memproses..." else "Copot",
                         color = MaterialTheme.colorScheme.error,
                         fontWeight = FontWeight.Bold
                     )
@@ -650,20 +651,27 @@ fun SettingsScreen(
     }
 }
 
-private fun uninstallModule(context: Context) {
-    try {
-        val script = """
-            killall -9 luminad 2>/dev/null
-            pkill -9 -f luminad 2>/dev/null
-            rm -rf /data/adb/luminatweaks
-            rm -rf /data/adb/modules/luminatweaks
-            rm -rf /data/adb/modules_update/luminatweaks
-            rm -f /dev/socket/luminad* 2>/dev/null
-            nohup sh -c 'sleep 1; pm uninstall --user 0 com.luminatweaks >/dev/null 2>&1; pm uninstall com.luminatweaks >/dev/null 2>&1; cmd package uninstall com.luminatweaks >/dev/null 2>&1' >/dev/null 2>&1 &
-        """.trimIndent()
-        Runtime.getRuntime().exec(arrayOf("su", "-c", script))
-    } catch (e: Exception) {
-        Toast.makeText(context, "Gagal mencopot modul: ${e.message}", Toast.LENGTH_SHORT).show()
+private suspend fun uninstallModule(context: Context) {
+    withContext(Dispatchers.IO) {
+        try {
+            val p = Runtime.getRuntime().exec("su")
+            p.outputStream.bufferedWriter().use { writer ->
+                writer.write("killall -9 luminad 2>/dev/null\n")
+                writer.write("pkill -9 -f luminad 2>/dev/null\n")
+                writer.write("rm -rf /data/adb/luminatweaks\n")
+                writer.write("rm -rf /data/adb/modules/luminatweaks\n")
+                writer.write("rm -rf /data/adb/modules_update/luminatweaks\n")
+                writer.write("rm -f /dev/socket/luminad*\n")
+                writer.write("(sleep 1 && pm uninstall com.luminatweaks) &\n")
+                writer.write("exit\n")
+                writer.flush()
+            }
+            p.waitFor()
+        } catch (_: Exception) {}
+    }
+    withContext(Dispatchers.Main) {
+        (context as? Activity)?.finishAffinity()
+        android.os.Process.killProcess(android.os.Process.myPid())
     }
 }
 
