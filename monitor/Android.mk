@@ -29,7 +29,7 @@ LOCAL_C_INCLUDES := \
     $(LOCAL_PATH)/BinderNDK
 
 LOCAL_CPPFLAGS += -std=c++20 -O2
-LOCAL_CPPFLAGS += -Wpedantic -Wall -Wextra -Wno-unused-parameter
+LOCAL_CPPFLAGS += -Wall -Wextra -Wno-unused-parameter
 
 LOCAL_LDLIBS := -llog
 

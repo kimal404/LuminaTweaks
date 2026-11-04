@@ -19,26 +19,56 @@
 
 #include <android/log.h>
 #include <cstdio>
+#include <sstream>
+#include <string>
 
 #ifndef LOG_TAG
 #define LOG_TAG "LuminaMonitor"
 #endif
 
+namespace lumina::log {
+    inline void format_impl(std::ostringstream &oss, const std::string &fmt) {
+        oss << fmt;
+    }
+
+    template <typename T, typename... Args>
+    inline void format_impl(std::ostringstream &oss, const std::string &fmt, const T &first, const Args &...rest) {
+        size_t pos = fmt.find("{}");
+        if (pos != std::string::npos) {
+            oss << fmt.substr(0, pos) << first;
+            format_impl(oss, fmt.substr(pos + 2), rest...);
+        } else {
+            oss << fmt;
+        }
+    }
+
+    template <typename... Args>
+    inline std::string format(const std::string &fmt, const Args &...args) {
+        std::ostringstream oss;
+        format_impl(oss, fmt, args...);
+        return oss.str();
+    }
+} // namespace lumina::log
+
 #define LOGI_TAG(tag, fmt, ...) do { \
-    __android_log_print(ANDROID_LOG_INFO, tag, fmt, ##__VA_ARGS__); \
-    std::printf("[INFO][%s] " fmt "\n", tag, ##__VA_ARGS__); \
+    std::string _msg = ::lumina::log::format(fmt __VA_OPT__(,) __VA_ARGS__); \
+    __android_log_print(ANDROID_LOG_INFO, tag, "%s", _msg.c_str()); \
+    std::printf("[INFO][%s] %s\n", tag, _msg.c_str()); \
 } while (0)
 
 #define LOGE_TAG(tag, fmt, ...) do { \
-    __android_log_print(ANDROID_LOG_ERROR, tag, fmt, ##__VA_ARGS__); \
-    std::fprintf(stderr, "[ERROR][%s] " fmt "\n", tag, ##__VA_ARGS__); \
+    std::string _msg = ::lumina::log::format(fmt __VA_OPT__(,) __VA_ARGS__); \
+    __android_log_print(ANDROID_LOG_ERROR, tag, "%s", _msg.c_str()); \
+    std::fprintf(stderr, "[ERROR][%s] %s\n", tag, _msg.c_str()); \
 } while (0)
 
 #define LOGW_TAG(tag, fmt, ...) do { \
-    __android_log_print(ANDROID_LOG_WARN, tag, fmt, ##__VA_ARGS__); \
-    std::fprintf(stderr, "[WARN][%s] " fmt "\n", tag, ##__VA_ARGS__); \
+    std::string _msg = ::lumina::log::format(fmt __VA_OPT__(,) __VA_ARGS__); \
+    __android_log_print(ANDROID_LOG_WARN, tag, "%s", _msg.c_str()); \
+    std::fprintf(stderr, "[WARN][%s] %s\n", tag, _msg.c_str()); \
 } while (0)
 
 #define LOGD_TAG(tag, fmt, ...) do { \
-    __android_log_print(ANDROID_LOG_DEBUG, tag, fmt, ##__VA_ARGS__); \
+    std::string _msg = ::lumina::log::format(fmt __VA_OPT__(,) __VA_ARGS__); \
+    __android_log_print(ANDROID_LOG_DEBUG, tag, "%s", _msg.c_str()); \
 } while (0)
