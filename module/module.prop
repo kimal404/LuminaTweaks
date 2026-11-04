@@ -3,4 +3,5 @@ name=LuminaTweaks
 version=v2.0.1
 versionCode=2000
 author=kimal
-description=Advanced lightweight dynamic gaming daemon & kernel optimizer with Compose frontend.
+description=LuminaTweaks is Here
+banner=banner.png
