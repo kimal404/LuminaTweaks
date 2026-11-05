@@ -440,10 +440,13 @@ fun TweaksScreen() {
             item {
                 Text(
                     text = if (isIndonesian) "Layar & Grafis" else "Display & Graphics",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.4.sp
+                    ),
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(start = 4.dp, top = 6.dp)
+                    modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 2.dp)
                 )
             }
 
@@ -558,10 +561,13 @@ fun TweaksScreen() {
             item {
                 Text(
                     text = if (isIndonesian) "Performa & Termal" else "Performance & Thermal",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.4.sp
+                    ),
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(start = 4.dp, top = 6.dp)
+                    modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 2.dp)
                 )
             }
 
@@ -676,10 +682,13 @@ fun TweaksScreen() {
             item {
                 Text(
                     text = stringResource(R.string.section_additional_tweaks),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.4.sp
+                    ),
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(start = 4.dp, top = 6.dp)
+                    modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 2.dp)
                 )
             }
 
@@ -794,10 +803,13 @@ fun TweaksScreen() {
             item {
                 Text(
                     text = stringResource(R.string.section_utility_diagnostics),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.4.sp
+                    ),
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(start = 4.dp, top = 6.dp)
+                    modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 2.dp)
                 )
             }
 

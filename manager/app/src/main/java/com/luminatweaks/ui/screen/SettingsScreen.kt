@@ -1,18 +1,16 @@
-/*
- * Copyright (C) 2026 kimal
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright (C) 2026 kimal
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.luminatweaks.ui.screen
 
@@ -81,6 +79,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.LogUtil
@@ -160,10 +159,13 @@ fun SettingsScreen(
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = "Personalisasi",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 0.4.sp
+                        ),
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                        modifier = Modifier.padding(start = 8.dp, bottom = 4.dp)
                     )
                     val singleShape = getConnectedContainerShape(ContainerPosition.Single)
                     Card(
@@ -185,35 +187,38 @@ fun SettingsScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Palette,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(24.dp)
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(22.dp)
                             )
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = "Personalisasi",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = "Tema, warna, dan kustomisasi antarmuka",
-                                    style = MaterialTheme.typography.bodySmall,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 12.sp,
+                                        lineHeight = 16.sp
+                                    ),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Icon(
                                 imageVector = Icons.Rounded.ChevronRight,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
@@ -223,14 +228,17 @@ fun SettingsScreen(
             item {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
                         text = "Lainnya",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 0.4.sp
+                        ),
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 4.dp, bottom = 5.dp)
+                        modifier = Modifier.padding(start = 8.dp, bottom = 4.dp)
                     )
 
                     val topShape = getConnectedContainerShape(ContainerPosition.Top)
@@ -249,13 +257,13 @@ fun SettingsScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             if (isGeneratingLog) {
                                 CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    strokeWidth = 2.5.dp,
+                                    modifier = Modifier.size(22.dp),
+                                    strokeWidth = 2.dp,
                                     color = MaterialTheme.colorScheme.primary
                                 )
                             } else {
@@ -263,21 +271,24 @@ fun SettingsScreen(
                                     imageVector = Icons.Rounded.Description,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = "Simpan Log",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = if (isGeneratingLog) "Sedang membundel berkas log..." else "Ekspor atau bagikan log diagnosis daemon Lumina",
-                                    style = MaterialTheme.typography.bodySmall,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 12.sp,
+                                        lineHeight = 16.sp
+                                    ),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
@@ -297,35 +308,38 @@ fun SettingsScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Language,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(24.dp)
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(22.dp)
                             )
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = "Bahasa",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = if (currentLanguage == "en") "English" else "Bahasa Indonesia",
-                                    style = MaterialTheme.typography.bodySmall,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 12.sp,
+                                        lineHeight = 16.sp
+                                    ),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Icon(
                                 imageVector = Icons.Rounded.ChevronRight,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
@@ -336,10 +350,13 @@ fun SettingsScreen(
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = "Tentang",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 0.4.sp
+                        ),
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                        modifier = Modifier.padding(start = 8.dp, bottom = 4.dp)
                     )
                     val singleShape = getConnectedContainerShape(ContainerPosition.Single)
                     Card(
@@ -361,35 +378,38 @@ fun SettingsScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Info,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(24.dp)
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(22.dp)
                             )
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = "Tentang LuminaTweaks",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = "Versi ${com.luminatweaks.BuildConfig.VERSION_NAME}",
-                                    style = MaterialTheme.typography.bodySmall,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 12.sp,
+                                        lineHeight = 16.sp
+                                    ),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Icon(
                                 imageVector = Icons.Rounded.ChevronRight,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
@@ -400,10 +420,13 @@ fun SettingsScreen(
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = "Manajemen Modul",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 0.4.sp
+                        ),
                         color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                        modifier = Modifier.padding(start = 8.dp, bottom = 4.dp)
                     )
                     val singleShape = getConnectedContainerShape(ContainerPosition.Single)
                     Card(
@@ -419,27 +442,30 @@ fun SettingsScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.DeleteForever,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(22.dp)
                             )
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = "Copot Modul",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.error
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = "Hapus modul dan seluruh data konfigurasi",
-                                    style = MaterialTheme.typography.bodySmall,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 12.sp,
+                                        lineHeight = 16.sp
+                                    ),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
@@ -447,7 +473,7 @@ fun SettingsScreen(
                                 imageVector = Icons.Rounded.ChevronRight,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
@@ -464,14 +490,14 @@ fun SettingsScreen(
                     imageVector = Icons.Rounded.DeleteForever,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(24.dp)
                 )
             },
             title = {
                 Text(
                     text = "Copot Modul",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center
                 )
             },
@@ -523,14 +549,14 @@ fun SettingsScreen(
                     imageVector = Icons.Rounded.Language,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(24.dp)
                 )
             },
             title = {
                 Text(
                     text = "Pilih Bahasa",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center
                 )
             },
@@ -600,8 +626,8 @@ fun SettingsScreen(
             ) {
                 Text(
                     text = "Log Subsystem",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
                 )
@@ -694,13 +720,13 @@ private fun LanguageOptionItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
                 color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f)
             )
@@ -709,7 +735,7 @@ private fun LanguageOptionItem(
                     imageVector = Icons.Rounded.Check,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
@@ -763,27 +789,30 @@ private fun LogOptionCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp)
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp)
             )
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp
+                    ),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
