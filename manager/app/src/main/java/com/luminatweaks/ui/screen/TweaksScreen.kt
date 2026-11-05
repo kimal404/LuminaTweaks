@@ -439,7 +439,7 @@ fun TweaksScreen() {
                         fontSize = 13.5.sp,
                         fontWeight = FontWeight.Medium
                     ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(start = 16.dp, top = 4.dp)
                 )
             }
@@ -471,7 +471,7 @@ fun TweaksScreen() {
                             Icon(
                                 imageVector = Icons.Rounded.Speed,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(22.dp)
                             )
                             Spacer(modifier = Modifier.width(16.dp))
@@ -520,7 +520,7 @@ fun TweaksScreen() {
                             Icon(
                                 imageVector = Icons.Rounded.DeveloperBoard,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(22.dp)
                             )
                             Spacer(modifier = Modifier.width(16.dp))
@@ -559,7 +559,7 @@ fun TweaksScreen() {
                         fontSize = 13.5.sp,
                         fontWeight = FontWeight.Medium
                     ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(start = 16.dp, top = 4.dp)
                 )
             }
@@ -591,7 +591,7 @@ fun TweaksScreen() {
                             Icon(
                                 imageVector = Icons.Rounded.BatterySaver,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(22.dp)
                             )
                             Spacer(modifier = Modifier.width(16.dp))
@@ -640,7 +640,7 @@ fun TweaksScreen() {
                             Icon(
                                 imageVector = Icons.Rounded.Thermostat,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(22.dp)
                             )
                             Spacer(modifier = Modifier.width(16.dp))
@@ -679,7 +679,7 @@ fun TweaksScreen() {
                         fontSize = 13.5.sp,
                         fontWeight = FontWeight.Medium
                     ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(start = 16.dp, top = 4.dp)
                 )
             }
@@ -711,7 +711,7 @@ fun TweaksScreen() {
                             Icon(
                                 imageVector = Icons.Rounded.Memory,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(22.dp)
                             )
                             Spacer(modifier = Modifier.width(16.dp))
@@ -760,7 +760,7 @@ fun TweaksScreen() {
                             Icon(
                                 imageVector = Icons.Rounded.Storage,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(22.dp)
                             )
                             Spacer(modifier = Modifier.width(16.dp))
@@ -799,7 +799,7 @@ fun TweaksScreen() {
                         fontSize = 13.5.sp,
                         fontWeight = FontWeight.Medium
                     ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(start = 16.dp, top = 4.dp)
                 )
             }
@@ -831,7 +831,7 @@ fun TweaksScreen() {
                             Icon(
                                 imageVector = Icons.Rounded.DeveloperBoard,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(22.dp)
                             )
                             Spacer(modifier = Modifier.width(16.dp))
@@ -880,7 +880,7 @@ fun TweaksScreen() {
                             Icon(
                                 imageVector = Icons.Rounded.Widgets,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(22.dp)
                             )
                             Spacer(modifier = Modifier.width(16.dp))

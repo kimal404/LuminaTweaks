@@ -158,7 +158,7 @@ fun SettingsScreen(
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Medium
                         ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(start = 16.dp, bottom = 6.dp)
                     )
                     val singleShape = getConnectedContainerShape(ContainerPosition.Single)
@@ -187,7 +187,7 @@ fun SettingsScreen(
                             Icon(
                                 imageVector = Icons.Rounded.Palette,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(22.dp)
                             )
                             Spacer(modifier = Modifier.width(16.dp))
@@ -230,7 +230,7 @@ fun SettingsScreen(
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Medium
                         ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(start = 16.dp, bottom = 6.dp)
                     )
 
@@ -263,7 +263,7 @@ fun SettingsScreen(
                                 Icon(
                                     imageVector = Icons.Rounded.Description,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(22.dp)
                                 )
                             }
@@ -307,7 +307,7 @@ fun SettingsScreen(
                             Icon(
                                 imageVector = Icons.Rounded.Language,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(22.dp)
                             )
                             Spacer(modifier = Modifier.width(16.dp))
@@ -347,7 +347,7 @@ fun SettingsScreen(
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Medium
                         ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(start = 16.dp, bottom = 6.dp)
                     )
                     val singleShape = getConnectedContainerShape(ContainerPosition.Single)
@@ -376,7 +376,7 @@ fun SettingsScreen(
                             Icon(
                                 imageVector = Icons.Rounded.Info,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(22.dp)
                             )
                             Spacer(modifier = Modifier.width(16.dp))
@@ -416,7 +416,7 @@ fun SettingsScreen(
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Medium
                         ),
-                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.85f),
+                        color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.padding(start = 16.dp, bottom = 6.dp)
                     )
                     val singleShape = getConnectedContainerShape(ContainerPosition.Single)
@@ -786,7 +786,7 @@ private fun LogOptionCard(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(22.dp)
             )
             Spacer(modifier = Modifier.width(16.dp))
