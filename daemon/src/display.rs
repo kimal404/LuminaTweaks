@@ -19,6 +19,8 @@ use std::thread;
 use std::time::Duration;
 use serde_json::Value;
 
+pub const CONFIG_DIR: &str = "/data/adb/.config/lumina";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DisplayMode {
     pub id: i32,
@@ -56,8 +58,8 @@ pub fn apply_refresh_rate_id(id: i32) {
 
 pub fn get_saved_mode_id() -> Option<i32> {
     for path in [
-        "/data/adb/luminatweaks/current_rr.txt",
-        "/data/adb/modules/luminatweaks/current_rr.txt",
+        format!("{}/current_rr.txt", CONFIG_DIR),
+        "/data/adb/modules/lumina_tweaks/current_rr.txt".to_string(),
     ] {
         if let Ok(content) = fs::read_to_string(path) {
             if let Ok(id) = content.trim().parse::<i32>() {
@@ -76,7 +78,8 @@ pub fn resolve_mode_id(val: &str) -> Option<i32> {
 
     let num = trimmed.parse::<i32>().ok()?;
 
-    if let Ok(content) = fs::read_to_string("/data/adb/luminatweaks/rr_modes.json") {
+    let rr_path = format!("{}/rr_modes.json", CONFIG_DIR);
+    if let Ok(content) = fs::read_to_string(rr_path) {
         if let Ok(json) = serde_json::from_str::<Value>(&content) {
             if let Some(arr) = json.as_array() {
                 for item in arr {
@@ -148,13 +151,8 @@ pub fn init_display_subsystem() {
             .collect();
         let json_str = format!("[{}]", entries.join(","));
 
-        let _ = fs::create_dir_all("/data/adb/luminatweaks");
-        let _ = fs::write("/data/adb/luminatweaks/rr_modes.json", &json_str);
-
-        let mod_path = "/data/adb/modules/luminatweaks";
-        if std::path::Path::new(mod_path).exists() {
-            let _ = fs::write(format!("{}/rr_modes.json", mod_path), &json_str);
-        }
+        let _ = fs::create_dir_all(CONFIG_DIR);
+        let _ = fs::write(format!("{}/rr_modes.json", CONFIG_DIR), &json_str);
     }
 
     if let Some(saved_id) = get_saved_mode_id() {

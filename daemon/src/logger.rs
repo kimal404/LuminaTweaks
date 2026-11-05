@@ -23,10 +23,9 @@ use std::sync::{Mutex, Once};
 static LOG_LOCK: Mutex<()> = Mutex::new(());
 static INIT_LOGGER_ONCE: Once = Once::new();
 
-const LOG_FILE: &str = "/data/adb/luminatweaks/luminad.log";
-const LOG_FILE_OLD: &str = "/data/adb/luminatweaks/luminad.log.old";
-const LOG_LEVEL_FILE: &str = "/data/adb/luminatweaks/log_level.txt";
-const MAX_BYTES: u64 = 2 * 1024 * 1024;
+const LOG_FILE: &str = "/data/local/tmp/lumina.log";
+const LOG_FILE_OLD: &str = "/data/local/tmp/lumina.log.old";
+const MAX_BYTES: u64 = 1 * 1024 * 1024;
 
 #[repr(C)]
 struct Tm {
@@ -53,19 +52,6 @@ pub enum LogLevel {
     Info = 0,
     Debug = 1,
     Verbose = 2,
-}
-
-pub fn get_configured_log_level() -> LogLevel {
-    if let Ok(content) = fs::read_to_string(LOG_LEVEL_FILE) {
-        match content.trim() {
-            "0" => LogLevel::Info,
-            "1" => LogLevel::Debug,
-            "2" => LogLevel::Verbose,
-            _ => LogLevel::Debug,
-        }
-    } else {
-        LogLevel::Debug
-    }
 }
 
 fn get_timestamp() -> String {
@@ -95,8 +81,6 @@ fn get_timestamp() -> String {
 pub fn init_logger() {
     INIT_LOGGER_ONCE.call_once(|| {
         let _guard = LOG_LOCK.lock().unwrap();
-        let _ = fs::create_dir_all("/data/adb/luminatweaks");
-
         if Path::new(LOG_FILE).exists() {
             if Path::new(LOG_FILE_OLD).exists() {
                 let _ = fs::remove_file(LOG_FILE_OLD);
@@ -118,12 +102,6 @@ pub fn init_logger() {
 
 pub fn write_log_with_level(level: LogLevel, msg: &str) {
     init_logger();
-
-    let current_level = get_configured_log_level();
-    if level > current_level {
-        return;
-    }
-
     println!("{}", msg);
 
     if level == LogLevel::Info {
@@ -133,8 +111,6 @@ pub fn write_log_with_level(level: LogLevel, msg: &str) {
     }
 
     let _guard = LOG_LOCK.lock().unwrap();
-    let _ = fs::create_dir_all("/data/adb/luminatweaks");
-
     if let Ok(meta) = fs::metadata(LOG_FILE) {
         if meta.len() >= MAX_BYTES {
             if Path::new(LOG_FILE_OLD).exists() {
@@ -157,15 +133,7 @@ pub fn write_log_with_level(level: LogLevel, msg: &str) {
 }
 
 pub fn write_log(msg: &str) {
-    let level = if msg.contains("write_lock") || msg.contains("write_unlock") {
-        LogLevel::Debug
-    } else if msg.starts_with("[VERBOSE]") || (msg.contains("TID ") && msg.contains("bound to mask")) {
-        LogLevel::Verbose
-    } else {
-        LogLevel::Info
-    };
-
-    write_log_with_level(level, msg);
+    write_log_with_level(LogLevel::Info, msg);
 }
 
 #[macro_export]
@@ -186,12 +154,5 @@ macro_rules! log_info {
 macro_rules! log_debug {
     ($($arg:tt)*) => {
         $crate::logger::write_log_with_level($crate::logger::LogLevel::Debug, &format!($($arg)*))
-    };
-}
-
-#[macro_export]
-macro_rules! log_verbose {
-    ($($arg:tt)*) => {
-        $crate::logger::write_log_with_level($crate::logger::LogLevel::Verbose, &format!($($arg)*))
     };
 }

@@ -38,7 +38,7 @@ impl Default for NotificationPayload {
 }
 
 fn is_toast_enabled() -> bool {
-    if let Ok(val) = std::fs::read_to_string("/data/adb/luminatweaks/toast_enabled.txt") {
+    if let Ok(val) = std::fs::read_to_string("/data/adb/.config/lumina/toast_enabled.txt") {
         return val.trim() == "1";
     }
     Command::new("getprop")

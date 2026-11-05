@@ -82,8 +82,20 @@ jobs:
         run: |
           mkdir -p dist
           SHORT_SHA=$(git rev-parse --short HEAD)
-          ZIP_NAME="LuminaTweaks-v2.0.1-ci${{ github.run_number }}-${SHORT_SHA}.zip"
+
+          # Ekstrak versi dari module.prop, default ke v2.0.2 jika tidak terdeteksi
+          MOD_VER=$(grep "^version=" module/module.prop 2>/dev/null | head -n 1 | cut -d'=' -f2 | tr -d '[:space:]')
+          if [ -z "$MOD_VER" ]; then
+            MOD_VER="v2.0.2"
+          fi
+          case "$MOD_VER" in
+            v*|V*) ;;
+            *) MOD_VER="v${MOD_VER}" ;;
+          esac
+
+          ZIP_NAME="LuminaTweaks-${MOD_VER}-ci${{ github.run_number }}-${SHORT_SHA}.zip"
           ZIP_TARGET="${GITHUB_WORKSPACE}/dist/${ZIP_NAME}"
+          echo "Target ZIP Name: ${ZIP_NAME}"
 
           mkdir -p build_module
           if [ -d "module" ]; then
@@ -111,7 +123,7 @@ jobs:
 
           echo "ZIP_PATH=dist/${ZIP_NAME}" >> $GITHUB_ENV
 
-      - name: Send Build to Telegram Channel
+      - name: Send Module ZIP to Telegram Channel
         if: success()
         env:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -153,3 +165,42 @@ jobs:
             $THUMB_ARG \
             --form-string caption="${CAPTION}" \
             --form-string parse_mode="HTML"
+
+      - name: Send Manager APK to Telegram Channel
+        if: success()
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RUN_NUM: ${{ github.run_number }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          SERVER_URL: ${{ github.server_url }}
+          COMMIT_URL: ${{ github.event.head_commit.url }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          TARGET_FILE=$(ls dist/*-signed.apk 2>/dev/null | head -n 1)
+          if [ -z "$TARGET_FILE" ]; then
+            TARGET_FILE=$(find manager/app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
+          fi
+
+          if [ -z "$TARGET_FILE" ]; then
+            echo "File output APK tidak ditemukan!"
+            exit 1
+          fi
+
+          WORKFLOW_URL="${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
+          SAFE_MSG=$(echo "$COMMIT_MSG" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+
+          CAPTION="<b>LuminaTweaks Manager</b>
+          #ci_${RUN_NUM}
+
+          <pre>${SAFE_MSG}</pre>
+
+          <a href=\"${COMMIT_URL}\">Commit</a>
+          <a href=\"${WORKFLOW_URL}\">Workflow run</a>"
+
+          curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
+            -F chat_id="${CHAT_ID}" \
+            -F document=@"${TARGET_FILE}" \
+            -F caption="${CAPTION}" \
+            -F parse_mode="HTML"

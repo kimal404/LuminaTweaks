@@ -78,7 +78,7 @@ pub fn setrender(renderer: &str) {
 
 pub fn get_saved_renderer() -> String {
     for path in [
-        "/data/adb/luminatweaks/current_renderer.txt",
+        "/data/adb/.config/lumina/current_renderer.txt",
         "/data/adb/modules/luminatweaks/current_renderer.txt",
     ] {
         if let Ok(content) = fs::read_to_string(path) {
@@ -101,8 +101,8 @@ pub fn get_saved_renderer() -> String {
 }
 
 pub fn save_renderer(renderer: &str) {
-    let _ = fs::create_dir_all("/data/adb/luminatweaks");
-    let _ = fs::write("/data/adb/luminatweaks/current_renderer.txt", renderer);
+    
+    let _ = fs::write("/data/adb/.config/lumina/current_renderer.txt", renderer);
     setprop("persist.lumina.renderer", renderer);
     let mod_path = "/data/adb/modules/luminatweaks";
     if std::path::Path::new(mod_path).exists() {

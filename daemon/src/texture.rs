@@ -117,7 +117,7 @@ impl TextureController {
     }
 
     pub fn sync_config(focused_pkg: Option<&str>) {
-        let config_path = "/data/adb/luminatweaks/app_config.json";
+        let config_path = "/data/adb/.config/lumina/app_config.json";
         let content = match fs::read_to_string(config_path) {
             Ok(c) => c,
             Err(_) => {

@@ -19,6 +19,7 @@ mod logger;
 mod detector;
 mod display;
 mod engine;
+mod ipc;
 mod mediatek;
 mod notifier;
 mod renderer;
@@ -26,14 +27,16 @@ mod snapdragon;
 mod unisoc;
 mod utility;
 
+use ipc::{IpcServer, SharedState};
 use utility::UtilityController;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use detector::{
-    get_app_config, get_focused_package, is_app_enabled, is_app_retained,
+    get_app_config, get_focused_package, is_app_enabled, is_process_alive,
     is_lite_mode_active, is_low_power_active, is_master_enabled,
 };
 use engine::apply_thermal_kill;
@@ -60,6 +63,17 @@ pub enum Profile {
     PerformanceLite,
 }
 
+impl Profile {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Profile::Eco => "Eco",
+            Profile::Balance => "Balanced",
+            Profile::Performance => "Performance",
+            Profile::PerformanceLite => "Performance Lite",
+        }
+    }
+}
+
 fn set_system_profile_prop(name: &str) {
     let _ = Command::new("setprop").args(["sys.lumina.profile", name]).status();
 }
@@ -71,10 +85,12 @@ struct EngineRuntime {
     current_applied_renderer: String,
     last_app_config_mtime: Option<SystemTime>,
     last_global_config_mtime: Option<SystemTime>,
+    left_foreground_at: Option<Instant>,
+    shared_state: Arc<SharedState>,
 }
 
 impl EngineRuntime {
-    fn new() -> Self {
+    fn new(shared_state: Arc<SharedState>) -> Self {
         set_system_profile_prop("Balanced");
         TextureController::ensure_setup();
 
@@ -85,6 +101,17 @@ impl EngineRuntime {
             current_applied_renderer: renderer::get_saved_renderer(),
             last_app_config_mtime: None,
             last_global_config_mtime: None,
+            left_foreground_at: None,
+            shared_state,
+        }
+    }
+
+    fn update_shared_state(&self, profile: Profile, target_pkg: Option<&str>) {
+        if let Ok(mut p) = self.shared_state.current_profile.lock() {
+            *p = profile.as_str().to_string();
+        }
+        if let Ok(mut pkg) = self.shared_state.active_package.lock() {
+            *pkg = target_pkg.map(|s| s.to_string());
         }
     }
 
@@ -168,6 +195,7 @@ impl EngineRuntime {
                 }
             }
             self.current_profile = Some(target_profile);
+            self.update_shared_state(target_profile, target_pkg);
         }
 
         let global_rr = display::get_saved_mode_id();
@@ -213,10 +241,12 @@ impl EngineRuntime {
     fn reset_to_balance(&mut self) {
         if self.current_profile != Some(Profile::Balance) {
             self.active_target_pkg = None;
+            self.left_foreground_at = None;
             self.current_profile = Some(Profile::Balance);
             engine::balance_profile();
             set_system_profile_prop("Balanced");
             log!("[PROFILE] Target inactive -> Reverted to Balanced");
+            self.update_shared_state(Profile::Balance, None);
 
             let global_rr = display::get_saved_mode_id();
             if global_rr != self.current_applied_rr {
@@ -251,6 +281,9 @@ fn main() {
     engine::sync_global_tweaks();
     engine::apply_boot_profile();
 
+    let shared_state = Arc::new(SharedState::new());
+    IpcServer::start(Arc::clone(&shared_state));
+
     let mut utility_ctrl = UtilityController::new();
 
     send_notification(NotificationPayload {
@@ -263,7 +296,7 @@ fn main() {
     });
 
     log!("[DAEMON] Subsystems online, entering main event loop");
-    let mut runtime = EngineRuntime::new();
+    let mut runtime = EngineRuntime::new(Arc::clone(&shared_state));
     let mut last_pkg_for_texture: Option<String> = None;
 
     loop {
@@ -279,10 +312,11 @@ fn main() {
 
         utility_ctrl.tick();
 
-        let mut config_just_changed = false;
+        let mut config_just_changed = shared_state.reload_flag.swap(false, Ordering::Relaxed);
+
         for path in [
+            "/data/adb/.config/lumina/app_config.json",
             "/data/adb/modules/luminatweaks/app_config.json",
-            "/data/adb/luminatweaks/app_config.json"
         ] {
             if let Ok(meta) = std::fs::metadata(path) {
                 if let Ok(mtime) = meta.modified() {
@@ -295,8 +329,8 @@ fn main() {
         }
 
         for path in [
+            "/data/adb/.config/lumina/config.json",
             "/data/adb/modules/luminatweaks/config.json",
-            "/data/adb/luminatweaks/config.json"
         ] {
             if let Ok(meta) = std::fs::metadata(path) {
                 if let Ok(mtime) = meta.modified() {
@@ -309,6 +343,7 @@ fn main() {
         }
 
         if config_just_changed {
+            log!("[CONFIG] Reloading system tweaks...");
             engine::sync_global_tweaks();
         }
 
@@ -319,13 +354,39 @@ fn main() {
 
             let current_target = if let Some(pkg) = newly_focused_target {
                 let pkg_str = pkg.to_string();
+                if runtime.left_foreground_at.is_some() {
+                    log!("[SESSION] Focus restored to {}. Grace period cleared.", pkg_str);
+                    runtime.left_foreground_at = None;
+                }
                 runtime.active_target_pkg = Some(pkg_str.clone());
                 Some(pkg_str)
             } else if let Some(ref saved_pkg) = runtime.active_target_pkg {
-                if is_app_enabled(saved_pkg) && is_app_retained(saved_pkg) {
-                    Some(saved_pkg.clone())
+                if !is_process_alive(saved_pkg) {
+                    log!("[SESSION] Process for {} died. Reverting to Balance immediately.", saved_pkg);
+                    runtime.active_target_pkg = None;
+                    runtime.left_foreground_at = None;
+                    None
+                } else if is_app_enabled(saved_pkg) {
+                    if runtime.left_foreground_at.is_none() {
+                        log!("[SESSION] Focus lost from {}. 30s grace period engaged.", saved_pkg);
+                        runtime.left_foreground_at = Some(Instant::now());
+                    }
+
+                    if let Some(left_time) = runtime.left_foreground_at {
+                        if left_time.elapsed() < Duration::from_secs(30) {
+                            Some(saved_pkg.clone())
+                        } else {
+                            log!("[SESSION] Grace period 30s expired for {}. Dropping target.", saved_pkg);
+                            runtime.active_target_pkg = None;
+                            runtime.left_foreground_at = None;
+                            None
+                        }
+                    } else {
+                        None
+                    }
                 } else {
                     runtime.active_target_pkg = None;
+                    runtime.left_foreground_at = None;
                     None
                 }
             } else {
@@ -350,6 +411,6 @@ fn main() {
             last_pkg_for_texture = None;
         }
 
-        thread::sleep(Duration::from_millis(1200));
+        thread::sleep(Duration::from_millis(400));
     }
 }

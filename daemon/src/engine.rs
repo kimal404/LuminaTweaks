@@ -37,7 +37,7 @@ pub fn write_sysfs(path: &str, val: &str, lock: bool) -> bool {
 }
 
 pub fn is_disable_thermal_enabled() -> bool {
-    if let Ok(val) = fs::read_to_string("/data/adb/luminatweaks/disable_thermal.txt") {
+    if let Ok(val) = fs::read_to_string("/data/adb/.config/lumina/disable_thermal.txt") {
         return val.trim() == "1";
     }
     let prop = Command::new("getprop")

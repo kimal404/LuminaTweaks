@@ -17,8 +17,8 @@
 use std::fs;
 use std::process::Command;
 
-const DOZE_FLAG: &str = "/data/adb/luminatweaks/aggressive_doze";
-const GMS_FLAG: &str = "/data/adb/luminatweaks/gms_limit";
+const DOZE_FLAG: &str = "/data/adb/.config/lumina/aggressive_doze";
+const GMS_FLAG: &str = "/data/adb/.config/lumina/gms_limit";
 
 pub struct UtilityController {
     was_screen_on: bool,

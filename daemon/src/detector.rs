@@ -14,8 +14,12 @@
  * limitations under the License.
  */
 
+use std::fs;
+use std::path::Path;
 use std::process::Command;
 use serde_json::Value;
+
+pub const CONFIG_DIR: &str = "/data/adb/.config/lumina";
 
 #[derive(Debug, Clone, Default)]
 pub struct AppConfig {
@@ -29,28 +33,56 @@ pub struct AppConfig {
     pub hard_distance: bool,
 }
 
+const CGROUP_TOP_APP_CANDIDATES: &[&str] = &[
+    "/dev/cpuset/top-app/cgroup.procs",
+    "/sys/fs/cgroup/top-app/cgroup.procs",
+    "/sys/fs/cgroup/cpuset/top-app/cgroup.procs",
+];
+
+fn is_ignored_package(pkg: &str) -> bool {
+    matches!(
+        pkg,
+        "" | "com.android.systemui"
+            | "com.miui.securityadd"
+            | "com.miui.securitycenter"
+            | "com.miui.powerkeeper"
+            | "com.xiaomi.joyose"
+            | "android"
+            | "com.google.android.permissioncontroller"
+            | "com.android.permissioncontroller"
+            | "com.lbe.security.miui"
+            | "com.miui.guardprovider"
+            | "com.google.android.googlequicksearchbox"
+            | "com.miui.home"
+            | "com.mi.android.globallauncher"
+            | "com.android.launcher"
+            | "com.android.launcher3"
+    ) || pkg.contains("inputmethod") || pkg.contains("system_server")
+}
+
 pub fn get_focused_package() -> Option<String> {
-    let parse_output = |sub_arg: Option<&str>| -> Option<String> {
-        let mut cmd = Command::new("dumpsys");
-        cmd.arg("window");
-        if let Some(arg) = sub_arg {
-            cmd.arg(arg);
+    for &cgroup_path in CGROUP_TOP_APP_CANDIDATES {
+        if !Path::new(cgroup_path).exists() {
+            continue;
         }
 
-        let output = cmd.output().ok()?;
-        if !output.status.success() {
-            return None;
-        }
+        if let Ok(content) = fs::read_to_string(cgroup_path) {
+            for line in content.lines().rev() {
+                let pid_str = line.trim();
+                if pid_str.is_empty() {
+                    continue;
+                }
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        for line in stdout.lines() {
-            if line.contains("mCurrentFocus") || line.contains("mFocusedApp") {
-                for token in line.split_whitespace() {
-                    if token.contains('/') && token.contains('.') {
-                        let cleaned = token.trim_matches(|c: char| !c.is_alphanumeric() && c != '.' && c != '/' && c != '_');
-                        if let Some(pkg) = cleaned.split('/').next() {
-                            let pkg = pkg.trim();
-                            if !pkg.is_empty() && pkg != "null" && pkg.contains('.') {
+                let cmdline_path = format!("/proc/{}/cmdline", pid_str);
+                if let Ok(bytes) = fs::read(cmdline_path) {
+                    if let Some(pos) = bytes.iter().position(|&b| b == 0) {
+                        if let Ok(raw_pkg) = std::str::from_utf8(&bytes[..pos]) {
+                            let pkg = raw_pkg.trim();
+                            if !pkg.is_empty()
+                                && !pkg.starts_with('/')
+                                && pkg.contains('.')
+                                && !is_ignored_package(pkg)
+                            {
                                 return Some(pkg.to_string());
                             }
                         }
@@ -58,10 +90,8 @@ pub fn get_focused_package() -> Option<String> {
                 }
             }
         }
-        None
-    };
-
-    parse_output(Some("displays")).or_else(|| parse_output(None))
+    }
+    None
 }
 
 pub fn is_master_enabled() -> bool {
@@ -74,14 +104,13 @@ pub fn is_master_enabled() -> bool {
         }
     }
 
-    for p in ["/data/adb/modules/luminatweaks/master.conf", "/data/adb/luminatweaks/master.conf"] {
-        if let Ok(content) = std::fs::read_to_string(p) {
-            let val = content.trim();
-            if val == "0" || val == "false" {
-                return false;
-            } else if val == "1" || val == "true" {
-                return true;
-            }
+    let p = format!("{}/master.conf", CONFIG_DIR);
+    if let Ok(content) = std::fs::read_to_string(p) {
+        let val = content.trim();
+        if val == "0" || val == "false" {
+            return false;
+        } else if val == "1" || val == "true" {
+            return true;
         }
     }
 
@@ -120,9 +149,8 @@ fn is_truthy(val: &Value) -> bool {
 
 pub fn read_global_json() -> Option<Value> {
     for path in [
-        "/data/adb/modules/luminatweaks/config.json",
-        "/data/adb/luminatweaks/config.json",
-        "/data/adb/luminatweaks/configs/config.json",
+        format!("{}/config.json", CONFIG_DIR),
+        "/data/adb/modules/lumina_tweaks/config.json".to_string(),
     ] {
         if let Ok(content) = std::fs::read_to_string(path) {
             if let Ok(json) = serde_json::from_str::<Value>(&content) {
@@ -149,16 +177,11 @@ pub fn is_lite_mode_active() -> bool {
         }
     }
 
-    for path in [
-        "/data/adb/modules/luminatweaks/configs/lite_mode",
-        "/data/adb/luminatweaks/configs/lite_mode",
-        "/data/adb/luminatweaks/lite_mode.conf"
-    ] {
-        if let Ok(content) = std::fs::read_to_string(path) {
-            let trimmed = content.trim();
-            if trimmed == "1" || trimmed.eq_ignore_ascii_case("true") || trimmed.eq_ignore_ascii_case("on") {
-                return true;
-            }
+    let p = format!("{}/lite_mode.conf", CONFIG_DIR);
+    if let Ok(content) = std::fs::read_to_string(p) {
+        let trimmed = content.trim();
+        if trimmed == "1" || trimmed.eq_ignore_ascii_case("true") || trimmed.eq_ignore_ascii_case("on") {
+            return true;
         }
     }
 
@@ -275,8 +298,8 @@ fn extract_app_config(item: &Value) -> AppConfig {
 
 pub fn get_app_config(pkg: &str) -> Option<AppConfig> {
     for cfg_path in [
-        "/data/adb/modules/luminatweaks/app_config.json",
-        "/data/adb/luminatweaks/app_config.json"
+        format!("{}/app_config.json", CONFIG_DIR),
+        "/data/adb/modules/lumina_tweaks/app_config.json".to_string(),
     ] {
         if let Ok(content) = std::fs::read_to_string(cfg_path) {
             if let Ok(json) = serde_json::from_str::<Value>(&content) {
@@ -295,17 +318,6 @@ pub fn get_app_config(pkg: &str) -> Option<AppConfig> {
                 if let Some(app_obj) = json.get(pkg) {
                     return Some(extract_app_config(app_obj));
                 }
-            }
-        }
-    }
-
-    for path in [
-        format!("/data/adb/modules/luminatweaks/configs/{}.json", pkg),
-        format!("/data/adb/luminatweaks/configs/{}.json", pkg)
-    ] {
-        if let Ok(content) = std::fs::read_to_string(path) {
-            if let Ok(item) = serde_json::from_str::<Value>(&content) {
-                return Some(extract_app_config(&item));
             }
         }
     }
@@ -338,28 +350,4 @@ pub fn is_process_alive(pkg: &str) -> bool {
         }
     }
     false
-}
-
-pub fn is_task_in_recents(pkg: &str) -> bool {
-    if let Ok(output) = Command::new("dumpsys").args(["activity", "recents"]).output() {
-        if output.status.success() {
-            let s = String::from_utf8_lossy(&output.stdout);
-            for line in s.lines() {
-                if (line.contains("Recent #") || line.contains("Task{") || line.contains("realActivity="))
-                    && line.contains(pkg)
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-    }
-    true
-}
-
-pub fn is_app_retained(pkg: &str) -> bool {
-    if !is_process_alive(pkg) {
-        return false;
-    }
-    is_task_in_recents(pkg)
 }
