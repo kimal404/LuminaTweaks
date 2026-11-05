@@ -63,7 +63,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Scaffold
@@ -71,8 +70,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -83,7 +82,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -144,7 +142,6 @@ fun AppProfileScreen(
 
     val context = LocalContext.current
     val packageManager = remember { context.packageManager }
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val cornerRadius = LocalCornerRadius.current
     val isFloating = LocalFloatingNavBar.current
 
@@ -213,13 +210,13 @@ fun AppProfileScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            MediumTopAppBar(
+            TopAppBar(
                 title = {
                     Text(
                         text = stringResource(R.string.profile_title),
-                        fontWeight = FontWeight.Bold
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold
                     )
                 },
                 navigationIcon = {
@@ -248,11 +245,9 @@ fun AppProfileScreen(
                         )
                     }
                 },
-                scrollBehavior = scrollBehavior,
                 windowInsets = WindowInsets.statusBars,
-                colors = TopAppBarDefaults.mediumTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
                 )
             )
         }
@@ -260,7 +255,7 @@ fun AppProfileScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding(),
+                top = innerPadding.calculateTopPadding() + 4.dp,
                 bottom = bottomPadding,
                 start = 16.dp,
                 end = 16.dp
@@ -386,7 +381,7 @@ fun AppProfileScreen(
                         Icon(
                             imageVector = Icons.Rounded.PowerSettingsNew,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(22.dp)
                         )
                         Spacer(modifier = Modifier.width(16.dp))
@@ -445,7 +440,7 @@ fun AppProfileScreen(
                                     Icon(
                                         imageVector = Icons.Rounded.BatterySaver,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(22.dp)
                                     )
                                     Spacer(modifier = Modifier.width(16.dp))
@@ -515,7 +510,7 @@ fun AppProfileScreen(
                                         Icon(
                                             imageVector = Icons.Rounded.Tune,
                                             contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            tint = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.size(22.dp)
                                         )
                                         Spacer(modifier = Modifier.width(16.dp))
@@ -587,7 +582,7 @@ fun AppProfileScreen(
                                         Icon(
                                             imageVector = Icons.Rounded.Speed,
                                             contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            tint = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.size(22.dp)
                                         )
                                         Spacer(modifier = Modifier.width(16.dp))
@@ -648,7 +643,7 @@ fun AppProfileScreen(
                                         Icon(
                                             imageVector = Icons.Rounded.Brush,
                                             contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            tint = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.size(22.dp)
                                         )
                                         Spacer(modifier = Modifier.width(16.dp))
@@ -720,7 +715,7 @@ fun AppProfileScreen(
                                     Icon(
                                         imageVector = Icons.Rounded.NotificationsOff,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(22.dp)
                                     )
                                     Spacer(modifier = Modifier.width(16.dp))
@@ -776,7 +771,7 @@ fun AppProfileScreen(
             title = {
                 Text(
                     text = stringResource(R.string.dialog_select_lite_mode),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
             },
@@ -821,7 +816,10 @@ fun AppProfileScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showLiteModeDialog = false }) {
-                    Text(stringResource(R.string.action_done))
+                    Text(
+                        text = stringResource(R.string.action_done),
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         )
@@ -833,7 +831,7 @@ fun AppProfileScreen(
             title = {
                 Text(
                     text = stringResource(R.string.dialog_select_refresh_rate),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
             },
@@ -909,7 +907,10 @@ fun AppProfileScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showRefreshRateDialog = false }) {
-                    Text(stringResource(R.string.action_done))
+                    Text(
+                        text = stringResource(R.string.action_done),
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         )
@@ -921,7 +922,7 @@ fun AppProfileScreen(
             title = {
                 Text(
                     text = stringResource(R.string.dialog_select_renderer),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
             },
@@ -966,7 +967,10 @@ fun AppProfileScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showRendererDialog = false }) {
-                    Text(stringResource(R.string.action_done))
+                    Text(
+                        text = stringResource(R.string.action_done),
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         )
@@ -978,7 +982,7 @@ fun AppProfileScreen(
             title = {
                 Text(
                     text = stringResource(R.string.dialog_select_dnd),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
             },
@@ -1023,7 +1027,10 @@ fun AppProfileScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showDndDialog = false }) {
-                    Text(stringResource(R.string.action_done))
+                    Text(
+                        text = stringResource(R.string.action_done),
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         )
@@ -1039,7 +1046,7 @@ fun ProfileSectionTitle(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(start = 8.dp, top = 4.dp, bottom = 2.dp),
+            .padding(start = 16.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
@@ -1051,10 +1058,9 @@ fun ProfileSectionTitle(
         Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = title,
-            style = MaterialTheme.typography.labelMedium.copy(
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 0.4.sp
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = 13.5.sp,
+                fontWeight = FontWeight.Medium
             ),
             color = MaterialTheme.colorScheme.primary
         )
