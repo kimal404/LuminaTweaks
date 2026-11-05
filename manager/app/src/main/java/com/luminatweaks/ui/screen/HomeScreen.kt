@@ -576,6 +576,8 @@ fun HomeDashboardContent(
                                     fontSize = 20.sp,
                                     fontWeight = FontWeight.SemiBold
                                 ),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         }
@@ -617,12 +619,10 @@ fun HomeDashboardContent(
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(
                                 text = currentProfile,
-                                style = when {
-                                    currentProfile.length > 12 -> MaterialTheme.typography.titleSmall
-                                    currentProfile.length > 8 -> MaterialTheme.typography.titleMedium
-                                    else -> MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp)
-                                },
-                                fontWeight = FontWeight.SemiBold,
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                ),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -630,18 +630,6 @@ fun HomeDashboardContent(
                         }
                     }
                 }
-            }
-
-            item {
-                Text(
-                    text = "Sistem & Perangkat",
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 2.dp)
-                )
             }
 
             item {
@@ -671,18 +659,6 @@ fun HomeDashboardContent(
             }
 
             item {
-                Text(
-                    text = "Akses Root & Keamanan",
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 2.dp)
-                )
-            }
-
-            item {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
@@ -700,18 +676,6 @@ fun HomeDashboardContent(
                         position = ContainerPosition.Bottom
                     )
                 }
-            }
-
-            item {
-                Text(
-                    text = "Komunitas",
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 2.dp)
-                )
             }
 
             item {
@@ -865,20 +829,12 @@ fun ConnectedActionCardRow(
                 )
             }
 
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceContainerLowest),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.ChevronRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
+            Icon(
+                imageVector = Icons.Rounded.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }

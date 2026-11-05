@@ -438,11 +438,11 @@ fun TweaksScreen() {
                 Text(
                     text = if (isIndonesian) "Layar & Grafis" else "Display & Graphics",
                     style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 13.5.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Medium
                     ),
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 2.dp)
                 )
             }
 
@@ -465,12 +465,12 @@ fun TweaksScreen() {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(horizontal = 16.dp, vertical = 16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
+                                    .size(44.dp)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.primaryContainer),
                                 contentAlignment = Alignment.Center
@@ -479,16 +479,16 @@ fun TweaksScreen() {
                                     imageVector = Icons.Rounded.Speed,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = stringResource(R.string.tweaks_refresh_rate),
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.SemiBold
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontSize = 15.5.sp,
+                                        fontWeight = FontWeight.Medium
                                     ),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -502,20 +502,12 @@ fun TweaksScreen() {
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceContainerLowest),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.ChevronRight,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Rounded.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     }
 
@@ -530,12 +522,12 @@ fun TweaksScreen() {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(horizontal = 16.dp, vertical = 16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
+                                    .size(44.dp)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.primaryContainer),
                                 contentAlignment = Alignment.Center
@@ -544,16 +536,16 @@ fun TweaksScreen() {
                                     imageVector = Icons.Rounded.DeveloperBoard,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = stringResource(R.string.tweaks_renderer),
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.SemiBold
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontSize = 15.5.sp,
+                                        fontWeight = FontWeight.Medium
                                     ),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -567,20 +559,12 @@ fun TweaksScreen() {
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceContainerLowest),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.ChevronRight,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Rounded.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     }
                 }
@@ -590,11 +574,11 @@ fun TweaksScreen() {
                 Text(
                     text = if (isIndonesian) "Performa & Termal" else "Performance & Thermal",
                     style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 13.5.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Medium
                     ),
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 2.dp)
                 )
             }
 
@@ -617,12 +601,12 @@ fun TweaksScreen() {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(horizontal = 16.dp, vertical = 16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
+                                    .size(44.dp)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.primaryContainer),
                                 contentAlignment = Alignment.Center
@@ -631,16 +615,16 @@ fun TweaksScreen() {
                                     imageVector = Icons.Rounded.BatterySaver,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = stringResource(R.string.tweaks_lite_mode),
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.SemiBold
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontSize = 15.5.sp,
+                                        fontWeight = FontWeight.Medium
                                     ),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -654,20 +638,12 @@ fun TweaksScreen() {
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceContainerLowest),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.ChevronRight,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Rounded.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     }
 
@@ -682,12 +658,12 @@ fun TweaksScreen() {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(horizontal = 16.dp, vertical = 16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
+                                    .size(44.dp)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.primaryContainer),
                                 contentAlignment = Alignment.Center
@@ -696,16 +672,16 @@ fun TweaksScreen() {
                                     imageVector = Icons.Rounded.Thermostat,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = stringResource(R.string.tweaks_disable_thermal),
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.SemiBold
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontSize = 15.5.sp,
+                                        fontWeight = FontWeight.Medium
                                     ),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -719,20 +695,12 @@ fun TweaksScreen() {
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceContainerLowest),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.ChevronRight,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Rounded.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     }
                 }
@@ -742,11 +710,11 @@ fun TweaksScreen() {
                 Text(
                     text = stringResource(R.string.section_additional_tweaks),
                     style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 13.5.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Medium
                     ),
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 2.dp)
                 )
             }
 
@@ -769,12 +737,12 @@ fun TweaksScreen() {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(horizontal = 16.dp, vertical = 16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
+                                    .size(44.dp)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.primaryContainer),
                                 contentAlignment = Alignment.Center
@@ -783,16 +751,16 @@ fun TweaksScreen() {
                                     imageVector = Icons.Rounded.Memory,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = stringResource(R.string.tweak_memory_zram),
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.SemiBold
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontSize = 15.5.sp,
+                                        fontWeight = FontWeight.Medium
                                     ),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -806,20 +774,12 @@ fun TweaksScreen() {
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceContainerLowest),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.ChevronRight,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Rounded.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     }
 
@@ -834,12 +794,12 @@ fun TweaksScreen() {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(horizontal = 16.dp, vertical = 16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
+                                    .size(44.dp)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.primaryContainer),
                                 contentAlignment = Alignment.Center
@@ -848,16 +808,16 @@ fun TweaksScreen() {
                                     imageVector = Icons.Rounded.Storage,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = stringResource(R.string.tweak_io_scheduler),
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.SemiBold
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontSize = 15.5.sp,
+                                        fontWeight = FontWeight.Medium
                                     ),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -871,20 +831,12 @@ fun TweaksScreen() {
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceContainerLowest),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.ChevronRight,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Rounded.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     }
                 }
@@ -894,11 +846,11 @@ fun TweaksScreen() {
                 Text(
                     text = stringResource(R.string.section_utility_diagnostics),
                     style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 13.5.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Medium
                     ),
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 2.dp)
                 )
             }
 
@@ -921,12 +873,12 @@ fun TweaksScreen() {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(horizontal = 16.dp, vertical = 16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
+                                    .size(44.dp)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.primaryContainer),
                                 contentAlignment = Alignment.Center
@@ -935,16 +887,16 @@ fun TweaksScreen() {
                                     imageVector = Icons.Rounded.DeveloperBoard,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = stringResource(R.string.hardware_diag_title),
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.SemiBold
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontSize = 15.5.sp,
+                                        fontWeight = FontWeight.Medium
                                     ),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -958,20 +910,12 @@ fun TweaksScreen() {
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceContainerLowest),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.ChevronRight,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Rounded.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     }
 
@@ -986,12 +930,12 @@ fun TweaksScreen() {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(horizontal = 16.dp, vertical = 16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
+                                    .size(44.dp)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.primaryContainer),
                                 contentAlignment = Alignment.Center
@@ -1000,16 +944,16 @@ fun TweaksScreen() {
                                     imageVector = Icons.Rounded.Widgets,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = stringResource(R.string.utility_screen_title),
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.SemiBold
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontSize = 15.5.sp,
+                                        fontWeight = FontWeight.Medium
                                     ),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -1023,20 +967,12 @@ fun TweaksScreen() {
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceContainerLowest),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.ChevronRight,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Rounded.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     }
                 }
