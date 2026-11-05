@@ -200,33 +200,10 @@ fun HomeScreen() {
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            AnimatedContent(
-                targetState = selectedTab,
-                transitionSpec = {
-                    val direction = if (targetState >= initialState) {
-                        AnimatedContentTransitionScope.SlideDirection.Left
-                    } else {
-                        AnimatedContentTransitionScope.SlideDirection.Right
-                    }
-
-                    (slideIntoContainer(
-                        towards = direction,
-                        animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
-                    ) + fadeIn(
-                        animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
-                    )).togetherWith(
-                        slideOutOfContainer(
-                            towards = direction,
-                            animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
-                        ) + fadeOut(
-                            animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
-                        )
-                    )
-                },
-                modifier = Modifier.fillMaxSize(),
-                label = "ScreenTransition"
-            ) { targetTab ->
-                when (targetTab) {
+            Box(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                when (selectedTab) {
                     0 -> HomeDashboardContent(
                         batteryTemp = batteryTemp,
                         daemonPid = daemonPid,
@@ -271,35 +248,12 @@ fun HomeScreen() {
                 }
             }
         ) { innerPadding ->
-            AnimatedContent(
-                targetState = selectedTab,
-                transitionSpec = {
-                    val direction = if (targetState >= initialState) {
-                        AnimatedContentTransitionScope.SlideDirection.Left
-                    } else {
-                        AnimatedContentTransitionScope.SlideDirection.Right
-                    }
-
-                    (slideIntoContainer(
-                        towards = direction,
-                        animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
-                    ) + fadeIn(
-                        animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
-                    )).togetherWith(
-                        slideOutOfContainer(
-                            towards = direction,
-                            animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
-                        ) + fadeOut(
-                            animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
-                        )
-                    )
-                },
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(bottom = innerPadding.calculateBottomPadding()),
-                label = "ScreenTransition"
-            ) { targetTab ->
-                when (targetTab) {
+                    .padding(bottom = innerPadding.calculateBottomPadding())
+            ) {
+                when (selectedTab) {
                     0 -> HomeDashboardContent(
                         batteryTemp = batteryTemp,
                         daemonPid = daemonPid,
