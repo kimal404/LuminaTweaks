@@ -19,7 +19,6 @@ mod logger;
 mod detector;
 mod display;
 mod engine;
-mod fast_load;
 mod mediatek;
 mod notifier;
 mod renderer;
@@ -27,7 +26,6 @@ mod snapdragon;
 mod unisoc;
 mod utility;
 
-use fast_load::FastLoadController;
 use utility::UtilityController;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -35,8 +33,8 @@ use std::thread;
 use std::time::{Duration, SystemTime};
 
 use detector::{
-    get_app_config, get_focused_package, get_zen_mode, is_app_enabled, is_app_retained,
-    is_auto_dnd_active, is_lite_mode_active, is_low_power_active, is_master_enabled, set_zen_mode,
+    get_app_config, get_focused_package, is_app_enabled, is_app_retained,
+    is_lite_mode_active, is_low_power_active, is_master_enabled,
 };
 use engine::apply_thermal_kill;
 use notifier::{clear_all_notifications, send_notification, NotificationPayload};
@@ -71,9 +69,6 @@ struct EngineRuntime {
     active_target_pkg: Option<String>,
     current_applied_rr: Option<i32>,
     current_applied_renderer: String,
-    original_zen_mode: Option<String>,
-    dnd_overridden: bool,
-    current_applied_zen_mode: Option<String>,
     last_app_config_mtime: Option<SystemTime>,
     last_global_config_mtime: Option<SystemTime>,
 }
@@ -88,9 +83,6 @@ impl EngineRuntime {
             active_target_pkg: None,
             current_applied_rr: display::get_saved_mode_id(),
             current_applied_renderer: renderer::get_saved_renderer(),
-            original_zen_mode: None,
-            dnd_overridden: false,
-            current_applied_zen_mode: None,
             last_app_config_mtime: None,
             last_global_config_mtime: None,
         }
@@ -216,59 +208,6 @@ impl EngineRuntime {
             log!("[RENDERER] Graphics backend applied: {}", desired_renderer);
             self.current_applied_renderer = desired_renderer;
         }
-
-        let auto_dnd = is_auto_dnd_active();
-        let desired_dnd = if let Some(ref cfg) = target_cfg {
-            match cfg.dnd.as_str() {
-                "on" => Some(true),
-                "off" => Some(false),
-                _ => if auto_dnd && (target_profile == Profile::Performance || target_profile == Profile::PerformanceLite) {
-                    Some(true)
-                } else {
-                    None
-                }
-            }
-        } else if auto_dnd && (target_profile == Profile::Performance || target_profile == Profile::PerformanceLite) {
-            Some(true)
-        } else {
-            None
-        };
-
-        match desired_dnd {
-            Some(true) => {
-                if !self.dnd_overridden {
-                    self.original_zen_mode = get_zen_mode();
-                    self.dnd_overridden = true;
-                }
-                if self.current_applied_zen_mode.as_deref() != Some("1") {
-                    set_zen_mode("1");
-                    self.current_applied_zen_mode = Some("1".to_string());
-                    log!("[DND] Zen mode enabled (target or auto-dnd)");
-                }
-            }
-            Some(false) => {
-                if !self.dnd_overridden {
-                    self.original_zen_mode = get_zen_mode();
-                    self.dnd_overridden = true;
-                }
-                if self.current_applied_zen_mode.as_deref() != Some("0") {
-                    set_zen_mode("0");
-                    self.current_applied_zen_mode = Some("0".to_string());
-                    log!("[DND] Zen mode disabled for target application");
-                }
-            }
-            None => {
-                if self.dnd_overridden {
-                    if let Some(ref orig) = self.original_zen_mode {
-                        set_zen_mode(orig);
-                    }
-                    self.dnd_overridden = false;
-                    self.original_zen_mode = None;
-                    self.current_applied_zen_mode = None;
-                    log!("[DND] Zen mode restored");
-                }
-            }
-        }
     }
 
     fn reset_to_balance(&mut self) {
@@ -295,15 +234,6 @@ impl EngineRuntime {
                 self.current_applied_renderer = global_renderer;
             }
 
-            if self.dnd_overridden {
-                if let Some(ref orig) = self.original_zen_mode {
-                    set_zen_mode(orig);
-                }
-                self.dnd_overridden = false;
-                self.original_zen_mode = None;
-                self.current_applied_zen_mode = None;
-            }
-
             clear_all_notifications();
         }
     }
@@ -321,7 +251,6 @@ fn main() {
     engine::sync_global_tweaks();
     engine::apply_boot_profile();
 
-    let mut fast_loader = FastLoadController::new();
     let mut utility_ctrl = UtilityController::new();
 
     send_notification(NotificationPayload {
@@ -343,7 +272,6 @@ fn main() {
             runtime.reset_to_balance();
             engine::restore_balance();
             apply_thermal_kill(false);
-            fast_loader.restore();
             utility_ctrl.restore();
             TextureController::restore();
             break;
@@ -352,19 +280,30 @@ fn main() {
         utility_ctrl.tick();
 
         let mut config_just_changed = false;
-        if let Ok(meta) = std::fs::metadata("/data/adb/luminatweaks/app_config.json") {
-            if let Ok(mtime) = meta.modified() {
-                if runtime.last_app_config_mtime != Some(mtime) {
-                    runtime.last_app_config_mtime = Some(mtime);
-                    config_just_changed = true;
+        for path in [
+            "/data/adb/modules/luminatweaks/app_config.json",
+            "/data/adb/luminatweaks/app_config.json"
+        ] {
+            if let Ok(meta) = std::fs::metadata(path) {
+                if let Ok(mtime) = meta.modified() {
+                    if runtime.last_app_config_mtime != Some(mtime) {
+                        runtime.last_app_config_mtime = Some(mtime);
+                        config_just_changed = true;
+                    }
                 }
             }
         }
-        if let Ok(meta) = std::fs::metadata("/data/adb/luminatweaks/config.json") {
-            if let Ok(mtime) = meta.modified() {
-                if runtime.last_global_config_mtime != Some(mtime) {
-                    runtime.last_global_config_mtime = Some(mtime);
-                    config_just_changed = true;
+
+        for path in [
+            "/data/adb/modules/luminatweaks/config.json",
+            "/data/adb/luminatweaks/config.json"
+        ] {
+            if let Ok(meta) = std::fs::metadata(path) {
+                if let Ok(mtime) = meta.modified() {
+                    if runtime.last_global_config_mtime != Some(mtime) {
+                        runtime.last_global_config_mtime = Some(mtime);
+                        config_just_changed = true;
+                    }
                 }
             }
         }
@@ -376,13 +315,6 @@ fn main() {
         let focused = get_focused_package();
 
         if is_master_enabled() {
-            if let Some(ref current_pkg) = focused {
-                let is_game = detector::is_app_enabled(current_pkg);
-                fast_loader.tick(current_pkg, is_game);
-            } else {
-                fast_loader.tick("", false);
-            }
-
             let newly_focused_target = focused.as_deref().filter(|pkg| is_app_enabled(pkg));
 
             let current_target = if let Some(pkg) = newly_focused_target {
@@ -411,7 +343,6 @@ fn main() {
 
             runtime.apply_target(current_target.as_deref());
         } else {
-            fast_loader.restore();
             runtime.reset_to_balance();
             if config_just_changed {
                 TextureController::restore();

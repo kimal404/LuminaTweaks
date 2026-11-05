@@ -23,7 +23,6 @@ pub struct AppConfig {
     pub lite_mode: String,
     pub refresh_rate: String,
     pub renderer: String,
-    pub dnd: String,
     pub texture_enabled: bool,
     pub texture_detail: i32,
     pub pixel_sharp: bool,
@@ -68,15 +67,22 @@ pub fn get_focused_package() -> Option<String> {
 pub fn is_master_enabled() -> bool {
     if let Ok(output) = Command::new("getprop").arg("persist.lumina.master").output() {
         let val = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if val == "1" || val == "true" {
-            return true;
-        } else if val == "0" || val == "false" {
+        if val == "0" || val == "false" {
             return false;
+        } else if val == "1" || val == "true" {
+            return true;
         }
     }
 
-    if let Ok(content) = std::fs::read_to_string("/data/adb/luminatweaks/master.conf") {
-        return content.trim() == "1" || content.trim() == "true";
+    for p in ["/data/adb/modules/luminatweaks/master.conf", "/data/adb/luminatweaks/master.conf"] {
+        if let Ok(content) = std::fs::read_to_string(p) {
+            let val = content.trim();
+            if val == "0" || val == "false" {
+                return false;
+            } else if val == "1" || val == "true" {
+                return true;
+            }
+        }
     }
 
     true
@@ -114,6 +120,7 @@ fn is_truthy(val: &Value) -> bool {
 
 pub fn read_global_json() -> Option<Value> {
     for path in [
+        "/data/adb/modules/luminatweaks/config.json",
         "/data/adb/luminatweaks/config.json",
         "/data/adb/luminatweaks/configs/config.json",
     ] {
@@ -142,7 +149,11 @@ pub fn is_lite_mode_active() -> bool {
         }
     }
 
-    for path in ["/data/adb/luminatweaks/configs/lite_mode", "/data/adb/luminatweaks/lite_mode.conf"] {
+    for path in [
+        "/data/adb/modules/luminatweaks/configs/lite_mode",
+        "/data/adb/luminatweaks/configs/lite_mode",
+        "/data/adb/luminatweaks/lite_mode.conf"
+    ] {
         if let Ok(content) = std::fs::read_to_string(path) {
             let trimmed = content.trim();
             if trimmed == "1" || trimmed.eq_ignore_ascii_case("true") || trimmed.eq_ignore_ascii_case("on") {
@@ -153,26 +164,6 @@ pub fn is_lite_mode_active() -> bool {
 
     if is_low_power_active() {
         return true;
-    }
-
-    false
-}
-
-pub fn is_auto_dnd_active() -> bool {
-    if let Some(json) = read_global_json() {
-        if let Some(val) = json.get("auto_dnd")
-            .or_else(|| json.get("autoDnd"))
-            .or_else(|| json.get("dnd_auto"))
-        {
-            return is_truthy(val);
-        }
-    }
-
-    if let Ok(output) = Command::new("getprop").arg("persist.lumina.autodnd").output() {
-        let val = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if val == "1" || val == "true" {
-            return true;
-        }
     }
 
     false
@@ -249,12 +240,6 @@ fn extract_app_config(item: &Value) -> AppConfig {
         _ => "default".to_string(),
     };
 
-    let dnd = match item.get("dnd") {
-        Some(Value::Bool(b)) => if *b { "on".to_string() } else { "off".to_string() },
-        Some(Value::String(s)) => s.clone(),
-        _ => "default".to_string(),
-    };
-
     let texture_enabled = item.get("texture_enabled")
         .or_else(|| item.get("textureEnabled"))
         .map(is_truthy)
@@ -281,7 +266,6 @@ fn extract_app_config(item: &Value) -> AppConfig {
         lite_mode,
         refresh_rate,
         renderer,
-        dnd,
         texture_enabled,
         texture_detail,
         pixel_sharp,
@@ -290,30 +274,39 @@ fn extract_app_config(item: &Value) -> AppConfig {
 }
 
 pub fn get_app_config(pkg: &str) -> Option<AppConfig> {
-    if let Ok(content) = std::fs::read_to_string("/data/adb/luminatweaks/app_config.json") {
-        if let Ok(json) = serde_json::from_str::<Value>(&content) {
-            if let Some(list) = json.as_array() {
-                for item in list {
-                    let matches_pkg = item.get("pkg").and_then(|v| v.as_str()) == Some(pkg)
-                        || item.get("package").and_then(|v| v.as_str()) == Some(pkg)
-                        || item.get("packageName").and_then(|v| v.as_str()) == Some(pkg);
+    for cfg_path in [
+        "/data/adb/modules/luminatweaks/app_config.json",
+        "/data/adb/luminatweaks/app_config.json"
+    ] {
+        if let Ok(content) = std::fs::read_to_string(cfg_path) {
+            if let Ok(json) = serde_json::from_str::<Value>(&content) {
+                if let Some(list) = json.as_array() {
+                    for item in list {
+                        let matches_pkg = item.get("pkg").and_then(|v| v.as_str()) == Some(pkg)
+                            || item.get("package").and_then(|v| v.as_str()) == Some(pkg)
+                            || item.get("packageName").and_then(|v| v.as_str()) == Some(pkg);
 
-                    if matches_pkg {
-                        return Some(extract_app_config(item));
+                        if matches_pkg {
+                            return Some(extract_app_config(item));
+                        }
                     }
                 }
-            }
 
-            if let Some(app_obj) = json.get(pkg) {
-                return Some(extract_app_config(app_obj));
+                if let Some(app_obj) = json.get(pkg) {
+                    return Some(extract_app_config(app_obj));
+                }
             }
         }
     }
 
-    let conf_path = format!("/data/adb/luminatweaks/configs/{}.json", pkg);
-    if let Ok(content) = std::fs::read_to_string(conf_path) {
-        if let Ok(item) = serde_json::from_str::<Value>(&content) {
-            return Some(extract_app_config(&item));
+    for path in [
+        format!("/data/adb/modules/luminatweaks/configs/{}.json", pkg),
+        format!("/data/adb/luminatweaks/configs/{}.json", pkg)
+    ] {
+        if let Ok(content) = std::fs::read_to_string(path) {
+            if let Ok(item) = serde_json::from_str::<Value>(&content) {
+                return Some(extract_app_config(&item));
+            }
         }
     }
 
@@ -369,18 +362,4 @@ pub fn is_app_retained(pkg: &str) -> bool {
         return false;
     }
     is_task_in_recents(pkg)
-}
-
-pub fn get_zen_mode() -> Option<String> {
-    Command::new("settings")
-        .args(["get", "global", "zen_mode"])
-        .output()
-        .ok()
-        .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
-}
-
-pub fn set_zen_mode(mode: &str) {
-    let _ = Command::new("settings")
-        .args(["put", "global", "zen_mode", mode])
-        .output();
 }

@@ -43,14 +43,10 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.BatterySaver
-import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DeveloperBoard
-import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Memory
-import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Thermostat
@@ -60,16 +56,12 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
@@ -95,11 +87,9 @@ import com.luminatweaks.data.DisplayRrMode
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import java.util.Locale
 import kotlin.math.roundToInt
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 data class RendererItem(
     val id: String,
@@ -133,208 +123,6 @@ fun getRendererDisplayLabel(id: String, defaultLabel: String): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MediaTekEngineScreen(
-    onBack: () -> Unit,
-    isBypassFpsgo: Boolean,
-    onBypassFpsgoChange: (Boolean) -> Unit,
-    isBoostGed: Boolean,
-    onBoostGedChange: (Boolean) -> Unit
-) {
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = stringResource(R.string.tweaks_mtk_title),
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = stringResource(R.string.action_back)
-                        )
-                    }
-                },
-                windowInsets = WindowInsets.statusBars,
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
-            )
-        }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding() + 8.dp,
-                bottom = 24.dp,
-                start = 16.dp,
-                end = 16.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Info,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(14.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.tweaks_mtk_info_title),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = stringResource(R.string.tweaks_mtk_info_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(18.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Speed,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.tweaks_fpsgo_title),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                            Switch(
-                                checked = isBypassFpsgo,
-                                onCheckedChange = onBypassFpsgoChange,
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                    checkedTrackColor = MaterialTheme.colorScheme.primary
-                                )
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = stringResource(R.string.tweaks_fpsgo_desc),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(18.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.DeveloperBoard,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.tweaks_ged_title),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                            Switch(
-                                checked = isBoostGed,
-                                onCheckedChange = onBoostGedChange,
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                    checkedTrackColor = MaterialTheme.colorScheme.primary
-                                )
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = stringResource(R.string.tweaks_ged_desc),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
 fun TweaksScreen() {
     val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
@@ -351,23 +139,18 @@ fun TweaksScreen() {
 
     var rrModes by remember { mutableStateOf<List<DisplayRrMode>>(cached?.rrModes ?: emptyList()) }
     var currentRrId by remember { mutableStateOf<Int?>(cached?.currentRrId) }
-
     var liveRefreshRate by remember { mutableIntStateOf(120) }
 
     var currentRendererId by remember { mutableStateOf(cached?.currentRendererId ?: "default") }
-
-    var isMtkDevice by remember { mutableStateOf(cached?.isMtkDevice ?: false) }
-    var isBypassFpsgo by remember { mutableStateOf(cached?.isBypassFpsgo ?: false) }
-    var isBoostGed by remember { mutableStateOf(cached?.isBoostGed ?: true) }
-
-    var isAutoDnd by remember { mutableStateOf(cached?.isAutoDnd ?: false) }
     var currentIoScheduler by remember { mutableStateOf(cached?.currentIoScheduler ?: "mq-deadline") }
-    var isFastLoad by remember { mutableStateOf(false) }
 
     var showRefreshRateDialog by remember { mutableStateOf(false) }
     var showRenderDialog by remember { mutableStateOf(false) }
     var showIoSchedulerDialog by remember { mutableStateOf(false) }
-    var inMtkSubpage by remember { mutableStateOf(false) }
+
+    // Halaman Subpage Navigasi (Zero Toggle Eksterior)
+    var inLiteModeSubpage by remember { mutableStateOf(false) }
+    var inDisableThermalSubpage by remember { mutableStateOf(false) }
     var inMemoryZramSubpage by remember { mutableStateOf(false) }
     var inHardwareDiagnosticSubpage by remember { mutableStateOf(false) }
     var inUtilitySubpage by remember { mutableStateOf(false) }
@@ -382,21 +165,7 @@ fun TweaksScreen() {
         rrModes = state.rrModes
         currentRrId = state.currentRrId
         currentRendererId = state.currentRendererId
-        isMtkDevice = state.isMtkDevice
-        isBypassFpsgo = state.isBypassFpsgo
-        isBoostGed = state.isBoostGed
-        isAutoDnd = state.isAutoDnd
         currentIoScheduler = state.currentIoScheduler
-
-        withContext(Dispatchers.IO) {
-            val fastLoadVal = runCatching {
-                val proc = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat /data/adb/luminatweaks/fast_load 2>/dev/null"))
-                proc.inputStream.bufferedReader().use { it.readText().trim() }
-            }.getOrDefault("0")
-            withContext(Dispatchers.Main) {
-                isFastLoad = fastLoadVal == "1"
-            }
-        }
     }
 
     LaunchedEffect(Unit) {
@@ -429,57 +198,51 @@ fun TweaksScreen() {
         getRendererDisplayLabel(currentRendererId, defaultRendererLabel)
     }
 
-    if (inHardwareDiagnosticSubpage) {
-        BackHandler {
-            inHardwareDiagnosticSubpage = false
-        }
-        HardwareDiagnosticScreen(
-            onBack = { inHardwareDiagnosticSubpage = false }
-        )
-        return
-    }
-
-    if (inUtilitySubpage) {
-        BackHandler {
-            inUtilitySubpage = false
-        }
-        UtilityScreen(
-            onBack = { inUtilitySubpage = false }
-        )
-        return
-    }
-
-    if (inMtkSubpage) {
-        BackHandler {
-            inMtkSubpage = false
-        }
-        MediaTekEngineScreen(
-            onBack = { inMtkSubpage = false },
-            isBypassFpsgo = isBypassFpsgo,
-            onBypassFpsgoChange = { newState ->
-                isBypassFpsgo = newState
+    if (inLiteModeSubpage) {
+        BackHandler { inLiteModeSubpage = false }
+        LiteModeScreen(
+            onBack = { inLiteModeSubpage = false },
+            isLiteMode = isGlobalLiteMode,
+            onLiteModeChange = { newState ->
+                isGlobalLiteMode = newState
                 coroutineScope.launch {
-                    ConfigRepository.setFpsgoBypass(newState)
-                }
-            },
-            isBoostGed = isBoostGed,
-            onBoostGedChange = { newState ->
-                isBoostGed = newState
-                coroutineScope.launch {
-                    ConfigRepository.setGedBoost(newState)
+                    ConfigRepository.setGlobalLiteMode(newState)
                 }
             }
         )
         return
     }
 
-    if (inMemoryZramSubpage) {
-        BackHandler {
-            inMemoryZramSubpage = false
-        }
-        MemoryZramScreen(
-            onBack = { inMemoryZramSubpage = false }
+    if (inDisableThermalSubpage) {
+        BackHandler { inDisableThermalSubpage = false }
+        DisableThermalScreen(
+            onBack = { inDisableThermalSubpage = false },
+            isDisableThermal = isDisableThermal,
+            onDisableThermalChange = { newState ->
+                isDisableThermal = newState
+                coroutineScope.launch {
+                    ConfigRepository.setDisableThermal(newState)
+                }
+            }
         )
+        return
+    }
+
+    if (inHardwareDiagnosticSubpage) {
+        BackHandler { inHardwareDiagnosticSubpage = false }
+        HardwareDiagnosticScreen(onBack = { inHardwareDiagnosticSubpage = false })
+        return
+    }
+
+    if (inUtilitySubpage) {
+        BackHandler { inUtilitySubpage = false }
+        UtilityScreen(onBack = { inUtilitySubpage = false })
+        return
+    }
+
+    if (inMemoryZramSubpage) {
+        BackHandler { inMemoryZramSubpage = false }
+        MemoryZramScreen(onBack = { inMemoryZramSubpage = false })
         return
     }
 
@@ -489,7 +252,7 @@ fun TweaksScreen() {
             title = {
                 Text(
                     text = stringResource(R.string.tweaks_dialog_select_rr),
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.SemiBold
                 )
             },
             text = {
@@ -516,14 +279,11 @@ fun TweaksScreen() {
                                 .padding(vertical = 10.dp, horizontal = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            RadioButton(
-                                selected = isSelected,
-                                onClick = null
-                            )
+                            RadioButton(selected = isSelected, onClick = null)
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
                                 text = "${mode.hz} Hz",
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         }
@@ -544,7 +304,7 @@ fun TweaksScreen() {
             title = {
                 Text(
                     text = stringResource(R.string.tweaks_dialog_select_renderer),
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.SemiBold
                 )
             },
             text = {
@@ -572,14 +332,11 @@ fun TweaksScreen() {
                                 .padding(vertical = 10.dp, horizontal = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            RadioButton(
-                                selected = isSelected,
-                                onClick = null
-                            )
+                            RadioButton(selected = isSelected, onClick = null)
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
                                 text = displayLabel,
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         }
@@ -600,7 +357,7 @@ fun TweaksScreen() {
             title = {
                 Text(
                     text = stringResource(R.string.dialog_select_io_scheduler),
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.SemiBold
                 )
             },
             text = {
@@ -627,14 +384,11 @@ fun TweaksScreen() {
                                 .padding(vertical = 10.dp, horizontal = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            RadioButton(
-                                selected = isSelected,
-                                onClick = null
-                            )
+                            RadioButton(selected = isSelected, onClick = null)
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
                                 text = scheduler,
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         }
@@ -686,93 +440,138 @@ fun TweaksScreen() {
             ),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // SEKSI 1: DISPLAY & GRAPHICS (Connected Container)
             item {
-                Row(
+                Text(
+                    text = if (isIndonesian) "Layar & Grafis" else "Display & Graphics",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 4.dp, top = 6.dp)
+                )
+            }
+
+            item {
+                val dispTopShape = getConnectedContainerShape(ContainerPosition.Top, innerRadius = 4.dp)
+                val dispBottomShape = getConnectedContainerShape(ContainerPosition.Bottom, innerRadius = 4.dp)
+
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
+                    // Item Refresh Rate
                     Card(
                         modifier = Modifier
-                            .weight(1f)
+                            .fillMaxWidth()
+                            .clip(dispTopShape)
                             .clickable { showRefreshRateDialog = true },
-                        shape = RoundedCornerShape(20.dp),
+                        shape = dispTopShape,
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                         )
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 Icon(
                                     imageVector = Icons.Rounded.Speed,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                     modifier = Modifier.size(20.dp)
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = stringResource(R.string.tweaks_display_section),
-                                    style = MaterialTheme.typography.labelMedium,
+                                    text = stringResource(R.string.tweaks_refresh_rate),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "$currentRrText • ${stringResource(R.string.tweaks_display_section)}",
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text(
-                                text = stringResource(R.string.tweaks_refresh_rate),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = currentRrText,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary
+                            Icon(
+                                imageVector = Icons.Rounded.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
 
+                    // Item Renderer
                     Card(
                         modifier = Modifier
-                            .weight(1f)
+                            .fillMaxWidth()
+                            .clip(dispBottomShape)
                             .clickable { showRenderDialog = true },
-                        shape = RoundedCornerShape(20.dp),
+                        shape = dispBottomShape,
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                         )
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 Icon(
                                     imageVector = Icons.Rounded.DeveloperBoard,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                     modifier = Modifier.size(20.dp)
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = stringResource(R.string.tweaks_graphics_section),
-                                    style = MaterialTheme.typography.labelMedium,
+                                    text = stringResource(R.string.tweaks_renderer),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "$currentRendererText • ${stringResource(R.string.tweaks_graphics_section)}",
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text(
-                                text = stringResource(R.string.tweaks_renderer),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = currentRendererText,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary
+                            Icon(
+                                imageVector = Icons.Rounded.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
                 }
             }
 
+            // SEKSI 2: PERFORMA & TERMAL (Navigasi Subpage, Tanpa Toggle Luar)
             item {
                 Text(
                     text = if (isIndonesian) "Performa & Termal" else "Performance & Thermal",
@@ -784,17 +583,20 @@ fun TweaksScreen() {
             }
 
             item {
-                val litePos = ContainerPosition.Top
-                val thermalPos = if (isMtkDevice) ContainerPosition.Middle else ContainerPosition.Bottom
-                val mtkPos = ContainerPosition.Bottom
+                val perfTopShape = getConnectedContainerShape(ContainerPosition.Top, innerRadius = 4.dp)
+                val perfBottomShape = getConnectedContainerShape(ContainerPosition.Bottom, innerRadius = 4.dp)
 
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
+                    // Lite Mode
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = getConnectedContainerShape(litePos, innerRadius = 4.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(perfTopShape)
+                            .clickable { inLiteModeSubpage = true },
+                        shape = perfTopShape,
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                         )
@@ -807,7 +609,7 @@ fun TweaksScreen() {
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
+                                    .size(38.dp)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.primaryContainer),
                                 contentAlignment = Alignment.Center
@@ -816,44 +618,40 @@ fun TweaksScreen() {
                                     imageVector = Icons.Rounded.BatterySaver,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.width(14.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = stringResource(R.string.tweaks_lite_mode),
-                                    style = MaterialTheme.typography.titleMedium,
+                                    style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = stringResource(R.string.tweaks_lite_mode_desc),
+                                    text = if (isGlobalLiteMode) "Aktif • Efisiensi Core Big/Prime" else "Nonaktif • Jam Clock Maksimum",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Switch(
-                                checked = isGlobalLiteMode,
-                                onCheckedChange = { newState ->
-                                    isGlobalLiteMode = newState
-                                    coroutineScope.launch {
-                                        ConfigRepository.setGlobalLiteMode(newState)
-                                    }
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                    checkedTrackColor = MaterialTheme.colorScheme.primary
-                                )
+                            Icon(
+                                imageVector = Icons.Rounded.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
 
+                    // Disable Thermal
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = getConnectedContainerShape(thermalPos, innerRadius = 4.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(perfBottomShape)
+                            .clickable { inDisableThermalSubpage = true },
+                        shape = perfBottomShape,
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                         )
@@ -866,7 +664,7 @@ fun TweaksScreen() {
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
+                                    .size(38.dp)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.primaryContainer),
                                 contentAlignment = Alignment.Center
@@ -875,98 +673,36 @@ fun TweaksScreen() {
                                     imageVector = Icons.Rounded.Thermostat,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.width(14.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = stringResource(R.string.tweaks_disable_thermal),
-                                    style = MaterialTheme.typography.titleMedium,
+                                    style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = stringResource(R.string.tweaks_disable_thermal_desc),
+                                    text = if (isDisableThermal) "Aktif • Bypass Throttling Software" else "Nonaktif • Mitigasi Suhu Vendor",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Switch(
-                                checked = isDisableThermal,
-                                onCheckedChange = { newState ->
-                                    isDisableThermal = newState
-                                    coroutineScope.launch {
-                                        ConfigRepository.setDisableThermal(newState)
-                                    }
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                    checkedTrackColor = MaterialTheme.colorScheme.primary
-                                )
+                            Icon(
+                                imageVector = Icons.Rounded.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
                             )
-                        }
-                    }
-
-                    if (isMtkDevice) {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { inMtkSubpage = true },
-                            shape = getConnectedContainerShape(mtkPos, innerRadius = 4.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                            )
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primaryContainer),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Memory,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(14.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = stringResource(R.string.tweaks_mtk_title),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = stringResource(R.string.tweaks_mtk_desc),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Icon(
-                                    imageVector = Icons.Rounded.ChevronRight,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
                         }
                     }
                 }
             }
 
+            // SEKSI 3: PENGATURAN TAMBAHAN (Memory ZRAM & I/O Scheduler)
             item {
                 Text(
                     text = stringResource(R.string.section_additional_tweaks),
@@ -978,14 +714,14 @@ fun TweaksScreen() {
             }
 
             item {
+                val addTopShape = getConnectedContainerShape(ContainerPosition.Top, innerRadius = 4.dp)
+                val addBottomShape = getConnectedContainerShape(ContainerPosition.Bottom, innerRadius = 4.dp)
+
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    val addTopShape = getConnectedContainerShape(ContainerPosition.Top, innerRadius = 4.dp)
-                    val addMiddleShape = getConnectedContainerShape(ContainerPosition.Middle, innerRadius = 4.dp)
-                    val addBottomShape = getConnectedContainerShape(ContainerPosition.Bottom, innerRadius = 4.dp)
-
+                    // Memory & ZRAM
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1004,7 +740,7 @@ fun TweaksScreen() {
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
+                                    .size(38.dp)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.primaryContainer),
                                 contentAlignment = Alignment.Center
@@ -1013,14 +749,14 @@ fun TweaksScreen() {
                                     imageVector = Icons.Rounded.Memory,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.width(14.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = stringResource(R.string.tweak_memory_zram),
-                                    style = MaterialTheme.typography.titleMedium,
+                                    style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -1040,73 +776,13 @@ fun TweaksScreen() {
                         }
                     }
 
+                    // I/O Scheduler
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(addMiddleShape),
-                        shape = addMiddleShape,
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.NotificationsOff,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.tweak_auto_dnd),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = stringResource(R.string.tweak_auto_dnd_desc),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Switch(
-                                checked = isAutoDnd,
-                                onCheckedChange = { newState ->
-                                    isAutoDnd = newState
-                                    coroutineScope.launch {
-                                        ConfigRepository.setAutoDnd(newState)
-                                    }
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                    checkedTrackColor = MaterialTheme.colorScheme.primary
-                                )
-                            )
-                        }
-                    }
-
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(addMiddleShape)
+                            .clip(addBottomShape)
                             .clickable { showIoSchedulerDialog = true },
-                        shape = addMiddleShape,
+                        shape = addBottomShape,
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                         )
@@ -1119,7 +795,7 @@ fun TweaksScreen() {
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
+                                    .size(38.dp)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.primaryContainer),
                                 contentAlignment = Alignment.Center
@@ -1128,14 +804,14 @@ fun TweaksScreen() {
                                     imageVector = Icons.Rounded.Storage,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.width(14.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = stringResource(R.string.tweak_io_scheduler),
-                                    style = MaterialTheme.typography.titleMedium,
+                                    style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -1154,73 +830,10 @@ fun TweaksScreen() {
                             )
                         }
                     }
-
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(addBottomShape),
-                        shape = addBottomShape,
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Bolt,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.tweak_fast_load),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = stringResource(R.string.tweak_fast_load_desc),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Switch(
-                                checked = isFastLoad,
-                                onCheckedChange = { newState ->
-                                    isFastLoad = newState
-                                    coroutineScope.launch(Dispatchers.IO) {
-                                        val cmdVal = if (newState) "1" else "0"
-                                        runCatching {
-                                            Runtime.getRuntime().exec(arrayOf("su", "-c", "echo $cmdVal > /data/adb/luminatweaks/fast_load"))
-                                        }
-                                    }
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                    checkedTrackColor = MaterialTheme.colorScheme.primary
-                                )
-                            )
-                        }
-                    }
                 }
             }
 
+            // SEKSI 4: UTILITAS & DIAGNOSTIK
             item {
                 Text(
                     text = stringResource(R.string.section_utility_diagnostics),
@@ -1257,7 +870,7 @@ fun TweaksScreen() {
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
+                                    .size(38.dp)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.primaryContainer),
                                 contentAlignment = Alignment.Center
@@ -1266,14 +879,14 @@ fun TweaksScreen() {
                                     imageVector = Icons.Rounded.DeveloperBoard,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.width(14.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = stringResource(R.string.hardware_diag_title),
-                                    style = MaterialTheme.typography.titleMedium,
+                                    style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -1311,7 +924,7 @@ fun TweaksScreen() {
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
+                                    .size(38.dp)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.primaryContainer),
                                 contentAlignment = Alignment.Center
@@ -1320,14 +933,14 @@ fun TweaksScreen() {
                                     imageVector = Icons.Rounded.Widgets,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.width(14.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = stringResource(R.string.utility_screen_title),
-                                    style = MaterialTheme.typography.titleMedium,
+                                    style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
