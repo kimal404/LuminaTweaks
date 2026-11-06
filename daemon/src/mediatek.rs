@@ -60,6 +60,46 @@ fn write_sysfs(path: &str, val: &str, lock: bool) -> bool {
     res
 }
 
+fn lock_mtk_cpu_clocks(lock_max: bool) {
+    if let Ok(entries) = fs::read_dir("/sys/devices/system/cpu/cpufreq") {
+        for entry in entries.flatten() {
+            let fname = entry.file_name().to_string_lossy().into_owned();
+            if fname.starts_with("policy") {
+                let p_str = format!("/sys/devices/system/cpu/cpufreq/{}", fname);
+                let min_path = format!("{}/scaling_min_freq", p_str);
+                let max_path = format!("{}/scaling_max_freq", p_str);
+                let hw_min_path = format!("{}/cpuinfo_min_freq", p_str);
+                let hw_max_path = format!("{}/cpuinfo_max_freq", p_str);
+                let avail_path = format!("{}/scaling_available_frequencies", p_str);
+
+                let hw_min = fs::read_to_string(&hw_min_path)
+                    .ok()
+                    .and_then(|s| s.trim().parse::<u64>().ok())
+                    .unwrap_or(300000);
+                let hw_max = fs::read_to_string(&hw_max_path)
+                    .ok()
+                    .and_then(|s| s.trim().parse::<u64>().ok())
+                    .unwrap_or(2000000);
+
+                let freqs: Vec<u64> = fs::read_to_string(&avail_path)
+                    .unwrap_or_default()
+                    .split_whitespace()
+                    .filter_map(|s| s.parse::<u64>().ok())
+                    .collect();
+
+                let effective_max = freqs.iter().copied().max().unwrap_or(hw_max);
+
+                if lock_max {
+                    write_sysfs(&min_path, &effective_max.to_string(), true);
+                    write_sysfs(&max_path, &effective_max.to_string(), true);
+                } else {
+                    write_sysfs(&min_path, &hw_min.to_string(), false);
+                    write_sysfs(&max_path, &effective_max.to_string(), false);
+                }
+            }
+        }
+    }
+}
 
 pub fn set_thermal_throttling(bypass: bool) {
     if !is_mtk_device() {
@@ -68,19 +108,13 @@ pub fn set_thermal_throttling(bypass: bool) {
 
     if bypass {
         crate::log!("[MTK] Disabling SoC thermal throttling policies");
-
         write_sysfs("/proc/cpufreq/cpufreq_imax_thermal_protect", "0", true);
-
-
         write_sysfs("/proc/gpufreq/gpufreq_power_limited", "ignore_thermal_protect 1", false);
-
         write_sysfs("/proc/ppm/enabled", "0", true);
         for idx in [2, 3, 4, 6, 7] {
             let policy = format!("{} 0", idx);
             write_sysfs("/proc/ppm/policy_status", &policy, false);
         }
-
-        
         lock_mali_tmu(true);
     } else {
         crate::log!("[MTK] Restoring SoC thermal throttling policies");
@@ -120,10 +154,14 @@ pub fn apply_mtk_performance() {
         return;
     }
 
-    crate::log!("[MTK] Applying Mali GPU & DVFSRC Performance Profile");
+    crate::log!("[MTK] Applying Mali GPU, DVFSRC & CPU Max Clock Performance Profile");
     write_sysfs("/sys/class/misc/mali0/device/power_policy", "always_on", true);
     write_sysfs("/sys/class/devfreq/mtk-dvfsrc-devfreq/governor", "performance", true);
     write_sysfs("/proc/gpufreqv2/fix_target_opp_index", "0", true);
+    write_sysfs("/proc/cpufreq/cpufreq_power_mode", "3", true);
+    write_sysfs("/proc/cpufreq/cpufreq_imax_enable", "1", true);
+    write_sysfs("/proc/cpufreq/cpufreq_sched_disable", "1", true);
+    lock_mtk_cpu_clocks(true);
 }
 
 pub fn apply_mtk_balance() {
@@ -135,6 +173,10 @@ pub fn apply_mtk_balance() {
     write_sysfs("/sys/class/misc/mali0/device/power_policy", "coarse_demand", false);
     write_sysfs("/sys/class/devfreq/mtk-dvfsrc-devfreq/governor", "simple_ondemand", false);
     write_sysfs("/proc/gpufreqv2/fix_target_opp_index", "-1", false);
+    write_sysfs("/proc/cpufreq/cpufreq_power_mode", "1", false);
+    write_sysfs("/proc/cpufreq/cpufreq_imax_enable", "0", false);
+    write_sysfs("/proc/cpufreq/cpufreq_sched_disable", "0", false);
+    lock_mtk_cpu_clocks(false);
 }
 
 pub fn apply_mtk_eco() {
@@ -146,4 +188,8 @@ pub fn apply_mtk_eco() {
     write_sysfs("/sys/class/misc/mali0/device/power_policy", "coarse_demand", false);
     write_sysfs("/sys/class/devfreq/mtk-dvfsrc-devfreq/governor", "powersave", false);
     write_sysfs("/proc/gpufreqv2/fix_target_opp_index", "-1", false);
+    write_sysfs("/proc/cpufreq/cpufreq_power_mode", "0", false);
+    write_sysfs("/proc/cpufreq/cpufreq_imax_enable", "0", false);
+    write_sysfs("/proc/cpufreq/cpufreq_sched_disable", "0", false);
+    lock_mtk_cpu_clocks(false);
 }
