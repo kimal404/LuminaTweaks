@@ -197,4 +197,8 @@ Fitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. P
     <string name="utility_doze_desc">Memaksa perangkat segera masuk ke Deep Sleep sesaat setelah layar mati</string>
     <string name="utility_gms_title">GMS Battery Limiter</string>
     <string name="utility_gms_desc">Membatasi wakelock dan aktivitas background berlebih Google Play Services</string>
+    <string name="dialog_reboot_required_title">Reboot Required</string>
+    <string name="dialog_reboot_required_desc">A device reboot is required to activate the LuminaTweaks module and start the core daemon properly. Would you like to reboot now?</string>
+    <string name="action_reboot_now">Reboot Now</string>
+    <string name="action_later">Later</string>
 </resources>

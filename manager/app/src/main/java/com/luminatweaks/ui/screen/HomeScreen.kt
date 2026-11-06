@@ -197,7 +197,7 @@ fun HomeScreen() {
             },
             title = {
                 Text(
-                    text = "Reboot Required",
+                    text = stringResource(R.string.dialog_reboot_required_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center
@@ -205,7 +205,7 @@ fun HomeScreen() {
             },
             text = {
                 Text(
-                    text = "A device reboot is required to activate the LuminaTweaks module and start the core daemon properly. Would you like to reboot now?",
+                    text = stringResource(R.string.dialog_reboot_required_desc),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -216,14 +216,18 @@ fun HomeScreen() {
                     onClick = {
                         showRebootDialog = false
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        Toast.makeText(context, "Rebooting device...", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.toast_rebooting_device),
+                            Toast.LENGTH_SHORT
+                        ).show()
                         coroutineScope.launch {
                             RootUtil.rebootDevice("")
                         }
                     }
                 ) {
                     Text(
-                        text = "Reboot Now",
+                        text = stringResource(R.string.action_reboot_now),
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -232,7 +236,7 @@ fun HomeScreen() {
             dismissButton = {
                 TextButton(onClick = { showRebootDialog = false }) {
                     Text(
-                        text = "Later",
+                        text = stringResource(R.string.action_later),
                         fontWeight = FontWeight.Medium
                     )
                 }
