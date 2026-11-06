@@ -101,6 +101,36 @@ fn lock_mtk_cpu_clocks(lock_max: bool) {
     }
 }
 
+fn apply_mtk_dvfsrc(lock_max: bool) {
+    let (vcore_val, ddr_val, lock) = if lock_max {
+        ("0", "0", true)
+    } else {
+        ("-1", "-1", false)
+    };
+
+    write_sysfs("/sys/kernel/helio-dvfsrc/dvfsrc_force_vcore_dvfs_opp", vcore_val, lock);
+
+    if let Ok(entries) = fs::read_dir("/sys/devices/platform") {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let is_dvfsrc = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|s| s.contains("dvfsrc"))
+                .unwrap_or(false);
+
+            if is_dvfsrc {
+                let ddr_node = path.join("helio-dvfsrc/dvfsrc_req_ddr_opp");
+                if ddr_node.exists() {
+                    if let Some(p) = ddr_node.to_str() {
+                        write_sysfs(p, ddr_val, lock);
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub fn set_thermal_throttling(bypass: bool) {
     if !is_mtk_device() {
         return;
@@ -154,13 +184,21 @@ pub fn apply_mtk_performance() {
         return;
     }
 
-    crate::log!("[MTK] Applying Mali GPU, DVFSRC & CPU Max Clock Performance Profile");
+    crate::log!("[MTK] Applying Mali GPU, DVFSRC, CCI & CPU Max Clock Performance Profile");
     write_sysfs("/sys/class/misc/mali0/device/power_policy", "always_on", true);
     write_sysfs("/sys/class/devfreq/mtk-dvfsrc-devfreq/governor", "performance", true);
     write_sysfs("/proc/gpufreqv2/fix_target_opp_index", "0", true);
     write_sysfs("/proc/cpufreq/cpufreq_power_mode", "3", true);
     write_sysfs("/proc/cpufreq/cpufreq_imax_enable", "1", true);
     write_sysfs("/proc/cpufreq/cpufreq_sched_disable", "1", true);
+
+    write_sysfs("/sys/kernel/fpsgo/common/force_onoff", "0", true);
+    write_sysfs("/proc/cpufreq/cpufreq_cci_mode", "1", true);
+    write_sysfs("/sys/module/sspm_v3/holders/ged/parameters/is_GED_KPI_enabled", "0", true);
+    write_sysfs("/sys/devices/platform/boot_dramboost/dramboost/dramboost", "1", true);
+    write_sysfs("/proc/mtk_batoc_throttling/battery_oc_protect_stop", "stop 1", true);
+
+    apply_mtk_dvfsrc(true);
     lock_mtk_cpu_clocks(true);
 }
 
@@ -176,6 +214,14 @@ pub fn apply_mtk_balance() {
     write_sysfs("/proc/cpufreq/cpufreq_power_mode", "1", false);
     write_sysfs("/proc/cpufreq/cpufreq_imax_enable", "0", false);
     write_sysfs("/proc/cpufreq/cpufreq_sched_disable", "0", false);
+
+    write_sysfs("/sys/kernel/fpsgo/common/force_onoff", "2", false);
+    write_sysfs("/proc/cpufreq/cpufreq_cci_mode", "0", false);
+    write_sysfs("/sys/module/sspm_v3/holders/ged/parameters/is_GED_KPI_enabled", "1", false);
+    write_sysfs("/sys/devices/platform/boot_dramboost/dramboost/dramboost", "0", false);
+    write_sysfs("/proc/mtk_batoc_throttling/battery_oc_protect_stop", "stop 0", false);
+
+    apply_mtk_dvfsrc(false);
     lock_mtk_cpu_clocks(false);
 }
 
@@ -191,5 +237,13 @@ pub fn apply_mtk_eco() {
     write_sysfs("/proc/cpufreq/cpufreq_power_mode", "0", false);
     write_sysfs("/proc/cpufreq/cpufreq_imax_enable", "0", false);
     write_sysfs("/proc/cpufreq/cpufreq_sched_disable", "0", false);
+
+    write_sysfs("/sys/kernel/fpsgo/common/force_onoff", "2", false);
+    write_sysfs("/proc/cpufreq/cpufreq_cci_mode", "0", false);
+    write_sysfs("/sys/module/sspm_v3/holders/ged/parameters/is_GED_KPI_enabled", "1", false);
+    write_sysfs("/sys/devices/platform/boot_dramboost/dramboost/dramboost", "0", false);
+    write_sysfs("/proc/mtk_batoc_throttling/battery_oc_protect_stop", "stop 0", false);
+
+    apply_mtk_dvfsrc(false);
     lock_mtk_cpu_clocks(false);
 }

@@ -62,7 +62,129 @@ impl SnapdragonEngine {
         8
     }
 
-    
+    fn lock_cpu_clocks(lock_max: bool) {
+        if let Ok(entries) = fs::read_dir("/sys/devices/system/cpu/cpufreq") {
+            for entry in entries.flatten() {
+                let fname = entry.file_name().to_string_lossy().into_owned();
+                if fname.starts_with("policy") {
+                    let p_str = format!("/sys/devices/system/cpu/cpufreq/{}", fname);
+                    let min_path = format!("{}/scaling_min_freq", p_str);
+                    let max_path = format!("{}/scaling_max_freq", p_str);
+                    let hw_min_path = format!("{}/cpuinfo_min_freq", p_str);
+                    let hw_max_path = format!("{}/cpuinfo_max_freq", p_str);
+                    let avail_path = format!("{}/scaling_available_frequencies", p_str);
+
+                    let hw_min = fs::read_to_string(&hw_min_path)
+                        .ok()
+                        .and_then(|s| s.trim().parse::<u64>().ok())
+                        .unwrap_or(300000);
+                    let hw_max = fs::read_to_string(&hw_max_path)
+                        .ok()
+                        .and_then(|s| s.trim().parse::<u64>().ok())
+                        .unwrap_or(2000000);
+
+                    let freqs: Vec<u64> = fs::read_to_string(&avail_path)
+                        .unwrap_or_default()
+                        .split_whitespace()
+                        .filter_map(|s| s.parse::<u64>().ok())
+                        .collect();
+
+                    let effective_max = freqs.iter().copied().max().unwrap_or(hw_max);
+
+                    if lock_max {
+                        crate::engine::write_sysfs(&min_path, &effective_max.to_string(), true);
+                        crate::engine::write_sysfs(&max_path, &effective_max.to_string(), true);
+                    } else {
+                        crate::engine::write_sysfs(&min_path, &hw_min.to_string(), false);
+                        crate::engine::write_sysfs(&max_path, &effective_max.to_string(), false);
+                    }
+                }
+            }
+        }
+    }
+
+    fn apply_bus_dcvs(lock_max: bool) {
+        for comp in ["DDR", "LLCC", "L3"] {
+            let base = format!("/sys/devices/system/cpu/bus_dcvs/{}", comp);
+            let avail_p = format!("{}/available_frequencies", base);
+            if let Ok(content) = fs::read_to_string(&avail_p) {
+                let freqs: Vec<u64> = content
+                    .split_whitespace()
+                    .filter_map(|s| s.parse::<u64>().ok())
+                    .collect();
+
+                if let Some(&max_f) = freqs.iter().max() {
+                    let min_f = freqs.iter().min().copied().unwrap_or(0);
+                    let hw_max_p = format!("{}/hw_max_freq", base);
+                    let hw_min_p = format!("{}/hw_min_freq", base);
+
+                    if lock_max {
+                        crate::engine::write_sysfs(&hw_max_p, &max_f.to_string(), true);
+                        crate::engine::write_sysfs(&hw_min_p, &max_f.to_string(), true);
+                    } else {
+                        crate::engine::write_sysfs(&hw_max_p, &max_f.to_string(), false);
+                        crate::engine::write_sysfs(&hw_min_p, &min_f.to_string(), false);
+                    }
+                }
+            }
+        }
+
+        if let Ok(entries) = fs::read_dir("/sys/class/devfreq") {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if name.contains("memlat") || name.contains("latfloor") || name.contains("ddr-lat") {
+                    let base = format!("/sys/class/devfreq/{}", name);
+                    let avail_p = format!("{}/available_frequencies", base);
+                    if let Ok(content) = fs::read_to_string(&avail_p) {
+                        let freqs: Vec<u64> = content
+                            .split_whitespace()
+                            .filter_map(|s| s.parse::<u64>().ok())
+                            .collect();
+
+                        if let Some(&max_f) = freqs.iter().max() {
+                            let min_f = freqs.iter().min().copied().unwrap_or(0);
+                            let max_p = format!("{}/max_freq", base);
+                            let min_p = format!("{}/min_freq", base);
+
+                            if lock_max {
+                                crate::engine::write_sysfs(&max_p, &max_f.to_string(), true);
+                                crate::engine::write_sysfs(&min_p, &max_f.to_string(), true);
+                            } else {
+                                crate::engine::write_sysfs(&max_p, &max_f.to_string(), false);
+                                crate::engine::write_sysfs(&min_p, &min_f.to_string(), false);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn apply_kgsl_devfreq(lock_max: bool) {
+        let base = "/sys/class/kgsl/kgsl-3d0/devfreq";
+        let avail_p = format!("{}/available_frequencies", base);
+        if let Ok(content) = fs::read_to_string(&avail_p) {
+            let freqs: Vec<u64> = content
+                .split_whitespace()
+                .filter_map(|s| s.parse::<u64>().ok())
+                .collect();
+
+            if let Some(&max_f) = freqs.iter().max() {
+                let min_f = freqs.iter().min().copied().unwrap_or(0);
+                let max_p = format!("{}/max_freq", base);
+                let min_p = format!("{}/min_freq", base);
+
+                if lock_max {
+                    crate::engine::write_sysfs(&max_p, &max_f.to_string(), true);
+                    crate::engine::write_sysfs(&min_p, &max_f.to_string(), true);
+                } else {
+                    crate::engine::write_sysfs(&max_p, &max_f.to_string(), false);
+                    crate::engine::write_sysfs(&min_p, &min_f.to_string(), false);
+                }
+            }
+        }
+    }
+
     pub fn set_thermal_throttling(bypass: bool) {
         if !Self::is_snapdragon() {
             return;
@@ -72,15 +194,12 @@ impl SnapdragonEngine {
             crate::log!("[QCOM] Disabling Adreno KGSL & MSM Thermal Throttling");
             crate::engine::write_sysfs("/sys/module/msm_thermal/parameters/enabled", "N", true);
             crate::engine::write_sysfs("/sys/devices/soc:qcom,bcl/mode", "disable", true);
-
-            
             crate::engine::write_sysfs("/sys/class/kgsl/kgsl-3d0/throttling", "0", true);
             crate::engine::write_sysfs("/sys/class/kgsl/kgsl-3d0/thermal_pwrlevel", "0", true);
         } else {
             crate::log!("[QCOM] Restoring Adreno KGSL & MSM Thermal Throttling");
             crate::engine::write_sysfs("/sys/module/msm_thermal/parameters/enabled", "Y", false);
             crate::engine::write_sysfs("/sys/devices/soc:qcom,bcl/mode", "enable", false);
-
             crate::engine::write_sysfs("/sys/class/kgsl/kgsl-3d0/throttling", "1", false);
             crate::engine::write_sysfs("/sys/class/kgsl/kgsl-3d0/thermal_pwrlevel", "0", false);
         }
@@ -91,7 +210,7 @@ impl SnapdragonEngine {
             return;
         }
 
-        crate::log!("[QCOM] Applying Snapdragon & Adreno Performance Tuning");
+        crate::log!("[QCOM] Applying Snapdragon, Adreno KGSL & Bus DCVS Performance Tuning");
 
         crate::engine::write_sysfs("/sys/class/kgsl/kgsl-3d0/devfreq/adrenoboost", "3", true);
         crate::engine::write_sysfs("/sys/class/kgsl/kgsl-3d0/bus_split", "0", true);
@@ -101,8 +220,8 @@ impl SnapdragonEngine {
         crate::engine::write_sysfs("/sys/class/kgsl/kgsl-3d0/idle_timer", "80", true);
         crate::engine::write_sysfs("/sys/class/kgsl/kgsl-3d0/throttling", "0", true);
         crate::engine::write_sysfs("/sys/class/kgsl/kgsl-3d0/thermal_pwrlevel", "0", true);
-        crate::engine::write_sysfs("/sys/class/kgsl/kgsl-3d0/max_pwrlevel", "0", false);
-        crate::engine::write_sysfs("/sys/class/kgsl/kgsl-3d0/min_pwrlevel", "1", false);
+        crate::engine::write_sysfs("/sys/class/kgsl/kgsl-3d0/max_pwrlevel", "0", true);
+        crate::engine::write_sysfs("/sys/class/kgsl/kgsl-3d0/min_pwrlevel", "0", true);
 
         crate::engine::write_sysfs("/proc/sys/kernel/sched_energy_aware", "0", false);
         crate::engine::write_sysfs("/proc/sys/walt/sched_boost", "1", false);
@@ -125,6 +244,10 @@ impl SnapdragonEngine {
 
         crate::engine::write_sysfs("/sys/devices/soc:qcom,bcl/mode", "disable", true);
         crate::engine::write_sysfs("/sys/module/msm_thermal/parameters/enabled", "N", true);
+
+        Self::apply_kgsl_devfreq(true);
+        Self::apply_bus_dcvs(true);
+        Self::lock_cpu_clocks(true);
     }
 
     pub fn apply_balance() {
@@ -151,6 +274,7 @@ impl SnapdragonEngine {
             .unwrap_or(6)
             .saturating_sub(1)
             .to_string();
+
         if !crate::engine::write_sysfs("/sys/class/kgsl/kgsl-3d0/min_pwrlevel", &target_min, false) {
             crate::engine::write_sysfs("/sys/class/kgsl/kgsl-3d0/min_pwrlevel", num_pwr.trim(), false);
         }
@@ -178,5 +302,9 @@ impl SnapdragonEngine {
 
         crate::engine::write_sysfs("/sys/devices/soc:qcom,bcl/mode", "enable", false);
         crate::engine::write_sysfs("/sys/module/msm_thermal/parameters/enabled", "Y", false);
+
+        Self::apply_kgsl_devfreq(false);
+        Self::apply_bus_dcvs(false);
+        Self::lock_cpu_clocks(false);
     }
 }

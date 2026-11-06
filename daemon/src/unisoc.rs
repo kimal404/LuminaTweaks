@@ -51,12 +51,85 @@ impl UnisocEngine {
         is_unisoc_prop || has_sprd_node
     }
 
+    fn lock_cpu_clocks(lock_max: bool) {
+        if let Ok(entries) = fs::read_dir("/sys/devices/system/cpu/cpufreq") {
+            for entry in entries.flatten() {
+                let fname = entry.file_name().to_string_lossy().into_owned();
+                if fname.starts_with("policy") {
+                    let p_str = format!("/sys/devices/system/cpu/cpufreq/{}", fname);
+                    let min_path = format!("{}/scaling_min_freq", p_str);
+                    let max_path = format!("{}/scaling_max_freq", p_str);
+                    let hw_min_path = format!("{}/cpuinfo_min_freq", p_str);
+                    let hw_max_path = format!("{}/cpuinfo_max_freq", p_str);
+                    let avail_path = format!("{}/scaling_available_frequencies", p_str);
+
+                    let hw_min = fs::read_to_string(&hw_min_path)
+                        .ok()
+                        .and_then(|s| s.trim().parse::<u64>().ok())
+                        .unwrap_or(300000);
+                    let hw_max = fs::read_to_string(&hw_max_path)
+                        .ok()
+                        .and_then(|s| s.trim().parse::<u64>().ok())
+                        .unwrap_or(2000000);
+
+                    let freqs: Vec<u64> = fs::read_to_string(&avail_path)
+                        .unwrap_or_default()
+                        .split_whitespace()
+                        .filter_map(|s| s.parse::<u64>().ok())
+                        .collect();
+
+                    let effective_max = freqs.iter().copied().max().unwrap_or(hw_max);
+
+                    if lock_max {
+                        crate::engine::write_sysfs(&min_path, &effective_max.to_string(), true);
+                        crate::engine::write_sysfs(&max_path, &effective_max.to_string(), true);
+                    } else {
+                        crate::engine::write_sysfs(&min_path, &hw_min.to_string(), false);
+                        crate::engine::write_sysfs(&max_path, &effective_max.to_string(), false);
+                    }
+                }
+            }
+        }
+    }
+
+    fn apply_gpu_devfreq(lock_max: bool) {
+        if let Ok(entries) = fs::read_dir("/sys/class/devfreq") {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if name.contains("gpu") || name.contains("mali") {
+                    let base = format!("/sys/class/devfreq/{}", name);
+                    let avail_p = format!("{}/available_frequencies", base);
+                    if let Ok(content) = fs::read_to_string(&avail_p) {
+                        let freqs: Vec<u64> = content
+                            .split_whitespace()
+                            .filter_map(|s| s.parse::<u64>().ok())
+                            .collect();
+
+                        if let Some(&max_f) = freqs.iter().max() {
+                            let min_f = freqs.iter().min().copied().unwrap_or(0);
+                            let max_p = format!("{}/max_freq", base);
+                            let min_p = format!("{}/min_freq", base);
+
+                            if lock_max {
+                                crate::engine::write_sysfs(&max_p, &max_f.to_string(), true);
+                                crate::engine::write_sysfs(&min_p, &max_f.to_string(), true);
+                            } else {
+                                crate::engine::write_sysfs(&max_p, &max_f.to_string(), false);
+                                crate::engine::write_sysfs(&min_p, &min_f.to_string(), false);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     pub fn apply_performance() {
         if !Self::is_unisoc() {
             return;
         }
 
-        crate::log!("[UNISOC] Applying Unisoc / Spreadtrum Performance Tuning");
+        crate::log!("[UNISOC] Applying Unisoc Performance Tuning");
 
         crate::engine::write_sysfs("/sys/class/misc/mali0/device/power_policy", "always_on", true);
 
@@ -84,6 +157,9 @@ impl UnisocEngine {
         }
 
         crate::engine::write_sysfs("/sys/module/sprd_thermal/parameters/enable", "0", true);
+
+        Self::apply_gpu_devfreq(true);
+        Self::lock_cpu_clocks(true);
     }
 
     pub fn apply_balance() {
@@ -91,7 +167,7 @@ impl UnisocEngine {
             return;
         }
 
-        crate::log!("[UNISOC] Restoring Unisoc / Spreadtrum Balanced Baseline");
+        crate::log!("[UNISOC] Restoring Unisoc Balanced Baseline");
 
         crate::engine::write_sysfs("/sys/class/misc/mali0/device/power_policy", "coarse_demand", false);
 
@@ -119,5 +195,8 @@ impl UnisocEngine {
         }
 
         crate::engine::write_sysfs("/sys/module/sprd_thermal/parameters/enable", "1", false);
+
+        Self::apply_gpu_devfreq(false);
+        Self::lock_cpu_clocks(false);
     }
 }
