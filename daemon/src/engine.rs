@@ -75,11 +75,19 @@ pub fn apply_thermal_kill(disable: bool) {
     }
 
     let batt_limit_val = if disable { "0" } else { "1" };
+    let thermal_remove_val = if disable { "1" } else { "0" };
+
     if let Ok(entries) = fs::read_dir("/sys/class/power_supply") {
         for entry in entries.flatten() {
-            let limit_path = entry.path().join("thermal_limit");
+            let p = entry.path();
+            let limit_path = p.join("thermal_limit");
             if limit_path.exists() {
                 let _ = fs::write(&limit_path, batt_limit_val.as_bytes());
+            }
+
+            let remove_path = p.join("thermal_remove");
+            if remove_path.exists() {
+                let _ = fs::write(&remove_path, thermal_remove_val.as_bytes());
             }
         }
     }

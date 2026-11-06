@@ -102,33 +102,59 @@ fn lock_mtk_cpu_clocks(lock_max: bool) {
 }
 
 fn apply_mtk_dvfsrc(lock_max: bool) {
-    let (vcore_val, ddr_val, lock) = if lock_max {
-        ("0", "0", true)
+    if lock_max {
+        write_sysfs("/sys/kernel/helio-dvfsrc/dvfsrc_force_vcore_dvfs_opp", "0", true);
     } else {
-        ("-1", "-1", false)
+        let _ = fs::set_permissions("/sys/kernel/helio-dvfsrc/dvfsrc_force_vcore_dvfs_opp", fs::Permissions::from_mode(0o644));
+    }
+
+    let (ddr_val, lock) = if lock_max {
+        ("0", true)
+    } else {
+        ("-1", false)
     };
 
-    write_sysfs("/sys/kernel/helio-dvfsrc/dvfsrc_force_vcore_dvfs_opp", vcore_val, lock);
-
-    if let Ok(entries) = fs::read_dir("/sys/devices/platform") {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let is_dvfsrc = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .map(|s| s.contains("dvfsrc"))
-                .unwrap_or(false);
-
-            if is_dvfsrc {
-                let ddr_node = path.join("helio-dvfsrc/dvfsrc_req_ddr_opp");
-                if ddr_node.exists() {
-                    if let Some(p) = ddr_node.to_str() {
-                        write_sysfs(p, ddr_val, lock);
+    let base_dirs = ["/sys/devices/platform", "/sys/devices/platform/soc"];
+    for base in base_dirs {
+        if let Ok(entries) = fs::read_dir(base) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if name.contains("dvfsrc") {
+                    let ddr_node = path.join("helio-dvfsrc/dvfsrc_req_ddr_opp");
+                    if ddr_node.exists() {
+                        if let Some(p) = ddr_node.to_str() {
+                            write_sysfs(p, ddr_val, lock);
+                        }
                     }
                 }
             }
         }
     }
+}
+
+fn apply_mali_gpu(performance: bool) {
+    let (policy, gov) = if performance {
+        ("always_on", "performance")
+    } else {
+        ("coarse_demand", "simple_ondemand")
+    };
+
+    write_sysfs("/sys/class/misc/mali0/device/power_policy", policy, performance);
+
+    let mali_devfreq_candidates = [
+        "/sys/devices/platform/soc/13000000.mali/devfreq/13000000.mali/governor",
+        "/sys/class/devfreq/13000000.mali/governor",
+    ];
+
+    for path in mali_devfreq_candidates {
+        if Path::new(path).exists() {
+            write_sysfs(path, gov, performance);
+        }
+    }
+
+    let opp_target = if performance { "0" } else { "-1" };
+    write_sysfs("/proc/gpufreqv2/fix_target_opp_index", opp_target, performance);
 }
 
 pub fn set_thermal_throttling(bypass: bool) {
@@ -160,17 +186,32 @@ pub fn set_thermal_throttling(bypass: bool) {
 }
 
 fn lock_mali_tmu(lock: bool) {
-    let base_dirs = ["/sys/devices", "/sys/devices/platform"];
+    let base_dirs = [
+        "/sys/devices/platform/soc/13000000.mali",
+        "/sys/devices/platform/soc",
+        "/sys/devices/platform",
+    ];
     for base in base_dirs {
-        if let Ok(entries) = fs::read_dir(base) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(|s| s.to_str()) == Some("mali") {
-                    let perm = if lock { 0o000 } else { 0o644 };
-                    for sub in ["tmu", "throttling", "tripping"] {
-                        let target = path.join(sub);
-                        if target.exists() {
-                            let _ = fs::set_permissions(&target, fs::Permissions::from_mode(perm));
+        let p = Path::new(base);
+        if p.exists() {
+            if base.ends_with(".mali") {
+                let perm = if lock { 0o000 } else { 0o644 };
+                for sub in ["tmu", "throttling", "tripping"] {
+                    let target = p.join(sub);
+                    if target.exists() {
+                        let _ = fs::set_permissions(&target, fs::Permissions::from_mode(perm));
+                    }
+                }
+            } else if let Ok(entries) = fs::read_dir(base) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.extension().and_then(|s| s.to_str()) == Some("mali") {
+                        let perm = if lock { 0o000 } else { 0o644 };
+                        for sub in ["tmu", "throttling", "tripping"] {
+                            let target = path.join(sub);
+                            if target.exists() {
+                                let _ = fs::set_permissions(&target, fs::Permissions::from_mode(perm));
+                            }
                         }
                     }
                 }
@@ -185,15 +226,10 @@ pub fn apply_mtk_performance() {
     }
 
     crate::log!("[MTK] Applying Mali GPU, DVFSRC, CCI & CPU Max Clock Performance Profile");
-    write_sysfs("/sys/class/misc/mali0/device/power_policy", "always_on", true);
+    apply_mali_gpu(true);
     write_sysfs("/sys/class/devfreq/mtk-dvfsrc-devfreq/governor", "performance", true);
-    write_sysfs("/proc/gpufreqv2/fix_target_opp_index", "0", true);
-    write_sysfs("/proc/cpufreq/cpufreq_power_mode", "3", true);
-    write_sysfs("/proc/cpufreq/cpufreq_imax_enable", "1", true);
-    write_sysfs("/proc/cpufreq/cpufreq_sched_disable", "1", true);
 
     write_sysfs("/sys/kernel/fpsgo/common/force_onoff", "0", true);
-    write_sysfs("/proc/cpufreq/cpufreq_cci_mode", "1", true);
     write_sysfs("/sys/module/sspm_v3/holders/ged/parameters/is_GED_KPI_enabled", "0", true);
     write_sysfs("/sys/devices/platform/boot_dramboost/dramboost/dramboost", "1", true);
     write_sysfs("/proc/mtk_batoc_throttling/battery_oc_protect_stop", "stop 1", true);
@@ -208,15 +244,10 @@ pub fn apply_mtk_balance() {
     }
 
     crate::log!("[MTK] Restoring Balanced Baseline");
-    write_sysfs("/sys/class/misc/mali0/device/power_policy", "coarse_demand", false);
+    apply_mali_gpu(false);
     write_sysfs("/sys/class/devfreq/mtk-dvfsrc-devfreq/governor", "simple_ondemand", false);
-    write_sysfs("/proc/gpufreqv2/fix_target_opp_index", "-1", false);
-    write_sysfs("/proc/cpufreq/cpufreq_power_mode", "1", false);
-    write_sysfs("/proc/cpufreq/cpufreq_imax_enable", "0", false);
-    write_sysfs("/proc/cpufreq/cpufreq_sched_disable", "0", false);
 
     write_sysfs("/sys/kernel/fpsgo/common/force_onoff", "2", false);
-    write_sysfs("/proc/cpufreq/cpufreq_cci_mode", "0", false);
     write_sysfs("/sys/module/sspm_v3/holders/ged/parameters/is_GED_KPI_enabled", "1", false);
     write_sysfs("/sys/devices/platform/boot_dramboost/dramboost/dramboost", "0", false);
     write_sysfs("/proc/mtk_batoc_throttling/battery_oc_protect_stop", "stop 0", false);
@@ -234,12 +265,8 @@ pub fn apply_mtk_eco() {
     write_sysfs("/sys/class/misc/mali0/device/power_policy", "coarse_demand", false);
     write_sysfs("/sys/class/devfreq/mtk-dvfsrc-devfreq/governor", "powersave", false);
     write_sysfs("/proc/gpufreqv2/fix_target_opp_index", "-1", false);
-    write_sysfs("/proc/cpufreq/cpufreq_power_mode", "0", false);
-    write_sysfs("/proc/cpufreq/cpufreq_imax_enable", "0", false);
-    write_sysfs("/proc/cpufreq/cpufreq_sched_disable", "0", false);
 
     write_sysfs("/sys/kernel/fpsgo/common/force_onoff", "2", false);
-    write_sysfs("/proc/cpufreq/cpufreq_cci_mode", "0", false);
     write_sysfs("/sys/module/sspm_v3/holders/ged/parameters/is_GED_KPI_enabled", "1", false);
     write_sysfs("/sys/devices/platform/boot_dramboost/dramboost/dramboost", "0", false);
     write_sysfs("/proc/mtk_batoc_throttling/battery_oc_protect_stop", "stop 0", false);
