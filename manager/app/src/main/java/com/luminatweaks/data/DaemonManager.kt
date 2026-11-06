@@ -25,6 +25,7 @@ import java.io.InputStreamReader
 
 object DaemonManager {
     private const val MODULE_DAEMON_PATH = "/data/adb/modules/luminatweaks/luminad"
+    private const val MODULE_UPDATE_DIR = "/data/adb/modules_update/luminatweaks"
 
     private fun runSuCmd(cmd: String): String {
         return try {
@@ -55,6 +56,10 @@ object DaemonManager {
         true
     }
 
+    suspend fun isRebootRequired(): Boolean = withContext(Dispatchers.IO) {
+        runSuCmd("[ -d $MODULE_UPDATE_DIR ] && echo 'YES'").contains("YES")
+    }
+
     suspend fun isModuleInstalled(): Boolean = withContext(Dispatchers.IO) {
         runSuCmd("[ -f $MODULE_DAEMON_PATH ] && echo 'OK'").contains("OK")
     }
@@ -80,7 +85,12 @@ object DaemonManager {
 
         if (isDaemonRunning()) return@withContext true
 
-        // Hanya boleh jalan jika modul terpasang di KernelSU/Magisk
+        // Jangan jalankan daemon jika modul baru di-flash dan menunggu reboot
+        if (isRebootRequired()) {
+            return@withContext false
+        }
+
+        // Hanya boleh jalan jika modul terpasang resmi di KernelSU/Magisk
         if (!isModuleInstalled()) {
             return@withContext false
         }

@@ -12,7 +12,7 @@ rm -rf "$MODPATH/system" 2>/dev/null
 # Siapkan direktori konfigurasi resmi
 mkdir -p /data/adb/.config/lumina
 
-# Hentikan proses aktif
+# Hentikan proses lama jika ada
 killall -9 luminad 2>/dev/null
 pkill -9 -f luminad 2>/dev/null
 
@@ -59,10 +59,5 @@ set_perm "$MODPATH/service.sh" 0 0 0755
 set_perm "$MODPATH/post-fs-data.sh" 0 0 0755
 set_perm "$MODPATH/action.sh" 0 0 0755
 set_perm "$MODPATH/uninstall.sh" 0 0 0755
-
-# Hot-start jika di-flash saat Android menyala
-if [ "$(getprop sys.boot_completed)" = "1" ] && [ -f "$MODPATH/luminad" ]; then
-    nohup "$MODPATH/luminad" >/dev/null 2>&1 &
-fi
 
 ui_print "- Selesai"

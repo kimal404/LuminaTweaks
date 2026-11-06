@@ -143,9 +143,15 @@ fun HomeScreen() {
     var isChecking by remember { mutableStateOf(true) }
     var daemonPid by remember { mutableStateOf<String?>(null) }
     var currentProfile by remember { mutableStateOf("Balanced") }
+    var showRebootDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        DaemonManager.startDaemon(context)
+        val needsReboot = DaemonManager.isRebootRequired()
+        if (needsReboot) {
+            showRebootDialog = true
+        } else {
+            DaemonManager.startDaemon(context)
+        }
 
         withContext(Dispatchers.IO) {
             val initialTemp = DeviceUtil.getBatteryTemperature(context)
@@ -174,6 +180,68 @@ fun HomeScreen() {
         }
     }
 
+    if (showRebootDialog) {
+        val coroutineScope = rememberCoroutineScope()
+        val haptic = LocalHapticFeedback.current
+        val currentRadius = LocalCornerRadius.current
+
+        AlertDialog(
+            onDismissRequest = { showRebootDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Rounded.Refresh,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(28.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Reboot Required",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center
+                )
+            },
+            text = {
+                Text(
+                    text = "A device reboot is required to activate the LuminaTweaks module and start the core daemon properly. Would you like to reboot now?",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showRebootDialog = false
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        Toast.makeText(context, "Rebooting device...", Toast.LENGTH_SHORT).show()
+                        coroutineScope.launch {
+                            RootUtil.rebootDevice("")
+                        }
+                    }
+                ) {
+                    Text(
+                        text = "Reboot Now",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRebootDialog = false }) {
+                    Text(
+                        text = "Later",
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            },
+            shape = RoundedCornerShape(currentRadius.coerceAtLeast(16.dp)),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        )
+    }
+
     val isFloating = LocalFloatingNavBar.current
 
     if (currentSubscreen == "personalisasi") {
@@ -198,6 +266,7 @@ fun HomeScreen() {
                         currentProfile = currentProfile,
                         kernelVersion = kernelVersion,
                         deviceModel = deviceModel,
+                        onRequestRebootDialog = { showRebootDialog = true },
                         onRestartDaemon = {
                             daemonPid = null
                             currentProfile = "-"
@@ -248,6 +317,7 @@ fun HomeScreen() {
                         currentProfile = currentProfile,
                         kernelVersion = kernelVersion,
                         deviceModel = deviceModel,
+                        onRequestRebootDialog = { showRebootDialog = true },
                         onRestartDaemon = {
                             daemonPid = null
                             currentProfile = "-"
@@ -272,6 +342,7 @@ fun HomeDashboardContent(
     currentProfile: String,
     kernelVersion: String,
     deviceModel: String,
+    onRequestRebootDialog: () -> Unit,
     onRestartDaemon: suspend () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -461,10 +532,14 @@ fun HomeDashboardContent(
                 Card(
                     onClick = {
                         if (!isChecking && !isRunning && !isRestarting) {
-                            isRestarting = true
                             coroutineScope.launch {
-                                onRestartDaemon()
-                                isRestarting = false
+                                if (DaemonManager.isRebootRequired()) {
+                                    onRequestRebootDialog()
+                                } else {
+                                    isRestarting = true
+                                    onRestartDaemon()
+                                    isRestarting = false
+                                }
                             }
                         }
                     },
