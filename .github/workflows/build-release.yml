@@ -64,7 +64,6 @@ jobs:
         env:
           KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
           KS_ALIAS: ${{ secrets.KEYSTORE_ALIAS }}
-          KEY_PASS: ${{ secrets.KEY_PASSWORD }}
         run: |
           BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | tail -n 1)
           mkdir -p dist
@@ -77,12 +76,11 @@ jobs:
               --ks lumina-release.jks \
               --ks-pass "pass:${KS_PASS}" \
               --ks-key-alias "${KS_ALIAS}" \
-              --key-pass "pass:${KEY_PASS}" \
+              --key-pass "pass:${KS_PASS}" \
               --out "$signed" "$aligned"
             rm -f "$aligned"
             echo "Successfully signed: $signed"
           done
-          # Hapus file keystore dari runner segera setelah signing selesai
           rm -f lumina-release.jks
 
       - name: Package Flashable ZIP Module
