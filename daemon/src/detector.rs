@@ -17,6 +17,8 @@
 use std::fs;
 use std::path::Path;
 use std::process::Command;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 use serde_json::Value;
 
 pub const CONFIG_DIR: &str = "/data/adb/.config/lumina";
@@ -38,6 +40,23 @@ const CGROUP_TOP_APP_CANDIDATES: &[&str] = &[
     "/sys/fs/cgroup/top-app/cgroup.procs",
     "/sys/fs/cgroup/cpuset/top-app/cgroup.procs",
 ];
+
+extern "C" {
+    fn __system_property_get(name: *const std::os::raw::c_char, value: *mut std::os::raw::c_char) -> std::os::raw::c_int;
+}
+
+pub fn get_system_prop(name: &str) -> String {
+    let mut buf = [0u8; 92];
+    if let Ok(c_name) = std::ffi::CString::new(name) {
+        let len = unsafe {
+            __system_property_get(c_name.as_ptr(), buf.as_mut_ptr() as *mut std::os::raw::c_char)
+        };
+        if len > 0 {
+            return String::from_utf8_lossy(&buf[..len as usize]).trim().to_string();
+        }
+    }
+    String::new()
+}
 
 fn is_ignored_package(pkg: &str) -> bool {
     matches!(
@@ -95,15 +114,6 @@ pub fn get_focused_package() -> Option<String> {
 }
 
 pub fn is_master_enabled() -> bool {
-    if let Ok(output) = Command::new("getprop").arg("persist.lumina.master").output() {
-        let val = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if val == "0" || val == "false" {
-            return false;
-        } else if val == "1" || val == "true" {
-            return true;
-        }
-    }
-
     let p = format!("{}/master.conf", CONFIG_DIR);
     if let Ok(content) = std::fs::read_to_string(p) {
         let val = content.trim();
@@ -114,23 +124,45 @@ pub fn is_master_enabled() -> bool {
         }
     }
 
+    let val = get_system_prop("persist.lumina.master");
+    if val == "0" || val == "false" {
+        return false;
+    } else if val == "1" || val == "true" {
+        return true;
+    }
+
     true
 }
 
+static CACHED_LOW_POWER: Mutex<Option<(Instant, bool)>> = Mutex::new(None);
+
 pub fn is_low_power_active() -> bool {
-    if let Ok(output) = Command::new("getprop").arg("low_power").output() {
-        if String::from_utf8_lossy(&output.stdout).trim() == "1" {
-            return true;
+    if let Ok(guard) = CACHED_LOW_POWER.lock() {
+        if let Some((instant, val)) = *guard {
+            if instant.elapsed() < Duration::from_secs(5) {
+                return val;
+            }
         }
     }
 
-    if let Ok(output) = Command::new("settings").args(["get", "global", "low_power"]).output() {
-        if String::from_utf8_lossy(&output.stdout).trim() == "1" {
-            return true;
+    let prop_val = get_system_prop("low_power");
+    if prop_val == "1" {
+        if let Ok(mut guard) = CACHED_LOW_POWER.lock() {
+            *guard = Some((Instant::now(), true));
         }
+        return true;
     }
 
-    false
+    let is_active = Command::new("settings")
+        .args(["get", "global", "low_power"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "1")
+        .unwrap_or(false);
+
+    if let Ok(mut guard) = CACHED_LOW_POWER.lock() {
+        *guard = Some((Instant::now(), is_active));
+    }
+    is_active
 }
 
 fn is_truthy(val: &Value) -> bool {
@@ -158,27 +190,27 @@ pub fn read_global_json() -> Option<Value> {
 }
 
 pub fn is_lite_mode_active() -> bool {
+    let p = format!("{}/lite_mode.conf", CONFIG_DIR);
+    if let Ok(content) = std::fs::read_to_string(p) {
+        let trimmed = content.trim();
+        if trimmed == "1" || trimmed.eq_ignore_ascii_case("true") || trimmed.eq_ignore_ascii_case("on") {
+            return true;
+        } else if trimmed == "0" || trimmed.eq_ignore_ascii_case("false") || trimmed.eq_ignore_ascii_case("off") {
+            return false;
+        }
+    }
+
     if let Some(json) = read_global_json() {
         if let Some(val) = json.get("lite_mode_global") {
             return is_truthy(val);
         }
     }
 
-    if let Ok(output) = Command::new("getprop").arg("persist.lumina.litemode").output() {
-        let val = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if val == "1" || val == "true" {
-            return true;
-        } else if val == "0" || val == "false" {
-            return false;
-        }
-    }
-
-    let p = format!("{}/lite_mode.conf", CONFIG_DIR);
-    if let Ok(content) = std::fs::read_to_string(p) {
-        let trimmed = content.trim();
-        if trimmed == "1" || trimmed.eq_ignore_ascii_case("true") || trimmed.eq_ignore_ascii_case("on") {
-            return true;
-        }
+    let val = get_system_prop("persist.lumina.litemode");
+    if val == "1" || val == "true" {
+        return true;
+    } else if val == "0" || val == "false" {
+        return false;
     }
 
     if is_low_power_active() {

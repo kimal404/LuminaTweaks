@@ -16,6 +16,7 @@
 
 use std::fs;
 use std::process::Command;
+use std::time::{Duration, Instant};
 
 const DOZE_FLAG: &str = "/data/adb/.config/lumina/aggressive_doze";
 const GMS_FLAG: &str = "/data/adb/.config/lumina/gms_limit";
@@ -24,6 +25,8 @@ pub struct UtilityController {
     was_screen_on: bool,
     doze_forced: bool,
     last_gms_state: Option<bool>,
+    last_doze_check: Instant,
+    last_gms_check: Instant,
 }
 
 impl UtilityController {
@@ -32,15 +35,34 @@ impl UtilityController {
             was_screen_on: true,
             doze_forced: false,
             last_gms_state: None,
+            last_doze_check: Instant::now() - Duration::from_secs(10),
+            last_gms_check: Instant::now() - Duration::from_secs(10),
         }
     }
 
     pub fn tick(&mut self) {
-        self.handle_doze();
-        self.handle_gms();
+        if self.last_doze_check.elapsed() >= Duration::from_millis(1500) {
+            self.handle_doze();
+            self.last_doze_check = Instant::now();
+        }
+        if self.last_gms_check.elapsed() >= Duration::from_millis(2000) {
+            self.handle_gms();
+            self.last_gms_check = Instant::now();
+        }
     }
 
     fn is_screen_on() -> bool {
+        if let Ok(entries) = fs::read_dir("/sys/class/backlight") {
+            for entry in entries.flatten() {
+                let b_path = entry.path().join("brightness");
+                if let Ok(val_str) = fs::read_to_string(b_path) {
+                    if let Ok(val) = val_str.trim().parse::<u32>() {
+                        return val > 0;
+                    }
+                }
+            }
+        }
+
         if let Ok(output) = Command::new("dumpsys").args(["power"]).output() {
             let s = String::from_utf8_lossy(&output.stdout);
             return s.contains("Display Power: state=ON")
@@ -70,8 +92,7 @@ impl UtilityController {
             let _ = Command::new("dumpsys").args(["deviceidle", "force-idle"]).status();
             self.doze_forced = true;
             log!("[DOZE] Screen turned off -> Forced Deep Sleep (deviceidle force-idle)");
-        }
-        else if !self.was_screen_on && current_screen_on {
+        } else if !self.was_screen_on && current_screen_on {
             if self.doze_forced {
                 let _ = Command::new("dumpsys").args(["deviceidle", "unforce"]).status();
                 self.doze_forced = false;

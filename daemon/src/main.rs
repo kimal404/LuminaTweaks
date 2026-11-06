@@ -198,6 +198,10 @@ impl EngineRuntime {
             self.update_shared_state(target_profile, target_pkg);
         }
 
+        if !is_profile_changing && target_pkg.is_none() {
+            return;
+        }
+
         let global_rr = display::get_saved_mode_id();
         let desired_rr = if let Some(ref cfg) = target_cfg {
             if cfg.refresh_rate != "default" && !cfg.refresh_rate.is_empty() {
@@ -349,10 +353,10 @@ fn main() {
 
         let focused = get_focused_package();
 
-        if is_master_enabled() {
+        let current_target = if is_master_enabled() {
             let newly_focused_target = focused.as_deref().filter(|pkg| is_app_enabled(pkg));
 
-            let current_target = if let Some(pkg) = newly_focused_target {
+            let target = if let Some(pkg) = newly_focused_target {
                 let pkg_str = pkg.to_string();
                 if runtime.left_foreground_at.is_some() {
                     log!("[SESSION] Focus restored to {}. Grace period cleared.", pkg_str);
@@ -393,24 +397,32 @@ fn main() {
                 None
             };
 
-            if config_just_changed || current_target != last_pkg_for_texture {
-                if let Some(ref pkg) = current_target {
+            if config_just_changed || target != last_pkg_for_texture {
+                if let Some(ref pkg) = target {
                     TextureController::apply_foreground(pkg);
                 } else {
                     TextureController::sync_config(None);
                 }
-                last_pkg_for_texture = current_target.clone();
+                last_pkg_for_texture = target.clone();
             }
 
-            runtime.apply_target(current_target.as_deref());
+            runtime.apply_target(target.as_deref());
+            target
         } else {
             runtime.reset_to_balance();
             if config_just_changed {
                 TextureController::restore();
             }
             last_pkg_for_texture = None;
-        }
+            None
+        };
 
-        thread::sleep(Duration::from_millis(400));
+        let sleep_ms = if current_target.is_some() {
+            400
+        } else {
+            1200
+        };
+
+        thread::sleep(Duration::from_millis(sleep_ms));
     }
 }
