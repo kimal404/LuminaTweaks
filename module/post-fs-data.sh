@@ -1,14 +1,7 @@
+#!/system/bin/sh
+# Copyright (C) 2026 kimal
 
-MODDIR="${0%/*}"
-
-ABI=$(getprop ro.product.cpu.abi)
-case "$ABI" in
-    arm64*|aarch64*)
-        ;;
-    *)
-        exit 0
-        ;;
-esac
+[ "$(getprop ro.product.cpu.abi)" = "arm64-v8a" ] || [ "$ARCH" = "arm64" ] || exit 0
 
 patch_sepolicy_rule() {
     rule="$1"

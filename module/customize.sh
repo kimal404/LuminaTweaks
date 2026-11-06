@@ -1,48 +1,31 @@
-ui_print "===================================="
-ui_print "     LUMINATWEAKS CORE INSTALL      "
-ui_print "===================================="
+#!/system/bin/sh
 
-ABI=$(getprop ro.product.cpu.abi)
-case "$ABI" in
-    arm64*|aarch64*)
-        ui_print "[+] Architecture verified: $ABI"
-        ;;
-    *)
-        abort "[-] Fatal: 32-bit architecture ($ABI) is unsupported."
-        ;;
-esac
+[ "$ARCH" = "arm64" ] || abort "! Hanya mendukung arm64"
 
-BASE_DIR="/data/adb/luminatweaks"
-mkdir -p "$BASE_DIR/bin"
-mkdir -p "$BASE_DIR/configs"
-mkdir -p "$BASE_DIR/logs"
+ui_print "- Memasang LuminaTweaks"
 
+# Bersihkan sisa legacy
+rm -rf /data/adb/luminatweaks 2>/dev/null
 rm -rf "$MODPATH/webroot" 2>/dev/null
-rm -rf "/data/adb/modules/luminatweaks/webroot" 2>/dev/null
 rm -rf "$MODPATH/system" 2>/dev/null
 
-ui_print "[*] Purging legacy daemon processes..."
+# Siapkan direktori konfigurasi resmi
+mkdir -p /data/adb/.config/lumina
+
+# Hentikan proses aktif
 killall -9 luminad 2>/dev/null
 pkill -9 -f luminad 2>/dev/null
 
-DAEMON_SRC=""
+# Izin biner native
 if [ -f "$MODPATH/luminad" ]; then
-    DAEMON_SRC="$MODPATH/luminad"
-elif [ -f "$MODPATH/bin/luminad" ]; then
-    DAEMON_SRC="$MODPATH/bin/luminad"
-fi
-
-if [ -n "$DAEMON_SRC" ]; then
-    ui_print "[+] Deploying native luminad engine..."
-    cp -f "$DAEMON_SRC" "$BASE_DIR/bin/luminad"
-    set_perm "$BASE_DIR/bin/luminad" 0 0 0755
-    set_perm "$DAEMON_SRC" 0 0 0755
+    set_perm "$MODPATH/luminad" 0 0 0755
 else
-    ui_print "[!] Warning: Native binary not found in package."
+    ui_print "! Biner luminad tidak ditemukan"
 fi
 
+# Pemasangan Manager
 if [ -f "$MODPATH/manager.apk" ]; then
-    ui_print "[+] Installing Lumina Manager interface..."
+    ui_print "- Memasang Manager"
 
     TMP_APK="/data/local/tmp/lumina_manager.apk"
     cp -f "$MODPATH/manager.apk" "$TMP_APK"
@@ -50,24 +33,17 @@ if [ -f "$MODPATH/manager.apk" ]; then
     chcon u:object_r:shell_data_file:s0 "$TMP_APK" 2>/dev/null
 
     install_out=$(pm install -r -d --user 0 "$TMP_APK" 2>&1)
-
     if echo "$install_out" | grep -q "INSTALL_FAILED_UPDATE_INCOMPATIBLE"; then
-        ui_print "[!] Signature conflict detected. Overriding installation..."
         pm uninstall --user 0 com.luminatweaks >/dev/null 2>&1
         pm uninstall com.luminatweaks >/dev/null 2>&1
-        install_out=$(pm install --user 0 "$TMP_APK" 2>&1)
+        pm install --user 0 "$TMP_APK" >/dev/null 2>&1
     elif ! echo "$install_out" | grep -iq "Success"; then
-        install_out=$(cmd package install -r -d --user 0 "$TMP_APK" 2>&1)
+        cmd package install -r -d --user 0 "$TMP_APK" >/dev/null 2>&1
     fi
 
     rm -f "$TMP_APK"
 
-    if echo "$install_out" | grep -iq "Success"; then
-        ui_print "[+] Manager package deployed successfully."
-    else
-        ui_print "[!] Package manager warning: $install_out"
-    fi
-
+    # Izin sistem & background execution
     pm grant com.luminatweaks android.permission.POST_NOTIFICATIONS >/dev/null 2>&1
     pm grant com.luminatweaks android.permission.QUERY_ALL_PACKAGES >/dev/null 2>&1
     pm grant com.luminatweaks com.android.permission.GET_INSTALLED_APPS >/dev/null 2>&1
@@ -78,21 +54,15 @@ if [ -f "$MODPATH/manager.apk" ]; then
     dumpsys deviceidle whitelist +com.luminatweaks >/dev/null 2>&1
 fi
 
+# Izin skrip modul
 set_perm "$MODPATH/service.sh" 0 0 0755
 set_perm "$MODPATH/post-fs-data.sh" 0 0 0755
 set_perm "$MODPATH/action.sh" 0 0 0755
 set_perm "$MODPATH/uninstall.sh" 0 0 0755
 
-[ -f "$BASE_DIR/fast_load" ] || echo "1" > "$BASE_DIR/fast_load"
-[ -f "$BASE_DIR/aggressive_doze" ] || echo "0" > "$BASE_DIR/aggressive_doze"
-[ -f "$BASE_DIR/gms_limit" ] || echo "0" > "$BASE_DIR/gms_limit"
-
-if [ "$(getprop sys.boot_completed)" = "1" ] && [ -f "$BASE_DIR/bin/luminad" ]; then
-    ui_print "[+] Spawning native daemon runtime..."
-    killall -9 luminad 2>/dev/null
-    pkill -9 -f luminad 2>/dev/null
-    sleep 1
-    nohup "$BASE_DIR/bin/luminad" >/dev/null 2>&1 &
+# Hot-start jika di-flash saat Android menyala
+if [ "$(getprop sys.boot_completed)" = "1" ] && [ -f "$MODPATH/luminad" ]; then
+    nohup "$MODPATH/luminad" >/dev/null 2>&1 &
 fi
 
-ui_print "[✓] System deployment finished without errors."
+ui_print "- Selesai"
