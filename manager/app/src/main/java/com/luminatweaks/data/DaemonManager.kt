@@ -21,17 +21,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
-import java.io.File
-import java.io.FileOutputStream
 import java.io.InputStreamReader
 
 object DaemonManager {
-    private const val TMP_DAEMON_PATH = "/data/local/tmp/luminad"
-    private val MODULE_DAEMON_CANDIDATES = listOf(
-        "/data/adb/modules/lumina_tweaks/luminad",
-        "/data/adb/modules/luminatweaks/luminad",
-        TMP_DAEMON_PATH
-    )
+    private const val MODULE_DAEMON_PATH = "/data/adb/modules/luminatweaks/luminad"
 
     private fun runSuCmd(cmd: String): String {
         return try {
@@ -62,6 +55,10 @@ object DaemonManager {
         true
     }
 
+    suspend fun isModuleInstalled(): Boolean = withContext(Dispatchers.IO) {
+        runSuCmd("[ -f $MODULE_DAEMON_PATH ] && echo 'OK'").contains("OK")
+    }
+
     suspend fun getDaemonPid(): String? = withContext(Dispatchers.IO) {
         val pid = runSuCmd("pidof luminad")
         if (pid.isNotBlank() && pid.all { it.isDigit() || it.isWhitespace() }) {
@@ -78,52 +75,17 @@ object DaemonManager {
         !isDaemonRunning()
     }
 
-    private fun getActiveDaemonPath(): String {
-        for (candidate in MODULE_DAEMON_CANDIDATES) {
-            val check = runSuCmd("[ -f $candidate ] && echo 'EXISTS'")
-            if (check.contains("EXISTS")) {
-                return candidate
-            }
-        }
-        return TMP_DAEMON_PATH
-    }
-
-    suspend fun deployBinary(context: Context): Boolean = withContext(Dispatchers.IO) {
-        try {
-            autoGrantPermissions()
-            val tempFile = File(context.cacheDir, "luminad_tmp")
-            context.assets.open("bin/luminad").use { input ->
-                FileOutputStream(tempFile).use { output ->
-                    input.copyTo(output)
-                }
-            }
-
-            val cmds = """
-                cp ${tempFile.absolutePath} $TMP_DAEMON_PATH
-                chmod 755 $TMP_DAEMON_PATH
-                rm -f ${tempFile.absolutePath}
-            """.trimIndent()
-
-            runSuCmd(cmds)
-            true
-        } catch (e: Exception) {
-            false
-        }
-    }
-
     suspend fun startDaemon(context: Context): Boolean = withContext(Dispatchers.IO) {
         autoGrantPermissions()
 
         if (isDaemonRunning()) return@withContext true
 
-        var daemonPath = getActiveDaemonPath()
-        val exists = runSuCmd("[ -f $daemonPath ] && echo 'OK'").contains("OK")
-        if (!exists) {
-            deployBinary(context)
-            daemonPath = TMP_DAEMON_PATH
+        // Hanya boleh jalan jika modul terpasang di KernelSU/Magisk
+        if (!isModuleInstalled()) {
+            return@withContext false
         }
 
-        runSuCmd("$daemonPath </dev/null >/dev/null 2>&1 &")
+        runSuCmd("$MODULE_DAEMON_PATH </dev/null >/dev/null 2>&1 &")
 
         var retries = 5
         while (retries > 0) {
@@ -136,7 +98,6 @@ object DaemonManager {
 
     suspend fun restartDaemon(context: Context): Boolean = withContext(Dispatchers.IO) {
         stopDaemon()
-        deployBinary(context)
         startDaemon(context)
     }
 }
