@@ -675,7 +675,7 @@ private suspend fun uninstallModule(context: Context) {
             p.outputStream.bufferedWriter().use { writer ->
                 writer.write("killall -9 luminad 2>/dev/null\n")
                 writer.write("pkill -9 -f luminad 2>/dev/null\n")
-                writer.write("rm -rf /data/adb/luminatweaks\n")
+                writer.write("rm -rf /data/adb/.config/lumina /data/adb/luminatweaks\n")
                 writer.write("rm -rf /data/adb/modules/luminatweaks\n")
                 writer.write("rm -rf /data/adb/modules_update/luminatweaks\n")
                 writer.write("rm -f /dev/socket/luminad*\n")

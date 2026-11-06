@@ -55,3 +55,6 @@ Thumbs.db
 module/bin/
 module/system/bin/*
 !module/system/bin/.gitkeep
+
+*.jks
+keystore/

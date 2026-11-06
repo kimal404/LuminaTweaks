@@ -49,7 +49,7 @@ data class TweaksUiState(
 )
 
 object ConfigRepository {
-    private const val CONFIG_DIR = "/data/adb/luminatweaks"
+    private const val CONFIG_DIR = "/data/adb/.config/lumina"
     private const val GLOBAL_CONFIG_PATH = "$CONFIG_DIR/config.json"
     private const val APP_CONFIG_PATH = "$CONFIG_DIR/app_config.json"
     private const val BATCH_SEP = "___LUMINA_SEP___"
@@ -83,6 +83,10 @@ object ConfigRepository {
         }
     }
 
+    private fun notifyDaemonReload() {
+        runSuCmd("nc -U /dev/socket/lumina.sock <<< 'RELOAD_CONFIG' 2>/dev/null || nc -U /data/local/tmp/lumina.sock <<< 'RELOAD_CONFIG' 2>/dev/null")
+    }
+
     fun killApp(packageName: String) {
         runSuCmd("am force-stop $packageName")
     }
@@ -102,6 +106,7 @@ object ConfigRepository {
         updater(json)
         val raw = json.toString()
         runSuCmd("echo '$raw' > $GLOBAL_CONFIG_PATH")
+        notifyDaemonReload()
     }
 
     suspend fun getTweaksState(forceRefresh: Boolean = false): TweaksUiState = withContext(Dispatchers.IO) {
@@ -226,6 +231,8 @@ object ConfigRepository {
             updateGlobalConfigInternal { it.put("lite_mode_global", enabled) }
             val propVal = if (enabled) "1" else "0"
             runSuCmd("setprop persist.lumina.litemode $propVal")
+            val confVal = if (enabled) "1" else "0"
+            runSuCmd("echo '$confVal' > $CONFIG_DIR/lite_mode.conf")
         }
     }
 
@@ -265,6 +272,7 @@ object ConfigRepository {
         ensureDir()
         val valStr = if (enabled) "1" else "0"
         runSuCmd("echo '$valStr' > $CONFIG_DIR/disable_thermal.txt && setprop persist.lumina.disable_thermal '$valStr'")
+        notifyDaemonReload()
     }
 
     suspend fun setFpsgoBypass(enabled: Boolean) = withContext(Dispatchers.IO) {
@@ -272,6 +280,7 @@ object ConfigRepository {
         ensureDir()
         val valStr = if (enabled) "1" else "0"
         runSuCmd("echo '$valStr' > $CONFIG_DIR/fpsgo_bypass.txt && setprop persist.lumina.fpsgo_bypass '$valStr'")
+        notifyDaemonReload()
     }
 
     suspend fun setGedBoost(enabled: Boolean) = withContext(Dispatchers.IO) {
@@ -279,6 +288,7 @@ object ConfigRepository {
         ensureDir()
         val valStr = if (enabled) "1" else "0"
         runSuCmd("echo '$valStr' > $CONFIG_DIR/ged_boost.txt && setprop persist.lumina.ged_boost '$valStr'")
+        notifyDaemonReload()
     }
 
     private fun loadAppConfigsInternal(): Map<String, AppProfileConfig> {
@@ -346,11 +356,14 @@ object ConfigRepository {
             }
             val rawJson = arr.toString()
             runSuCmd("echo '$rawJson' > $APP_CONFIG_PATH")
+            notifyDaemonReload()
         }
     }
 
     suspend fun getRefreshRateModes(): List<DisplayRrMode> = withContext(Dispatchers.IO) {
-        cachedTweaksState?.let { return@withContext it.rrModes }
+        cachedTweaksState?.let {
+            if (it.rrModes.isNotEmpty()) return@withContext it.rrModes
+        }
         val content = runSuCmd("cat $CONFIG_DIR/rr_modes.json 2>/dev/null")
         if (content.isBlank()) return@withContext emptyList()
         val list = mutableListOf<DisplayRrMode>()
@@ -372,13 +385,14 @@ object ConfigRepository {
 
     suspend fun setRefreshRate(id: Int?) = withContext(Dispatchers.IO) {
         cachedTweaksState = cachedTweaksState?.copy(currentRrId = id)
+        ensureDir()
         if (id != null) {
             runSuCmd("echo $id > $CONFIG_DIR/current_rr.txt")
-            runSuCmd("[ -d /data/adb/modules/luminatweaks ] && echo $id > /data/adb/modules/luminatweaks/current_rr.txt")
             runSuCmd("/system/bin/service call SurfaceFlinger 1035 i32 $id")
         } else {
-            runSuCmd("rm -f $CONFIG_DIR/current_rr.txt /data/adb/modules/luminatweaks/current_rr.txt")
+            runSuCmd("rm -f $CONFIG_DIR/current_rr.txt")
         }
+        notifyDaemonReload()
     }
 
     suspend fun setRenderer(id: String) = withContext(Dispatchers.IO) {
@@ -386,7 +400,6 @@ object ConfigRepository {
         ensureDir()
         val cmds = mutableListOf<String>()
         cmds.add("echo '$id' > $CONFIG_DIR/current_renderer.txt")
-        cmds.add("[ -d /data/adb/modules/luminatweaks ] && echo '$id' > /data/adb/modules/luminatweaks/current_renderer.txt")
         cmds.add("setprop persist.lumina.renderer '$id'")
 
         if (id == "default") {
@@ -421,5 +434,6 @@ object ConfigRepository {
             }
         }
         runSuCmd(cmds.joinToString(" && "))
+        notifyDaemonReload()
     }
 }

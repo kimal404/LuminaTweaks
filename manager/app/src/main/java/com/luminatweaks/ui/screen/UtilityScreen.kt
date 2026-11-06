@@ -81,12 +81,12 @@ fun UtilityScreen(
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             val dozeVal = runCatching {
-                val proc = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat /data/adb/luminatweaks/aggressive_doze 2>/dev/null"))
+                val proc = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat /data/adb/.config/lumina/aggressive_doze 2>/dev/null"))
                 proc.inputStream.bufferedReader().use { it.readText().trim() }
             }.getOrDefault("0")
 
             val gmsVal = runCatching {
-                val proc = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat /data/adb/luminatweaks/gms_limit 2>/dev/null"))
+                val proc = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat /data/adb/.config/lumina/gms_limit 2>/dev/null"))
                 proc.inputStream.bufferedReader().use { it.readText().trim() }
             }.getOrDefault("0")
 
@@ -240,9 +240,9 @@ fun UtilityScreen(
                                     isDozeActive = newState
                                     coroutineScope.launch(Dispatchers.IO) {
                                         val dozeCmd = if (newState) {
-                                            "echo 1 > /data/adb/luminatweaks/aggressive_doze && dumpsys deviceidle force-idle 2>/dev/null"
+                                            "echo 1 > /data/adb/.config/lumina/aggressive_doze && dumpsys deviceidle force-idle 2>/dev/null"
                                         } else {
-                                            "echo 0 > /data/adb/luminatweaks/aggressive_doze && dumpsys deviceidle unforce 2>/dev/null"
+                                            "echo 0 > /data/adb/.config/lumina/aggressive_doze && dumpsys deviceidle unforce 2>/dev/null"
                                         }
                                         runCatching {
                                             Runtime.getRuntime().exec(arrayOf("su", "-c", dozeCmd))
@@ -308,9 +308,9 @@ fun UtilityScreen(
                                     isGmsLimitActive = newState
                                     coroutineScope.launch(Dispatchers.IO) {
                                         val gmsCmd = if (newState) {
-                                            "echo 1 > /data/adb/luminatweaks/gms_limit && cmd appops set com.google.android.gms RUN_IN_BACKGROUND ignore && cmd appops set com.google.android.gms WAKE_LOCK ignore"
+                                            "echo 1 > /data/adb/.config/lumina/gms_limit && cmd appops set com.google.android.gms RUN_IN_BACKGROUND ignore && cmd appops set com.google.android.gms WAKE_LOCK ignore"
                                         } else {
-                                            "echo 0 > /data/adb/luminatweaks/gms_limit && cmd appops set com.google.android.gms RUN_IN_BACKGROUND allow && cmd appops set com.google.android.gms WAKE_LOCK allow"
+                                            "echo 0 > /data/adb/.config/lumina/gms_limit && cmd appops set com.google.android.gms RUN_IN_BACKGROUND allow && cmd appops set com.google.android.gms WAKE_LOCK allow"
                                         }
                                         runCatching {
                                             Runtime.getRuntime().exec(arrayOf("su", "-c", gmsCmd))

@@ -73,11 +73,12 @@ object LogUtil {
             mkdir -p ${d}TMP_DIR/luminatweaks
             mkdir -p ${d}TMP_DIR/system
 
-            # 1. Salin langsung berkas asli dari /data/adb/luminatweaks/
-            cp -f /data/adb/luminatweaks/*.log* ${d}TMP_DIR/luminatweaks/ 2>/dev/null
-            cp -f /data/adb/luminatweaks/*.json ${d}TMP_DIR/luminatweaks/ 2>/dev/null
-            cp -f /data/adb/luminatweaks/*.txt ${d}TMP_DIR/luminatweaks/ 2>/dev/null
-            cp -f /data/adb/luminatweaks/*.conf ${d}TMP_DIR/luminatweaks/ 2>/dev/null
+            # 1. Salin langsung berkas asli dari /data/adb/.config/lumina/
+            cp -f /data/adb/.config/lumina/*.log* ${d}TMP_DIR/luminatweaks/ 2>/dev/null
+            cp -f /data/local/tmp/lumina*.log* ${d}TMP_DIR/ 2>/dev/null
+            cp -f /data/adb/.config/lumina/*.json ${d}TMP_DIR/luminatweaks/ 2>/dev/null
+            cp -f /data/adb/.config/lumina/*.txt ${d}TMP_DIR/luminatweaks/ 2>/dev/null
+            cp -f /data/adb/.config/lumina/*.conf ${d}TMP_DIR/luminatweaks/ 2>/dev/null
 
             # Salin metadata modul untuk verifikasi instalasi
             cp -f /data/adb/modules/luminatweaks/module.prop ${d}TMP_DIR/luminatweaks/ 2>/dev/null

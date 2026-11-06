@@ -26,10 +26,12 @@ import java.io.FileOutputStream
 import java.io.InputStreamReader
 
 object DaemonManager {
-    private const val DAEMON_DIR = "/data/adb/luminatweaks"
-    private const val DAEMON_PATH = "$DAEMON_DIR/luminad"
-    private const val BOOT_SERVICE_DIR = "/data/adb/service.d"
-    private const val BOOT_SCRIPT_PATH = "$BOOT_SERVICE_DIR/luminad_boot.sh"
+    private const val TMP_DAEMON_PATH = "/data/local/tmp/luminad"
+    private val MODULE_DAEMON_CANDIDATES = listOf(
+        "/data/adb/modules/lumina_tweaks/luminad",
+        "/data/adb/modules/luminatweaks/luminad",
+        TMP_DAEMON_PATH
+    )
 
     private fun runSuCmd(cmd: String): String {
         return try {
@@ -76,29 +78,14 @@ object DaemonManager {
         !isDaemonRunning()
     }
 
-    suspend fun setupBootScript(): Boolean = withContext(Dispatchers.IO) {
-        val bootScriptContent = """
-            #!/system/bin/sh
-            while [ "${'$'}(getprop sys.boot_completed)" != "1" ]; do
-                sleep 2
-            done
-            sleep 3
-
-            DAEMON_BIN="$DAEMON_PATH"
-            if [ -f "${'$'}DAEMON_BIN" ]; then
-                chmod 755 "${'$'}DAEMON_BIN"
-                "${'$'}DAEMON_BIN" </dev/null >/dev/null 2>&1 &
-            fi
-        """.trimIndent()
-
-        val cmds = """
-            mkdir -p $BOOT_SERVICE_DIR
-            echo '$bootScriptContent' > $BOOT_SCRIPT_PATH
-            chmod 755 $BOOT_SCRIPT_PATH
-        """.trimIndent()
-
-        runSuCmd(cmds)
-        true
+    private fun getActiveDaemonPath(): String {
+        for (candidate in MODULE_DAEMON_CANDIDATES) {
+            val check = runSuCmd("[ -f $candidate ] && echo 'EXISTS'")
+            if (check.contains("EXISTS")) {
+                return candidate
+            }
+        }
+        return TMP_DAEMON_PATH
     }
 
     suspend fun deployBinary(context: Context): Boolean = withContext(Dispatchers.IO) {
@@ -112,14 +99,12 @@ object DaemonManager {
             }
 
             val cmds = """
-                mkdir -p $DAEMON_DIR
-                cp ${tempFile.absolutePath} $DAEMON_PATH
-                chmod 755 $DAEMON_PATH
+                cp ${tempFile.absolutePath} $TMP_DAEMON_PATH
+                chmod 755 $TMP_DAEMON_PATH
                 rm -f ${tempFile.absolutePath}
             """.trimIndent()
 
             runSuCmd(cmds)
-            setupBootScript()
             true
         } catch (e: Exception) {
             false
@@ -131,14 +116,14 @@ object DaemonManager {
 
         if (isDaemonRunning()) return@withContext true
 
-        val exists = runSuCmd("[ -f $DAEMON_PATH ] && echo 'OK'").contains("OK")
+        var daemonPath = getActiveDaemonPath()
+        val exists = runSuCmd("[ -f $daemonPath ] && echo 'OK'").contains("OK")
         if (!exists) {
             deployBinary(context)
-        } else {
-            setupBootScript()
+            daemonPath = TMP_DAEMON_PATH
         }
 
-        runSuCmd("$DAEMON_PATH </dev/null >/dev/null 2>&1 &")
+        runSuCmd("$daemonPath </dev/null >/dev/null 2>&1 &")
 
         var retries = 5
         while (retries > 0) {
