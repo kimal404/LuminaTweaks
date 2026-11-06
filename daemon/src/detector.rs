@@ -148,14 +148,10 @@ fn is_truthy(val: &Value) -> bool {
 }
 
 pub fn read_global_json() -> Option<Value> {
-    for path in [
-        format!("{}/config.json", CONFIG_DIR),
-        "/data/adb/modules/lumina_tweaks/config.json".to_string(),
-    ] {
-        if let Ok(content) = std::fs::read_to_string(path) {
-            if let Ok(json) = serde_json::from_str::<Value>(&content) {
-                return Some(json);
-            }
+    let path = format!("{}/config.json", CONFIG_DIR);
+    if let Ok(content) = std::fs::read_to_string(path) {
+        if let Ok(json) = serde_json::from_str::<Value>(&content) {
+            return Some(json);
         }
     }
     None
@@ -297,27 +293,23 @@ fn extract_app_config(item: &Value) -> AppConfig {
 }
 
 pub fn get_app_config(pkg: &str) -> Option<AppConfig> {
-    for cfg_path in [
-        format!("{}/app_config.json", CONFIG_DIR),
-        "/data/adb/modules/lumina_tweaks/app_config.json".to_string(),
-    ] {
-        if let Ok(content) = std::fs::read_to_string(cfg_path) {
-            if let Ok(json) = serde_json::from_str::<Value>(&content) {
-                if let Some(list) = json.as_array() {
-                    for item in list {
-                        let matches_pkg = item.get("pkg").and_then(|v| v.as_str()) == Some(pkg)
-                            || item.get("package").and_then(|v| v.as_str()) == Some(pkg)
-                            || item.get("packageName").and_then(|v| v.as_str()) == Some(pkg);
+    let cfg_path = format!("{}/app_config.json", CONFIG_DIR);
+    if let Ok(content) = std::fs::read_to_string(cfg_path) {
+        if let Ok(json) = serde_json::from_str::<Value>(&content) {
+            if let Some(list) = json.as_array() {
+                for item in list {
+                    let matches_pkg = item.get("pkg").and_then(|v| v.as_str()) == Some(pkg)
+                        || item.get("package").and_then(|v| v.as_str()) == Some(pkg)
+                        || item.get("packageName").and_then(|v| v.as_str()) == Some(pkg);
 
-                        if matches_pkg {
-                            return Some(extract_app_config(item));
-                        }
+                    if matches_pkg {
+                        return Some(extract_app_config(item));
                     }
                 }
+            }
 
-                if let Some(app_obj) = json.get(pkg) {
-                    return Some(extract_app_config(app_obj));
-                }
+            if let Some(app_obj) = json.get(pkg) {
+                return Some(extract_app_config(app_obj));
             }
         }
     }

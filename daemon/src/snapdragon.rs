@@ -62,6 +62,30 @@ impl SnapdragonEngine {
         8
     }
 
+    
+    pub fn set_thermal_throttling(bypass: bool) {
+        if !Self::is_snapdragon() {
+            return;
+        }
+
+        if bypass {
+            crate::log!("[QCOM] Disabling Adreno KGSL & MSM Thermal Throttling");
+            crate::engine::write_sysfs("/sys/module/msm_thermal/parameters/enabled", "N", true);
+            crate::engine::write_sysfs("/sys/devices/soc:qcom,bcl/mode", "disable", true);
+
+            
+            crate::engine::write_sysfs("/sys/class/kgsl/kgsl-3d0/throttling", "0", true);
+            crate::engine::write_sysfs("/sys/class/kgsl/kgsl-3d0/thermal_pwrlevel", "0", true);
+        } else {
+            crate::log!("[QCOM] Restoring Adreno KGSL & MSM Thermal Throttling");
+            crate::engine::write_sysfs("/sys/module/msm_thermal/parameters/enabled", "Y", false);
+            crate::engine::write_sysfs("/sys/devices/soc:qcom,bcl/mode", "enable", false);
+
+            crate::engine::write_sysfs("/sys/class/kgsl/kgsl-3d0/throttling", "1", false);
+            crate::engine::write_sysfs("/sys/class/kgsl/kgsl-3d0/thermal_pwrlevel", "0", false);
+        }
+    }
+
     pub fn apply_performance() {
         if !Self::is_snapdragon() {
             return;

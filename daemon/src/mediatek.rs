@@ -51,7 +51,7 @@ fn write_sysfs(path: &str, val: &str, lock: bool) -> bool {
     let res = match fs::write(path, val.as_bytes()) {
         Ok(_) => true,
         Err(e) => {
-            log!("[WARN] Failed to write '{}' to {}: {}", val, path, e);
+            crate::log!("[WARN] Failed to write '{}' to {}: {}", val, path, e);
             false
         }
     };
@@ -60,12 +60,67 @@ fn write_sysfs(path: &str, val: &str, lock: bool) -> bool {
     res
 }
 
+
+pub fn set_thermal_throttling(bypass: bool) {
+    if !is_mtk_device() {
+        return;
+    }
+
+    if bypass {
+        crate::log!("[MTK] Disabling SoC thermal throttling policies");
+
+        write_sysfs("/proc/cpufreq/cpufreq_imax_thermal_protect", "0", true);
+
+
+        write_sysfs("/proc/gpufreq/gpufreq_power_limited", "ignore_thermal_protect 1", false);
+
+        write_sysfs("/proc/ppm/enabled", "0", true);
+        for idx in [2, 3, 4, 6, 7] {
+            let policy = format!("{} 0", idx);
+            write_sysfs("/proc/ppm/policy_status", &policy, false);
+        }
+
+        
+        lock_mali_tmu(true);
+    } else {
+        crate::log!("[MTK] Restoring SoC thermal throttling policies");
+        write_sysfs("/proc/cpufreq/cpufreq_imax_thermal_protect", "1", false);
+        write_sysfs("/proc/gpufreq/gpufreq_power_limited", "ignore_thermal_protect 0", false);
+        write_sysfs("/proc/ppm/enabled", "1", false);
+        for idx in [2, 3, 4, 6, 7] {
+            let policy = format!("{} 1", idx);
+            write_sysfs("/proc/ppm/policy_status", &policy, false);
+        }
+        lock_mali_tmu(false);
+    }
+}
+
+fn lock_mali_tmu(lock: bool) {
+    let base_dirs = ["/sys/devices", "/sys/devices/platform"];
+    for base in base_dirs {
+        if let Ok(entries) = fs::read_dir(base) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|s| s.to_str()) == Some("mali") {
+                    let perm = if lock { 0o000 } else { 0o644 };
+                    for sub in ["tmu", "throttling", "tripping"] {
+                        let target = path.join(sub);
+                        if target.exists() {
+                            let _ = fs::set_permissions(&target, fs::Permissions::from_mode(perm));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub fn apply_mtk_performance() {
     if !is_mtk_device() {
         return;
     }
 
-    log!("[MTK] Applying Mali GPU & DVFSRC Performance Profile");
+    crate::log!("[MTK] Applying Mali GPU & DVFSRC Performance Profile");
     write_sysfs("/sys/class/misc/mali0/device/power_policy", "always_on", true);
     write_sysfs("/sys/class/devfreq/mtk-dvfsrc-devfreq/governor", "performance", true);
     write_sysfs("/proc/gpufreqv2/fix_target_opp_index", "0", true);
@@ -76,7 +131,7 @@ pub fn apply_mtk_balance() {
         return;
     }
 
-    log!("[MTK] Restoring Balanced Baseline");
+    crate::log!("[MTK] Restoring Balanced Baseline");
     write_sysfs("/sys/class/misc/mali0/device/power_policy", "coarse_demand", false);
     write_sysfs("/sys/class/devfreq/mtk-dvfsrc-devfreq/governor", "simple_ondemand", false);
     write_sysfs("/proc/gpufreqv2/fix_target_opp_index", "-1", false);
@@ -87,7 +142,7 @@ pub fn apply_mtk_eco() {
         return;
     }
 
-    log!("[MTK] Applying Eco Profile");
+    crate::log!("[MTK] Applying Eco Profile");
     write_sysfs("/sys/class/misc/mali0/device/power_policy", "coarse_demand", false);
     write_sysfs("/sys/class/devfreq/mtk-dvfsrc-devfreq/governor", "powersave", false);
     write_sysfs("/proc/gpufreqv2/fix_target_opp_index", "-1", false);

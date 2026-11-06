@@ -50,6 +50,7 @@ pub fn is_disable_thermal_enabled() -> bool {
 
 pub fn apply_thermal_kill(disable: bool) {
     let mode_str = if disable { "disabled" } else { "enabled" };
+
     if let Ok(entries) = fs::read_dir("/sys/class/thermal") {
         for entry in entries.flatten() {
             let fname = entry.file_name().to_string_lossy().into_owned();
@@ -58,6 +59,35 @@ pub fn apply_thermal_kill(disable: bool) {
                 write_sysfs(&path, mode_str, false);
             }
         }
+    }
+
+    let param_val = if disable { "0" } else { "1" };
+    write_sysfs("/sys/module/thermal/parameters/enabled", param_val, false);
+
+    if disable {
+        let _ = Command::new("cmd")
+            .args(["thermalservice", "override-status", "0"])
+            .status();
+    } else {
+        let _ = Command::new("cmd")
+            .args(["thermalservice", "reset"])
+            .status();
+    }
+
+    let batt_limit_val = if disable { "0" } else { "1" };
+    if let Ok(entries) = fs::read_dir("/sys/class/power_supply") {
+        for entry in entries.flatten() {
+            let limit_path = entry.path().join("thermal_limit");
+            if limit_path.exists() {
+                let _ = fs::write(&limit_path, batt_limit_val.as_bytes());
+            }
+        }
+    }
+
+    if crate::snapdragon::SnapdragonEngine::is_snapdragon() {
+        crate::snapdragon::SnapdragonEngine::set_thermal_throttling(disable);
+    } else if crate::mediatek::is_mtk_device() {
+        crate::mediatek::set_thermal_throttling(disable);
     }
 }
 
