@@ -106,13 +106,8 @@ fn apply_mtk_dvfsrc(lock_max: bool) {
         write_sysfs("/sys/kernel/helio-dvfsrc/dvfsrc_force_vcore_dvfs_opp", "0", true);
     } else {
         let _ = fs::set_permissions("/sys/kernel/helio-dvfsrc/dvfsrc_force_vcore_dvfs_opp", fs::Permissions::from_mode(0o644));
+        write_sysfs("/sys/kernel/helio-dvfsrc/dvfsrc_force_vcore_dvfs_opp", "-1", false);
     }
-
-    let (ddr_val, lock) = if lock_max {
-        ("0", true)
-    } else {
-        ("-1", false)
-    };
 
     let base_dirs = ["/sys/devices/platform", "/sys/devices/platform/soc"];
     for base in base_dirs {
@@ -124,7 +119,11 @@ fn apply_mtk_dvfsrc(lock_max: bool) {
                     let ddr_node = path.join("helio-dvfsrc/dvfsrc_req_ddr_opp");
                     if ddr_node.exists() {
                         if let Some(p) = ddr_node.to_str() {
-                            write_sysfs(p, ddr_val, lock);
+                            if lock_max {
+                                write_sysfs(p, "0", true);
+                            } else {
+                                let _ = fs::set_permissions(p, fs::Permissions::from_mode(0o644));
+                            }
                         }
                     }
                 }
