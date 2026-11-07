@@ -21,7 +21,6 @@ mod display;
 mod engine;
 mod ipc;
 mod mediatek;
-mod notifier;
 mod renderer;
 mod snapdragon;
 mod unisoc;
@@ -40,7 +39,6 @@ use detector::{
     is_lite_mode_active, is_low_power_active, is_master_enabled,
 };
 use engine::apply_thermal_kill;
-use notifier::{clear_all_notifications, send_notification, NotificationPayload};
 
 static SHUTDOWN: AtomicBool = AtomicBool::new(false);
 
@@ -144,54 +142,21 @@ impl EngineRuntime {
                     engine::performance_profile();
                     set_system_profile_prop("Performance");
                     log!("[PROFILE] Switched to Performance -> App: {:?}", target_pkg);
-                    send_notification(NotificationPayload {
-                        title: "Lumina: Performance",
-                        text: "System is now at Maximum State",
-                        toast: Some("Performance Profile Applied"),
-                        is_profile: true,
-                        chrono: true,
-                        ..Default::default()
-                    });
                 }
                 Profile::PerformanceLite => {
                     engine::performance_lite_profile();
                     set_system_profile_prop("Performance Lite");
                     log!("[PROFILE] Switched to Performance Lite -> App: {:?}", target_pkg);
-                    send_notification(NotificationPayload {
-                        title: "Lumina: Performance Lite",
-                        text: "System is now at Optimized State",
-                        toast: Some("Performance Lite Profile Applied"),
-                        is_profile: true,
-                        chrono: true,
-                        ..Default::default()
-                    });
                 }
                 Profile::Eco => {
                     engine::eco_profile();
                     set_system_profile_prop("Eco");
                     log!("[PROFILE] Switched to Eco (Power Save Active)");
-                    send_notification(NotificationPayload {
-                        title: "Lumina: Eco",
-                        text: "System is now at Endurance State",
-                        toast: Some("Applying Eco Mode"),
-                        is_profile: true,
-                        chrono: true,
-                        ..Default::default()
-                    });
                 }
                 Profile::Balance => {
                     engine::balance_profile();
                     set_system_profile_prop("Balanced");
                     log!("[PROFILE] Switched to Balanced (Dynamic Idle)");
-                    clear_all_notifications();
-                    send_notification(NotificationPayload {
-                        title: "Lumina: Balance",
-                        text: "System is now at Dynamic State",
-                        toast: Some("Balanced Profile Applied"),
-                        is_profile: true,
-                        timeout_ms: 3000,
-                        ..Default::default()
-                    });
                 }
             }
             self.current_profile = Some(target_profile);
@@ -267,8 +232,6 @@ impl EngineRuntime {
                 renderer::setrender(&global_renderer);
                 self.current_applied_renderer = global_renderer;
             }
-
-            clear_all_notifications();
         }
     }
 }
@@ -289,15 +252,6 @@ fn main() {
     IpcServer::start(Arc::clone(&shared_state));
 
     let mut utility_ctrl = UtilityController::new();
-
-    send_notification(NotificationPayload {
-        title: "Lumina: Active",
-        text: "System is now at Dynamic State",
-        toast: Some("LuminaTweaks Subsystem Active"),
-        is_profile: true,
-        timeout_ms: 5000,
-        ..Default::default()
-    });
 
     log!("[DAEMON] Subsystems online, entering main event loop");
     let mut runtime = EngineRuntime::new(Arc::clone(&shared_state));
@@ -372,15 +326,15 @@ fn main() {
                     None
                 } else if is_app_enabled(saved_pkg) {
                     if runtime.left_foreground_at.is_none() {
-                        log!("[SESSION] Focus lost from {}. 30s grace period engaged.", saved_pkg);
+                        log!("[SESSION] Focus lost from {}. 3s grace period engaged.", saved_pkg);
                         runtime.left_foreground_at = Some(Instant::now());
                     }
 
                     if let Some(left_time) = runtime.left_foreground_at {
-                        if left_time.elapsed() < Duration::from_secs(30) {
+                        if left_time.elapsed() < Duration::from_secs(3) {
                             Some(saved_pkg.clone())
                         } else {
-                            log!("[SESSION] Grace period 30s expired for {}. Dropping target.", saved_pkg);
+                            log!("[SESSION] Grace period 3s expired for {}. Dropping target.", saved_pkg);
                             runtime.active_target_pkg = None;
                             runtime.left_foreground_at = None;
                             None
