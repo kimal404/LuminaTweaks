@@ -102,11 +102,11 @@ fn lock_mtk_cpu_clocks(lock_max: bool) {
 }
 
 fn apply_mtk_dvfsrc(lock_max: bool) {
+    let vcore_node = "/sys/kernel/helio-dvfsrc/dvfsrc_force_vcore_dvfs_opp";
     if lock_max {
-        write_sysfs("/sys/kernel/helio-dvfsrc/dvfsrc_force_vcore_dvfs_opp", "0", true);
-    } else {
-        let _ = fs::set_permissions("/sys/kernel/helio-dvfsrc/dvfsrc_force_vcore_dvfs_opp", fs::Permissions::from_mode(0o644));
-        write_sysfs("/sys/kernel/helio-dvfsrc/dvfsrc_force_vcore_dvfs_opp", "-1", false);
+        write_sysfs(vcore_node, "0", true);
+    } else if Path::new(vcore_node).exists() {
+        let _ = fs::set_permissions(vcore_node, fs::Permissions::from_mode(0o644));
     }
 
     let base_dirs = ["/sys/devices/platform", "/sys/devices/platform/soc"];
