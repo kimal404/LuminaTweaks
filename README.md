@@ -11,68 +11,38 @@
 
 ---
 
-## ⚡ Overview
+## ⚡ What is LuminaTweaks?
 
-**LuminaTweaks** is a modern runtime tweak suite for dynamic performance and graphics tuning, driven by a low-overhead native Rust daemon (`luminad`) and a Jetpack Compose dashboard. It provides granular system profiling, advanced texture LOD tuning, and hardware diagnostics to ensure optimal gaming stability without sacrificing system integrity.
+**LuminaTweaks** is an automated Android root optimization module powered by a low-overhead, native Rust daemon (`luminad`) paired with a modern Jetpack Compose manager application.
 
----
-
-## 📖 Quick Guide
-
-### 🤖 Optimization
-
-* **Dynamic Profile Switcher:** Automatically switches system profiles (**Performance**, **Performance Lite**, **Balanced**, or **Eco**) based on active foreground state.
-
-### 🌐 Core Features
-
-* **Texture LOD Offset (ANGLE Pipeline):** Fine-tune texture Level of Detail from **-3** (forcing maximum 16x Anisotropic Filtering quality) up to **+4** (reducing TMU/DRAM GPU bandwidth overhead).
-* **Pixel Sharp Mode:** Force raw nearest-neighbor texture filtering for sharp, pixel-clean rendering without unwanted blur.
-* **Refresh Rate Controller:** Supports global display refresh rate presets and granular Per-App configurations with real-time hardware Hz polling.
-* **Memory & ZRAM Management:** Optimizes memory swap behavior and compression algorithms for responsive multitasking.
-* **Thermal Throttling Toggle:** Safely toggle aggressive thermal throttling restrictions for sustained framerate stability.
-* **Hardware Diagnostic Suite:** Integrated dashboard to inspect live battery health cycles, UFS storage integrity, and kernel system logs.
+Rather than running heavy polling scripts or applying static, generic sysctl tweaks, LuminaTweaks dynamically adapts system parameters, memory bus frequencies (DDR/LLCC/L3), GPU pipelines, and SoC thermal headroom in real time based on active foreground state. It is engineered to eliminate frame pacing jitter and sustain peak framerates during heavy gaming, while immediately restoring dynamic idle baselines when returning to daily tasks.
 
 ---
 
 ## 📦 Installation
 
-This is a root module compatible across modern Android root environments. Install via your preferred root manager:
+LuminaTweaks requires root privileges on Android 11+ and is compatible with:
 
-* **KernelSU**
+* **KernelSU** / **KernelSU Next**
 * **APatch**
 * **Magisk**
 
----
-
-## 🛠️ Contributing & Bug Reports
-
-We welcome contributions to make **LuminaTweaks** even better!
-
-* **Report Bugs:** Open an [Issue](https://github.com/kimal404/LuminaTweaks/issues) with detailed logs from `/data/adb/luminatweaks/luminad.log` or logcat.
-* **Pull Requests:** Fork the repository, create a branch for your feature, and submit a PR with clear documentation.
+Flash the release package through your root manager and reboot.
 
 ---
 
 ## 🙏 Credits & Acknowledgements
 
-### Core Developers
+### Core Development
+* **Author:** [@kimal404](https://github.com/kimal404)
 
-| Role | Developer |
-| :--- | :--- |
-| **Author** | [@kimal404](https://github.com/kimal404) |
-
-### Source Code & Inspirations
-
-| Project / Developer | Reference |
-| :--- | :--- |
-| **AZenith** | [@Liliya2727](https://github.com/Liliya2727) |
-| **Encore Tweaks** | [@Rem01Gaming](https://github.com/Rem01Gaming) |
+### Inspirations & Upstream References
+* **[Encore Tweaks](https://github.com/Rem01Gaming)** by [@Rem01Gaming](https://github.com/Rem01Gaming) — Low-level interconnect bus scaling, KGSL power level logic, and hardware throttling bypass architecture.
+* **[AZenith](https://github.com/Liliya2727)** by [@Liliya2727](https://github.com/Liliya2727) — Scheduler governor tuning, asynchronous sysfs dispatching, and daemon structural insights.
 
 ---
 
-## 📢 Stay Updated
-
-Get the latest updates, experimental builds, and discussions through our official channels:
+## 📢 Official Channels
 
 <p align="left">
   <a href="https://github.com/kimal404/LuminaTweaks">
@@ -87,8 +57,4 @@ Get the latest updates, experimental builds, and discussions through our officia
 
 ## ⚖️ License
 
-This project is licensed under the **Apache License 2.0**.
-
-> Licensed under the Apache License, Version 2.0 (the "License");
-> you may not use this file except in compliance with the License.
-> You may obtain a copy of the License at <http://www.apache.org/licenses/LICENSE-2.0>
+Licensed under the **Apache License 2.0**.
