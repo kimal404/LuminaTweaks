@@ -1,29 +1,38 @@
 #!/system/bin/sh
+#
+# Copyright (C) 2026 kimal
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 [ "$ARCH" = "arm64" ] || abort "! Hanya mendukung arm64"
 
 ui_print "- Memasang LuminaTweaks"
 
-# Bersihkan sisa legacy
 rm -rf /data/adb/luminatweaks 2>/dev/null
 rm -rf "$MODPATH/webroot" 2>/dev/null
 rm -rf "$MODPATH/system" 2>/dev/null
 
-# Siapkan direktori konfigurasi resmi
 mkdir -p /data/adb/.config/lumina
 
-# Hentikan proses lama jika ada
 killall -9 luminad 2>/dev/null
 pkill -9 -f luminad 2>/dev/null
 
-# Izin biner native
 if [ -f "$MODPATH/luminad" ]; then
     set_perm "$MODPATH/luminad" 0 0 0755
 else
     ui_print "! Biner luminad tidak ditemukan"
 fi
 
-# Pemasangan Manager
 if [ -f "$MODPATH/manager.apk" ]; then
     ui_print "- Memasang Manager"
 
@@ -43,7 +52,6 @@ if [ -f "$MODPATH/manager.apk" ]; then
 
     rm -f "$TMP_APK"
 
-    # Izin sistem & background execution
     pm grant com.luminatweaks android.permission.POST_NOTIFICATIONS >/dev/null 2>&1
     pm grant com.luminatweaks android.permission.QUERY_ALL_PACKAGES >/dev/null 2>&1
     pm grant com.luminatweaks com.android.permission.GET_INSTALLED_APPS >/dev/null 2>&1
@@ -54,7 +62,6 @@ if [ -f "$MODPATH/manager.apk" ]; then
     dumpsys deviceidle whitelist +com.luminatweaks >/dev/null 2>&1
 fi
 
-# Izin skrip modul
 set_perm "$MODPATH/service.sh" 0 0 0755
 set_perm "$MODPATH/post-fs-data.sh" 0 0 0755
 set_perm "$MODPATH/action.sh" 0 0 0755
