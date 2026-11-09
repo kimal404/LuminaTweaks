@@ -36,8 +36,8 @@ android {
         applicationId = "com.luminatweaks"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "2.0.1"
+        versionCode = 230
+        versionName = "2.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

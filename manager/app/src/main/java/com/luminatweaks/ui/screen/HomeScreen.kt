@@ -719,7 +719,7 @@ fun HomeDashboardContent(
                     ConnectedCardRow(
                         icon = Icons.Rounded.DeveloperBoard,
                         title = stringResource(R.string.home_manager_version),
-                        subtitle = "v${com.luminatweaks.BuildConfig.VERSION_NAME} (Release)",
+                        subtitle = "v${com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")} (Release)",
                         position = ContainerPosition.Top
                     )
                     ConnectedCardRow(

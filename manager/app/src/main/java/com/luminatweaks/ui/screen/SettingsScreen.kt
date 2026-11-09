@@ -389,7 +389,7 @@ fun SettingsScreen(
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Versi ${com.luminatweaks.BuildConfig.VERSION_NAME}",
+                                    text = "Versi ${com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")}",
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         fontSize = 12.sp,
                                         lineHeight = 16.sp
