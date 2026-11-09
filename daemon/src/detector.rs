@@ -14,14 +14,22 @@
  * limitations under the License.
  */
 
-use std::fs;
-use std::path::Path;
+use std::collections::HashSet;
+use std::fs::{self, File};
+use std::io::{BufRead, BufReader};
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use serde_json::Value;
 
 pub const CONFIG_DIR: &str = "/data/adb/.config/lumina";
+
+const GAMES_TXT_CANDIDATES: &[&str] = &[
+    "/data/adb/.config/lumina/games.txt",
+    "/data/adb/modules/luminatweaks/games.txt",
+    "/data/adb/modules/lumina_tweaks/games.txt",
+];
 
 #[derive(Debug, Clone, Default)]
 pub struct AppConfig {
@@ -58,6 +66,12 @@ pub fn get_system_prop(name: &str) -> String {
     String::new()
 }
 
+#[inline]
+pub fn sanitize_pkg_name(raw: &str) -> &str {
+    let clean = raw.trim_matches('\0').trim();
+    clean.split_once(':').map(|(base, _)| base).unwrap_or(clean).trim()
+}
+
 fn is_ignored_package(pkg: &str) -> bool {
     matches!(
         pkg,
@@ -79,6 +93,70 @@ fn is_ignored_package(pkg: &str) -> bool {
     ) || pkg.contains("inputmethod") || pkg.contains("system_server")
 }
 
+struct WhitelistState {
+    games: HashSet<String>,
+    last_mtime: Option<SystemTime>,
+    active_path: Option<PathBuf>,
+}
+
+static WHITELIST_CACHE: Mutex<Option<WhitelistState>> = Mutex::new(None);
+
+pub fn is_game_whitelisted(pkg: &str) -> bool {
+    let clean = sanitize_pkg_name(pkg);
+    let mut guard = match WHITELIST_CACHE.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+
+    let target_path = GAMES_TXT_CANDIDATES
+        .iter()
+        .map(PathBuf::from)
+        .find(|p| p.exists());
+
+    let path = match target_path {
+        Some(p) => p,
+        None => {
+            *guard = None;
+            return false;
+        }
+    };
+
+    let current_mtime = fs::metadata(&path).ok().and_then(|m| m.modified().ok());
+
+    let need_reload = match &*guard {
+        Some(state) => state.active_path.as_ref() != Some(&path) || state.last_mtime != current_mtime,
+        None => true,
+    };
+
+    if need_reload {
+        let mut new_set = HashSet::new();
+        if let Ok(file) = File::open(&path) {
+            let reader = BufReader::new(file);
+            for line in reader.lines().flatten() {
+                let trimmed = line.trim();
+                if trimmed.is_empty() || trimmed.starts_with('#') {
+                    continue;
+                }
+                let sanitized = sanitize_pkg_name(trimmed);
+                if !sanitized.is_empty() {
+                    new_set.insert(sanitized.to_string());
+                }
+            }
+        }
+        *guard = Some(WhitelistState {
+            games: new_set,
+            last_mtime: current_mtime,
+            active_path: Some(path),
+        });
+    }
+
+    if let Some(ref state) = *guard {
+        state.games.contains(clean)
+    } else {
+        false
+    }
+}
+
 pub fn get_focused_package() -> Option<String> {
     for &cgroup_path in CGROUP_TOP_APP_CANDIDATES {
         if !Path::new(cgroup_path).exists() {
@@ -94,16 +172,20 @@ pub fn get_focused_package() -> Option<String> {
 
                 let cmdline_path = format!("/proc/{}/cmdline", pid_str);
                 if let Ok(bytes) = fs::read(cmdline_path) {
-                    if let Some(pos) = bytes.iter().position(|&b| b == 0) {
-                        if let Ok(raw_pkg) = std::str::from_utf8(&bytes[..pos]) {
-                            let pkg = raw_pkg.trim();
-                            if !pkg.is_empty()
-                                && !pkg.starts_with('/')
-                                && pkg.contains('.')
-                                && !is_ignored_package(pkg)
-                            {
-                                return Some(pkg.to_string());
-                            }
+                    let raw_str = if let Some(pos) = bytes.iter().position(|&b| b == 0) {
+                        std::str::from_utf8(&bytes[..pos]).ok()
+                    } else {
+                        std::str::from_utf8(&bytes).ok()
+                    };
+
+                    if let Some(raw) = raw_str {
+                        let pkg = sanitize_pkg_name(raw);
+                        if !pkg.is_empty()
+                            && !pkg.starts_with('/')
+                            && pkg.contains('.')
+                            && !is_ignored_package(pkg)
+                        {
+                            return Some(pkg.to_string());
                         }
                     }
                 }
@@ -325,14 +407,16 @@ fn extract_app_config(item: &Value) -> AppConfig {
 }
 
 pub fn get_app_config(pkg: &str) -> Option<AppConfig> {
+    let clean_pkg = sanitize_pkg_name(pkg);
+
     let cfg_path = format!("{}/app_config.json", CONFIG_DIR);
     if let Ok(content) = std::fs::read_to_string(cfg_path) {
         if let Ok(json) = serde_json::from_str::<Value>(&content) {
             if let Some(list) = json.as_array() {
                 for item in list {
-                    let matches_pkg = item.get("pkg").and_then(|v| v.as_str()) == Some(pkg)
-                        || item.get("package").and_then(|v| v.as_str()) == Some(pkg)
-                        || item.get("packageName").and_then(|v| v.as_str()) == Some(pkg);
+                    let matches_pkg = item.get("pkg").and_then(|v| v.as_str()) == Some(clean_pkg)
+                        || item.get("package").and_then(|v| v.as_str()) == Some(clean_pkg)
+                        || item.get("packageName").and_then(|v| v.as_str()) == Some(clean_pkg);
 
                     if matches_pkg {
                         return Some(extract_app_config(item));
@@ -340,20 +424,38 @@ pub fn get_app_config(pkg: &str) -> Option<AppConfig> {
                 }
             }
 
-            if let Some(app_obj) = json.get(pkg) {
+            if let Some(app_obj) = json.get(clean_pkg) {
                 return Some(extract_app_config(app_obj));
             }
         }
+    }
+
+    if is_game_whitelisted(clean_pkg) {
+        return Some(AppConfig {
+            enabled: true,
+            lite_mode: "default".to_string(),
+            refresh_rate: "default".to_string(),
+            renderer: "default".to_string(),
+            texture_enabled: false,
+            texture_detail: 0,
+            pixel_sharp: false,
+            hard_distance: false,
+        });
     }
 
     None
 }
 
 pub fn is_app_enabled(pkg: &str) -> bool {
-    get_app_config(pkg).map(|c| c.enabled).unwrap_or(false)
+    let clean_pkg = sanitize_pkg_name(pkg);
+    if is_game_whitelisted(clean_pkg) {
+        return true;
+    }
+    get_app_config(clean_pkg).map(|c| c.enabled).unwrap_or(false)
 }
 
 pub fn is_process_alive(pkg: &str) -> bool {
+    let target = sanitize_pkg_name(pkg);
     if let Ok(entries) = std::fs::read_dir("/proc") {
         for entry in entries.flatten() {
             let name = entry.file_name();
@@ -361,11 +463,15 @@ pub fn is_process_alive(pkg: &str) -> bool {
                 if s.chars().all(|c| c.is_ascii_digit()) {
                     let cmdline_path = entry.path().join("cmdline");
                     if let Ok(cmd) = std::fs::read(cmdline_path) {
-                        if let Some(first) = cmd.split(|&b| b == 0).next() {
-                            if let Ok(proc_name) = std::str::from_utf8(first) {
-                                if proc_name == pkg || proc_name.starts_with(&format!("{}:", pkg)) {
-                                    return true;
-                                }
+                        let proc_str = if let Some(first) = cmd.split(|&b| b == 0).next() {
+                            std::str::from_utf8(first).ok()
+                        } else {
+                            std::str::from_utf8(&cmd).ok()
+                        };
+                        if let Some(raw) = proc_str {
+                            let clean = sanitize_pkg_name(raw);
+                            if clean == target {
+                                return true;
                             }
                         }
                     }
