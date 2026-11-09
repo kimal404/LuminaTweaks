@@ -286,6 +286,25 @@ pub fn sync_global_tweaks() {
     }
 }
 
+pub fn tune_schedutil_rate_limits(up_us: u64, down_us: u64) {
+    if let Ok(entries) = fs::read_dir("/sys/devices/system/cpu/cpufreq") {
+        for entry in entries.flatten() {
+            let fname = entry.file_name().to_string_lossy().into_owned();
+            if fname.starts_with("policy") {
+                let p_str = format!("/sys/devices/system/cpu/cpufreq/{}", fname);
+                let up_path = format!("{}/schedutil/up_rate_limit_us", p_str);
+                let down_path = format!("{}/schedutil/down_rate_limit_us", p_str);
+
+                write_sysfs(&up_path, &up_us.to_string(), false);
+                write_sysfs(&down_path, &down_us.to_string(), false);
+            }
+        }
+    }
+
+    write_sysfs("/sys/devices/system/cpu/cpufreq/schedutil/up_rate_limit_us", &up_us.to_string(), false);
+    write_sysfs("/sys/devices/system/cpu/cpufreq/schedutil/down_rate_limit_us", &down_us.to_string(), false);
+}
+
 fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool, max_cap_ratio: Option<u64>) {
     if let Ok(entries) = fs::read_dir("/sys/devices/system/cpu/cpufreq") {
         for entry in entries.flatten() {
@@ -386,6 +405,7 @@ pub fn performance_profile() {
 pub fn performance_lite_profile() {
     log!("[ENGINE] Applying Performance Lite Profile (72% Dynamic CPU Frequency Cap)");
     apply_universal_cpu("schedutil", true, false, Some(72));
+    tune_schedutil_rate_limits(500, 20000);
     apply_thermal_kill(false);
 
     crate::mediatek::apply_mtk_balance();
@@ -396,6 +416,7 @@ pub fn performance_lite_profile() {
 pub fn balance_profile() {
     log!("[ENGINE] Restoring Balanced Profile");
     apply_universal_cpu("schedutil", false, false, None);
+    tune_schedutil_rate_limits(2000, 4000);
     apply_thermal_kill(false);
 
     crate::mediatek::apply_mtk_balance();
@@ -410,6 +431,7 @@ pub fn restore_balance() {
 pub fn eco_profile() {
     log!("[ENGINE] Applying Eco Profile");
     apply_universal_cpu("powersave", false, false, None);
+    tune_schedutil_rate_limits(4000, 8000);
     apply_thermal_kill(false);
 
     crate::mediatek::apply_mtk_eco();
