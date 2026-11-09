@@ -58,3 +58,6 @@ module/system/bin/*
 
 *.jks
 keystore/
+
+# Local-only progress notes (never commit/push)
+PROGRESS.md
