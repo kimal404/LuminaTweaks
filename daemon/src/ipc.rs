@@ -51,8 +51,13 @@ impl IpcServer {
         }
 
         let _ = fs::remove_file(FALLBACK_SOCKET);
-        let listener = UnixListener::bind(FALLBACK_SOCKET)
-            .expect("Fatal: Gagal mengikat IPC socket pada /dev/socket maupun /data/local/tmp");
+        let listener = match UnixListener::bind(FALLBACK_SOCKET) {
+            Ok(listener) => listener,
+            Err(e) => {
+                crate::log!("[IPC] Fatal: gagal mengikat IPC socket: {}", e);
+                std::process::exit(1);
+            }
+        };
         let _ = fs::set_permissions(FALLBACK_SOCKET, fs::Permissions::from_mode(0o666));
         (listener, FALLBACK_SOCKET)
     }
@@ -72,7 +77,14 @@ impl IpcServer {
     }
 
     fn handle_client(mut stream: UnixStream, state: Arc<SharedState>) {
-        let mut reader = BufReader::new(stream.try_clone().unwrap());
+        let cloned = match stream.try_clone() {
+            Ok(cloned) => cloned,
+            Err(e) => {
+                crate::log!("[IPC] Gagal clone stream: {}", e);
+                return;
+            }
+        };
+        let mut reader = BufReader::new(cloned);
         let mut line = String::new();
 
         if reader.read_line(&mut line).is_ok() {
@@ -80,8 +92,14 @@ impl IpcServer {
             let response = match cmd {
                 "PING" => "PONG\n".to_string(),
                 "GET_STATUS" => {
-                    let prof = state.current_profile.lock().unwrap().clone();
-                    let pkg = state.active_package.lock().unwrap().clone();
+                    let prof = match state.current_profile.lock() {
+                        Ok(guard) => guard.clone(),
+                        Err(e) => e.into_inner().clone(),
+                    };
+                    let pkg = match state.active_package.lock() {
+                        Ok(guard) => guard.clone(),
+                        Err(e) => e.into_inner().clone(),
+                    };
                     let pkg_json = match pkg {
                         Some(p) => format!(r#""{}""#, p),
                         None => "null".to_string(),

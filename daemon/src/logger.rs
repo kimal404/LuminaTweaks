@@ -80,7 +80,7 @@ fn get_timestamp() -> String {
 
 pub fn init_logger() {
     INIT_LOGGER_ONCE.call_once(|| {
-        let _guard = LOG_LOCK.lock().unwrap();
+        let _guard = LOG_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         if Path::new(LOG_FILE).exists() {
             if Path::new(LOG_FILE_OLD).exists() {
                 let _ = fs::remove_file(LOG_FILE_OLD);
@@ -110,7 +110,7 @@ pub fn write_log_with_level(level: LogLevel, msg: &str) {
             .status();
     }
 
-    let _guard = LOG_LOCK.lock().unwrap();
+    let _guard = LOG_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     if let Ok(meta) = fs::metadata(LOG_FILE) {
         if meta.len() >= MAX_BYTES {
             if Path::new(LOG_FILE_OLD).exists() {
