@@ -54,6 +54,15 @@ object ConfigRepository {
     private const val APP_CONFIG_PATH = "$CONFIG_DIR/app_config.json"
     private const val BATCH_SEP = "___LUMINA_SEP___"
 
+    private val GAMELIST_CANDIDATES = listOf(
+        "/data/adb/modules/luminatweaks/gamelist.txt",
+        "/data/adb/modules_update/luminatweaks/gamelist.txt",
+        "/data/adb/.config/lumina/gamelist.txt",
+        "/data/adb/modules/luminatweaks/games.txt",
+        "/data/adb/modules_update/luminatweaks/games.txt",
+        "/data/adb/.config/lumina/games.txt"
+    )
+
     private val fileMutex = Mutex()
 
     @Volatile
@@ -331,34 +340,83 @@ object ConfigRepository {
         }
     }
 
+    private fun persistAppConfigsInternal(configs: Map<String, AppProfileConfig>) {
+        ensureDir()
+        val arr = JSONArray()
+        for (item in configs.values) {
+            val obj = JSONObject().apply {
+                put("pkg", item.pkg)
+                put("saklar_utama", item.saklarUtama)
+                put("lite_mode", item.liteMode)
+                put("refresh_rate", item.refreshRate)
+                put("renderer", item.renderer)
+                put("dnd", item.dnd)
+                put("texture_enabled", item.textureEnabled)
+                put("texture_detail", item.textureDetail)
+                put("pixel_sharp", item.pixelSharp)
+                put("hard_distance", item.hardDistance)
+            }
+            arr.put(obj)
+        }
+        runSuCmd("echo '$arr' > $APP_CONFIG_PATH")
+        notifyDaemonReload()
+    }
+
     suspend fun saveAppConfig(profile: AppProfileConfig) = withContext(Dispatchers.IO) {
         fileMutex.withLock {
-            ensureDir()
             val currentConfigs = (cachedAppConfigs ?: loadAppConfigsInternal()).toMutableMap()
             currentConfigs[profile.pkg] = profile
             cachedAppConfigs = currentConfigs
-
-            val arr = JSONArray()
-            for (item in currentConfigs.values) {
-                val obj = JSONObject().apply {
-                    put("pkg", item.pkg)
-                    put("saklar_utama", item.saklarUtama)
-                    put("lite_mode", item.liteMode)
-                    put("refresh_rate", item.refreshRate)
-                    put("renderer", item.renderer)
-                    put("dnd", item.dnd)
-                    put("texture_enabled", item.textureEnabled)
-                    put("texture_detail", item.textureDetail)
-                    put("pixel_sharp", item.pixelSharp)
-                    put("hard_distance", item.hardDistance)
-                }
-                arr.put(obj)
-            }
-            val rawJson = arr.toString()
-            runSuCmd("echo '$rawJson' > $APP_CONFIG_PATH")
-            notifyDaemonReload()
+            persistAppConfigsInternal(currentConfigs)
         }
     }
+
+    private fun loadGameWhitelist(): Set<String> {
+        val script = GAMELIST_CANDIDATES.joinToString(" ; ") { path ->
+            "[ -f \"$path\" ] && cat \"$path\" 2>/dev/null"
+        }
+        val output = runSuCmd(script)
+        if (output.isBlank()) return emptySet()
+
+        return output.lineSequence()
+            .map { it.substringBefore('#').trim() }
+            .filter { it.isNotEmpty() }
+            .map { it.substringBefore(' ').trim().substringBefore(':').trim() }
+            .filter { it.isNotEmpty() }
+            .toSet()
+    }
+
+    suspend fun syncInstalledGameWhitelist(installedPackages: Collection<String>): Map<String, AppProfileConfig> =
+        withContext(Dispatchers.IO) {
+            fileMutex.withLock {
+                val whitelist = loadGameWhitelist()
+                val targets = whitelist.intersect(installedPackages.toSet())
+                val currentConfigs = (cachedAppConfigs ?: loadAppConfigsInternal()).toMutableMap()
+
+                if (targets.isEmpty()) {
+                    cachedAppConfigs = currentConfigs
+                    return@withLock currentConfigs
+                }
+
+                var changed = false
+                for (pkg in targets) {
+                    val existing = currentConfigs[pkg]
+                    if (existing == null) {
+                        currentConfigs[pkg] = AppProfileConfig(pkg = pkg, saklarUtama = true)
+                        changed = true
+                    } else if (!existing.saklarUtama) {
+                        currentConfigs[pkg] = existing.copy(saklarUtama = true)
+                        changed = true
+                    }
+                }
+
+                if (changed) {
+                    persistAppConfigsInternal(currentConfigs)
+                }
+                cachedAppConfigs = currentConfigs
+                currentConfigs
+            }
+        }
 
     suspend fun getRefreshRateModes(): List<DisplayRrMode> = withContext(Dispatchers.IO) {
         cachedTweaksState?.let {

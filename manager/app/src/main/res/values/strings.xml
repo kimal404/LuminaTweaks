@@ -49,6 +49,7 @@
     <string name="apps_search_placeholder">Cari aplikasi atau paket...</string>
     <string name="action_clear">Hapus</string>
     <string name="apps_badge_recommended">Rekomendasi</string>
+    <string name="apps_scan_games">Pindai game terpasang</string>
     <string name="status_active_upper">AKTIF</string>
     <string name="status_inactive_upper">NONAKTIF</string>
     <string name="power_menu_title">Menu Daya</string>

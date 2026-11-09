@@ -39,6 +39,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -92,6 +93,7 @@ fun AppsScreen(
 
     var rawApps by remember { mutableStateOf(ConfigRepository.cachedApps ?: emptyList()) }
     var isLoading by remember { mutableStateOf(ConfigRepository.cachedApps == null) }
+    var isScanningGames by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var hideSystemApps by remember { mutableStateOf(true) }
     var showMoreMenu by remember { mutableStateOf(false) }
@@ -104,13 +106,17 @@ fun AppsScreen(
         appConfigs.clear()
         appConfigs.putAll(loadedConfigs)
 
-        if (ConfigRepository.cachedApps == null) {
-            val apps = ConfigRepository.loadInstalledApps(packageManager)
-            rawApps = apps
-            isLoading = false
-        } else {
-            rawApps = ConfigRepository.cachedApps!!
-            isLoading = false
+        val apps = ConfigRepository.cachedApps ?: ConfigRepository.loadInstalledApps(packageManager)
+        rawApps = apps
+        isLoading = false
+
+        isScanningGames = true
+        try {
+            val syncedConfigs = ConfigRepository.syncInstalledGameWhitelist(apps.map { it.packageName })
+            appConfigs.clear()
+            appConfigs.putAll(syncedConfigs)
+        } finally {
+            isScanningGames = false
         }
     }
 
@@ -160,6 +166,40 @@ fun AppsScreen(
                     )
                 },
                 actions = {
+                    IconButton(
+                        onClick = {
+                            if (!isScanningGames) {
+                                coroutineScope.launch {
+                                    isScanningGames = true
+                                    try {
+                                        val syncedConfigs = ConfigRepository.syncInstalledGameWhitelist(
+                                            rawApps.map { it.packageName }
+                                        )
+                                        appConfigs.clear()
+                                        appConfigs.putAll(syncedConfigs)
+                                    } finally {
+                                        isScanningGames = false
+                                    }
+                                }
+                            }
+                        },
+                        enabled = !isScanningGames
+                    ) {
+                        if (isScanningGames) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Rounded.Refresh,
+                                contentDescription = stringResource(R.string.apps_scan_games),
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+
                     Box {
                         IconButton(onClick = { showMoreMenu = true }) {
                             Icon(

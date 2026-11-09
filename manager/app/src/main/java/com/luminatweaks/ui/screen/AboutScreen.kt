@@ -150,7 +150,7 @@ fun AboutScreen(
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = stringResource(R.string.about_version_format, com.luminatweaks.BuildConfig.VERSION_NAME),
+                            text = stringResource(R.string.about_version_format, com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")),
                             style = MaterialTheme.typography.bodySmall.copy(
                                 fontSize = 12.sp,
                                 lineHeight = 16.sp
