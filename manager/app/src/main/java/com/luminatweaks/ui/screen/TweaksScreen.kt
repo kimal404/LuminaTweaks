@@ -132,8 +132,8 @@ fun TweaksScreen() {
     val cached = ConfigRepository.cachedTweaksState
     var isGlobalLiteMode by remember { mutableStateOf(cached?.isGlobalLiteMode ?: false) }
     var isDisableThermal by remember { mutableStateOf(cached?.isDisableThermal ?: false) }
-    var isDeviceMitigation by remember { mutableStateOf(cached?.isDeviceMitigation ?: false) }
-    var isGamePreload by remember { mutableStateOf(cached?.isGamePreload ?: false) }
+    var isHardwareQuirks by remember { mutableStateOf(cached?.isHardwareQuirks ?: false) }
+    var isMemoryPrewarm by remember { mutableStateOf(cached?.isMemoryPrewarm ?: false) }
 
     var rrModes by remember { mutableStateOf<List<DisplayRrMode>>(cached?.rrModes ?: emptyList()) }
     var currentRrId by remember { mutableStateOf<Int?>(cached?.currentRrId) }
@@ -159,8 +159,8 @@ fun TweaksScreen() {
         val state = ConfigRepository.getTweaksState()
         isGlobalLiteMode = state.isGlobalLiteMode
         isDisableThermal = state.isDisableThermal
-        isDeviceMitigation = state.isDeviceMitigation
-        isGamePreload = state.isGamePreload
+        isHardwareQuirks = state.isHardwareQuirks
+        isMemoryPrewarm = state.isMemoryPrewarm
         rrModes = state.rrModes
         currentRrId = state.currentRrId
         currentRendererId = state.currentRendererId
@@ -877,7 +877,7 @@ fun TweaksScreen() {
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = stringResource(R.string.tweaks_device_mitigation),
+                                    text = stringResource(R.string.tweaks_hardware_quirks),
                                     style = MaterialTheme.typography.bodyLarge.copy(
                                         fontSize = 15.5.sp,
                                         fontWeight = FontWeight.Medium
@@ -886,7 +886,7 @@ fun TweaksScreen() {
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = stringResource(R.string.tweaks_device_mitigation_desc),
+                                    text = stringResource(R.string.tweaks_hardware_quirks_desc),
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         fontSize = 12.5.sp,
                                         lineHeight = 16.sp
@@ -895,11 +895,11 @@ fun TweaksScreen() {
                                 )
                             }
                             Switch(
-                                checked = isDeviceMitigation,
+                                checked = isHardwareQuirks,
                                 onCheckedChange = { enabled ->
-                                    isDeviceMitigation = enabled
+                                    isHardwareQuirks = enabled
                                     coroutineScope.launch {
-                                        ConfigRepository.setDeviceMitigation(enabled)
+                                        ConfigRepository.setHardwareQuirks(enabled)
                                     }
                                 }
                             )
@@ -936,7 +936,7 @@ fun TweaksScreen() {
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = stringResource(R.string.tweaks_game_preload),
+                                    text = stringResource(R.string.tweaks_memory_prewarm),
                                     style = MaterialTheme.typography.bodyLarge.copy(
                                         fontSize = 15.5.sp,
                                         fontWeight = FontWeight.Medium
@@ -945,7 +945,7 @@ fun TweaksScreen() {
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = stringResource(R.string.tweaks_game_preload_desc),
+                                    text = stringResource(R.string.tweaks_memory_prewarm_desc),
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         fontSize = 12.5.sp,
                                         lineHeight = 16.sp
@@ -954,11 +954,11 @@ fun TweaksScreen() {
                                 )
                             }
                             Switch(
-                                checked = isGamePreload,
+                                checked = isMemoryPrewarm,
                                 onCheckedChange = { enabled ->
-                                    isGamePreload = enabled
+                                    isMemoryPrewarm = enabled
                                     coroutineScope.launch {
-                                        ConfigRepository.setGamePreload(enabled)
+                                        ConfigRepository.setMemoryPrewarm(enabled)
                                     }
                                 }
                             )

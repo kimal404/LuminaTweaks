@@ -130,9 +130,9 @@ impl UnisocEngine {
         }
 
         crate::log!("[UNISOC] Applying Unisoc Performance Tuning");
-        let no_perf = crate::mitigation::active("NO_PERFORMANCE_GOVERNOR");
-        let no_thermal = crate::mitigation::active("NO_THERMAL_BYPASS");
-        let no_ddr = crate::mitigation::active("NO_DDR_TWEAK");
+        let no_perf = crate::quirks::active("NO_PERFORMANCE_GOVERNOR");
+        let no_thermal = crate::quirks::active("NO_THERMAL_BYPASS");
+        let no_ddr = crate::quirks::active("NO_DDR_TWEAK");
 
         crate::engine::write_sysfs("/sys/class/misc/mali0/device/power_policy", "always_on", true);
 

@@ -13,16 +13,15 @@
 // limitations under the License.
 
 use std::fs::{self, File};
-use std::io::{BufReader, Read};
+use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const MAX_PRELOAD_BYTES: u64 = 128 * 1024 * 1024;
-const CHUNK_SIZE: usize = 64 * 1024;
+const MAX_PREWARM_BYTES: u64 = 128 * 1024 * 1024;
 
 fn is_enabled() -> bool {
     if let Some(json) = crate::detector::read_global_json() {
-        if let Some(value) = json.get("game_preload") {
+        if let Some(value) = json.get("memory_prewarm") {
             if let Some(enabled) = value.as_bool() {
                 return enabled;
             }
@@ -32,7 +31,7 @@ fn is_enabled() -> bool {
         }
     }
 
-    let prop = crate::detector::get_system_prop("persist.lumina.game_preload");
+    let prop = crate::detector::get_system_prop("persist.lumina.memory_prewarm");
     prop == "1" || prop.eq_ignore_ascii_case("true")
 }
 
@@ -53,23 +52,19 @@ fn native_libraries(apk: &Path) -> Vec<PathBuf> {
         return Vec::new();
     };
 
-    let mut libraries = Vec::new();
-    for abi in ["arm64", "arm"] {
-        let dir = parent.join("lib").join(abi);
-        let Ok(entries) = fs::read_dir(dir) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().is_some_and(|ext| ext == "so") && path.is_file() {
-                libraries.push(path);
-            }
-        }
-    }
-    libraries
+    let dir = parent.join("lib").join("arm64");
+    let Ok(entries) = fs::read_dir(dir) else {
+        return Vec::new();
+    };
+
+    entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "so") && path.is_file())
+        .collect()
 }
 
-fn preload_file(path: &Path, budget: &mut u64) -> u64 {
+fn advise_file(path: &Path, budget: &mut u64) -> u64 {
     if *budget == 0 {
         return 0;
     }
@@ -77,48 +72,56 @@ fn preload_file(path: &Path, budget: &mut u64) -> u64 {
     let Ok(file) = File::open(path) else {
         return 0;
     };
-    let mut reader = BufReader::with_capacity(CHUNK_SIZE, file);
-    let mut buffer = [0u8; CHUNK_SIZE];
-    let mut total = 0;
+    let Ok(metadata) = file.metadata() else {
+        return 0;
+    };
 
-    while *budget > 0 {
-        let limit = (*budget).min(CHUNK_SIZE as u64) as usize;
-        match reader.read(&mut buffer[..limit]) {
-            Ok(0) => break,
-            Ok(read) => {
-                total += read as u64;
-                *budget -= read as u64;
-            }
-            Err(_) => break,
-        }
+    let length = metadata.len().min(*budget);
+    if length == 0 {
+        return 0;
     }
-    total
+
+    let result = unsafe {
+        libc::posix_fadvise(
+            file.as_raw_fd(),
+            0,
+            length as libc::off_t,
+            libc::POSIX_FADV_WILLNEED,
+        )
+    };
+
+    if result == 0 {
+        *budget -= length;
+        length
+    } else {
+        0
+    }
 }
 
-fn preload_package(package: &str) -> u64 {
-    let mut budget = MAX_PRELOAD_BYTES;
+fn prewarm_package(package: &str) -> u64 {
+    let mut budget = MAX_PREWARM_BYTES;
     let mut total = 0;
 
     for apk in package_files(package) {
         if budget == 0 {
             break;
         }
-        total += preload_file(&apk, &mut budget);
+        total += advise_file(&apk, &mut budget);
         for library in native_libraries(&apk) {
             if budget == 0 {
                 break;
             }
-            total += preload_file(&library, &mut budget);
+            total += advise_file(&library, &mut budget);
         }
     }
     total
 }
 
-pub struct GamePreloader {
+pub struct MemoryPrewarm {
     last_package: Option<String>,
 }
 
-impl GamePreloader {
+impl MemoryPrewarm {
     pub fn new() -> Self {
         Self { last_package: None }
     }
@@ -142,13 +145,9 @@ impl GamePreloader {
             return;
         }
 
-        let bytes = preload_package(package);
+        let bytes = prewarm_package(package);
         if bytes > 0 {
-            crate::log!(
-                "[PRELOAD] Warmed {} MiB for {}",
-                bytes / (1024 * 1024),
-                package
-            );
+            crate::log!("[PREWARM] Advised {} KiB for {}", bytes / 1024, package);
         }
     }
 }

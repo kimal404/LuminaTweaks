@@ -1,5 +1,7 @@
 {
+  "_license": "Apache-2.0 (LuminaTweaks)",
   "global": [],
+  "writes": [],
   "devices": [
     {
       "props": {
@@ -9,7 +11,8 @@
         "NO_DDR_TWEAK",
         "NO_THERMAL_BYPASS",
         "NO_PERFORMANCE_GOVERNOR"
-      ]
+      ],
+      "writes": []
     }
   ]
 }

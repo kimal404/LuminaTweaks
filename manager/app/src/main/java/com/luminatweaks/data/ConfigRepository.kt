@@ -41,8 +41,8 @@ data class TweaksUiState(
     val isBypassFpsgo: Boolean = false,
     val isBoostGed: Boolean = true,
     val isAutoDnd: Boolean = false,
-    val isDeviceMitigation: Boolean = false,
-    val isGamePreload: Boolean = false,
+    val isHardwareQuirks: Boolean = false,
+    val isMemoryPrewarm: Boolean = false,
     val currentIoScheduler: String = "mq-deadline",
     val zramSizeGb: Int = 8,
     val zramAlgorithm: String = "zstd",
@@ -162,8 +162,8 @@ object ConfigRepository {
 
         val isLite = globalJson?.optBoolean("lite_mode_global", false) ?: false
         val isAutoDnd = globalJson?.optBoolean("auto_dnd", false) ?: false
-        val isDeviceMitigation = globalJson?.optBoolean("device_mitigation", false) ?: false
-        val isGamePreload = globalJson?.optBoolean("game_preload", false) ?: false
+        val isHardwareQuirks = globalJson?.optBoolean("hardware_quirks", false) ?: false
+        val isMemoryPrewarm = globalJson?.optBoolean("memory_prewarm", false) ?: false
         val currentIoSched = globalJson?.optString("io_scheduler", "mq-deadline")?.takeIf { it.isNotBlank() } ?: "mq-deadline"
         val zramSize = globalJson?.optInt("zram_size_gb", 8) ?: 8
         val zramAlgo = globalJson?.optString("zram_algorithm", "zstd")?.takeIf { it.isNotBlank() } ?: "zstd"
@@ -201,8 +201,8 @@ object ConfigRepository {
             isBypassFpsgo = isBypassFpsgo,
             isBoostGed = isBoostGed,
             isAutoDnd = isAutoDnd,
-            isDeviceMitigation = isDeviceMitigation,
-            isGamePreload = isGamePreload,
+            isHardwareQuirks = isHardwareQuirks,
+            isMemoryPrewarm = isMemoryPrewarm,
             currentIoScheduler = currentIoSched,
             zramSizeGb = zramSize,
             zramAlgorithm = zramAlgo,
@@ -278,21 +278,21 @@ object ConfigRepository {
         }
     }
 
-    suspend fun setDeviceMitigation(enabled: Boolean) = withContext(Dispatchers.IO) {
-        cachedTweaksState = cachedTweaksState?.copy(isDeviceMitigation = enabled)
+    suspend fun setHardwareQuirks(enabled: Boolean) = withContext(Dispatchers.IO) {
+        cachedTweaksState = cachedTweaksState?.copy(isHardwareQuirks = enabled)
         fileMutex.withLock {
-            updateGlobalConfigInternal { it.put("device_mitigation", enabled) }
+            updateGlobalConfigInternal { it.put("hardware_quirks", enabled) }
             val propVal = if (enabled) "1" else "0"
-            runSuCmd("setprop persist.lumina.device_mitigation $propVal")
+            runSuCmd("setprop persist.lumina.hardware_quirks $propVal")
         }
     }
 
-    suspend fun setGamePreload(enabled: Boolean) = withContext(Dispatchers.IO) {
-        cachedTweaksState = cachedTweaksState?.copy(isGamePreload = enabled)
+    suspend fun setMemoryPrewarm(enabled: Boolean) = withContext(Dispatchers.IO) {
+        cachedTweaksState = cachedTweaksState?.copy(isMemoryPrewarm = enabled)
         fileMutex.withLock {
-            updateGlobalConfigInternal { it.put("game_preload", enabled) }
+            updateGlobalConfigInternal { it.put("memory_prewarm", enabled) }
             val propVal = if (enabled) "1" else "0"
-            runSuCmd("setprop persist.lumina.game_preload $propVal")
+            runSuCmd("setprop persist.lumina.memory_prewarm $propVal")
         }
     }
 

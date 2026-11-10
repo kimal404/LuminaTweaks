@@ -41,12 +41,12 @@ impl ExynosEngine {
             return;
         }
         if governor == "performance"
-            && crate::mitigation::active("NO_PERFORMANCE_GOVERNOR")
+            && crate::quirks::active("NO_PERFORMANCE_GOVERNOR")
         {
             return;
         }
         let nodes: &[&str] = if governor == "performance"
-            && crate::mitigation::active("NO_DDR_TWEAK")
+            && crate::quirks::active("NO_DDR_TWEAK")
         {
             &["gpu", "mali"]
         } else {

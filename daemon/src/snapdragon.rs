@@ -105,8 +105,8 @@ impl SnapdragonEngine {
     }
 
     fn apply_bus_dcvs_async(lock_max: bool) {
-        if crate::mitigation::active("NO_DDR_TWEAK") {
-            crate::log!("[MITIGATION] DDR/bus scaling skipped");
+        if crate::quirks::active("NO_DDR_TWEAK") {
+            crate::log!("[QUIRKS] DDR/bus scaling skipped");
             return;
         }
 
@@ -215,7 +215,7 @@ impl SnapdragonEngine {
         }
 
         crate::log!("[QCOM] Applying Snapdragon Performance Profile");
-        let no_thermal = crate::mitigation::active("NO_THERMAL_BYPASS");
+        let no_thermal = crate::quirks::active("NO_THERMAL_BYPASS");
 
         crate::engine::write_sysfs("/sys/class/kgsl/kgsl-3d0/devfreq/adrenoboost", "3", true);
         crate::engine::write_sysfs("/sys/class/kgsl/kgsl-3d0/bus_split", "0", true);
@@ -293,7 +293,7 @@ impl SnapdragonEngine {
         crate::engine::write_sysfs("/sys/class/kgsl/kgsl-3d0/throttling", "1", false);
         crate::engine::write_sysfs("/sys/class/kgsl/kgsl-3d0/thermal_pwrlevel", "0", false);
 
-        let gpu_mitigated = crate::mitigation::active("QCOM_NO_GPU_POWERSAVE");
+        let gpu_mitigated = crate::quirks::active("QCOM_NO_GPU_POWERSAVE");
         if !gpu_mitigated {
             let num_pwr = fs::read_to_string("/sys/class/kgsl/kgsl-3d0/num_pwrlevels").unwrap_or_else(|_| "6".to_string());
             let target_min = num_pwr.trim().parse::<u32>().unwrap_or(6).saturating_sub(1).to_string();

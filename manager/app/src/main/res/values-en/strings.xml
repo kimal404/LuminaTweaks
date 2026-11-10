@@ -162,10 +162,10 @@ Features on this page are only active when the system is in the Performance prof
     <string name="tweak_auto_dnd_desc">Automatically enable DND when Performance profile is active</string>
     <string name="tweak_io_scheduler">I/O Scheduler</string>
     <string name="tweak_io_scheduler_desc">UFS/eMMC storage I/O queue scheduling algorithm</string>
-    <string name="tweaks_device_mitigation">Device Mitigation</string>
-    <string name="tweaks_device_mitigation_desc">Skip risky tweaks on incompatible hardware</string>
-    <string name="tweaks_game_preload">Game Preload</string>
-    <string name="tweaks_game_preload_desc">Warm game APK and native libraries into page cache</string>
+    <string name="tweaks_hardware_quirks">Hardware Quirk Rules</string>
+    <string name="tweaks_hardware_quirks_desc">Apply device-specific sysfs/procfs rules from hardware_quirks.json</string>
+    <string name="tweaks_memory_prewarm">Memory Prewarm</string>
+    <string name="tweaks_memory_prewarm_desc">Ask the kernel to page-cache APKs and native libraries</string>
     <string name="dialog_reboot_required_title">Reboot Required</string>
     <string name="dialog_reboot_required_desc">A device reboot is required to activate the LuminaTweaks module and start the core daemon properly. Would you like to reboot now?</string>
     <string name="action_reboot_now">Reboot Now</string>

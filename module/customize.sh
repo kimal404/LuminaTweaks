@@ -102,7 +102,7 @@ if [ -f "$MODPATH/manager.apk" ]; then
     dumpsys deviceidle whitelist +com.luminatweaks >/dev/null 2>&1
 fi
 
-[ -f "$MODPATH/device_mitigation.json" ] && set_perm "$MODPATH/device_mitigation.json" 0 0 0644
+[ -f "$MODPATH/hardware_quirks.json" ] && set_perm "$MODPATH/hardware_quirks.json" 0 0 0644
 
 set_perm "$MODPATH/service.sh" 0 0 0755
 set_perm "$MODPATH/post-fs-data.sh" 0 0 0755

@@ -24,8 +24,8 @@ mod exynos;
 mod fps;
 mod ipc;
 mod mediatek;
-mod mitigation;
-mod preload;
+mod prewarm;
+mod quirks;
 mod renderer;
 mod snapdragon;
 mod tensor;
@@ -305,7 +305,7 @@ fn main() {
     }
 
     log!("[DAEMON] Initializing luminad subsystem...");
-    mitigation::init();
+    quirks::init();
     display::init_display_subsystem();
     renderer::init_renderer_subsystem();
     engine::sync_global_tweaks();
@@ -327,7 +327,7 @@ fn main() {
     let mut config_watcher = watcher::ConfigWatcher::new();
     let mut last_pkg_for_texture: Option<String> = None;
     let mut fps_monitor = fps::FpsMonitor::new();
-    let mut game_preloader = preload::GamePreloader::new();
+    let mut memory_prewarm = prewarm::MemoryPrewarm::new();
 
     loop {
         if SHUTDOWN.load(Ordering::Relaxed) {
@@ -378,8 +378,8 @@ fn main() {
 
         if config_just_changed {
             log!("[CONFIG] Reloading system tweaks...");
-            mitigation::reload();
-            game_preloader.reset();
+            quirks::reload();
+            memory_prewarm.reset();
             engine::sync_global_tweaks();
         }
 
@@ -461,7 +461,7 @@ fn main() {
         };
 
         fps_monitor.observe(current_target.as_deref());
-        game_preloader.observe(current_target.as_deref());
+        memory_prewarm.observe(current_target.as_deref());
 
         let sleep_ms = if current_target.is_some() {
             400
