@@ -17,12 +17,19 @@ use texture::TextureController;
 #[macro_use]
 mod logger;
 mod detector;
+mod devfreq;
 mod display;
 mod engine;
+mod exynos;
+mod fps;
 mod ipc;
 mod mediatek;
+mod mitigation;
+mod preload;
 mod renderer;
 mod snapdragon;
+mod tensor;
+mod thermal;
 mod unisoc;
 mod utility;
 mod watcher;
@@ -89,6 +96,7 @@ struct EngineRuntime {
     left_foreground_at: Option<Instant>,
     dnd_override: bool,
     prev_zen_mode: String,
+    thermal: thermal::ThermalWatchdog,
     shared_state: Arc<SharedState>,
 }
 
@@ -107,6 +115,7 @@ impl EngineRuntime {
             left_foreground_at: None,
             dnd_override: false,
             prev_zen_mode: "0".to_string(),
+            thermal: thermal::ThermalWatchdog::new(),
             shared_state,
         }
     }
@@ -160,6 +169,23 @@ impl EngineRuntime {
             Profile::Eco
         } else {
             Profile::Balance
+        };
+
+        let target_profile = if target_pkg.is_some() {
+            match self.thermal.sample() {
+                thermal::ThermalLevel::Critical => match target_profile {
+                    Profile::Performance | Profile::PerformanceLite => Profile::Balance,
+                    other => other,
+                },
+                thermal::ThermalLevel::Warm => match target_profile {
+                    Profile::Performance => Profile::PerformanceLite,
+                    other => other,
+                },
+                thermal::ThermalLevel::Normal => target_profile,
+            }
+        } else {
+            self.thermal.reset();
+            target_profile
         };
 
         let is_profile_changing = self.current_profile != Some(target_profile);
@@ -236,6 +262,7 @@ impl EngineRuntime {
     }
 
     fn reset_to_balance(&mut self) {
+        self.thermal.reset();
         if self.dnd_override {
             let restore = engine::zen_to_dnd_arg(&self.prev_zen_mode);
             engine::set_dnd_mode(restore);
@@ -278,6 +305,7 @@ fn main() {
     }
 
     log!("[DAEMON] Initializing luminad subsystem...");
+    mitigation::init();
     display::init_display_subsystem();
     renderer::init_renderer_subsystem();
     engine::sync_global_tweaks();
@@ -298,6 +326,8 @@ fn main() {
     }
     let mut config_watcher = watcher::ConfigWatcher::new();
     let mut last_pkg_for_texture: Option<String> = None;
+    let mut fps_monitor = fps::FpsMonitor::new();
+    let mut game_preloader = preload::GamePreloader::new();
 
     loop {
         if SHUTDOWN.load(Ordering::Relaxed) {
@@ -348,6 +378,8 @@ fn main() {
 
         if config_just_changed {
             log!("[CONFIG] Reloading system tweaks...");
+            mitigation::reload();
+            game_preloader.reset();
             engine::sync_global_tweaks();
         }
 
@@ -427,6 +459,9 @@ fn main() {
             last_pkg_for_texture = None;
             None
         };
+
+        fps_monitor.observe(current_target.as_deref());
+        game_preloader.observe(current_target.as_deref());
 
         let sleep_ms = if current_target.is_some() {
             400

@@ -43,6 +43,7 @@ import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.Memory
+import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Thermostat
@@ -55,6 +56,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -130,6 +132,8 @@ fun TweaksScreen() {
     val cached = ConfigRepository.cachedTweaksState
     var isGlobalLiteMode by remember { mutableStateOf(cached?.isGlobalLiteMode ?: false) }
     var isDisableThermal by remember { mutableStateOf(cached?.isDisableThermal ?: false) }
+    var isDeviceMitigation by remember { mutableStateOf(cached?.isDeviceMitigation ?: false) }
+    var isGamePreload by remember { mutableStateOf(cached?.isGamePreload ?: false) }
 
     var rrModes by remember { mutableStateOf<List<DisplayRrMode>>(cached?.rrModes ?: emptyList()) }
     var currentRrId by remember { mutableStateOf<Int?>(cached?.currentRrId) }
@@ -155,6 +159,8 @@ fun TweaksScreen() {
         val state = ConfigRepository.getTweaksState()
         isGlobalLiteMode = state.isGlobalLiteMode
         isDisableThermal = state.isDisableThermal
+        isDeviceMitigation = state.isDeviceMitigation
+        isGamePreload = state.isGamePreload
         rrModes = state.rrModes
         currentRrId = state.currentRrId
         currentRendererId = state.currentRendererId
@@ -720,6 +726,7 @@ fun TweaksScreen() {
 
             item {
                 val addTopShape = getConnectedContainerShape(ContainerPosition.Top, innerRadius = 4.dp)
+                val addMiddleShape = getConnectedContainerShape(ContainerPosition.Middle, innerRadius = 4.dp)
                 val addBottomShape = getConnectedContainerShape(ContainerPosition.Bottom, innerRadius = 4.dp)
 
                 Column(
@@ -786,7 +793,7 @@ fun TweaksScreen() {
                     Card(
                         onClick = { showIoSchedulerDialog = true },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = addBottomShape,
+                        shape = addMiddleShape,
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                         )
@@ -836,6 +843,124 @@ fun TweaksScreen() {
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = addMiddleShape,
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Security,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.tweaks_device_mitigation),
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontSize = 15.5.sp,
+                                        fontWeight = FontWeight.Medium
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = stringResource(R.string.tweaks_device_mitigation_desc),
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 12.5.sp,
+                                        lineHeight = 16.sp
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = isDeviceMitigation,
+                                onCheckedChange = { enabled ->
+                                    isDeviceMitigation = enabled
+                                    coroutineScope.launch {
+                                        ConfigRepository.setDeviceMitigation(enabled)
+                                    }
+                                }
+                            )
+                        }
+                    }
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = addBottomShape,
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Speed,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.tweaks_game_preload),
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontSize = 15.5.sp,
+                                        fontWeight = FontWeight.Medium
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = stringResource(R.string.tweaks_game_preload_desc),
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 12.5.sp,
+                                        lineHeight = 16.sp
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = isGamePreload,
+                                onCheckedChange = { enabled ->
+                                    isGamePreload = enabled
+                                    coroutineScope.launch {
+                                        ConfigRepository.setGamePreload(enabled)
+                                    }
+                                }
                             )
                         }
                     }

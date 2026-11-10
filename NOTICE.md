@@ -14,14 +14,16 @@ This project contains inspirations, logic architectures, and structural concepts
 * **AZenith**
   Developed by @Liliya2727
   Source: https://github.com/Liliya2727
-  Contribution: Architecture references and dynamic profile workflow inspirations.
+  Contribution: Conceptual architecture references for dynamic profile workflow.
+  No AZenith source code is included in LuminaTweaks.
 
 * **Encore Tweaks**
   Copyright (C) 2024-2026 Rem01Gaming
   Source: https://github.com/Rem01Gaming/encore
-  Contribution: System optimization methodology, tweak structure references, and
+  Contribution: System optimization methodology, tweak structure references,
   the `IProcessObserver` / ActivityManager binder monitoring approach used by
-  `daemon/src/binder/`. Licensed under the Apache License, Version 2.0.
+  `daemon/src/binder/`, and the sysfs tuning values/sequencing adapted in
+  `daemon/src/engine.rs`. Licensed under the Apache License, Version 2.0.
 
 * **Binder Resolver**
   Copyright (C) 2026 Rem01Gaming

@@ -12,6 +12,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Sysfs tuning values and sequencing are adapted from Encore Tweaks
+ * (Copyright (C) 2024-2026 Rem01Gaming), licensed under Apache-2.0.
  */
 
 use std::fs;
@@ -81,6 +84,11 @@ pub fn is_disable_thermal_enabled() -> bool {
 }
 
 pub fn apply_thermal_kill(disable: bool) {
+    if disable && crate::mitigation::active("NO_THERMAL_BYPASS") {
+        crate::log!("[THERMAL] Bypass skipped by device mitigation");
+        return;
+    }
+
     let mode_str = if disable { "disabled" } else { "enabled" };
 
     if let Ok(entries) = fs::read_dir("/sys/class/thermal") {
@@ -338,6 +346,13 @@ pub fn tune_schedutil_rate_limits(up_us: u64, down_us: u64) {
 }
 
 fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool, max_cap_ratio: Option<u64>) {
+    let gov = if gov == "performance" && crate::mitigation::active("NO_PERFORMANCE_GOVERNOR") {
+        crate::log!("[MITIGATION] performance governor disabled, using schedutil");
+        "schedutil"
+    } else {
+        gov
+    };
+
     if let Ok(entries) = fs::read_dir("/sys/devices/system/cpu/cpufreq") {
         for entry in entries.flatten() {
             let fname = entry.file_name().to_string_lossy().into_owned();
@@ -432,6 +447,8 @@ pub fn performance_profile() {
     crate::mediatek::apply_mtk_performance();
     crate::snapdragon::SnapdragonEngine::apply_performance();
     crate::unisoc::UnisocEngine::apply_performance();
+    crate::exynos::ExynosEngine::apply_performance();
+    crate::tensor::TensorEngine::apply_performance();
 }
 
 pub fn performance_lite_profile() {
@@ -443,6 +460,8 @@ pub fn performance_lite_profile() {
     crate::mediatek::apply_mtk_balance();
     crate::snapdragon::SnapdragonEngine::apply_balance();
     crate::unisoc::UnisocEngine::apply_balance();
+    crate::exynos::ExynosEngine::apply_balance();
+    crate::tensor::TensorEngine::apply_balance();
 }
 
 pub fn balance_profile() {
@@ -454,6 +473,8 @@ pub fn balance_profile() {
     crate::mediatek::apply_mtk_balance();
     crate::snapdragon::SnapdragonEngine::apply_balance();
     crate::unisoc::UnisocEngine::apply_balance();
+    crate::exynos::ExynosEngine::apply_balance();
+    crate::tensor::TensorEngine::apply_balance();
 }
 
 pub fn restore_balance() {
@@ -469,4 +490,6 @@ pub fn eco_profile() {
     crate::mediatek::apply_mtk_eco();
     crate::snapdragon::SnapdragonEngine::apply_balance();
     crate::unisoc::UnisocEngine::apply_balance();
+    crate::exynos::ExynosEngine::apply_eco();
+    crate::tensor::TensorEngine::apply_eco();
 }

@@ -30,6 +30,10 @@ pub fn is_mtk_device() -> bool {
     let hardware = get_prop("ro.hardware").to_lowercase();
     let soc_mfg = get_prop("ro.soc.manufacturer").to_lowercase();
 
+    if soc_mfg.contains("samsung") || platform.contains("exynos") || hardware.contains("exynos") {
+        return false;
+    }
+
     let is_mtk_prop = platform.starts_with("mt")
         || platform.contains("mediatek")
         || hardware.starts_with("mt")
@@ -186,12 +190,22 @@ pub fn apply_mtk_performance() {
     }
 
     crate::log!("[MTK] Applying Performance Profile");
+    let no_perf = crate::mitigation::active("NO_PERFORMANCE_GOVERNOR");
+    let no_thermal = crate::mitigation::active("NO_THERMAL_BYPASS");
+    let no_ddr = crate::mitigation::active("NO_DDR_TWEAK");
+
     write_sysfs("/sys/class/misc/mali0/device/power_policy", "always_on", true);
-    write_sysfs("/sys/class/devfreq/mtk-dvfsrc-devfreq/governor", "performance", true);
+    write_sysfs(
+        "/sys/class/devfreq/mtk-dvfsrc-devfreq/governor",
+        if no_perf { "simple_ondemand" } else { "performance" },
+        !no_perf,
+    );
     write_sysfs("/proc/gpufreqv2/fix_target_opp_index", "0", true);
 
     write_sysfs("/sys/kernel/fpsgo/common/force_onoff", "0", true);
-    write_sysfs("/sys/kernel/eara_thermal/enable", "0", true);
+    if !no_thermal {
+        write_sysfs("/sys/kernel/eara_thermal/enable", "0", true);
+    }
     write_sysfs("/sys/devices/system/cpu/eas/enable", "0", true);
 
     write_sysfs("/sys/kernel/ged/hal/gpu_boost_level", "100", true);
@@ -200,13 +214,19 @@ pub fn apply_mtk_performance() {
     write_sysfs("/sys/pnpmgr/fpsgo_boost/boost_enable", "1", true);
     write_sysfs("/sys/pnpmgr/fpsgo_boost/boost_mode", "1", true);
 
-    write_sysfs("/proc/cpufreq/cpufreq_cci_mode", "1", true);
+    if !no_ddr {
+        write_sysfs("/proc/cpufreq/cpufreq_cci_mode", "1", true);
+    }
     write_sysfs("/sys/module/sspm_v3/holders/ged/parameters/is_GED_KPI_enabled", "0", true);
-    write_sysfs("/sys/devices/platform/boot_dramboost/dramboost/dramboost", "1", true);
+    if !no_ddr {
+        write_sysfs("/sys/devices/platform/boot_dramboost/dramboost/dramboost", "1", true);
+    }
     write_sysfs("/proc/mtk_batoc_throttling/battery_oc_protect_stop", "stop 1", true);
     write_sysfs("/proc/perfmgr/syslimiter/syslimiter_force_disable", "0", false);
 
-    apply_mtk_dvfsrc(true);
+    if !no_ddr {
+        apply_mtk_dvfsrc(true);
+    }
     lock_mtk_cpu_clocks(true);
 }
 

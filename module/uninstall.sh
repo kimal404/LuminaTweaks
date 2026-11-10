@@ -28,5 +28,6 @@ rm -f /data/local/tmp/lumina-binder.log*
 
 rm -rf /data/adb/luminatweaks
 rm -f /data/adb/service.d/luminad_boot.sh
+rm -f "${0%/*}/.bootcount" "${0%/*}/.bootloop_guard" "${0%/*}/disable"
 
 exit 0

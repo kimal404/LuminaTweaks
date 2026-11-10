@@ -163,6 +163,10 @@ Fitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. P
     <string name="tweak_auto_dnd_desc">Aktifkan DND otomatis saat profil Performance aktif</string>
     <string name="tweak_io_scheduler">I/O Scheduler</string>
     <string name="tweak_io_scheduler_desc">Algoritma antrean I/O penyimpanan UFS/eMMC</string>
+    <string name="tweaks_device_mitigation">Mitigasi Perangkat</string>
+    <string name="tweaks_device_mitigation_desc">Lewati tweak berisiko pada perangkat yang tidak kompatibel</string>
+    <string name="tweaks_game_preload">Preload Game</string>
+    <string name="tweaks_game_preload_desc">Muat APK dan library native game ke page cache</string>
     <string name="dialog_select_io_scheduler">Pilih I/O Scheduler</string>
     <string name="memory_zram_title">Memory &amp; ZRAM</string>
     <string name="memory_status_title">Status Memori &amp; Swap</string>
@@ -198,8 +202,8 @@ Fitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. P
     <string name="utility_doze_desc">Memaksa perangkat segera masuk ke Deep Sleep sesaat setelah layar mati</string>
     <string name="utility_gms_title">GMS Battery Limiter</string>
     <string name="utility_gms_desc">Membatasi wakelock dan aktivitas background berlebih Google Play Services</string>
-    <string name="dialog_reboot_required_title">Reboot Required</string>
-    <string name="dialog_reboot_required_desc">A device reboot is required to activate the LuminaTweaks module and start the core daemon properly. Would you like to reboot now?</string>
-    <string name="action_reboot_now">Reboot Now</string>
-    <string name="action_later">Later</string>
+    <string name="dialog_reboot_required_title">Perlu Reboot</string>
+    <string name="dialog_reboot_required_desc">Perangkat perlu di-reboot agar modul LuminaTweaks aktif dan daemon core berjalan dengan benar. Reboot sekarang?</string>
+    <string name="action_reboot_now">Reboot Sekarang</string>
+    <string name="action_later">Nanti</string>
 </resources>

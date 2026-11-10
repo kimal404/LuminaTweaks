@@ -23,6 +23,7 @@ rm -rf "$MODPATH/webroot" 2>/dev/null
 rm -rf "$MODPATH/system" 2>/dev/null
 
 mkdir -p /data/adb/.config/lumina
+rm -f "$MODPATH/.bootcount" "$MODPATH/.bootloop_guard" "$MODPATH/disable"
 
 BASE_GAMELIST="$MODPATH/gamelist.txt"
 GEN_GAMELIST="$MODPATH/gamelist.json"
@@ -100,6 +101,8 @@ if [ -f "$MODPATH/manager.apk" ]; then
     appops set com.luminatweaks RUN_IN_BACKGROUND allow >/dev/null 2>&1
     dumpsys deviceidle whitelist +com.luminatweaks >/dev/null 2>&1
 fi
+
+[ -f "$MODPATH/device_mitigation.json" ] && set_perm "$MODPATH/device_mitigation.json" 0 0 0644
 
 set_perm "$MODPATH/service.sh" 0 0 0755
 set_perm "$MODPATH/post-fs-data.sh" 0 0 0755

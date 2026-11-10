@@ -41,6 +41,8 @@ data class TweaksUiState(
     val isBypassFpsgo: Boolean = false,
     val isBoostGed: Boolean = true,
     val isAutoDnd: Boolean = false,
+    val isDeviceMitigation: Boolean = false,
+    val isGamePreload: Boolean = false,
     val currentIoScheduler: String = "mq-deadline",
     val zramSizeGb: Int = 8,
     val zramAlgorithm: String = "zstd",
@@ -160,6 +162,8 @@ object ConfigRepository {
 
         val isLite = globalJson?.optBoolean("lite_mode_global", false) ?: false
         val isAutoDnd = globalJson?.optBoolean("auto_dnd", false) ?: false
+        val isDeviceMitigation = globalJson?.optBoolean("device_mitigation", false) ?: false
+        val isGamePreload = globalJson?.optBoolean("game_preload", false) ?: false
         val currentIoSched = globalJson?.optString("io_scheduler", "mq-deadline")?.takeIf { it.isNotBlank() } ?: "mq-deadline"
         val zramSize = globalJson?.optInt("zram_size_gb", 8) ?: 8
         val zramAlgo = globalJson?.optString("zram_algorithm", "zstd")?.takeIf { it.isNotBlank() } ?: "zstd"
@@ -197,6 +201,8 @@ object ConfigRepository {
             isBypassFpsgo = isBypassFpsgo,
             isBoostGed = isBoostGed,
             isAutoDnd = isAutoDnd,
+            isDeviceMitigation = isDeviceMitigation,
+            isGamePreload = isGamePreload,
             currentIoScheduler = currentIoSched,
             zramSizeGb = zramSize,
             zramAlgorithm = zramAlgo,
@@ -240,6 +246,18 @@ object ConfigRepository {
         if (prop.isNotBlank()) prop else "Balanced"
     }
 
+    suspend fun getCurrentFps(): String = withContext(Dispatchers.IO) {
+        val raw = runSuCmd("cat $CONFIG_DIR/fps.txt 2>/dev/null").trim()
+        if (raw.isBlank()) return@withContext "-"
+
+        val parts = raw.split(Regex("\\s+"))
+        val fps = parts.getOrNull(0)?.toFloatOrNull() ?: return@withContext "-"
+        val timestamp = parts.getOrNull(1)?.toLongOrNull() ?: 0L
+        val age = System.currentTimeMillis() - timestamp
+
+        if (fps <= 0f || (timestamp > 0L && age > 5000L)) "-" else fps.toInt().toString()
+    }
+
     suspend fun setGlobalLiteMode(enabled: Boolean) = withContext(Dispatchers.IO) {
         cachedTweaksState = cachedTweaksState?.copy(isGlobalLiteMode = enabled)
         fileMutex.withLock {
@@ -257,6 +275,24 @@ object ConfigRepository {
             updateGlobalConfigInternal { it.put("auto_dnd", enabled) }
             val propVal = if (enabled) "1" else "0"
             runSuCmd("setprop persist.lumina.autodnd $propVal")
+        }
+    }
+
+    suspend fun setDeviceMitigation(enabled: Boolean) = withContext(Dispatchers.IO) {
+        cachedTweaksState = cachedTweaksState?.copy(isDeviceMitigation = enabled)
+        fileMutex.withLock {
+            updateGlobalConfigInternal { it.put("device_mitigation", enabled) }
+            val propVal = if (enabled) "1" else "0"
+            runSuCmd("setprop persist.lumina.device_mitigation $propVal")
+        }
+    }
+
+    suspend fun setGamePreload(enabled: Boolean) = withContext(Dispatchers.IO) {
+        cachedTweaksState = cachedTweaksState?.copy(isGamePreload = enabled)
+        fileMutex.withLock {
+            updateGlobalConfigInternal { it.put("game_preload", enabled) }
+            val propVal = if (enabled) "1" else "0"
+            runSuCmd("setprop persist.lumina.game_preload $propVal")
         }
     }
 

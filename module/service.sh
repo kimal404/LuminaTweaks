@@ -23,6 +23,9 @@ done
 
 sleep 3
 
+echo 0 > "$MODDIR/.bootcount"
+rm -f "$MODDIR/.bootloop_guard"
+
 pm grant com.luminatweaks android.permission.POST_NOTIFICATIONS >/dev/null 2>&1
 cmd appops set com.luminatweaks POST_NOTIFICATION allow >/dev/null 2>&1
 cmd appops set com.luminatweaks AUTO_START allow >/dev/null 2>&1

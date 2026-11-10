@@ -1,0 +1,15 @@
+{
+  "global": [],
+  "devices": [
+    {
+      "props": {
+        "ro.kernel.qemu": "1"
+      },
+      "items": [
+        "NO_DDR_TWEAK",
+        "NO_THERMAL_BYPASS",
+        "NO_PERFORMANCE_GOVERNOR"
+      ]
+    }
+  ]
+}

@@ -130,6 +130,9 @@ impl UnisocEngine {
         }
 
         crate::log!("[UNISOC] Applying Unisoc Performance Tuning");
+        let no_perf = crate::mitigation::active("NO_PERFORMANCE_GOVERNOR");
+        let no_thermal = crate::mitigation::active("NO_THERMAL_BYPASS");
+        let no_ddr = crate::mitigation::active("NO_DDR_TWEAK");
 
         crate::engine::write_sysfs("/sys/class/misc/mali0/device/power_policy", "always_on", true);
 
@@ -138,7 +141,11 @@ impl UnisocEngine {
                 let name = entry.file_name().to_string_lossy().into_owned();
                 if name.contains("gpu") || name.contains("mali") {
                     let gov = format!("/sys/class/devfreq/{}/governor", name);
-                    crate::engine::write_sysfs(&gov, "performance", true);
+                    crate::engine::write_sysfs(
+                        &gov,
+                        if no_perf { "simple_ondemand" } else { "performance" },
+                        !no_perf,
+                    );
                 }
             }
         }
@@ -146,17 +153,21 @@ impl UnisocEngine {
         crate::engine::write_sysfs("/sys/class/devfreq/scene-frequency/sprd_governor/scene_boost_dfs", "1", true);
         crate::engine::write_sysfs("/sys/class/devfreq/scene-frequency/sprd_governor/backlight_boost", "1", false);
 
-        if let Ok(entries) = fs::read_dir("/sys/class/devfreq") {
-            for entry in entries.flatten() {
-                let name = entry.file_name().to_string_lossy().into_owned();
-                if name.contains("mddr") || name.contains("dram") || name.contains("sprd-dvfs") {
-                    let gov = format!("/sys/class/devfreq/{}/governor", name);
-                    crate::engine::write_sysfs(&gov, "performance", false);
+        if !no_ddr {
+            if let Ok(entries) = fs::read_dir("/sys/class/devfreq") {
+                for entry in entries.flatten() {
+                    let name = entry.file_name().to_string_lossy().into_owned();
+                    if name.contains("mddr") || name.contains("dram") || name.contains("sprd-dvfs") {
+                        let gov = format!("/sys/class/devfreq/{}/governor", name);
+                        crate::engine::write_sysfs(&gov, "performance", false);
+                    }
                 }
             }
         }
 
-        crate::engine::write_sysfs("/sys/module/sprd_thermal/parameters/enable", "0", true);
+        if !no_thermal {
+            crate::engine::write_sysfs("/sys/module/sprd_thermal/parameters/enable", "0", true);
+        }
 
         Self::apply_gpu_devfreq(true);
         Self::lock_cpu_clocks(true);

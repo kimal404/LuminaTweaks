@@ -143,6 +143,7 @@ fun HomeScreen() {
     var isChecking by remember { mutableStateOf(true) }
     var daemonPid by remember { mutableStateOf<String?>(null) }
     var currentProfile by remember { mutableStateOf("Balanced") }
+    var currentFps by remember { mutableStateOf("-") }
     var showRebootDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -157,11 +158,13 @@ fun HomeScreen() {
             val initialTemp = DeviceUtil.getBatteryTemperature(context)
             val initialPid = DaemonManager.getDaemonPid()
             val initialProfile = if (initialPid != null) ConfigRepository.getCurrentProfile() else "-"
+            val initialFps = if (initialPid != null) ConfigRepository.getCurrentFps() else "-"
 
             withContext(Dispatchers.Main) {
                 batteryTemp = initialTemp
                 daemonPid = initialPid
                 currentProfile = initialProfile
+                currentFps = initialFps
                 isChecking = false
             }
 
@@ -170,11 +173,13 @@ fun HomeScreen() {
                 val currentTemp = DeviceUtil.getBatteryTemperature(context)
                 val currentPid = DaemonManager.getDaemonPid()
                 val profileText = if (currentPid != null) ConfigRepository.getCurrentProfile() else "-"
+                val fpsText = if (currentPid != null) ConfigRepository.getCurrentFps() else "-"
 
                 withContext(Dispatchers.Main) {
                     batteryTemp = currentTemp
                     daemonPid = currentPid
                     currentProfile = profileText
+                    currentFps = fpsText
                 }
             }
         }
@@ -268,6 +273,7 @@ fun HomeScreen() {
                         daemonPid = daemonPid,
                         isChecking = isChecking,
                         currentProfile = currentProfile,
+                        currentFps = currentFps,
                         kernelVersion = kernelVersion,
                         deviceModel = deviceModel,
                         onRequestRebootDialog = { showRebootDialog = true },
@@ -319,6 +325,7 @@ fun HomeScreen() {
                         daemonPid = daemonPid,
                         isChecking = isChecking,
                         currentProfile = currentProfile,
+                        currentFps = currentFps,
                         kernelVersion = kernelVersion,
                         deviceModel = deviceModel,
                         onRequestRebootDialog = { showRebootDialog = true },
@@ -344,6 +351,7 @@ fun HomeDashboardContent(
     daemonPid: String?,
     isChecking: Boolean = false,
     currentProfile: String,
+    currentFps: String,
     kernelVersion: String,
     deviceModel: String,
     onRequestRebootDialog: () -> Unit,
@@ -697,7 +705,7 @@ fun HomeDashboardContent(
                             }
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(
-                                text = currentProfile,
+                                text = if (currentFps == "-") currentProfile else "$currentProfile  |  $currentFps FPS",
                                 style = MaterialTheme.typography.titleLarge.copy(
                                     fontSize = 20.sp,
                                     fontWeight = FontWeight.SemiBold
