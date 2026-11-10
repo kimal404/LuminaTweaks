@@ -82,6 +82,15 @@ object ConfigRepository {
     @Volatile
     var cachedAppConfigs: Map<String, AppProfileConfig>? = null
 
+    @Volatile
+    var defaultGames: Set<String> = emptySet()
+
+    @Volatile
+    var disabledGames: Set<String> = emptySet()
+
+    @Volatile
+    var customGames: Set<String> = emptySet()
+
     private fun runSuCmd(cmd: String): String {
         return try {
             val process = ProcessBuilder("su", "-c", cmd)
@@ -356,6 +365,12 @@ object ConfigRepository {
                     result[pkg] = AppProfileConfig(
                         pkg = pkg,
                         saklarUtama = obj.optBoolean("saklar_utama", false),
+                        disabled = obj.optBoolean("disabled", false),
+                        custom = if (obj.has("custom")) {
+                            obj.optBoolean("custom", false)
+                        } else {
+                            obj.optBoolean("saklar_utama", false)
+                        },
                         liteMode = obj.optString("lite_mode", "default"),
                         refreshRate = obj.optString("refresh_rate", "default"),
                         renderer = obj.optString("renderer", "default"),
@@ -378,6 +393,7 @@ object ConfigRepository {
             }
             val loaded = loadAppConfigsInternal()
             cachedAppConfigs = loaded
+            refreshGameSets(loaded)
             loaded
         }
     }
@@ -389,6 +405,8 @@ object ConfigRepository {
             val obj = JSONObject().apply {
                 put("pkg", item.pkg)
                 put("saklar_utama", item.saklarUtama)
+                put("disabled", item.disabled)
+                put("custom", item.custom)
                 put("lite_mode", item.liteMode)
                 put("refresh_rate", item.refreshRate)
                 put("renderer", item.renderer)
@@ -401,6 +419,17 @@ object ConfigRepository {
             arr.put(obj)
         }
         runSuCmd("echo '$arr' > $APP_CONFIG_PATH")
+
+        val globalContent = runSuCmd("cat $GLOBAL_CONFIG_PATH 2>/dev/null")
+        val globalJson = try {
+            if (globalContent.isNotBlank()) JSONObject(globalContent) else JSONObject()
+        } catch (_: Exception) {
+            JSONObject()
+        }
+        val disabledSet = JSONArray()
+        configs.values.filter { it.disabled }.forEach { disabledSet.put(it.pkg) }
+        globalJson.put("disabled_games", disabledSet)
+        runSuCmd("echo '$globalJson' > $GLOBAL_CONFIG_PATH")
         notifyDaemonReload()
     }
 
@@ -409,6 +438,7 @@ object ConfigRepository {
             val currentConfigs = (cachedAppConfigs ?: loadAppConfigsInternal()).toMutableMap()
             currentConfigs[profile.pkg] = profile
             cachedAppConfigs = currentConfigs
+            refreshGameSets(currentConfigs)
             persistAppConfigsInternal(currentConfigs)
         }
     }
@@ -450,7 +480,10 @@ object ConfigRepository {
                         dnd = normalizeOption(item?.optString("dnd"))
                     )
                 }
-                if (map.isNotEmpty()) return map
+                if (map.isNotEmpty()) {
+                    defaultGames = map.keys.toSet()
+                    return map
+                }
             } catch (_: Exception) {}
         }
 
@@ -464,6 +497,7 @@ object ConfigRepository {
             .map { it.substringBefore(' ').trim().substringBefore(':').trim() }
             .filter { it.isNotEmpty() }
             .forEach { map[it] = GameListMeta() }
+        defaultGames = map.keys.toSet()
         return map
     }
 
@@ -476,6 +510,7 @@ object ConfigRepository {
 
                 if (targets.isEmpty()) {
                     cachedAppConfigs = currentConfigs
+                    refreshGameSets(currentConfigs)
                     return@withLock currentConfigs
                 }
 
@@ -487,13 +522,21 @@ object ConfigRepository {
                         currentConfigs[pkg] = AppProfileConfig(
                             pkg = pkg,
                             saklarUtama = true,
+                            disabled = false,
+                            custom = false,
                             liteMode = meta.liteMode,
                             dnd = meta.dnd
                         )
                         changed = true
-                    } else if (!existing.saklarUtama) {
-                        currentConfigs[pkg] = existing.copy(saklarUtama = true)
-                        changed = true
+                    } else if (!existing.disabled) {
+                        val normalized = existing.copy(
+                            saklarUtama = true,
+                            custom = if (whitelist.containsKey(pkg)) false else existing.custom
+                        )
+                        if (normalized != existing) {
+                            currentConfigs[pkg] = normalized
+                            changed = true
+                        }
                     }
                 }
 
@@ -501,9 +544,21 @@ object ConfigRepository {
                     persistAppConfigsInternal(currentConfigs)
                 }
                 cachedAppConfigs = currentConfigs
+                refreshGameSets(currentConfigs)
                 currentConfigs
             }
         }
+
+    private fun refreshGameSets(configs: Map<String, AppProfileConfig>) {
+        disabledGames = configs.values.filter { it.disabled }.map { it.pkg }.toSet()
+        customGames = configs.values.filter { it.custom && !it.disabled }.map { it.pkg }.toSet()
+    }
+
+    fun isAppActive(pkg: String): Boolean {
+        val isDefault = defaultGames.contains(pkg)
+        val isCustom = customGames.contains(pkg)
+        return !disabledGames.contains(pkg) && (isDefault || isCustom)
+    }
 
     suspend fun getRefreshRateModes(): List<DisplayRrMode> = withContext(Dispatchers.IO) {
         cachedTweaksState?.let {

@@ -365,7 +365,22 @@ fun AppProfileScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
-                            onProfileChanged(profile.copy(saklarUtama = !profile.saklarUtama))
+                            val nextEnabled = profile.disabled || !profile.saklarUtama
+                            onProfileChanged(
+                                if (nextEnabled) {
+                                    profile.copy(
+                                        saklarUtama = true,
+                                        disabled = false,
+                                        custom = profile.custom || !ConfigRepository.defaultGames.contains(profile.pkg)
+                                    )
+                                } else {
+                                    profile.copy(
+                                        saklarUtama = false,
+                                        disabled = true,
+                                        custom = false
+                                    )
+                                }
+                            )
                         },
                     shape = getConnectedContainerShape(ContainerPosition.Single, outerRadius = cornerRadius),
                     colors = CardDefaults.cardColors(
@@ -393,9 +408,23 @@ fun AppProfileScreen(
                             modifier = Modifier.weight(1f)
                         )
                         Switch(
-                            checked = profile.saklarUtama,
+                            checked = !profile.disabled && profile.saklarUtama,
                             onCheckedChange = { newState ->
-                                onProfileChanged(profile.copy(saklarUtama = newState))
+                                onProfileChanged(
+                                    if (newState) {
+                                        profile.copy(
+                                            saklarUtama = true,
+                                            disabled = false,
+                                            custom = profile.custom || !ConfigRepository.defaultGames.contains(profile.pkg)
+                                        )
+                                    } else {
+                                        profile.copy(
+                                            saklarUtama = false,
+                                            disabled = true,
+                                            custom = false
+                                        )
+                                    }
+                                )
                             },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
@@ -408,7 +437,7 @@ fun AppProfileScreen(
 
             item {
                 AnimatedVisibility(
-                    visible = profile.saklarUtama,
+                    visible = !profile.disabled && profile.saklarUtama,
                     enter = fadeIn() + expandVertically(),
                     exit = fadeOut() + shrinkVertically()
                 ) {

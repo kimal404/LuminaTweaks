@@ -14,23 +14,55 @@
  * limitations under the License.
  */
 
+use std::fs::OpenOptions;
+use std::os::fd::AsRawFd;
 use std::sync::Arc;
-use std::thread;
-use std::time::Duration;
 
+use luminad_core::binder::producer::Shared;
 use luminad_core::binder::BinderMonitor;
 use luminad_core::binder_ipc;
 
+const LOCK_PATH: &str = "/data/local/tmp/lumina-binder.lock";
+
+fn acquire_lock() -> bool {
+    let Ok(file) = OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .truncate(false)
+        .open(LOCK_PATH)
+    else {
+        return true;
+    };
+    let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+    if result != 0 {
+        return false;
+    }
+    std::mem::forget(file);
+    true
+}
+
 fn main() {
+    if !acquire_lock() {
+        eprintln!("lumina-binder is already running");
+        std::process::exit(0);
+    }
+
     luminad_core::log!("[BINDER] helper starting (pid={})", std::process::id());
 
-    let monitor = loop {
-        if let Some(monitor) = BinderMonitor::start() {
-            break Arc::new(monitor);
-        }
-        luminad_core::log!("[BINDER] observer unavailable, retrying in 30s");
-        thread::sleep(Duration::from_secs(30));
-    };
+    let shared = Arc::new(Shared::new());
 
-    binder_ipc::serve(monitor);
+    let screen = luminad_core::detector::get_system_prop("debug.tracing.screen_state");
+    if !screen.is_empty() {
+        shared.set_initial_screen(screen == "2");
+    }
+
+    if let Some(monitor) = BinderMonitor::start(Arc::clone(&shared)) {
+        std::mem::forget(monitor);
+        luminad_core::log!("[BINDER] observer thread started");
+    } else {
+        luminad_core::log!("[BINDER] observer thread failed to start");
+    }
+
+    binder_ipc::serve(shared);
 }

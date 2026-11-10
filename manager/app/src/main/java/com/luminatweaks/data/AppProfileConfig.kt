@@ -19,6 +19,8 @@ package com.luminatweaks.data
 data class AppProfileConfig(
     val pkg: String = "",
     val saklarUtama: Boolean = false,
+    val disabled: Boolean = false,
+    val custom: Boolean = false,
     val liteMode: String = "default",
     val refreshRate: String = "default",
     val renderer: String = "default",

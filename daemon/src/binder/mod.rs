@@ -21,27 +21,29 @@
  * limitations under the License.
  */
 
-//! Event-driven foreground app detection through ActivityManager's
-//! `IProcessObserver` binder interface.
+//! Event-driven foreground, process-death, and display monitoring through
+//! Android's binder interfaces.
 //!
-//! The cgroup polling path in `detector.rs` stays untouched and remains the
-//! fallback source of truth. This module only provides a faster foreground
-//! hint; if libbinder, the resolver APK, or the transaction fails, Lumina
-//! keeps running with polling.
+//! Binder callbacks only update `producer::Shared` and enqueue events. The
+//! socket writer in `binder_ipc.rs` performs all I/O on its own thread. The
+//! cgroup polling path in `detector.rs` remains the fallback when binder is
+//! unavailable.
 
 mod ffi;
+pub mod producer;
 mod resolver;
 
 use std::ffi::CString;
 use std::os::raw::c_void;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Arc, Condvar, Mutex, OnceLock};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
-use crate::detector::{is_ignored_package, sanitize_pkg_name};
+use crate::detector::sanitize_pkg_name;
 
 use ffi::{AIBinder, AParcel, AStatus};
+use producer::{Death, Event, Focus, Shared};
 
 const RESOLVER_CANDIDATES: [&str; 4] = [
     "/data/adb/modules/luminatweaks/binder_resolver.apk",
@@ -52,98 +54,48 @@ const RESOLVER_CANDIDATES: [&str; 4] = [
 
 const ACTIVITY_DESCRIPTOR: &str = "android.app.IActivityManager";
 const OBSERVER_DESCRIPTOR: &str = "android.app.IProcessObserver";
-const FOCUS_TTL: Duration = Duration::from_secs(2);
+const DISPLAY_DESCRIPTOR: &str = "android.hardware.display.IDisplayManager";
+const DISPLAY_CALLBACK_DESCRIPTOR: &str = "android.hardware.display.IDisplayManagerCallback";
+const POWER_DESCRIPTOR: &str = "android.os.IPowerManager";
+
+const INITIAL_BACKOFF: Duration = Duration::from_secs(5);
+const MAX_BACKOFF: Duration = Duration::from_secs(60);
+const DEATH_POLL: Duration = Duration::from_millis(250);
 
 static TX_FOREGROUND: AtomicU32 = AtomicU32::new(0);
 static TX_DIED: AtomicU32 = AtomicU32::new(0);
-static NOTIFIER: OnceLock<Arc<Notifier>> = OnceLock::new();
-
-#[derive(Default)]
-struct FocusState {
-    package: Option<String>,
-    pid: i32,
-    last_event: Option<Instant>,
-    event_seq: u64,
-    consumed_seq: u64,
-}
-
-#[derive(Default)]
-struct Notifier {
-    state: Mutex<FocusState>,
-    changed: Condvar,
-}
+static TX_DISPLAY_EVENT: AtomicU32 = AtomicU32::new(0);
+static TX_INTERACTIVE: AtomicU32 = AtomicU32::new(0);
+static SHARED: OnceLock<Arc<Shared>> = OnceLock::new();
+static THREAD_POOL_STARTED: AtomicBool = AtomicBool::new(false);
+static SCREEN_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 pub struct BinderMonitor {
-    notifier: Arc<Notifier>,
+    shared: Arc<Shared>,
     running: Arc<AtomicBool>,
 }
 
 impl BinderMonitor {
-    /// Starts the binder observer if the bundled resolver APK is present.
-    /// Returns `None` when binder monitoring is unavailable; callers must keep
-    /// using cgroup polling in that case.
-    pub fn start() -> Option<Self> {
-        let resolver = find_resolver()?;
-
-        let notifier = Arc::new(Notifier::default());
-        if NOTIFIER.set(Arc::clone(&notifier)).is_err() {
-            return None;
-        }
+    /// Starts the binder monitor thread. The caller owns `shared` so the
+    /// socket producer can start even while binder is still resolving.
+    pub fn start(shared: Arc<Shared>) -> Option<Self> {
+        let _ = SHARED.set(Arc::clone(&shared));
 
         let running = Arc::new(AtomicBool::new(true));
         let thread_running = Arc::clone(&running);
+        let thread_shared = Arc::clone(&shared);
 
         std::thread::Builder::new()
             .name("binder-monitor".to_string())
-            .spawn(move || run_monitor(resolver, thread_running))
+            .spawn(move || run_monitor(thread_shared, thread_running))
             .ok()?;
 
-        Some(Self { notifier, running })
-    }
-
-    /// Most recent binder-reported foreground package, validated against the
-    /// live process. Returns `None` if the hint is stale or binder is idle.
-    pub fn focused_package(&self) -> Option<String> {
-        let mut state = lock_state(&self.notifier);
-
-        let fresh = matches!(state.last_event, Some(at) if at.elapsed() < FOCUS_TTL);
-        if !fresh {
-            return None;
-        }
-
-        let package = state.package.clone()?;
-
-        if !pid_matches(state.pid, &package) {
-            state.package = None;
-            state.pid = 0;
-            return None;
-        }
-
-        Some(package)
-    }
-
-    /// Blocks until a binder event arrives or the timeout expires. Used by the
-    /// daemon loop to react to foreground switches without extra polling.
-    pub fn wait_for_event(&self, timeout: Duration) {
-        let mut state = lock_state(&self.notifier);
-        if state.event_seq != state.consumed_seq {
-            state.consumed_seq = state.event_seq;
-            return;
-        }
-
-        let (mut state, _) = match self.notifier.changed.wait_timeout(state, timeout) {
-            Ok(result) => result,
-            Err(poisoned) => poisoned.into_inner(),
-        };
-
-        if state.event_seq != state.consumed_seq {
-            state.consumed_seq = state.event_seq;
-        }
+        Some(Self { shared, running })
     }
 
     pub fn stop(&self) {
         self.running.store(false, Ordering::Relaxed);
-        self.notifier.changed.notify_all();
+        self.shared.wake();
     }
 }
 
@@ -167,147 +119,347 @@ fn find_resolver() -> Option<PathBuf> {
     None
 }
 
-fn run_monitor(resolver: PathBuf, running: Arc<AtomicBool>) {
+fn run_monitor(shared: Arc<Shared>, running: Arc<AtomicBool>) {
+    let mut backoff = INITIAL_BACKOFF;
+
     while running.load(Ordering::Relaxed) {
+        let Some(resolver) = find_resolver() else {
+            crate::log!(
+                "[BINDER] Resolver APK unavailable, retrying in {}s",
+                backoff.as_secs()
+            );
+            sleep_while_running(&running, backoff);
+            backoff = next_backoff(backoff);
+            continue;
+        };
+
         let codes = match resolver::resolve(&resolver) {
             Some(codes) => codes,
             None => {
-                crate::log!("[BINDER] Resolver unavailable, keeping cgroup polling");
-                sleep_while_running(&running, Duration::from_secs(30));
+                crate::log!(
+                    "[BINDER] Transaction codes unavailable, retrying in {}s",
+                    backoff.as_secs()
+                );
+                sleep_while_running(&running, backoff);
+                backoff = next_backoff(backoff);
                 continue;
             }
         };
 
         crate::log!(
-            "[BINDER] Transaction codes resolved (register={}, foreground={}, died={})",
+            "[BINDER] Transaction codes resolved (register={}, foreground={}, died={}, display={})",
             codes.register,
             codes.foreground,
-            codes.died
+            codes.died,
+            codes.display_register
         );
 
-        if start_observer(&codes) {
-            return;
-        }
+        shared.clear_dead();
+        match attach(&codes, &shared) {
+            Ok(handles) => {
+                backoff = INITIAL_BACKOFF;
+                crate::log!("[BINDER] Observer registered");
 
-        crate::log!("[BINDER] Observer registration failed, retrying in 30s");
-        sleep_while_running(&running, Duration::from_secs(30));
+                wait_for_death(&shared, &running, &handles);
+                drop(handles);
+
+                if running.load(Ordering::Relaxed) {
+                    crate::log!("[BINDER] Service died, re-resolving transaction codes");
+                    shared.clear_focus_state();
+                }
+            }
+            Err(error) => {
+                crate::log!(
+                    "[BINDER] Attach failed: {}. Retrying in {}s",
+                    error,
+                    backoff.as_secs()
+                );
+                sleep_while_running(&running, backoff);
+                backoff = next_backoff(backoff);
+            }
+        }
+    }
+}
+
+fn next_backoff(current: Duration) -> Duration {
+    let doubled = current.saturating_mul(2);
+    if doubled > MAX_BACKOFF {
+        MAX_BACKOFF
+    } else {
+        doubled
     }
 }
 
 fn sleep_while_running(running: &AtomicBool, total: Duration) {
-    let step = Duration::from_millis(250);
-    let mut waited = Duration::ZERO;
-    while waited < total && running.load(Ordering::Relaxed) {
-        std::thread::sleep(step);
-        waited += step;
+    let deadline = Instant::now() + total;
+    while Instant::now() < deadline && running.load(Ordering::Relaxed) {
+        std::thread::sleep(Duration::from_millis(250));
     }
 }
 
-fn start_observer(codes: &resolver::Codes) -> bool {
-    let api = match ffi::api() {
-        Some(api) => api,
-        None => {
-            crate::log!("[BINDER] libbinder_ndk.so unavailable");
-            return false;
+fn wait_for_death(shared: &Shared, running: &AtomicBool, handles: &Handles) {
+    let alive = handles.api.is_alive;
+    while running.load(Ordering::Relaxed) && !shared.is_dead() {
+        std::thread::sleep(DEATH_POLL);
+        if let Some(is_alive) = alive {
+            let activity_ok = unsafe { is_alive(handles.activity) };
+            let display_ok = handles.display.is_null() || unsafe { is_alive(handles.display) };
+            let power_ok = handles.power.is_null() || unsafe { is_alive(handles.power) };
+            if !activity_ok || !display_ok || !power_ok {
+                crate::log!("[BINDER] Service liveness check failed");
+                shared.mark_dead();
+                break;
+            }
         }
-    };
+    }
+}
 
-    let activity = ffi::wait_for_service(api, "activity");
-    if activity.is_null() {
-        crate::log!("[BINDER] ActivityManager service not found");
-        return false;
+struct Handles {
+    api: &'static ffi::Api,
+    activity: *mut AIBinder,
+    display: *mut AIBinder,
+    power: *mut AIBinder,
+    observer: *mut AIBinder,
+    display_callback: *mut AIBinder,
+    death: *mut c_void,
+}
+
+unsafe impl Send for Handles {}
+
+impl Handles {
+    fn new(api: &'static ffi::Api) -> Self {
+        Self {
+            api,
+            activity: std::ptr::null_mut(),
+            display: std::ptr::null_mut(),
+            power: std::ptr::null_mut(),
+            observer: std::ptr::null_mut(),
+            display_callback: std::ptr::null_mut(),
+            death: std::ptr::null_mut(),
+        }
+    }
+}
+
+impl Drop for Handles {
+    fn drop(&mut self) {
+        SCREEN_GENERATION.fetch_add(1, Ordering::Relaxed);
+        if let Some(shared) = SHARED.get() {
+            shared.request_screen();
+        }
+        unsafe {
+            if !self.death.is_null() {
+                if let Some(unlink) = self.api.unlink_from_death {
+                    for binder in [self.activity, self.display, self.power] {
+                        if !binder.is_null() {
+                            let _ = unlink(binder, self.death, std::ptr::null_mut());
+                        }
+                    }
+                }
+            }
+            for binder in [self.observer, self.display_callback] {
+                if !binder.is_null() {
+                    (self.api.dec_strong)(binder);
+                }
+            }
+            for binder in [self.activity, self.display, self.power] {
+                if !binder.is_null() {
+                    (self.api.dec_strong)(binder);
+                }
+            }
+            if !self.death.is_null() {
+                if let Some(delete) = self.api.death_delete {
+                    delete(self.death);
+                }
+            }
+        }
+    }
+}
+
+fn attach(codes: &resolver::Codes, shared: &Shared) -> Result<Handles, String> {
+    let api = ffi::api().ok_or_else(|| "libbinder_ndk.so unavailable".to_string())?;
+    let mut handles = Handles::new(api);
+
+    handles.activity = ffi::wait_for_service(api, "activity");
+    handles.display = ffi::wait_for_service(api, "display");
+    handles.power = ffi::wait_for_service(api, "power");
+    if handles.activity.is_null() {
+        return Err("activity service missing".to_string());
+    }
+    if handles.display.is_null() {
+        crate::log!("[BINDER] display service missing; screen events use fallback");
+    }
+    if handles.power.is_null() {
+        crate::log!("[BINDER] power service missing; screen events use fallback");
     }
 
-    let activity_descriptor = match CString::new(ACTIVITY_DESCRIPTOR) {
-        Ok(value) => value,
-        Err(_) => return false,
-    };
-
-    let activity_class = unsafe {
-        (api.class_define)(
-            activity_descriptor.as_ptr(),
-            Some(on_create),
-            Some(on_destroy),
-            on_transact,
-        )
-    };
-    if activity_class.is_null() {
-        crate::log!("[BINDER] Failed to define IActivityManager class");
-        return false;
+    if let (Some(new_death), Some(link)) = (api.death_new, api.link_to_death) {
+        let death = unsafe { new_death(on_binder_died) };
+        if death.is_null() {
+            return Err("failed to allocate death recipient".to_string());
+        }
+        handles.death = death;
+        for binder in [handles.activity, handles.display, handles.power] {
+            if binder.is_null() {
+                continue;
+            }
+            let status = unsafe { link(binder, death, std::ptr::null_mut()) };
+            if status != ffi::STATUS_OK {
+                crate::log!("[BINDER] linkToDeath failed with status {}", status);
+            }
+        }
+    } else {
+        crate::log!("[BINDER] death recipient API unavailable; relying on re-resolve");
     }
-    if !unsafe { (api.associate_class)(activity, activity_class) } {
-        crate::log!("[BINDER] Failed to associate IActivityManager class");
-        return false;
-    }
-
-    let descriptor = match CString::new(OBSERVER_DESCRIPTOR) {
-        Ok(value) => value,
-        Err(_) => return false,
-    };
 
     TX_FOREGROUND.store(codes.foreground, Ordering::Relaxed);
     TX_DIED.store(codes.died, Ordering::Relaxed);
+    TX_DISPLAY_EVENT.store(codes.display_event, Ordering::Relaxed);
+    TX_INTERACTIVE.store(codes.is_interactive, Ordering::Relaxed);
 
+    associate(api, handles.activity, ACTIVITY_DESCRIPTOR)?;
+    if !handles.display.is_null() {
+        associate(api, handles.display, DISPLAY_DESCRIPTOR)?;
+    }
+    if !handles.power.is_null() {
+        associate(api, handles.power, POWER_DESCRIPTOR)?;
+    }
+
+    handles.observer = new_binder(api, OBSERVER_DESCRIPTOR, on_transact)?;
+    if !register(
+        api,
+        handles.activity,
+        ACTIVITY_DESCRIPTOR,
+        handles.observer,
+        codes.register,
+    ) {
+        return Err("registerProcessObserver rejected".to_string());
+    }
+
+    if !THREAD_POOL_STARTED.swap(true, Ordering::Relaxed) {
+        unsafe { (api.start_thread_pool)() };
+    }
+
+    let mut display_registered = false;
+    if !handles.display.is_null() && codes.display_register != 0 && codes.display_event != 0 {
+        match new_binder(api, DISPLAY_CALLBACK_DESCRIPTOR, on_display_transact) {
+            Ok(callback) => {
+                if register(
+                    api,
+                    handles.display,
+                    DISPLAY_DESCRIPTOR,
+                    callback,
+                    codes.display_register,
+                ) {
+                    handles.display_callback = callback;
+                    display_registered = true;
+                    crate::log!("[BINDER] Display callback registered");
+                } else {
+                    crate::log!("[BINDER] Display callback unavailable; polling screen state");
+                    unsafe { (api.dec_strong)(callback) };
+                }
+            }
+            Err(error) => {
+                crate::log!(
+                    "[BINDER] Display callback allocation failed: {}; polling screen state",
+                    error
+                );
+            }
+        }
+    }
+
+    if codes.is_interactive != 0 {
+        if !display_registered {
+            crate::log!("[BINDER] Screen state polled through IPowerManager");
+        }
+        start_screen_worker(api, codes.is_interactive, !display_registered);
+    }
+
+    if !handles.power.is_null() {
+        let interactive = transact_read_int32(
+            api,
+            handles.power,
+            codes.is_interactive,
+            POWER_DESCRIPTOR,
+            -1,
+        );
+        if interactive >= 0 {
+            let on = interactive != 0;
+            if shared.update_screen(on) {
+                shared.push_event(Event::Screen(on));
+            }
+        }
+    }
+
+    Ok(handles)
+}
+
+fn associate(
+    api: &'static ffi::Api,
+    binder: *mut AIBinder,
+    descriptor: &str,
+) -> Result<(), String> {
+    let name = CString::new(descriptor).map_err(|_| "descriptor contains NUL".to_string())?;
     let class = unsafe {
         (api.class_define)(
-            descriptor.as_ptr(),
+            name.as_ptr(),
             Some(on_create),
             Some(on_destroy),
             on_transact,
         )
     };
     if class.is_null() {
-        crate::log!("[BINDER] Failed to define IProcessObserver class");
-        return false;
+        return Err(format!("failed to define class {}", descriptor));
     }
-
-    let observer = unsafe { (api.binder_new)(class, std::ptr::null_mut()) };
-    if observer.is_null() {
-        crate::log!("[BINDER] Failed to allocate IProcessObserver binder");
-        return false;
+    if !unsafe { (api.associate_class)(binder, class) } {
+        return Err(format!("failed to associate class {}", descriptor));
     }
-
-    if !register_observer(api, activity, observer, codes.register) {
-        crate::log!("[BINDER] registerProcessObserver transaction failed");
-        return false;
-    }
-
-    crate::log!("[BINDER] IProcessObserver registered");
-    unsafe {
-        (api.start_thread_pool)();
-        (api.join_thread_pool)();
-    }
-    true
+    Ok(())
 }
 
-fn register_observer(
-    api: &ffi::Api,
-    activity: *mut AIBinder,
-    observer: *mut AIBinder,
+fn new_binder(
+    api: &'static ffi::Api,
+    descriptor: &str,
+    transact: ffi::OnTransact,
+) -> Result<*mut AIBinder, String> {
+    let name = CString::new(descriptor).map_err(|_| "descriptor contains NUL".to_string())?;
+    let class =
+        unsafe { (api.class_define)(name.as_ptr(), Some(on_create), Some(on_destroy), transact) };
+    if class.is_null() {
+        return Err(format!("failed to define class {}", descriptor));
+    }
+    let binder = unsafe { (api.binder_new)(class, std::ptr::null_mut()) };
+    if binder.is_null() {
+        return Err(format!("failed to allocate binder {}", descriptor));
+    }
+    Ok(binder)
+}
+
+fn register(
+    api: &'static ffi::Api,
+    service: *mut AIBinder,
+    descriptor: &str,
+    callback: *mut AIBinder,
     code: u32,
 ) -> bool {
-    // Prefer the automatic header written by AIBinder_prepareTransaction.
-    // Older libbinder_ndk builds require an explicit interface token instead.
-    if try_register(api, activity, observer, code, false) {
+    if try_register(api, service, descriptor, callback, code, false) {
         return true;
     }
-
     if api.write_interface_token.is_some() {
-        return try_register(api, activity, observer, code, true);
+        return try_register(api, service, descriptor, callback, code, true);
     }
-
     false
 }
 
 fn try_register(
-    api: &ffi::Api,
-    activity: *mut AIBinder,
-    observer: *mut AIBinder,
+    api: &'static ffi::Api,
+    service: *mut AIBinder,
+    descriptor: &str,
+    callback: *mut AIBinder,
     code: u32,
     manual_token: bool,
 ) -> bool {
     let mut input: *mut AParcel = std::ptr::null_mut();
-    if unsafe { (api.prepare_transaction)(activity, &mut input) } != ffi::STATUS_OK
+    if unsafe { (api.prepare_transaction)(service, &mut input) } != ffi::STATUS_OK
         || input.is_null()
     {
         return false;
@@ -318,23 +470,23 @@ fn try_register(
             unsafe { (api.parcel_delete)(input) };
             return false;
         };
-        let Some(descriptor) = ffi::interface_token(ACTIVITY_DESCRIPTOR) else {
+        let Some(token) = ffi::interface_token(descriptor) else {
             unsafe { (api.parcel_delete)(input) };
             return false;
         };
-        if unsafe { write_token(input, descriptor.as_ptr()) } != ffi::STATUS_OK {
+        if unsafe { write_token(input, token.as_ptr()) } != ffi::STATUS_OK {
             unsafe { (api.parcel_delete)(input) };
             return false;
         }
     }
 
-    if unsafe { (api.write_strong_binder)(input, observer) } != ffi::STATUS_OK {
+    if unsafe { (api.write_strong_binder)(input, callback) } != ffi::STATUS_OK {
         unsafe { (api.parcel_delete)(input) };
         return false;
     }
 
     let mut output: *mut AParcel = std::ptr::null_mut();
-    let status = unsafe { (api.transact)(activity, code, &mut input, &mut output, 0) };
+    let status = unsafe { (api.transact)(service, code, &mut input, &mut output, 0) };
     let mut ok = status == ffi::STATUS_OK;
 
     if !output.is_null() {
@@ -346,10 +498,10 @@ fn try_register(
                 ok = false;
                 let description = unsafe { (api.status_get_description)(reply) };
                 if description.is_null() {
-                    crate::log!("[BINDER] registerProcessObserver rejected");
+                    crate::log!("[BINDER] {} registration rejected", descriptor);
                 } else {
                     let text = unsafe { std::ffi::CStr::from_ptr(description) }.to_string_lossy();
-                    crate::log!("[BINDER] registerProcessObserver rejected: {}", text);
+                    crate::log!("[BINDER] {} registration rejected: {}", descriptor, text);
                     unsafe { (api.status_delete_description)(description) };
                 }
             }
@@ -361,11 +513,105 @@ fn try_register(
     ok
 }
 
+fn transact_read_int32(
+    api: &'static ffi::Api,
+    service: *mut AIBinder,
+    code: u32,
+    descriptor: &str,
+    on_error: i32,
+) -> i32 {
+    if code == 0 || service.is_null() {
+        return on_error;
+    }
+
+    let mut input: *mut AParcel = std::ptr::null_mut();
+    if unsafe { (api.prepare_transaction)(service, &mut input) } != ffi::STATUS_OK
+        || input.is_null()
+    {
+        return on_error;
+    }
+
+    if let (Some(write_token), Some(token)) =
+        (api.write_interface_token, ffi::interface_token(descriptor))
+    {
+        let _ = unsafe { write_token(input, token.as_ptr()) };
+    }
+
+    let mut output: *mut AParcel = std::ptr::null_mut();
+    let status = unsafe { (api.transact)(service, code, &mut input, &mut output, 0) };
+    if status != ffi::STATUS_OK {
+        if !output.is_null() {
+            unsafe { (api.parcel_delete)(output) };
+        }
+        return on_error;
+    }
+
+    let mut value = on_error;
+    if !output.is_null() {
+        let mut reply: *mut AStatus = std::ptr::null_mut();
+        if unsafe { (api.read_status_header)(output, &mut reply) } == ffi::STATUS_OK
+            && !reply.is_null()
+        {
+            if unsafe { (api.status_is_ok)(reply) } {
+                let _ = unsafe { (api.read_int32)(output, &mut value) };
+            }
+            unsafe { (api.status_delete)(reply) };
+        }
+        unsafe { (api.parcel_delete)(output) };
+    }
+    value
+}
+
+fn start_screen_worker(api: &'static ffi::Api, code: u32, poll: bool) {
+    if code == 0 {
+        return;
+    }
+    let Some(shared) = SHARED.get().cloned() else {
+        return;
+    };
+
+    let generation = SCREEN_GENERATION.fetch_add(1, Ordering::Relaxed) + 1;
+    let _ = std::thread::Builder::new()
+        .name("binder-screen".to_string())
+        .spawn(move || {
+            while SCREEN_GENERATION.load(Ordering::Relaxed) == generation && !shared.is_dead() {
+                if poll {
+                    shared.wait_screen_request(Duration::from_secs(2));
+                } else {
+                    shared.wait_screen_request(Duration::from_secs(5));
+                }
+                if SCREEN_GENERATION.load(Ordering::Relaxed) != generation || shared.is_dead() {
+                    break;
+                }
+
+                let power = ffi::wait_for_service(api, "power");
+                if power.is_null() {
+                    continue;
+                }
+                let value = transact_read_int32(api, power, code, POWER_DESCRIPTOR, -1);
+                unsafe { (api.dec_strong)(power) };
+                if value < 0 {
+                    continue;
+                }
+                let on = value != 0;
+                if shared.update_screen(on) {
+                    shared.push_event(Event::Screen(on));
+                }
+            }
+        });
+}
+
 unsafe extern "C" fn on_create(args: *mut c_void) -> *mut c_void {
     args
 }
 
 unsafe extern "C" fn on_destroy(_: *mut c_void) {}
+
+unsafe extern "C" fn on_binder_died(_cookie: *mut c_void) {
+    if let Some(shared) = SHARED.get() {
+        shared.mark_dead();
+    }
+}
 
 unsafe extern "C" fn on_transact(
     _binder: *mut AIBinder,
@@ -393,7 +639,9 @@ unsafe extern "C" fn on_transact(
             return ffi::STATUS_OK;
         }
 
-        handle_foreground(pid, uid, foreground != 0);
+        if foreground != 0 {
+            handle_foreground(pid, uid);
+        }
         return ffi::STATUS_OK;
     }
 
@@ -409,76 +657,57 @@ unsafe extern "C" fn on_transact(
         return ffi::STATUS_OK;
     }
 
-    // Other IProcessObserver events (foreground services, process started)
-    // carry no state we need; acknowledge them so binder does not complain.
     ffi::STATUS_OK
 }
 
-fn handle_foreground(pid: i32, uid: i32, foreground: bool) {
-    let Some(notifier) = NOTIFIER.get() else {
+unsafe extern "C" fn on_display_transact(
+    _binder: *mut AIBinder,
+    code: u32,
+    _input: *const AParcel,
+    _output: *mut AParcel,
+) -> i32 {
+    let expected = TX_DISPLAY_EVENT.load(Ordering::Relaxed);
+    if expected == 0 || code != expected {
+        return ffi::STATUS_UNKNOWN_ERROR;
+    }
+
+    if let Some(shared) = SHARED.get() {
+        shared.request_screen();
+    }
+    ffi::STATUS_OK
+}
+
+fn handle_foreground(pid: i32, uid: i32) {
+    let Some(shared) = SHARED.get() else {
         return;
     };
     if pid <= 0 {
         return;
     }
 
-    if !foreground {
-        clear_if_pid(notifier, pid);
-        return;
-    }
-
     let Some(package) = read_package(pid) else {
-        // Foreground moved to a package we do not track (launcher, SystemUI,
-        // etc.). Drop the previous hint so the daemon can start its grace path.
-        clear_current(notifier);
         return;
     };
 
-    let mut state = lock_state(notifier);
-    if state.pid == pid && state.package.as_deref() == Some(package.as_str()) {
+    let focus = Focus { package, pid, uid };
+    if !shared.set_focus(focus.clone()) {
         return;
     }
 
-    state.package = Some(package.clone());
-    state.pid = pid;
-    state.last_event = Some(Instant::now());
-    state.event_seq = state.event_seq.wrapping_add(1);
-    crate::log!("[BINDER] Foreground: {} (pid={}, uid={})", package, pid, uid);
-    notifier.changed.notify_all();
+    shared.push_event(Event::Focus(focus));
 }
 
-fn handle_died(pid: i32, _uid: i32) {
-    let Some(notifier) = NOTIFIER.get() else {
+fn handle_died(pid: i32, uid: i32) {
+    let Some(shared) = SHARED.get() else {
         return;
     };
-    if pid > 0 {
-        clear_if_pid(notifier, pid);
-    }
-}
-
-fn clear_if_pid(notifier: &Notifier, pid: i32) {
-    let mut state = lock_state(notifier);
-    if state.pid != pid {
+    if pid <= 0 {
         return;
     }
-    clear_state(&mut state);
-    notifier.changed.notify_all();
-}
 
-fn clear_current(notifier: &Notifier) {
-    let mut state = lock_state(notifier);
-    if state.package.is_none() {
-        return;
-    }
-    clear_state(&mut state);
-    notifier.changed.notify_all();
-}
+    let package = shared.clear_focus(pid).map(|focus| focus.package);
 
-fn clear_state(state: &mut FocusState) {
-    state.package = None;
-    state.pid = 0;
-    state.last_event = None;
-    state.event_seq = state.event_seq.wrapping_add(1);
+    shared.push_event(Event::Died(Death { pid, uid, package }));
 }
 
 fn read_package(pid: i32) -> Option<String> {
@@ -490,31 +719,9 @@ fn read_package(pid: i32) -> Option<String> {
     let raw = std::str::from_utf8(&bytes[..end]).ok()?;
     let package = sanitize_pkg_name(raw);
 
-    if package.is_empty()
-        || package.starts_with('/')
-        || !package.contains('.')
-        || is_ignored_package(package)
-    {
+    if package.is_empty() || package.starts_with('/') || !package.contains('.') {
         return None;
     }
 
     Some(package.to_string())
-}
-
-fn pid_matches(pid: i32, package: &str) -> bool {
-    if pid <= 0 {
-        return false;
-    }
-
-    match read_package(pid) {
-        Some(current) => current == package,
-        None => false,
-    }
-}
-
-fn lock_state(notifier: &Notifier) -> std::sync::MutexGuard<'_, FocusState> {
-    match notifier.state.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
-    }
 }

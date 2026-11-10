@@ -40,7 +40,8 @@ const GAMES_TXT_CANDIDATES: &[&str] = &[
     "/data/adb/modules/lumina_tweaks/games.txt",
 ];
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[serde(default)]
 pub struct AppConfig {
     pub enabled: bool,
     pub lite_mode: String,
@@ -51,6 +52,8 @@ pub struct AppConfig {
     pub texture_detail: i32,
     pub pixel_sharp: bool,
     pub hard_distance: bool,
+    #[serde(default)]
+    pub disabled_games: HashSet<String>,
 }
 
 const CGROUP_TOP_APP_CANDIDATES: &[&str] = &[
@@ -554,7 +557,99 @@ pub fn get_global_io_scheduler() -> Option<String> {
         .and_then(|v| v.as_str().map(|s| s.trim().to_string()))
 }
 
+fn parse_disabled_games(value: Option<&Value>) -> HashSet<String> {
+    let Some(value) = value else {
+        return HashSet::new();
+    };
+
+    match value {
+        Value::Array(items) => items
+            .iter()
+            .filter_map(|item| item.as_str())
+            .map(sanitize_pkg_name)
+            .filter(|pkg| !pkg.is_empty())
+            .map(str::to_string)
+            .collect(),
+        Value::String(text) => text
+            .split(|ch: char| ch == ',' || ch.is_whitespace())
+            .map(str::trim)
+            .filter(|pkg| !pkg.is_empty())
+            .map(sanitize_pkg_name)
+            .map(str::to_string)
+            .collect(),
+        _ => HashSet::new(),
+    }
+}
+
+fn app_row_disabled(pkg: &str, json: &Value) -> bool {
+    let clean = sanitize_pkg_name(pkg);
+
+    if let Some(list) = json.as_array() {
+        for item in list {
+            let row_pkg = item
+                .get("pkg")
+                .or_else(|| item.get("package"))
+                .or_else(|| item.get("packageName"))
+                .and_then(|value| value.as_str());
+            if row_pkg.map(sanitize_pkg_name) != Some(clean) {
+                continue;
+            }
+            if item.get("disabled").map(is_truthy).unwrap_or(false) {
+                return true;
+            }
+            if parse_disabled_games(item.get("disabled_games")).contains(clean) {
+                return true;
+            }
+        }
+    }
+
+    if parse_disabled_games(json.get("disabled_games")).contains(clean) {
+        return true;
+    }
+
+    false
+}
+
+pub fn is_game_disabled(pkg: &str) -> bool {
+    let clean = sanitize_pkg_name(pkg);
+    if clean.is_empty() {
+        return false;
+    }
+
+    if let Some(json) = read_global_json() {
+        if parse_disabled_games(json.get("disabled_games")).contains(clean) {
+            return true;
+        }
+    }
+
+    if let Some(json) = read_app_json() {
+        if app_row_disabled(clean, &json) {
+            return true;
+        }
+    }
+
+    false
+}
+
 fn extract_app_config(item: &Value) -> AppConfig {
+    let mut disabled_games = parse_disabled_games(
+        item.get("disabled_games")
+            .or_else(|| item.get("disabledGames")),
+    );
+    if item.get("disabled").map(is_truthy).unwrap_or(false) {
+        if let Some(pkg) = item
+            .get("pkg")
+            .or_else(|| item.get("package"))
+            .or_else(|| item.get("packageName"))
+            .and_then(|value| value.as_str())
+        {
+            let clean = sanitize_pkg_name(pkg);
+            if !clean.is_empty() {
+                disabled_games.insert(clean.to_string());
+            }
+        }
+    }
+
     let enabled = item
         .get("saklar_utama")
         .or_else(|| item.get("saklarUtama"))
@@ -637,11 +732,15 @@ fn extract_app_config(item: &Value) -> AppConfig {
         texture_detail,
         pixel_sharp,
         hard_distance,
+        disabled_games,
     }
 }
 
 pub fn get_app_config(pkg: &str) -> Option<AppConfig> {
     let clean_pkg = sanitize_pkg_name(pkg);
+    let global_disabled = read_global_json()
+        .map(|json| parse_disabled_games(json.get("disabled_games")))
+        .unwrap_or_default();
 
     if let Some(json) = read_app_json() {
         if let Some(list) = json.as_array() {
@@ -651,13 +750,17 @@ pub fn get_app_config(pkg: &str) -> Option<AppConfig> {
                     || item.get("packageName").and_then(|v| v.as_str()) == Some(clean_pkg);
 
                 if matches_pkg {
-                    return Some(extract_app_config(item));
+                    let mut config = extract_app_config(item);
+                    config.disabled_games.extend(global_disabled);
+                    return Some(config);
                 }
             }
         }
 
         if let Some(app_obj) = json.get(clean_pkg) {
-            return Some(extract_app_config(app_obj));
+            let mut config = extract_app_config(app_obj);
+            config.disabled_games.extend(global_disabled);
+            return Some(config);
         }
     }
 
@@ -672,6 +775,7 @@ pub fn get_app_config(pkg: &str) -> Option<AppConfig> {
             texture_detail: 0,
             pixel_sharp: false,
             hard_distance: false,
+            disabled_games: global_disabled,
         });
     }
 
@@ -680,11 +784,17 @@ pub fn get_app_config(pkg: &str) -> Option<AppConfig> {
 
 pub fn is_app_enabled(pkg: &str) -> bool {
     let clean_pkg = sanitize_pkg_name(pkg);
+
+    if is_game_disabled(clean_pkg) {
+        return false;
+    }
+
     if is_game_whitelisted(clean_pkg) {
         return true;
     }
+
     get_app_config(clean_pkg)
-        .map(|c| c.enabled)
+        .map(|config| config.enabled && !config.disabled_games.contains(clean_pkg))
         .unwrap_or(false)
 }
 

@@ -148,7 +148,9 @@ fun AppsScreen(
         }
 
         filtered.sortedWith(
-            compareByDescending<AppItem> { appConfigs[it.packageName]?.saklarUtama == true }
+            compareByDescending<AppItem> {
+                ConfigRepository.isAppActive(it.packageName)
+            }
                 .thenByDescending { it.isGame }
                 .thenBy { it.name.lowercase() }
         )
@@ -310,8 +312,7 @@ fun AppsScreen(
                         else -> ContainerPosition.Middle
                     }
 
-                    val profile = appConfigs[appItem.packageName]
-                    val isEnabled = profile?.saklarUtama ?: false
+                    val isEnabled = ConfigRepository.isAppActive(appItem.packageName)
 
                     AppRowCard(
                         app = appItem,

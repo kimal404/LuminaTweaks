@@ -332,13 +332,18 @@ fn main() {
     log!("[DAEMON] Subsystems online, entering main event loop");
     let mut runtime = EngineRuntime::new(Arc::clone(&shared_state));
     let mut binder_client = binder_client::BinderClient::new();
-    if binder_client.ping() {
-        log!("[BINDER] Helper IPC connected (cgroup polling kept as fallback)");
+    let _ = binder_client.poll(Duration::from_millis(200));
+    if binder_client.is_push() {
+        log!("[BINDER] Helper event stream connected (cgroup polling kept as fallback)");
+    } else if binder_client.ping() {
+        log!("[BINDER] Helper IPC connected (legacy protocol)");
     } else {
         log!("[BINDER] Helper unavailable, using cgroup polling only");
     }
     let mut config_watcher = watcher::ConfigWatcher::new();
     let mut last_pkg_for_texture: Option<String> = None;
+    let mut fallback_blocked_until = Instant::now();
+    let mut last_screen_state: Option<bool> = None;
     let mut fps_monitor = fps::FpsMonitor::new();
     let mut memory_prewarm = prewarm::MemoryPrewarm::new();
 
@@ -356,7 +361,19 @@ fn main() {
         }
 
         let loop_started = Instant::now();
-        let screen_awake = UtilityController::is_screen_on();
+        let screen_awake = binder_client
+            .screen_state()
+            .unwrap_or_else(UtilityController::is_screen_on);
+        if last_screen_state != Some(screen_awake) {
+            if screen_awake {
+                log!("[SCREEN] on -> resuming workers");
+            } else {
+                log!("[SCREEN] off -> pausing workers");
+                fps_monitor.observe(None);
+                memory_prewarm.observe(None);
+            }
+            last_screen_state = Some(screen_awake);
+        }
         utility_ctrl.tick(screen_awake);
 
         let mut config_just_changed = shared_state.reload_flag.swap(false, Ordering::Relaxed);
@@ -404,14 +421,75 @@ fn main() {
             engine::sync_global_tweaks();
         }
 
-        if !screen_awake && runtime.active_target_pkg.is_some() {
-            log!("[SCREEN] Display off -> dropping active target");
-            runtime.active_target_pkg = None;
-            runtime.left_foreground_at = None;
+        let active_pid = binder_client
+            .active_focus()
+            .map(|focus| focus.pid)
+            .unwrap_or(0);
+        let active_pkg = runtime.active_target_pkg.clone();
+        let mut suppress_fallback = false;
+
+        while let Some(died) = binder_client.take_died() {
+            let matches_target = active_pkg.as_deref().is_some()
+                && active_pkg.as_deref() == died.package.as_deref()
+                || (active_pid > 0 && active_pid == died.pid);
+
+            if matches_target {
+                log!(
+                    "[SESSION] APP_DIED pkg={} pid={} uid={}. Instant restore to Balanced.",
+                    died.package.as_deref().unwrap_or("-"),
+                    died.pid,
+                    died.uid
+                );
+                runtime.active_target_pkg = None;
+                runtime.left_foreground_at = None;
+                runtime.reset_to_balance();
+                fps_monitor.observe(None);
+                memory_prewarm.observe(None);
+                TextureController::sync_config(None);
+                last_pkg_for_texture = None;
+                suppress_fallback = true;
+            } else {
+                log!(
+                    "[SESSION] APP_DIED pkg={} pid={} uid={} is not active",
+                    died.package.as_deref().unwrap_or("-"),
+                    died.pid,
+                    died.uid
+                );
+            }
         }
 
+        if suppress_fallback {
+            fallback_blocked_until = Instant::now() + Duration::from_millis(1500);
+        }
+        if Instant::now() < fallback_blocked_until {
+            suppress_fallback = true;
+        }
+
+        let binder_focus = binder_client.focused_package();
         let focused = if screen_awake {
-            binder_client.focused_package().or_else(get_focused_package)
+            match binder_focus {
+                Some(package) if is_app_enabled(&package) => {
+                    if runtime.active_target_pkg.as_deref() != Some(package.as_str()) {
+                        let pid = binder_client
+                            .active_focus()
+                            .map(|focus| focus.pid)
+                            .unwrap_or(0);
+                        let uid = binder_client
+                            .active_focus()
+                            .map(|focus| focus.uid)
+                            .unwrap_or(0);
+                        log!(
+                            "[SESSION] APP_FOCUS -> {} (pid={}, uid={})",
+                            package,
+                            pid,
+                            uid
+                        );
+                    }
+                    Some(package)
+                }
+                Some(_) | None if suppress_fallback => None,
+                Some(_) | None => get_focused_package(),
+            }
         } else {
             None
         };
@@ -495,12 +573,19 @@ fn main() {
         fps_monitor.observe(current_target.as_deref());
         memory_prewarm.observe(current_target.as_deref());
 
-        let sleep_ms = if current_target.is_some() { 400 } else { 1200 };
+        let sleep_ms = if binder_client.is_push() {
+            250
+        } else if current_target.is_some() {
+            400
+        } else {
+            1200
+        };
 
         perf::record(loop_started.elapsed());
 
         let timeout = Duration::from_millis(sleep_ms);
-        if !binder_client.wait_for_event(timeout) {
+        let had_event = binder_client.poll(timeout);
+        if !had_event && !binder_client.is_push() {
             thread::sleep(timeout);
         }
     }

@@ -19,11 +19,17 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
-const QUERIES: [&str; 3] = [
+const RESOLVE_TIMEOUT: Duration = Duration::from_secs(5);
+
+const QUERIES: [&str; 6] = [
     "android.app.IActivityManager.Stub::TRANSACTION_registerProcessObserver",
     "android.app.IProcessObserver.Stub::TRANSACTION_onForegroundActivitiesChanged",
     "android.app.IProcessObserver.Stub::TRANSACTION_onProcessDied",
+    "android.hardware.display.IDisplayManager.Stub::TRANSACTION_registerCallback",
+    "android.hardware.display.IDisplayManagerCallback.Stub::TRANSACTION_onDisplayEvent",
+    "android.os.IPowerManager.Stub::TRANSACTION_isInteractive",
 ];
 
 #[derive(Debug, Clone, Copy)]
@@ -31,6 +37,9 @@ pub struct Codes {
     pub register: u32,
     pub foreground: u32,
     pub died: u32,
+    pub display_register: u32,
+    pub display_event: u32,
+    pub is_interactive: u32,
 }
 
 pub fn resolve(apk: &Path) -> Option<Codes> {
@@ -62,16 +71,40 @@ pub fn resolve(apk: &Path) -> Option<Codes> {
     }
 
     let stdout = child.stdout.take()?;
-    let mut resolved: HashMap<String, u32> = HashMap::new();
-    for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-        if let Some((query, value)) = line.rsplit_once(' ') {
-            if let Ok(code) = value.trim().parse::<u32>() {
-                resolved.insert(query.to_string(), code);
+    let reader = std::thread::spawn(move || {
+        let mut resolved: HashMap<String, u32> = HashMap::new();
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            if let Some((query, value)) = line.rsplit_once(' ') {
+                if let Ok(code) = value.trim().parse::<u32>() {
+                    resolved.insert(query.to_string(), code);
+                }
+            }
+        }
+        resolved
+    });
+
+    let deadline = Instant::now() + RESOLVE_TIMEOUT;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = reader.join();
+                return None;
+            }
+            Err(_) => {
+                let _ = child.kill();
+                let _ = reader.join();
+                return None;
             }
         }
     }
-    let _ = child.wait();
 
+    let resolved = reader.join().ok()?;
     let register = *resolved.get(QUERIES[0])?;
     let foreground = *resolved.get(QUERIES[1])?;
     let died = *resolved.get(QUERIES[2])?;
@@ -80,9 +113,13 @@ pub fn resolve(apk: &Path) -> Option<Codes> {
         return None;
     }
 
-    Some(Codes {
+    let codes = Codes {
         register,
         foreground,
         died,
-    })
+        display_register: resolved.get(QUERIES[3]).copied().unwrap_or(0),
+        display_event: resolved.get(QUERIES[4]).copied().unwrap_or(0),
+        is_interactive: resolved.get(QUERIES[5]).copied().unwrap_or(0),
+    };
+    Some(codes)
 }
