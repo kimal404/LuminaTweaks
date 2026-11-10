@@ -31,6 +31,9 @@ dumpsys deviceidle whitelist +com.luminatweaks >/dev/null 2>&1
 
 killall -9 luminad 2>/dev/null
 pkill -9 -f luminad 2>/dev/null
+killall -9 lumina-binder 2>/dev/null
+pkill -9 -f lumina-binder 2>/dev/null
+rm -f /dev/socket/lumina_binder.sock /data/local/tmp/lumina_binder.sock
 sleep 1
 
 DAEMON_BIN=""
@@ -40,6 +43,19 @@ elif [ -f "/data/adb/modules/luminatweaks/luminad" ]; then
     DAEMON_BIN="/data/adb/modules/luminatweaks/luminad"
 fi
 
+BINDER_BIN=""
+if [ -f "$MODDIR/lumina-binder" ]; then
+    BINDER_BIN="$MODDIR/lumina-binder"
+elif [ -f "/data/adb/modules/luminatweaks/lumina-binder" ]; then
+    BINDER_BIN="/data/adb/modules/luminatweaks/lumina-binder"
+fi
+
+if [ -n "$BINDER_BIN" ]; then
+    chmod 755 "$BINDER_BIN"
+    nohup "$BINDER_BIN" >/dev/null 2>&1 &
+    sleep 1
+fi
+
 if [ -n "$DAEMON_BIN" ]; then
     chmod 755 "$DAEMON_BIN"
     nohup "$DAEMON_BIN" >/dev/null 2>&1 &
@@ -47,6 +63,10 @@ fi
 
 LAST_PID=""
 while true; do
+    if [ -n "$BINDER_BIN" ] && ! pidof lumina-binder >/dev/null 2>&1; then
+        nohup "$BINDER_BIN" >/dev/null 2>&1 &
+    fi
+
     CURRENT_PID=$(pidof luminad | awk '{print $1}')
     if [ "$CURRENT_PID" != "$LAST_PID" ]; then
         if [ -n "$CURRENT_PID" ]; then

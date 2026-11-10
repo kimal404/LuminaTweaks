@@ -82,7 +82,7 @@ pub fn sanitize_pkg_name(raw: &str) -> &str {
     clean.split_once(':').map(|(base, _)| base).unwrap_or(clean).trim()
 }
 
-fn is_ignored_package(pkg: &str) -> bool {
+pub(crate) fn is_ignored_package(pkg: &str) -> bool {
     matches!(
         pkg,
         "" | "com.android.systemui"

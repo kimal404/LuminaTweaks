@@ -27,6 +27,7 @@ manager/app/.cxx/
 
 # Output Packages & Images
 *.apk
+!module/binder_resolver.apk
 *.aab
 *.img
 *.zip

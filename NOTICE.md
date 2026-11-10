@@ -17,9 +17,24 @@ This project contains inspirations, logic architectures, and structural concepts
   Contribution: Architecture references and dynamic profile workflow inspirations.
 
 * **Encore Tweaks**
-  Developed by @Rem01Gaming
-  Source: https://github.com/Rem01Gaming
-  Contribution: System optimization methodology and tweak structure references.
+  Copyright (C) 2024-2026 Rem01Gaming
+  Source: https://github.com/Rem01Gaming/encore
+  Contribution: System optimization methodology, tweak structure references, and
+  the `IProcessObserver` / ActivityManager binder monitoring approach used by
+  `daemon/src/binder/`. Licensed under the Apache License, Version 2.0.
+
+* **Binder Resolver**
+  Copyright (C) 2026 Rem01Gaming
+  Source: https://github.com/Rem01Gaming/binder_resolver
+  Contribution: Runtime binder transaction-code resolver. The prebuilt
+  `binder_resolver.apk` is redistributed unmodified under the Apache License,
+  Version 2.0.
+
+* **AndroidHiddenApiBypass**
+  Copyright (C) 2021-2025 LSPosed
+  Source: https://github.com/LSPosed/AndroidHiddenApiBypass
+  Contribution: Bundled inside `binder_resolver.apk` for hidden API access.
+  Licensed under the Apache License, Version 2.0.
 
 --------------------------------------------------------------------------------
 

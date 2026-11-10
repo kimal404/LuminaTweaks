@@ -26,6 +26,8 @@ mod snapdragon;
 mod unisoc;
 mod utility;
 mod watcher;
+mod binder_client;
+mod binder_protocol;
 
 use ipc::{IpcServer, SharedState};
 use utility::UtilityController;
@@ -288,6 +290,12 @@ fn main() {
 
     log!("[DAEMON] Subsystems online, entering main event loop");
     let mut runtime = EngineRuntime::new(Arc::clone(&shared_state));
+    let mut binder_client = binder_client::BinderClient::new();
+    if binder_client.ping() {
+        log!("[BINDER] Helper IPC connected (cgroup polling kept as fallback)");
+    } else {
+        log!("[BINDER] Helper unavailable, using cgroup polling only");
+    }
     let mut config_watcher = watcher::ConfigWatcher::new();
     let mut last_pkg_for_texture: Option<String> = None;
 
@@ -350,7 +358,11 @@ fn main() {
             runtime.left_foreground_at = None;
         }
 
-        let focused = if screen_awake { get_focused_package() } else { None };
+        let focused = if screen_awake {
+            binder_client.focused_package().or_else(get_focused_package)
+        } else {
+            None
+        };
 
         let current_target = if is_master_enabled() {
             let newly_focused_target = focused.as_deref().filter(|pkg| is_app_enabled(pkg));
@@ -422,6 +434,9 @@ fn main() {
             1200
         };
 
-        thread::sleep(Duration::from_millis(sleep_ms));
+        let timeout = Duration::from_millis(sleep_ms);
+        if !binder_client.wait_for_event(timeout) {
+            thread::sleep(timeout);
+        }
     }
 }

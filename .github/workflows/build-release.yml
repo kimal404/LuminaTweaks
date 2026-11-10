@@ -39,6 +39,8 @@ jobs:
           mkdir -p manager/app/src/main/assets/bin
           cp daemon/target/aarch64-linux-android/release/luminad manager/app/src/main/assets/bin/luminad
           chmod 755 manager/app/src/main/assets/bin/luminad
+          cp daemon/target/aarch64-linux-android/release/lumina-binder manager/app/src/main/assets/bin/lumina-binder
+          chmod 755 manager/app/src/main/assets/bin/lumina-binder
 
       - name: Setup Gradle Build Cache
         uses: gradle/actions/setup-gradle@v3
@@ -106,10 +108,15 @@ jobs:
             cp -r module/* build_module/
           fi
 
+          cp LICENSE build_module/LICENSE
+          cp NOTICE.md build_module/NOTICE.md
+
           rm -rf build_module/system build_module/webroot build_module/common
 
           cp daemon/target/aarch64-linux-android/release/luminad build_module/luminad
           chmod 755 build_module/luminad
+          cp daemon/target/aarch64-linux-android/release/lumina-binder build_module/lumina-binder
+          chmod 755 build_module/lumina-binder
 
           APK_FILE=$(ls dist/*-signed.apk 2>/dev/null | head -n 1)
           if [ -z "$APK_FILE" ]; then

@@ -31,7 +31,8 @@ Flash the release zip via your root manager and reboot.
 ## Credits
 
 - **Author:** [@kimal404](https://github.com/kimal404)
-- **[Encore Tweaks](https://github.com/Rem01Gaming)** by [@Rem01Gaming](https://github.com/Rem01Gaming) — Interconnect bus scaling and hardware throttling bypass architecture.
+- **[Encore Tweaks](https://github.com/Rem01Gaming/encore)** by [@Rem01Gaming](https://github.com/Rem01Gaming) — Interconnect bus scaling, hardware throttling bypass, and the binder `IProcessObserver` monitoring approach.
+- **[Binder Resolver](https://github.com/Rem01Gaming/binder_resolver)** by [@Rem01Gaming](https://github.com/Rem01Gaming) — Runtime binder transaction-code resolver (Apache-2.0).
 - **[AZenith](https://github.com/Liliya2727)** by [@Liliya2727](https://github.com/Liliya2727) — Scheduler governor tuning and sysfs dispatching logic.
 
 ---

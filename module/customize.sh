@@ -53,11 +53,23 @@ fi
 
 killall -9 luminad 2>/dev/null
 pkill -9 -f luminad 2>/dev/null
+killall -9 lumina-binder 2>/dev/null
+pkill -9 -f lumina-binder 2>/dev/null
 
 if [ -f "$MODPATH/luminad" ]; then
     set_perm "$MODPATH/luminad" 0 0 0755
 else
     ui_print "! Biner luminad tidak ditemukan"
+fi
+
+if [ -f "$MODPATH/lumina-binder" ]; then
+    set_perm "$MODPATH/lumina-binder" 0 0 0755
+else
+    ui_print "! Biner lumina-binder tidak ditemukan"
+fi
+
+if [ -f "$MODPATH/binder_resolver.apk" ]; then
+    set_perm "$MODPATH/binder_resolver.apk" 0 0 0644
 fi
 
 if [ -f "$MODPATH/manager.apk" ]; then
