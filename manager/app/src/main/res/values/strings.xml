@@ -163,10 +163,10 @@ Fitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. P
     <string name="tweak_auto_dnd_desc">Aktifkan DND otomatis saat profil Performance aktif</string>
     <string name="tweak_io_scheduler">I/O Scheduler</string>
     <string name="tweak_io_scheduler_desc">Algoritma antrean I/O penyimpanan UFS/eMMC</string>
-    <string name="tweaks_hardware_quirks">Adaptasi Profil Hardware</string>
-    <string name="tweaks_hardware_quirks_desc">Terapkan aturan sysfs/procfs khusus perangkat dari hardware_quirks.json</string>
-    <string name="tweaks_memory_prewarm">Pemanasan Cache RAM / Prewarm</string>
-    <string name="tweaks_memory_prewarm_desc">Minta kernel membaca APK dan library native ke page cache</string>
+    <string name="tweaks_hardware_quirks">Tuning Khusus Perangkat</string>
+    <string name="tweaks_hardware_quirks_desc">Sesuaikan setelan performa otomatis mengikuti karakteristik chipset HP kamu.</string>
+    <string name="tweaks_memory_prewarm">Akselerasi Buka Game</string>
+    <string name="tweaks_memory_prewarm_desc">Muat data game ke RAM lebih awal supaya loading awal terasa instan tanpa jeda.</string>
     <string name="dialog_select_io_scheduler">Pilih I/O Scheduler</string>
     <string name="memory_zram_title">Memory &amp; ZRAM</string>
     <string name="memory_status_title">Status Memori &amp; Swap</string>

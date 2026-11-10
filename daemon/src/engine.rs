@@ -81,11 +81,6 @@ pub fn is_disable_thermal_enabled() -> bool {
 }
 
 pub fn apply_thermal_kill(disable: bool) {
-    if disable && crate::quirks::active("NO_THERMAL_BYPASS") {
-        crate::log!("[THERMAL] Bypass skipped by hardware quirks");
-        return;
-    }
-
     let mode_str = if disable { "disabled" } else { "enabled" };
 
     if let Ok(entries) = fs::read_dir("/sys/class/thermal") {
@@ -343,13 +338,6 @@ pub fn tune_schedutil_rate_limits(up_us: u64, down_us: u64) {
 }
 
 fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool, max_cap_ratio: Option<u64>) {
-    let gov = if gov == "performance" && crate::quirks::active("NO_PERFORMANCE_GOVERNOR") {
-        crate::log!("[QUIRKS] performance governor disabled, using schedutil");
-        "schedutil"
-    } else {
-        gov
-    };
-
     if let Ok(entries) = fs::read_dir("/sys/devices/system/cpu/cpufreq") {
         for entry in entries.flatten() {
             let fname = entry.file_name().to_string_lossy().into_owned();

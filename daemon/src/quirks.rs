@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use serde_json::Value;
-use std::collections::HashSet;
 use std::fs;
 use std::sync::{OnceLock, RwLock};
 
@@ -28,7 +27,6 @@ struct PathRule {
 
 #[derive(Default, Clone)]
 struct QuirkRules {
-    items: HashSet<String>,
     writes: Vec<PathRule>,
 }
 
@@ -56,6 +54,24 @@ fn config_enabled() -> bool {
     prop == "1" || prop.eq_ignore_ascii_case("true")
 }
 
+fn detected_soc() -> &'static str {
+    if crate::snapdragon::SnapdragonEngine::is_snapdragon() {
+        "snapdragon"
+    } else if crate::mediatek::is_mtk_device() {
+        "mediatek"
+    } else if crate::exynos::ExynosEngine::is_exynos() {
+        "exynos"
+    } else if crate::tensor::TensorEngine::is_tensor() {
+        "tensor"
+    } else if crate::unisoc::UnisocEngine::is_unisoc() {
+        "unisoc"
+    } else if crate::detector::get_system_prop("ro.kernel.qemu") == "1" {
+        "emulator"
+    } else {
+        "generic"
+    }
+}
+
 fn props_match(rule: &Value) -> bool {
     let Some(props) = rule.get("props").and_then(Value::as_object) else {
         return false;
@@ -73,17 +89,24 @@ fn props_match(rule: &Value) -> bool {
     })
 }
 
-fn collect_items(target: &mut HashSet<String>, value: Option<&Value>) {
-    if let Some(items) = value.and_then(Value::as_array) {
-        for item in items {
-            if let Some(name) = item.as_str() {
-                let name = name.trim();
-                if !name.is_empty() {
-                    target.insert(name.to_ascii_uppercase());
-                }
-            }
+fn rule_matches(rule: &Value, soc: &str) -> bool {
+    let mut conditioned = false;
+
+    if let Some(expected) = rule.get("soc").and_then(Value::as_str) {
+        conditioned = true;
+        if !expected.eq_ignore_ascii_case(soc) {
+            return false;
         }
     }
+
+    if rule.get("props").is_some() {
+        conditioned = true;
+        if !props_match(rule) {
+            return false;
+        }
+    }
+
+    conditioned
 }
 
 fn collect_writes(target: &mut Vec<PathRule>, value: Option<&Value>) {
@@ -114,7 +137,6 @@ fn collect_writes(target: &mut Vec<PathRule>, value: Option<&Value>) {
 }
 
 fn collect_rule(target: &mut QuirkRules, value: Option<&Value>) {
-    collect_items(&mut target.items, value.and_then(|rule| rule.get("items")));
     collect_writes(
         &mut target.writes,
         value.and_then(|rule| rule.get("writes")),
@@ -138,18 +160,16 @@ fn load() -> QuirkRules {
         return rules;
     };
 
-    if let Some(global) = json.get("global") {
-        if global.is_array() {
-            collect_items(&mut rules.items, Some(global));
-        } else {
-            collect_rule(&mut rules, Some(global));
-        }
+    let soc = detected_soc();
+    if let Some(rule) = json.get("socs").and_then(|socs| socs.get(soc)) {
+        collect_rule(&mut rules, Some(rule));
     }
+
     collect_writes(&mut rules.writes, json.get("writes"));
 
     if let Some(devices) = json.get("devices").and_then(Value::as_array) {
         for rule in devices {
-            if props_match(rule) {
+            if rule_matches(rule, soc) {
                 collect_rule(&mut rules, Some(rule));
             }
         }
@@ -177,16 +197,19 @@ pub fn apply_writes() {
 
 pub fn init() {
     let rules = load();
-    let active_items = rules.items.len();
+    let path_rules = rules.writes.len();
+    let soc = detected_soc();
 
     let state = STATE.get_or_init(|| RwLock::new(QuirkRules::default()));
     if let Ok(mut guard) = state.write() {
         *guard = rules;
     }
 
-    if active_items > 0 {
-        crate::log!("[QUIRKS] Active items: {}", active_items);
-    }
+    crate::log!(
+        "[QUIRKS] Detected SoC: {} ({} path rule(s))",
+        soc,
+        path_rules
+    );
     apply_writes();
 }
 
@@ -197,23 +220,11 @@ pub fn reload() {
     };
 
     let rules = load();
-    let active_items = rules.items.len();
     let path_rules = rules.writes.len();
     if let Ok(mut guard) = state.write() {
         *guard = rules;
     }
 
-    crate::log!(
-        "[QUIRKS] Reloaded ({} item(s), {} path rule(s))",
-        active_items,
-        path_rules
-    );
+    crate::log!("[QUIRKS] Reloaded ({} path rule(s))", path_rules);
     apply_writes();
-}
-
-pub fn active(item: &str) -> bool {
-    STATE
-        .get()
-        .and_then(|state| state.read().ok().map(|guard| guard.items.contains(item)))
-        .unwrap_or(false)
 }

@@ -36,19 +36,7 @@ impl TensorEngine {
         if !Self::is_tensor() {
             return;
         }
-        if governor == "performance"
-            && crate::quirks::active("NO_PERFORMANCE_GOVERNOR")
-        {
-            return;
-        }
-        let nodes: &[&str] = if governor == "performance"
-            && crate::quirks::active("NO_DDR_TWEAK")
-        {
-            &["gpu", "mali"]
-        } else {
-            NODES
-        };
-        let count = crate::devfreq::apply(nodes, governor, lock_max);
+        let count = crate::devfreq::apply(NODES, governor, lock_max);
         crate::log!(
             "[TENSOR] {} governor on {} devfreq node(s)",
             governor,

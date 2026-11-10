@@ -1,18 +1,14 @@
 {
   "_license": "Apache-2.0 (LuminaTweaks)",
-  "global": [],
+  "socs": {
+    "snapdragon": { "writes": [] },
+    "mediatek": { "writes": [] },
+    "exynos": { "writes": [] },
+    "tensor": { "writes": [] },
+    "unisoc": { "writes": [] },
+    "emulator": { "writes": [] },
+    "generic": { "writes": [] }
+  },
   "writes": [],
-  "devices": [
-    {
-      "props": {
-        "ro.kernel.qemu": "1"
-      },
-      "items": [
-        "NO_DDR_TWEAK",
-        "NO_THERMAL_BYPASS",
-        "NO_PERFORMANCE_GOVERNOR"
-      ],
-      "writes": []
-    }
-  ]
+  "devices": []
 }
