@@ -12,12 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 
-const MAX_PREWARM_BYTES: u64 = 128 * 1024 * 1024;
+const MAX_PREWARM_BYTES: u64 = 96 * 1024 * 1024;
+const APK_CACHE_TTL: Duration = Duration::from_secs(300);
 
 fn is_enabled() -> bool {
     if let Some(json) = crate::detector::read_global_json() {
@@ -98,36 +104,48 @@ fn advise_file(path: &Path, budget: &mut u64) -> u64 {
     }
 }
 
-fn prewarm_package(package: &str) -> u64 {
-    let mut budget = MAX_PREWARM_BYTES;
-    let mut total = 0;
+struct CacheEntry {
+    files: Vec<PathBuf>,
+    at: std::time::Instant,
+}
 
-    for apk in package_files(package) {
-        if budget == 0 {
-            break;
-        }
-        total += advise_file(&apk, &mut budget);
-        for library in native_libraries(&apk) {
-            if budget == 0 {
-                break;
-            }
-            total += advise_file(&library, &mut budget);
-        }
-    }
-    total
+enum Request {
+    Warm(String),
+    Stop,
 }
 
 pub struct MemoryPrewarm {
+    tx: Sender<Request>,
     last_package: Option<String>,
+    cache: Arc<Mutex<HashMap<String, CacheEntry>>>,
+    stopped: Arc<Mutex<bool>>,
 }
 
 impl MemoryPrewarm {
     pub fn new() -> Self {
-        Self { last_package: None }
+        let (tx, rx) = mpsc::channel();
+        let cache = Arc::new(Mutex::new(HashMap::new()));
+        let stopped = Arc::new(Mutex::new(false));
+
+        let worker_cache = Arc::clone(&cache);
+        let worker_stopped = Arc::clone(&stopped);
+        let _ = thread::Builder::new()
+            .name("prewarm-worker".to_string())
+            .spawn(move || worker_loop(rx, worker_cache, worker_stopped));
+
+        Self {
+            tx,
+            last_package: None,
+            cache,
+            stopped,
+        }
     }
 
     pub fn reset(&mut self) {
         self.last_package = None;
+        if let Ok(mut cache) = self.cache.lock() {
+            cache.clear();
+        }
     }
 
     pub fn observe(&mut self, package: Option<&str>) {
@@ -145,9 +163,75 @@ impl MemoryPrewarm {
             return;
         }
 
-        let bytes = prewarm_package(package);
-        if bytes > 0 {
-            crate::log!("[PREWARM] Advised {} KiB for {}", bytes / 1024, package);
+        let _ = self.tx.send(Request::Warm(package.to_string()));
+    }
+
+    pub fn stop(&self) {
+        if let Ok(mut stopped) = self.stopped.lock() {
+            *stopped = true;
+        }
+        let _ = self.tx.send(Request::Stop);
+    }
+}
+
+fn worker_loop(
+    rx: Receiver<Request>,
+    cache: Arc<Mutex<HashMap<String, CacheEntry>>>,
+    stopped: Arc<Mutex<bool>>,
+) {
+    while let Ok(request) = rx.recv() {
+        if stopped.lock().map(|s| *s).unwrap_or(true) {
+            return;
+        }
+
+        let Request::Warm(package) = request else {
+            return;
+        };
+
+        let files = cached_files(&cache, &package).unwrap_or_else(|| package_files(&package));
+        if files.is_empty() {
+            continue;
+        }
+
+        let mut budget = MAX_PREWARM_BYTES;
+        let mut total = 0;
+        for apk in &files {
+            if budget == 0 {
+                break;
+            }
+            total += advise_file(apk, &mut budget);
+            for library in native_libraries(apk) {
+                if budget == 0 {
+                    break;
+                }
+                total += advise_file(&library, &mut budget);
+            }
+        }
+
+        if total > 0 {
+            crate::log!("[PREWARM] Advised {} KiB for {}", total / 1024, package);
         }
     }
+}
+
+fn cached_files(
+    cache: &Arc<Mutex<HashMap<String, CacheEntry>>>,
+    package: &str,
+) -> Option<Vec<PathBuf>> {
+    let mut cache = cache.lock().ok()?;
+    if let Some(entry) = cache.get(package) {
+        if entry.at.elapsed() < APK_CACHE_TTL {
+            return Some(entry.files.clone());
+        }
+    }
+
+    let files = package_files(package);
+    cache.insert(
+        package.to_string(),
+        CacheEntry {
+            files: files.clone(),
+            at: std::time::Instant::now(),
+        },
+    );
+    Some(files)
 }

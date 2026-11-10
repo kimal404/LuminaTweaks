@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::fs;
-use std::process::Command;
-use serde_json::Value;
 use crate::log;
+use serde_json::Value;
+use std::process::Command;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextureDriver {
@@ -117,18 +116,9 @@ impl TextureController {
     }
 
     pub fn sync_config(focused_pkg: Option<&str>) {
-        let config_path = "/data/adb/.config/lumina/app_config.json";
-        let content = match fs::read_to_string(config_path) {
-            Ok(c) => c,
-            Err(_) => {
-                Self::restore();
-                return;
-            }
-        };
-
-        let json: Value = match serde_json::from_str(&content) {
-            Ok(j) => j,
-            Err(_) => {
+        let json: Value = match crate::detector::read_app_json_cached() {
+            Some(json) => json,
+            None => {
                 Self::restore();
                 return;
             }

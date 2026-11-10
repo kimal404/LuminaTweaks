@@ -12,10 +12,54 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
+const FREQ_CACHE_TTL: Duration = Duration::from_secs(120);
+
+type FreqCache = Option<(Instant, HashMap<String, Vec<u64>>)>;
+
+static FREQ_CACHE: Mutex<FreqCache> = Mutex::new(None);
+
+fn frequencies(base: &str) -> Vec<u64> {
+    let key = format!("{}/available_frequencies", base);
+
+    if let Ok(guard) = FREQ_CACHE.lock() {
+        if let Some((at, cache)) = guard.as_ref() {
+            if at.elapsed() < FREQ_CACHE_TTL {
+                if let Some(values) = cache.get(&key) {
+                    return values.clone();
+                }
+            }
+        }
+    }
+
+    let values: Vec<u64> = fs::read_to_string(&key)
+        .unwrap_or_default()
+        .split_whitespace()
+        .filter_map(|value| value.parse().ok())
+        .collect();
+
+    if let Ok(mut guard) = FREQ_CACHE.lock() {
+        let entry = guard.get_or_insert_with(|| (Instant::now(), HashMap::new()));
+        if entry.0.elapsed() >= FREQ_CACHE_TTL {
+            entry.1.clear();
+            entry.0 = Instant::now();
+        }
+        entry.1.insert(key, values.clone());
+    }
+
+    values
+}
 
 fn write_governor(base: &str, governor: &str) {
+    if governor.is_empty() {
+        return;
+    }
+
     let path = format!("{}/governor", base);
     let available = fs::read_to_string(format!("{}/available_governors", base)).unwrap_or_default();
     if available.is_empty() || available.split_whitespace().any(|item| item == governor) {
@@ -24,20 +68,17 @@ fn write_governor(base: &str, governor: &str) {
 }
 
 fn write_frequency_limits(base: &str, lock_max: bool) {
-    let Ok(content) = fs::read_to_string(format!("{}/available_frequencies", base)) else {
-        return;
-    };
-    let frequencies: Vec<u64> = content
-        .split_whitespace()
-        .filter_map(|value| value.parse().ok())
-        .collect();
-
-    let (Some(min), Some(max)) = (frequencies.iter().min(), frequencies.iter().max()) else {
+    let values = frequencies(base);
+    let (Some(min), Some(max)) = (values.iter().min(), values.iter().max()) else {
         return;
     };
 
     let min_target = if lock_max { *max } else { *min };
-    crate::engine::write_sysfs(&format!("{}/min_freq", base), &min_target.to_string(), lock_max);
+    crate::engine::write_sysfs(
+        &format!("{}/min_freq", base),
+        &min_target.to_string(),
+        lock_max,
+    );
     crate::engine::write_sysfs(&format!("{}/max_freq", base), &max.to_string(), lock_max);
 }
 
@@ -61,6 +102,32 @@ pub fn apply(needles: &[&str], governor: &str, lock_max: bool) -> usize {
         write_governor(&base, governor);
         write_frequency_limits(&base, lock_max);
         applied += 1;
+    }
+    applied
+}
+
+pub fn apply_patterns(patterns: &[(&str, &str)], lock_max: bool) -> usize {
+    let Ok(entries) = fs::read_dir("/sys/class/devfreq") else {
+        return 0;
+    };
+
+    let mut applied = 0;
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+        let base = format!("/sys/class/devfreq/{}", entry.file_name().to_string_lossy());
+        if !Path::new(&base).exists() {
+            continue;
+        }
+
+        for (needle, governor) in patterns {
+            if !name.contains(needle) {
+                continue;
+            }
+            write_governor(&base, governor);
+            write_frequency_limits(&base, lock_max);
+            applied += 1;
+            break;
+        }
     }
     applied
 }

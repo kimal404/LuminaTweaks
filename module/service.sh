@@ -70,6 +70,10 @@ while true; do
         nohup "$BINDER_BIN" >/dev/null 2>&1 &
     fi
 
+    if [ -n "$DAEMON_BIN" ] && ! pidof luminad >/dev/null 2>&1; then
+        nohup "$DAEMON_BIN" >/dev/null 2>&1 &
+    fi
+
     CURRENT_PID=$(pidof luminad | awk '{print $1}')
     if [ "$CURRENT_PID" != "$LAST_PID" ]; then
         if [ -n "$CURRENT_PID" ]; then

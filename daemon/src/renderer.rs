@@ -15,6 +15,8 @@
 use std::fs;
 use std::path::Path;
 use std::process::Command;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 const CONFIG_DIR: &str = "/data/adb/.config/lumina";
 const MODULE_DIR: &str = "/data/adb/modules/luminatweaks";
@@ -52,7 +54,11 @@ impl RendererSpec {
         let threaded = lower.contains("threaded");
         let skia_threaded = threaded && lower.contains("skia");
 
-        Some(Self { backend, threaded, skia_threaded })
+        Some(Self {
+            backend,
+            threaded,
+            skia_threaded,
+        })
     }
 }
 
@@ -91,14 +97,26 @@ fn write_spec(spec: &RendererSpec) {
         }
         Backend::Vulkan => {
             set_prop("debug.renderengine.backend", "vulkan");
-            set_prop("debug.hwui.render_thread", if spec.threaded { "true" } else { "false" });
-            set_prop("debug.skia.threaded_mode", if spec.skia_threaded { "true" } else { "false" });
+            set_prop(
+                "debug.hwui.render_thread",
+                if spec.threaded { "true" } else { "false" },
+            );
+            set_prop(
+                "debug.skia.threaded_mode",
+                if spec.skia_threaded { "true" } else { "false" },
+            );
             set_reset_prop("ro.hwui.use_vulkan", Some("true"));
         }
         Backend::Gles => {
             set_prop("debug.renderengine.backend", "gles");
-            set_prop("debug.hwui.render_thread", if spec.threaded { "true" } else { "false" });
-            set_prop("debug.skia.threaded_mode", if spec.skia_threaded { "true" } else { "false" });
+            set_prop(
+                "debug.hwui.render_thread",
+                if spec.threaded { "true" } else { "false" },
+            );
+            set_prop(
+                "debug.skia.threaded_mode",
+                if spec.skia_threaded { "true" } else { "false" },
+            );
             set_reset_prop("ro.hwui.use_vulkan", Some("false"));
         }
     }
@@ -125,30 +143,55 @@ pub fn setrender(renderer: &str) {
     }
 }
 
+static RENDERER_CACHE: Mutex<Option<(Instant, String)>> = Mutex::new(None);
+const RENDERER_CACHE_TTL: Duration = Duration::from_millis(1000);
+
 pub fn get_saved_renderer() -> String {
-    for path in [config_path(), module_path()] {
-        if let Ok(text) = fs::read_to_string(path) {
-            let value = text.trim();
-            if !value.is_empty() {
-                return value.to_string();
+    if let Ok(guard) = RENDERER_CACHE.lock() {
+        if let Some((at, value)) = guard.as_ref() {
+            if at.elapsed() < RENDERER_CACHE_TTL {
+                return value.clone();
             }
         }
     }
 
-    if let Ok(out) = Command::new("getprop")
-        .arg("persist.lumina.renderer")
-        .output()
-    {
-        let value = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        if !value.is_empty() {
-            return value;
+    let mut value = String::new();
+    for path in [config_path(), module_path()] {
+        if let Ok(text) = fs::read_to_string(path) {
+            let trimmed = text.trim();
+            if !trimmed.is_empty() {
+                value = trimmed.to_string();
+                break;
+            }
         }
     }
 
-    "default".to_string()
+    if value.is_empty() {
+        if let Ok(out) = Command::new("getprop")
+            .arg("persist.lumina.renderer")
+            .output()
+        {
+            let prop = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !prop.is_empty() {
+                value = prop;
+            }
+        }
+    }
+
+    if value.is_empty() {
+        value = "default".to_string();
+    }
+
+    if let Ok(mut guard) = RENDERER_CACHE.lock() {
+        *guard = Some((Instant::now(), value.clone()));
+    }
+    value
 }
 
 pub fn save_renderer(renderer: &str) {
+    if let Ok(mut guard) = RENDERER_CACHE.lock() {
+        *guard = Some((Instant::now(), renderer.to_string()));
+    }
     let _ = fs::write(config_path(), renderer);
     set_prop("persist.lumina.renderer", renderer);
 

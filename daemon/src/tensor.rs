@@ -15,7 +15,15 @@
 use crate::detector::get_system_prop;
 
 const NODES: &[&str] = &["mif", "mem", "dram", "bus", "dvfs", "gpu", "mali"];
-const PLATFORMS: &[&str] = &["zuma", "ripcurrent", "laguna", "deepspace", "gs101", "gs201", "gs301"];
+const PLATFORMS: &[&str] = &[
+    "zuma",
+    "ripcurrent",
+    "laguna",
+    "deepspace",
+    "gs101",
+    "gs201",
+    "gs301",
+];
 
 pub struct TensorEngine;
 
@@ -29,7 +37,9 @@ impl TensorEngine {
         soc_model.contains("tensor")
             || soc_mfg.contains("google")
             || hardware.contains("tensor")
-            || PLATFORMS.iter().any(|name| platform.contains(name) || hardware.contains(name))
+            || PLATFORMS
+                .iter()
+                .any(|name| platform.contains(name) || hardware.contains(name))
     }
 
     fn apply(governor: &str, lock_max: bool) {
@@ -37,10 +47,12 @@ impl TensorEngine {
             return;
         }
         let count = crate::devfreq::apply(NODES, governor, lock_max);
+        let gpu = crate::devfreq::apply(&["gpu", "mali"], governor, lock_max);
         crate::log!(
-            "[TENSOR] {} governor on {} devfreq node(s)",
+            "[TENSOR] {} governor on {} devfreq node(s), GPU {}",
             governor,
-            count
+            count,
+            gpu
         );
     }
 

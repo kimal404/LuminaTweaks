@@ -16,6 +16,8 @@ mod texture;
 use texture::TextureController;
 #[macro_use]
 mod logger;
+mod binder_client;
+mod binder_protocol;
 mod detector;
 mod devfreq;
 mod display;
@@ -24,29 +26,29 @@ mod exynos;
 mod fps;
 mod ipc;
 mod mediatek;
+mod perf;
 mod prewarm;
 mod quirks;
 mod renderer;
+mod sched;
 mod snapdragon;
 mod tensor;
 mod thermal;
 mod unisoc;
 mod utility;
 mod watcher;
-mod binder_client;
-mod binder_protocol;
 
 use ipc::{IpcServer, SharedState};
-use utility::UtilityController;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
+use utility::UtilityController;
 
 use detector::{
-    get_app_config, get_focused_package, is_app_enabled, is_auto_dnd_enabled,
-    is_process_alive, is_lite_mode_active, is_low_power_active, is_master_enabled,
+    get_app_config, get_focused_package, is_app_enabled, is_auto_dnd_enabled, is_lite_mode_active,
+    is_low_power_active, is_master_enabled, is_process_alive,
 };
 use engine::apply_thermal_kill;
 
@@ -83,7 +85,9 @@ impl Profile {
 }
 
 fn set_system_profile_prop(name: &str) {
-    let _ = Command::new("setprop").args(["sys.lumina.profile", name]).status();
+    let _ = Command::new("setprop")
+        .args(["sys.lumina.profile", name])
+        .status();
 }
 
 struct EngineRuntime {
@@ -97,6 +101,7 @@ struct EngineRuntime {
     dnd_override: bool,
     prev_zen_mode: String,
     thermal: thermal::ThermalWatchdog,
+    last_config_poll: Instant,
     shared_state: Arc<SharedState>,
 }
 
@@ -116,6 +121,7 @@ impl EngineRuntime {
             dnd_override: false,
             prev_zen_mode: "0".to_string(),
             thermal: thermal::ThermalWatchdog::new(),
+            last_config_poll: Instant::now(),
             shared_state,
         }
     }
@@ -146,7 +152,10 @@ impl EngineRuntime {
             self.prev_zen_mode = engine::get_zen_mode();
             engine::set_dnd_mode("priority");
             self.dnd_override = true;
-            log!("[DND] Notifications suppressed (prev zen_mode={})", self.prev_zen_mode);
+            log!(
+                "[DND] Notifications suppressed (prev zen_mode={})",
+                self.prev_zen_mode
+            );
         } else if !desired_dnd && self.dnd_override {
             let restore = engine::zen_to_dnd_arg(&self.prev_zen_mode);
             engine::set_dnd_mode(restore);
@@ -200,7 +209,10 @@ impl EngineRuntime {
                 Profile::PerformanceLite => {
                     engine::performance_lite_profile();
                     set_system_profile_prop("Performance Lite");
-                    log!("[PROFILE] Switched to Performance Lite -> App: {:?}", target_pkg);
+                    log!(
+                        "[PROFILE] Switched to Performance Lite -> App: {:?}",
+                        target_pkg
+                    );
                 }
                 Profile::Eco => {
                     engine::eco_profile();
@@ -305,6 +317,7 @@ fn main() {
     }
 
     log!("[DAEMON] Initializing luminad subsystem...");
+    sched::tune_daemon();
     quirks::init();
     display::init_display_subsystem();
     renderer::init_renderer_subsystem();
@@ -337,10 +350,14 @@ fn main() {
             apply_thermal_kill(false);
             utility_ctrl.restore();
             TextureController::restore();
+            fps_monitor.stop();
+            memory_prewarm.stop();
             break;
         }
 
-        utility_ctrl.tick();
+        let loop_started = Instant::now();
+        let screen_awake = UtilityController::is_screen_on();
+        utility_ctrl.tick(screen_awake);
 
         let mut config_just_changed = shared_state.reload_flag.swap(false, Ordering::Relaxed);
 
@@ -348,29 +365,32 @@ fn main() {
             config_just_changed = true;
         }
 
-        for path in [
-            "/data/adb/.config/lumina/app_config.json",
-            "/data/adb/modules/luminatweaks/app_config.json",
-        ] {
-            if let Ok(meta) = std::fs::metadata(path) {
-                if let Ok(mtime) = meta.modified() {
-                    if runtime.last_app_config_mtime != Some(mtime) {
-                        runtime.last_app_config_mtime = Some(mtime);
-                        config_just_changed = true;
+        if runtime.last_config_poll.elapsed() >= Duration::from_secs(2) {
+            runtime.last_config_poll = Instant::now();
+            for path in [
+                "/data/adb/.config/lumina/app_config.json",
+                "/data/adb/modules/luminatweaks/app_config.json",
+            ] {
+                if let Ok(meta) = std::fs::metadata(path) {
+                    if let Ok(mtime) = meta.modified() {
+                        if runtime.last_app_config_mtime != Some(mtime) {
+                            runtime.last_app_config_mtime = Some(mtime);
+                            config_just_changed = true;
+                        }
                     }
                 }
             }
-        }
 
-        for path in [
-            "/data/adb/.config/lumina/config.json",
-            "/data/adb/modules/luminatweaks/config.json",
-        ] {
-            if let Ok(meta) = std::fs::metadata(path) {
-                if let Ok(mtime) = meta.modified() {
-                    if runtime.last_global_config_mtime != Some(mtime) {
-                        runtime.last_global_config_mtime = Some(mtime);
-                        config_just_changed = true;
+            for path in [
+                "/data/adb/.config/lumina/config.json",
+                "/data/adb/modules/luminatweaks/config.json",
+            ] {
+                if let Ok(meta) = std::fs::metadata(path) {
+                    if let Ok(mtime) = meta.modified() {
+                        if runtime.last_global_config_mtime != Some(mtime) {
+                            runtime.last_global_config_mtime = Some(mtime);
+                            config_just_changed = true;
+                        }
                     }
                 }
             }
@@ -378,12 +398,12 @@ fn main() {
 
         if config_just_changed {
             log!("[CONFIG] Reloading system tweaks...");
+            detector::invalidate_config_cache();
             quirks::reload();
             memory_prewarm.reset();
             engine::sync_global_tweaks();
         }
 
-        let screen_awake = UtilityController::is_screen_on();
         if !screen_awake && runtime.active_target_pkg.is_some() {
             log!("[SCREEN] Display off -> dropping active target");
             runtime.active_target_pkg = None;
@@ -402,20 +422,29 @@ fn main() {
             let target = if let Some(pkg) = newly_focused_target {
                 let pkg_str = pkg.to_string();
                 if runtime.left_foreground_at.is_some() {
-                    log!("[SESSION] Focus restored to {}. Grace period cleared.", pkg_str);
+                    log!(
+                        "[SESSION] Focus restored to {}. Grace period cleared.",
+                        pkg_str
+                    );
                     runtime.left_foreground_at = None;
                 }
                 runtime.active_target_pkg = Some(pkg_str.clone());
                 Some(pkg_str)
             } else if let Some(ref saved_pkg) = runtime.active_target_pkg {
                 if !is_process_alive(saved_pkg) {
-                    log!("[SESSION] Process for {} died. Reverting to Balance immediately.", saved_pkg);
+                    log!(
+                        "[SESSION] Process for {} died. Reverting to Balance immediately.",
+                        saved_pkg
+                    );
                     runtime.active_target_pkg = None;
                     runtime.left_foreground_at = None;
                     None
                 } else if is_app_enabled(saved_pkg) {
                     if runtime.left_foreground_at.is_none() {
-                        log!("[SESSION] Focus lost from {}. 3s grace period engaged.", saved_pkg);
+                        log!(
+                            "[SESSION] Focus lost from {}. 3s grace period engaged.",
+                            saved_pkg
+                        );
                         runtime.left_foreground_at = Some(Instant::now());
                     }
 
@@ -423,7 +452,10 @@ fn main() {
                         if left_time.elapsed() < Duration::from_secs(3) {
                             Some(saved_pkg.clone())
                         } else {
-                            log!("[SESSION] Grace period 3s expired for {}. Dropping target.", saved_pkg);
+                            log!(
+                                "[SESSION] Grace period 3s expired for {}. Dropping target.",
+                                saved_pkg
+                            );
                             runtime.active_target_pkg = None;
                             runtime.left_foreground_at = None;
                             None
@@ -463,11 +495,9 @@ fn main() {
         fps_monitor.observe(current_target.as_deref());
         memory_prewarm.observe(current_target.as_deref());
 
-        let sleep_ms = if current_target.is_some() {
-            400
-        } else {
-            1200
-        };
+        let sleep_ms = if current_target.is_some() { 400 } else { 1200 };
+
+        perf::record(loop_started.elapsed());
 
         let timeout = Duration::from_millis(sleep_ms);
         if !binder_client.wait_for_event(timeout) {

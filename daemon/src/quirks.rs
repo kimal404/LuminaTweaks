@@ -28,6 +28,8 @@ struct PathRule {
 #[derive(Default, Clone)]
 struct QuirkRules {
     writes: Vec<PathRule>,
+    disable_schedtune: bool,
+    disable_uclamp: bool,
 }
 
 static STATE: OnceLock<RwLock<QuirkRules>> = OnceLock::new();
@@ -141,6 +143,18 @@ fn collect_rule(target: &mut QuirkRules, value: Option<&Value>) {
         &mut target.writes,
         value.and_then(|rule| rule.get("writes")),
     );
+
+    if let Some(features) = value.and_then(|rule| rule.get("features")) {
+        if let Some(items) = features.as_array() {
+            for item in items {
+                match item.as_str().map(str::trim) {
+                    Some("no_schedtune") => target.disable_schedtune = true,
+                    Some("no_uclamp") => target.disable_uclamp = true,
+                    _ => {}
+                }
+            }
+        }
+    }
 }
 
 fn load() -> QuirkRules {
@@ -205,10 +219,21 @@ pub fn init() {
         *guard = rules;
     }
 
+    let (no_schedtune, no_uclamp) = STATE
+        .get()
+        .and_then(|state| {
+            state
+                .read()
+                .ok()
+                .map(|guard| (guard.disable_schedtune, guard.disable_uclamp))
+        })
+        .unwrap_or((false, false));
     crate::log!(
-        "[QUIRKS] Detected SoC: {} ({} path rule(s))",
+        "[QUIRKS] Detected SoC: {} ({} path rule(s), no_schedtune={}, no_uclamp={})",
         soc,
-        path_rules
+        path_rules,
+        no_schedtune,
+        no_uclamp
     );
     apply_writes();
 }
@@ -227,4 +252,18 @@ pub fn reload() {
 
     crate::log!("[QUIRKS] Reloaded ({} path rule(s))", path_rules);
     apply_writes();
+}
+
+pub fn schedtune_disabled() -> bool {
+    STATE
+        .get()
+        .and_then(|state| state.read().ok().map(|guard| guard.disable_schedtune))
+        .unwrap_or(false)
+}
+
+pub fn uclamp_disabled() -> bool {
+    STATE
+        .get()
+        .and_then(|state| state.read().ok().map(|guard| guard.disable_uclamp))
+        .unwrap_or(false)
 }

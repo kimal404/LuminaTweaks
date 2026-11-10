@@ -41,10 +41,12 @@ impl ExynosEngine {
             return;
         }
         let count = crate::devfreq::apply(NODES, governor, lock_max);
+        let gpu = crate::devfreq::apply(&["gpu", "mali"], governor, lock_max);
         crate::log!(
-            "[EXYNOS] {} governor on {} devfreq node(s)",
+            "[EXYNOS] {} governor on {} devfreq node(s), GPU {}",
             governor,
-            count
+            count,
+            gpu
         );
     }
 

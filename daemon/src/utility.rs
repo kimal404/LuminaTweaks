@@ -16,10 +16,14 @@
 
 use std::fs;
 use std::process::Command;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 const DOZE_FLAG: &str = "/data/adb/.config/lumina/aggressive_doze";
 const GMS_FLAG: &str = "/data/adb/.config/lumina/gms_limit";
+const SCREEN_CACHE_TTL: Duration = Duration::from_millis(750);
+
+static SCREEN_CACHE: Mutex<Option<(Instant, bool)>> = Mutex::new(None);
 
 pub struct UtilityController {
     was_screen_on: bool,
@@ -40,18 +44,34 @@ impl UtilityController {
         }
     }
 
-    pub fn tick(&mut self) {
-        if self.last_doze_check.elapsed() >= Duration::from_millis(1500) {
-            self.handle_doze();
+    pub fn tick(&mut self, screen_awake: bool) {
+        if self.last_doze_check.elapsed() >= Duration::from_millis(3000) {
+            self.handle_doze(screen_awake);
             self.last_doze_check = Instant::now();
         }
-        if self.last_gms_check.elapsed() >= Duration::from_millis(2000) {
+        if self.last_gms_check.elapsed() >= Duration::from_millis(5000) {
             self.handle_gms();
             self.last_gms_check = Instant::now();
         }
     }
 
     pub(crate) fn is_screen_on() -> bool {
+        if let Ok(guard) = SCREEN_CACHE.lock() {
+            if let Some((at, value)) = guard.as_ref() {
+                if at.elapsed() < SCREEN_CACHE_TTL {
+                    return *value;
+                }
+            }
+        }
+
+        let value = Self::read_screen_on();
+        if let Ok(mut guard) = SCREEN_CACHE.lock() {
+            *guard = Some((Instant::now(), value));
+        }
+        value
+    }
+
+    fn read_screen_on() -> bool {
         let state = crate::detector::get_system_prop("debug.tracing.screen_state");
         if !state.is_empty() {
             return state == "2";
@@ -68,38 +88,36 @@ impl UtilityController {
             }
         }
 
-        if let Ok(output) = Command::new("dumpsys").args(["power"]).output() {
-            let s = String::from_utf8_lossy(&output.stdout);
-            return s.contains("Display Power: state=ON")
-                || s.contains("mWakefulness=Awake")
-                || s.contains("mHoldingDisplaySuspendBlocker=true");
-        }
         true
     }
 
-    fn handle_doze(&mut self) {
+    fn handle_doze(&mut self, current_screen_on: bool) {
         let is_doze_enabled = fs::read_to_string(DOZE_FLAG)
             .map(|s| s.trim() == "1")
             .unwrap_or(false);
 
         if !is_doze_enabled {
             if self.doze_forced {
-                let _ = Command::new("dumpsys").args(["deviceidle", "unforce"]).status();
+                let _ = Command::new("dumpsys")
+                    .args(["deviceidle", "unforce"])
+                    .status();
                 self.doze_forced = false;
                 log!("[DOZE] Aggressive Doze disabled -> Unforced deviceidle");
             }
             return;
         }
 
-        let current_screen_on = Self::is_screen_on();
-
         if self.was_screen_on && !current_screen_on {
-            let _ = Command::new("dumpsys").args(["deviceidle", "force-idle"]).status();
+            let _ = Command::new("dumpsys")
+                .args(["deviceidle", "force-idle"])
+                .status();
             self.doze_forced = true;
             log!("[DOZE] Screen turned off -> Forced Deep Sleep (deviceidle force-idle)");
         } else if !self.was_screen_on && current_screen_on {
             if self.doze_forced {
-                let _ = Command::new("dumpsys").args(["deviceidle", "unforce"]).status();
+                let _ = Command::new("dumpsys")
+                    .args(["deviceidle", "unforce"])
+                    .status();
                 self.doze_forced = false;
                 log!("[DOZE] Screen turned on -> Restored standard idle state");
             }
@@ -116,18 +134,42 @@ impl UtilityController {
         if self.last_gms_state != Some(is_gms_enabled) {
             if is_gms_enabled {
                 let _ = Command::new("cmd")
-                    .args(["appops", "set", "com.google.android.gms", "RUN_IN_BACKGROUND", "ignore"])
+                    .args([
+                        "appops",
+                        "set",
+                        "com.google.android.gms",
+                        "RUN_IN_BACKGROUND",
+                        "ignore",
+                    ])
                     .status();
                 let _ = Command::new("cmd")
-                    .args(["appops", "set", "com.google.android.gms", "WAKE_LOCK", "ignore"])
+                    .args([
+                        "appops",
+                        "set",
+                        "com.google.android.gms",
+                        "WAKE_LOCK",
+                        "ignore",
+                    ])
                     .status();
                 log!("[GMS] Restricted Google Play Services background execution & wakelocks");
             } else if self.last_gms_state.is_some() {
                 let _ = Command::new("cmd")
-                    .args(["appops", "set", "com.google.android.gms", "RUN_IN_BACKGROUND", "allow"])
+                    .args([
+                        "appops",
+                        "set",
+                        "com.google.android.gms",
+                        "RUN_IN_BACKGROUND",
+                        "allow",
+                    ])
                     .status();
                 let _ = Command::new("cmd")
-                    .args(["appops", "set", "com.google.android.gms", "WAKE_LOCK", "allow"])
+                    .args([
+                        "appops",
+                        "set",
+                        "com.google.android.gms",
+                        "WAKE_LOCK",
+                        "allow",
+                    ])
                     .status();
                 log!("[GMS] Restored Google Play Services background execution & wakelocks");
             }
@@ -137,16 +179,30 @@ impl UtilityController {
 
     pub fn restore(&mut self) {
         if self.doze_forced {
-            let _ = Command::new("dumpsys").args(["deviceidle", "unforce"]).status();
+            let _ = Command::new("dumpsys")
+                .args(["deviceidle", "unforce"])
+                .status();
             self.doze_forced = false;
         }
 
         if self.last_gms_state == Some(true) {
             let _ = Command::new("cmd")
-                .args(["appops", "set", "com.google.android.gms", "RUN_IN_BACKGROUND", "allow"])
+                .args([
+                    "appops",
+                    "set",
+                    "com.google.android.gms",
+                    "RUN_IN_BACKGROUND",
+                    "allow",
+                ])
                 .status();
             let _ = Command::new("cmd")
-                .args(["appops", "set", "com.google.android.gms", "WAKE_LOCK", "allow"])
+                .args([
+                    "appops",
+                    "set",
+                    "com.google.android.gms",
+                    "WAKE_LOCK",
+                    "allow",
+                ])
                 .status();
             self.last_gms_state = Some(false);
         }

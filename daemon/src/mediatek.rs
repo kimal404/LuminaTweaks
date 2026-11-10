@@ -144,12 +144,19 @@ pub fn set_thermal_throttling(bypass: bool) {
     if bypass {
         crate::log!("[MTK] Disabling SoC thermal throttling policies");
         write_sysfs("/proc/cpufreq/cpufreq_imax_thermal_protect", "0", true);
-        write_sysfs("/proc/gpufreq/gpufreq_power_limited", "ignore_thermal_protect 1", false);
+        write_sysfs(
+            "/proc/gpufreq/gpufreq_power_limited",
+            "ignore_thermal_protect 1",
+            false,
+        );
         write_sysfs("/proc/ppm/enabled", "0", true);
 
         if let Ok(content) = fs::read_to_string("/proc/ppm/policy_status") {
             for line in content.lines() {
-                let is_limit = line.contains("FORCE_LIMIT") || line.contains("PWR_THRO") || line.contains("THERMAL") || line.contains("USER_LIMIT");
+                let is_limit = line.contains("FORCE_LIMIT")
+                    || line.contains("PWR_THRO")
+                    || line.contains("THERMAL")
+                    || line.contains("USER_LIMIT");
                 let is_boost = line.contains("SYS_BOOST");
                 if let Some(idx_str) = line.split('[').nth(1).and_then(|s| s.split(']').next()) {
                     if is_limit {
@@ -164,12 +171,19 @@ pub fn set_thermal_throttling(bypass: bool) {
     } else {
         crate::log!("[MTK] Restoring SoC thermal throttling policies");
         write_sysfs("/proc/cpufreq/cpufreq_imax_thermal_protect", "1", false);
-        write_sysfs("/proc/gpufreq/gpufreq_power_limited", "ignore_thermal_protect 0", false);
+        write_sysfs(
+            "/proc/gpufreq/gpufreq_power_limited",
+            "ignore_thermal_protect 0",
+            false,
+        );
         write_sysfs("/proc/ppm/enabled", "1", false);
 
         if let Ok(content) = fs::read_to_string("/proc/ppm/policy_status") {
             for line in content.lines() {
-                let is_limit = line.contains("FORCE_LIMIT") || line.contains("PWR_THRO") || line.contains("THERMAL") || line.contains("USER_LIMIT");
+                let is_limit = line.contains("FORCE_LIMIT")
+                    || line.contains("PWR_THRO")
+                    || line.contains("THERMAL")
+                    || line.contains("USER_LIMIT");
                 let is_boost = line.contains("SYS_BOOST");
                 if let Some(idx_str) = line.split('[').nth(1).and_then(|s| s.split(']').next()) {
                     if is_limit {
@@ -184,6 +198,32 @@ pub fn set_thermal_throttling(bypass: bool) {
     }
 }
 
+fn gpu_opp_table() -> Vec<u64> {
+    let path = if Path::new("/proc/gpufreqv2/gpu_working_opp_table").exists() {
+        "/proc/gpufreqv2/gpu_working_opp_table"
+    } else {
+        "/proc/gpufreq/gpufreq_opp_dump"
+    };
+
+    let Ok(content) = crate::engine::read_sysfs(path) else {
+        return Vec::new();
+    };
+
+    let mut freqs: Vec<u64> = content
+        .lines()
+        .filter_map(|line| {
+            let start = line.find("freq = ")? + 7;
+            let digits: String = line[start..]
+                .chars()
+                .take_while(|c| c.is_ascii_digit())
+                .collect();
+            digits.parse().ok()
+        })
+        .collect();
+    freqs.sort_unstable_by(|a, b| b.cmp(a));
+    freqs
+}
+
 pub fn apply_mtk_performance() {
     if !is_mtk_device() {
         return;
@@ -191,29 +231,63 @@ pub fn apply_mtk_performance() {
 
     crate::log!("[MTK] Applying Performance Profile");
 
-    write_sysfs("/sys/class/misc/mali0/device/power_policy", "always_on", true);
     write_sysfs(
-        "/sys/class/devfreq/mtk-dvfsrc-devfreq/governor",
-        "performance",
+        "/sys/class/misc/mali0/device/power_policy",
+        "always_on",
         true,
     );
-    write_sysfs("/proc/gpufreqv2/fix_target_opp_index", "0", true);
+    crate::devfreq::apply(&["mtk-dvfsrc"], "", true);
+
+    if Path::new("/proc/gpufreqv2").exists() {
+        write_sysfs("/proc/gpufreqv2/fix_target_opp_index", "0", true);
+    } else if let Some(freq) = gpu_opp_table().first() {
+        write_sysfs("/proc/gpufreq/gpufreq_opp_freq", &freq.to_string(), true);
+    }
 
     write_sysfs("/sys/kernel/fpsgo/common/force_onoff", "0", true);
-    write_sysfs("/sys/kernel/eara_thermal/enable", "0", true);
+    if !crate::engine::vendor_thermal_managed() {
+        write_sysfs("/sys/kernel/eara_thermal/enable", "0", true);
+    }
     write_sysfs("/sys/devices/system/cpu/eas/enable", "0", true);
 
     write_sysfs("/sys/kernel/ged/hal/gpu_boost_level", "100", true);
-    write_sysfs("/sys/module/mtk_fpsgo/parameters/uboost_enhance_f", "100", true);
-    write_sysfs("/sys/module/mtk_fpsgo/parameters/isolation_limit_cap", "0", true);
+    write_sysfs(
+        "/sys/module/mtk_fpsgo/parameters/uboost_enhance_f",
+        "100",
+        true,
+    );
+    write_sysfs(
+        "/sys/module/mtk_fpsgo/parameters/isolation_limit_cap",
+        "0",
+        true,
+    );
+    if Path::new("/proc/cpufreq/cpufreq_power_mode").exists() {
+        write_sysfs("/proc/cpufreq/cpufreq_power_mode", "3", true);
+    }
     write_sysfs("/sys/pnpmgr/fpsgo_boost/boost_enable", "1", true);
     write_sysfs("/sys/pnpmgr/fpsgo_boost/boost_mode", "1", true);
 
     write_sysfs("/proc/cpufreq/cpufreq_cci_mode", "1", true);
-    write_sysfs("/sys/module/sspm_v3/holders/ged/parameters/is_GED_KPI_enabled", "0", true);
-    write_sysfs("/sys/devices/platform/boot_dramboost/dramboost/dramboost", "1", true);
-    write_sysfs("/proc/mtk_batoc_throttling/battery_oc_protect_stop", "stop 1", true);
-    write_sysfs("/proc/perfmgr/syslimiter/syslimiter_force_disable", "0", false);
+    write_sysfs(
+        "/sys/module/sspm_v3/holders/ged/parameters/is_GED_KPI_enabled",
+        "0",
+        true,
+    );
+    write_sysfs(
+        "/sys/devices/platform/boot_dramboost/dramboost/dramboost",
+        "1",
+        true,
+    );
+    write_sysfs(
+        "/proc/mtk_batoc_throttling/battery_oc_protect_stop",
+        "stop 1",
+        true,
+    );
+    write_sysfs(
+        "/proc/perfmgr/syslimiter/syslimiter_force_disable",
+        "0",
+        false,
+    );
 
     apply_mtk_dvfsrc(true);
     lock_mtk_cpu_clocks(true);
@@ -225,24 +299,57 @@ pub fn apply_mtk_balance() {
     }
 
     crate::log!("[MTK] Restoring Balanced Baseline");
-    write_sysfs("/sys/class/misc/mali0/device/power_policy", "coarse_demand", false);
-    write_sysfs("/sys/class/devfreq/mtk-dvfsrc-devfreq/governor", "simple_ondemand", false);
+    write_sysfs(
+        "/sys/class/misc/mali0/device/power_policy",
+        "coarse_demand",
+        false,
+    );
+    write_sysfs(
+        "/sys/class/devfreq/mtk-dvfsrc-devfreq/governor",
+        "simple_ondemand",
+        false,
+    );
     write_sysfs("/proc/gpufreqv2/fix_target_opp_index", "-1", false);
 
     write_sysfs("/sys/kernel/fpsgo/common/force_onoff", "2", false);
-    write_sysfs("/sys/kernel/eara_thermal/enable", "1", false);
+    if !crate::engine::vendor_thermal_managed() {
+        write_sysfs("/sys/kernel/eara_thermal/enable", "1", false);
+    }
     write_sysfs("/sys/devices/system/cpu/eas/enable", "1", false);
 
     write_sysfs("/sys/kernel/ged/hal/gpu_boost_level", "0", false);
-    write_sysfs("/sys/module/mtk_fpsgo/parameters/uboost_enhance_f", "0", false);
+    write_sysfs(
+        "/sys/module/mtk_fpsgo/parameters/uboost_enhance_f",
+        "0",
+        false,
+    );
     write_sysfs("/sys/pnpmgr/fpsgo_boost/boost_enable", "0", false);
     write_sysfs("/sys/pnpmgr/fpsgo_boost/boost_mode", "0", false);
+    if Path::new("/proc/cpufreq/cpufreq_power_mode").exists() {
+        write_sysfs("/proc/cpufreq/cpufreq_power_mode", "1", false);
+    }
 
     write_sysfs("/proc/cpufreq/cpufreq_cci_mode", "0", false);
-    write_sysfs("/sys/module/sspm_v3/holders/ged/parameters/is_GED_KPI_enabled", "1", false);
-    write_sysfs("/sys/devices/platform/boot_dramboost/dramboost/dramboost", "0", false);
-    write_sysfs("/proc/mtk_batoc_throttling/battery_oc_protect_stop", "stop 0", false);
-    write_sysfs("/proc/perfmgr/syslimiter/syslimiter_force_disable", "0", false);
+    write_sysfs(
+        "/sys/module/sspm_v3/holders/ged/parameters/is_GED_KPI_enabled",
+        "1",
+        false,
+    );
+    write_sysfs(
+        "/sys/devices/platform/boot_dramboost/dramboost/dramboost",
+        "0",
+        false,
+    );
+    write_sysfs(
+        "/proc/mtk_batoc_throttling/battery_oc_protect_stop",
+        "stop 0",
+        false,
+    );
+    write_sysfs(
+        "/proc/perfmgr/syslimiter/syslimiter_force_disable",
+        "0",
+        false,
+    );
 
     apply_mtk_dvfsrc(false);
     lock_mtk_cpu_clocks(false);
@@ -254,20 +361,46 @@ pub fn apply_mtk_eco() {
     }
 
     crate::log!("[MTK] Applying Eco Profile");
-    write_sysfs("/sys/class/misc/mali0/device/power_policy", "coarse_demand", false);
-    write_sysfs("/sys/class/devfreq/mtk-dvfsrc-devfreq/governor", "powersave", false);
+    write_sysfs(
+        "/sys/class/misc/mali0/device/power_policy",
+        "coarse_demand",
+        false,
+    );
+    write_sysfs(
+        "/sys/class/devfreq/mtk-dvfsrc-devfreq/governor",
+        "powersave",
+        false,
+    );
     write_sysfs("/proc/gpufreqv2/fix_target_opp_index", "-1", false);
 
     write_sysfs("/sys/kernel/fpsgo/common/force_onoff", "2", false);
-    write_sysfs("/sys/kernel/eara_thermal/enable", "1", false);
+    if !crate::engine::vendor_thermal_managed() {
+        write_sysfs("/sys/kernel/eara_thermal/enable", "1", false);
+    }
     write_sysfs("/sys/devices/system/cpu/eas/enable", "1", false);
 
     write_sysfs("/sys/kernel/ged/hal/gpu_boost_level", "0", false);
-    write_sysfs("/sys/module/mtk_fpsgo/parameters/uboost_enhance_f", "0", false);
+    write_sysfs(
+        "/sys/module/mtk_fpsgo/parameters/uboost_enhance_f",
+        "0",
+        false,
+    );
     write_sysfs("/proc/cpufreq/cpufreq_cci_mode", "0", false);
-    write_sysfs("/sys/module/sspm_v3/holders/ged/parameters/is_GED_KPI_enabled", "1", false);
-    write_sysfs("/sys/devices/platform/boot_dramboost/dramboost/dramboost", "0", false);
-    write_sysfs("/proc/mtk_batoc_throttling/battery_oc_protect_stop", "stop 0", false);
+    write_sysfs(
+        "/sys/module/sspm_v3/holders/ged/parameters/is_GED_KPI_enabled",
+        "1",
+        false,
+    );
+    write_sysfs(
+        "/sys/devices/platform/boot_dramboost/dramboost/dramboost",
+        "0",
+        false,
+    );
+    write_sysfs(
+        "/proc/mtk_batoc_throttling/battery_oc_protect_stop",
+        "stop 0",
+        false,
+    );
 
     apply_mtk_dvfsrc(false);
     lock_mtk_cpu_clocks(false);

@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-use std::collections::HashMap;
+use serde_json::Value;
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime};
-use serde_json::Value;
 
 pub const CONFIG_DIR: &str = "/data/adb/.config/lumina";
 
@@ -60,17 +60,25 @@ const CGROUP_TOP_APP_CANDIDATES: &[&str] = &[
 ];
 
 extern "C" {
-    fn __system_property_get(name: *const std::os::raw::c_char, value: *mut std::os::raw::c_char) -> std::os::raw::c_int;
+    fn __system_property_get(
+        name: *const std::os::raw::c_char,
+        value: *mut std::os::raw::c_char,
+    ) -> std::os::raw::c_int;
 }
 
 pub fn get_system_prop(name: &str) -> String {
     let mut buf = [0u8; 92];
     if let Ok(c_name) = std::ffi::CString::new(name) {
         let len = unsafe {
-            __system_property_get(c_name.as_ptr(), buf.as_mut_ptr() as *mut std::os::raw::c_char)
+            __system_property_get(
+                c_name.as_ptr(),
+                buf.as_mut_ptr() as *mut std::os::raw::c_char,
+            )
         };
         if len > 0 {
-            return String::from_utf8_lossy(&buf[..len as usize]).trim().to_string();
+            return String::from_utf8_lossy(&buf[..len as usize])
+                .trim()
+                .to_string();
         }
     }
     String::new()
@@ -79,7 +87,11 @@ pub fn get_system_prop(name: &str) -> String {
 #[inline]
 pub fn sanitize_pkg_name(raw: &str) -> &str {
     let clean = raw.trim_matches('\0').trim();
-    clean.split_once(':').map(|(base, _)| base).unwrap_or(clean).trim()
+    clean
+        .split_once(':')
+        .map(|(base, _)| base)
+        .unwrap_or(clean)
+        .trim()
 }
 
 pub(crate) fn is_ignored_package(pkg: &str) -> bool {
@@ -100,7 +112,8 @@ pub(crate) fn is_ignored_package(pkg: &str) -> bool {
             | "com.mi.android.globallauncher"
             | "com.android.launcher"
             | "com.android.launcher3"
-    ) || pkg.contains("inputmethod") || pkg.contains("system_server")
+    ) || pkg.contains("inputmethod")
+        || pkg.contains("system_server")
 }
 
 #[derive(Debug, Clone)]
@@ -125,6 +138,30 @@ struct WhitelistState {
 }
 
 static WHITELIST_CACHE: Mutex<Option<WhitelistState>> = Mutex::new(None);
+
+const CONFIG_CACHE_TTL: Duration = Duration::from_millis(750);
+const PROC_CACHE_TTL: Duration = Duration::from_secs(3);
+const FOCUS_FALLBACK_TTL: Duration = Duration::from_millis(1500);
+
+static GLOBAL_JSON_CACHE: Mutex<Option<(Instant, Value)>> = Mutex::new(None);
+static APP_JSON_CACHE: Mutex<Option<(Instant, Value)>> = Mutex::new(None);
+static PROC_CACHE: Mutex<Option<(Instant, HashSet<String>)>> = Mutex::new(None);
+static FOCUS_FALLBACK_CACHE: Mutex<Option<(Instant, Option<String>)>> = Mutex::new(None);
+
+pub fn invalidate_config_cache() {
+    if let Ok(mut guard) = GLOBAL_JSON_CACHE.lock() {
+        *guard = None;
+    }
+    if let Ok(mut guard) = APP_JSON_CACHE.lock() {
+        *guard = None;
+    }
+    if let Ok(mut guard) = CACHED_MASTER.lock() {
+        *guard = None;
+    }
+    if let Ok(mut guard) = CACHED_LITE.lock() {
+        *guard = None;
+    }
+}
 
 fn normalize_option(val: &Value) -> Option<String> {
     match val {
@@ -157,7 +194,8 @@ fn parse_gamelist(path: &Path) -> HashMap<String, GameMeta> {
                     }
                     let mut meta = GameMeta::default();
                     if let Value::Object(fields) = value {
-                        if let Some(v) = fields.get("lite_mode").or_else(|| fields.get("liteMode")) {
+                        if let Some(v) = fields.get("lite_mode").or_else(|| fields.get("liteMode"))
+                        {
                             if let Some(mode) = normalize_option(v) {
                                 meta.lite_mode = mode;
                             }
@@ -204,7 +242,7 @@ fn find_gamelist_path() -> Option<PathBuf> {
         })
 }
 
-fn refresh_whitelist<'a>(guard: &'a mut Option<WhitelistState>) -> &'a Option<WhitelistState> {
+fn refresh_whitelist(guard: &mut Option<WhitelistState>) -> &Option<WhitelistState> {
     let path = match find_gamelist_path() {
         Some(p) => p,
         None => {
@@ -216,7 +254,9 @@ fn refresh_whitelist<'a>(guard: &'a mut Option<WhitelistState>) -> &'a Option<Wh
     let current_mtime = fs::metadata(&path).ok().and_then(|m| m.modified().ok());
 
     let need_reload = match &*guard {
-        Some(state) => state.active_path.as_ref() != Some(&path) || state.last_mtime != current_mtime,
+        Some(state) => {
+            state.active_path.as_ref() != Some(&path) || state.last_mtime != current_mtime
+        }
         None => true,
     };
 
@@ -257,44 +297,26 @@ pub fn get_game_meta(pkg: &str) -> Option<GameMeta> {
 }
 
 pub fn get_focused_package() -> Option<String> {
-    for &cgroup_path in CGROUP_TOP_APP_CANDIDATES {
-        if !Path::new(cgroup_path).exists() {
-            continue;
-        }
-
-        if let Ok(content) = fs::read_to_string(cgroup_path) {
-            for line in content.lines().rev() {
-                let pid_str = line.trim();
-                if pid_str.is_empty() {
-                    continue;
-                }
-
-                let cmdline_path = format!("/proc/{}/cmdline", pid_str);
-                if let Ok(bytes) = fs::read(cmdline_path) {
-                    let raw_str = if let Some(pos) = bytes.iter().position(|&b| b == 0) {
-                        std::str::from_utf8(&bytes[..pos]).ok()
-                    } else {
-                        std::str::from_utf8(&bytes).ok()
-                    };
-
-                    if let Some(raw) = raw_str {
-                        let pkg = sanitize_pkg_name(raw);
-                        if !pkg.is_empty()
-                            && !pkg.starts_with('/')
-                            && pkg.contains('.')
-                            && !is_ignored_package(pkg)
-                        {
-                            return Some(pkg.to_string());
-                        }
-                    }
-                }
-            }
-        }
-    }
-    None
+    get_focused_package_cached()
 }
 
 pub fn is_master_enabled() -> bool {
+    if let Ok(guard) = CACHED_MASTER.lock() {
+        if let Some((at, value)) = *guard {
+            if at.elapsed() < CONFIG_CACHE_TTL {
+                return value;
+            }
+        }
+    }
+
+    let value = read_master_enabled();
+    if let Ok(mut guard) = CACHED_MASTER.lock() {
+        *guard = Some((Instant::now(), value));
+    }
+    value
+}
+
+fn read_master_enabled() -> bool {
     let p = format!("{}/master.conf", CONFIG_DIR);
     if let Ok(content) = std::fs::read_to_string(p) {
         let val = content.trim();
@@ -316,6 +338,8 @@ pub fn is_master_enabled() -> bool {
 }
 
 static CACHED_LOW_POWER: Mutex<Option<(Instant, bool)>> = Mutex::new(None);
+static CACHED_MASTER: Mutex<Option<(Instant, bool)>> = Mutex::new(None);
+static CACHED_LITE: Mutex<Option<(Instant, bool)>> = Mutex::new(None);
 
 pub fn is_low_power_active() -> bool {
     if let Ok(guard) = CACHED_LOW_POWER.lock() {
@@ -361,22 +385,86 @@ fn is_truthy(val: &Value) -> bool {
 }
 
 pub fn read_global_json() -> Option<Value> {
-    let path = format!("{}/config.json", CONFIG_DIR);
-    if let Ok(content) = std::fs::read_to_string(path) {
-        if let Ok(json) = serde_json::from_str::<Value>(&content) {
-            return Some(json);
+    if let Ok(guard) = GLOBAL_JSON_CACHE.lock() {
+        if let Some((at, json)) = guard.as_ref() {
+            if at.elapsed() < CONFIG_CACHE_TTL {
+                return Some(json.clone());
+            }
         }
     }
-    None
+
+    let path = format!("{}/config.json", CONFIG_DIR);
+    let json = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|content| serde_json::from_str::<Value>(&content).ok());
+
+    if let Some(value) = json {
+        if let Ok(mut guard) = GLOBAL_JSON_CACHE.lock() {
+            *guard = Some((Instant::now(), value.clone()));
+        }
+        Some(value)
+    } else {
+        None
+    }
+}
+
+pub fn read_app_json_cached() -> Option<Value> {
+    read_app_json()
+}
+
+fn read_app_json() -> Option<Value> {
+    if let Ok(guard) = APP_JSON_CACHE.lock() {
+        if let Some((at, json)) = guard.as_ref() {
+            if at.elapsed() < CONFIG_CACHE_TTL {
+                return Some(json.clone());
+            }
+        }
+    }
+
+    let path = format!("{}/app_config.json", CONFIG_DIR);
+    let json = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|content| serde_json::from_str::<Value>(&content).ok());
+
+    if let Some(value) = json {
+        if let Ok(mut guard) = APP_JSON_CACHE.lock() {
+            *guard = Some((Instant::now(), value.clone()));
+        }
+        Some(value)
+    } else {
+        None
+    }
 }
 
 pub fn is_lite_mode_active() -> bool {
+    if let Ok(guard) = CACHED_LITE.lock() {
+        if let Some((at, value)) = *guard {
+            if at.elapsed() < CONFIG_CACHE_TTL {
+                return value;
+            }
+        }
+    }
+
+    let value = read_lite_mode_active();
+    if let Ok(mut guard) = CACHED_LITE.lock() {
+        *guard = Some((Instant::now(), value));
+    }
+    value
+}
+
+fn read_lite_mode_active() -> bool {
     let p = format!("{}/lite_mode.conf", CONFIG_DIR);
     if let Ok(content) = std::fs::read_to_string(p) {
         let trimmed = content.trim();
-        if trimmed == "1" || trimmed.eq_ignore_ascii_case("true") || trimmed.eq_ignore_ascii_case("on") {
+        if trimmed == "1"
+            || trimmed.eq_ignore_ascii_case("true")
+            || trimmed.eq_ignore_ascii_case("on")
+        {
             return true;
-        } else if trimmed == "0" || trimmed.eq_ignore_ascii_case("false") || trimmed.eq_ignore_ascii_case("off") {
+        } else if trimmed == "0"
+            || trimmed.eq_ignore_ascii_case("false")
+            || trimmed.eq_ignore_ascii_case("off")
+        {
             return false;
         }
     }
@@ -418,25 +506,32 @@ pub fn get_global_zram_config() -> (Option<u32>, Option<String>, Option<u32>) {
         None => return (None, None, None),
     };
 
-    let size_gb = json.get("zram_size_gb")
+    let size_gb = json
+        .get("zram_size_gb")
         .or_else(|| json.get("zram_size"))
         .or_else(|| json.get("zramSize"))
         .and_then(|v| {
             if let Some(n) = v.as_u64() {
                 Some(n as u32)
             } else if let Some(s) = v.as_str() {
-                s.replace("GB", "").replace("gb", "").trim().parse::<u32>().ok()
+                s.replace("GB", "")
+                    .replace("gb", "")
+                    .trim()
+                    .parse::<u32>()
+                    .ok()
             } else {
                 None
             }
         });
 
-    let algo = json.get("zram_algorithm")
+    let algo = json
+        .get("zram_algorithm")
         .or_else(|| json.get("zramAlgorithm"))
         .or_else(|| json.get("zram_algo"))
         .and_then(|v| v.as_str().map(|s| s.trim().to_string()));
 
-    let swappiness = json.get("swappiness")
+    let swappiness = json
+        .get("swappiness")
         .or_else(|| json.get("vm_swappiness"))
         .and_then(|v| {
             if let Some(n) = v.as_u64() {
@@ -460,20 +555,33 @@ pub fn get_global_io_scheduler() -> Option<String> {
 }
 
 fn extract_app_config(item: &Value) -> AppConfig {
-    let enabled = item.get("saklar_utama")
+    let enabled = item
+        .get("saklar_utama")
         .or_else(|| item.get("saklarUtama"))
         .or_else(|| item.get("enabled"))
         .map(is_truthy)
         .unwrap_or(false);
 
     let lite_mode = match item.get("lite_mode").or_else(|| item.get("liteMode")) {
-        Some(Value::Bool(b)) => if *b { "on".to_string() } else { "off".to_string() },
+        Some(Value::Bool(b)) => {
+            if *b {
+                "on".to_string()
+            } else {
+                "off".to_string()
+            }
+        }
         Some(Value::String(s)) => s.clone(),
         _ => "default".to_string(),
     };
 
     let dnd = match item.get("dnd") {
-        Some(Value::Bool(b)) => if *b { "on".to_string() } else { "off".to_string() },
+        Some(Value::Bool(b)) => {
+            if *b {
+                "on".to_string()
+            } else {
+                "off".to_string()
+            }
+        }
         Some(Value::String(s)) => match s.trim().to_ascii_lowercase().as_str() {
             "on" | "off" | "default" => s.trim().to_ascii_lowercase(),
             _ => "default".to_string(),
@@ -492,23 +600,29 @@ fn extract_app_config(item: &Value) -> AppConfig {
         _ => "default".to_string(),
     };
 
-    let texture_enabled = item.get("texture_enabled")
+    let texture_enabled = item
+        .get("texture_enabled")
         .or_else(|| item.get("textureEnabled"))
         .map(is_truthy)
         .unwrap_or(false);
 
-    let texture_detail = match item.get("texture_detail").or_else(|| item.get("textureDetail")) {
+    let texture_detail = match item
+        .get("texture_detail")
+        .or_else(|| item.get("textureDetail"))
+    {
         Some(Value::Number(n)) => n.as_i64().unwrap_or(0) as i32,
         Some(Value::String(s)) => s.parse::<i32>().unwrap_or(0),
         _ => 0,
     };
 
-    let pixel_sharp = item.get("pixel_sharp")
+    let pixel_sharp = item
+        .get("pixel_sharp")
         .or_else(|| item.get("pixelSharp"))
         .map(is_truthy)
         .unwrap_or(false);
 
-    let hard_distance = item.get("hard_distance")
+    let hard_distance = item
+        .get("hard_distance")
         .or_else(|| item.get("hardDistance"))
         .map(is_truthy)
         .unwrap_or(false);
@@ -529,24 +643,21 @@ fn extract_app_config(item: &Value) -> AppConfig {
 pub fn get_app_config(pkg: &str) -> Option<AppConfig> {
     let clean_pkg = sanitize_pkg_name(pkg);
 
-    let cfg_path = format!("{}/app_config.json", CONFIG_DIR);
-    if let Ok(content) = std::fs::read_to_string(cfg_path) {
-        if let Ok(json) = serde_json::from_str::<Value>(&content) {
-            if let Some(list) = json.as_array() {
-                for item in list {
-                    let matches_pkg = item.get("pkg").and_then(|v| v.as_str()) == Some(clean_pkg)
-                        || item.get("package").and_then(|v| v.as_str()) == Some(clean_pkg)
-                        || item.get("packageName").and_then(|v| v.as_str()) == Some(clean_pkg);
+    if let Some(json) = read_app_json() {
+        if let Some(list) = json.as_array() {
+            for item in list {
+                let matches_pkg = item.get("pkg").and_then(|v| v.as_str()) == Some(clean_pkg)
+                    || item.get("package").and_then(|v| v.as_str()) == Some(clean_pkg)
+                    || item.get("packageName").and_then(|v| v.as_str()) == Some(clean_pkg);
 
-                    if matches_pkg {
-                        return Some(extract_app_config(item));
-                    }
+                if matches_pkg {
+                    return Some(extract_app_config(item));
                 }
             }
+        }
 
-            if let Some(app_obj) = json.get(clean_pkg) {
-                return Some(extract_app_config(app_obj));
-            }
+        if let Some(app_obj) = json.get(clean_pkg) {
+            return Some(extract_app_config(app_obj));
         }
     }
 
@@ -572,33 +683,109 @@ pub fn is_app_enabled(pkg: &str) -> bool {
     if is_game_whitelisted(clean_pkg) {
         return true;
     }
-    get_app_config(clean_pkg).map(|c| c.enabled).unwrap_or(false)
+    get_app_config(clean_pkg)
+        .map(|c| c.enabled)
+        .unwrap_or(false)
+}
+
+fn running_packages() -> HashSet<String> {
+    if let Ok(guard) = PROC_CACHE.lock() {
+        if let Some((at, set)) = guard.as_ref() {
+            if at.elapsed() < PROC_CACHE_TTL {
+                return set.clone();
+            }
+        }
+    }
+
+    let mut packages = HashSet::new();
+    if let Ok(entries) = std::fs::read_dir("/proc") {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let Some(pid) = name.to_str() else {
+                continue;
+            };
+            if !pid.chars().all(|c| c.is_ascii_digit()) {
+                continue;
+            }
+
+            let cmdline_path = entry.path().join("cmdline");
+            let Ok(cmd) = std::fs::read(cmdline_path) else {
+                continue;
+            };
+            let Some(first) = cmd.split(|&b| b == 0).next() else {
+                continue;
+            };
+            let Ok(raw) = std::str::from_utf8(first) else {
+                continue;
+            };
+            let clean = sanitize_pkg_name(raw);
+            if clean.contains('.') && !clean.starts_with('/') {
+                packages.insert(clean.to_string());
+            }
+        }
+    }
+
+    if let Ok(mut guard) = PROC_CACHE.lock() {
+        *guard = Some((Instant::now(), packages.clone()));
+    }
+    packages
 }
 
 pub fn is_process_alive(pkg: &str) -> bool {
     let target = sanitize_pkg_name(pkg);
-    if let Ok(entries) = std::fs::read_dir("/proc") {
-        for entry in entries.flatten() {
-            let name = entry.file_name();
-            if let Some(s) = name.to_str() {
-                if s.chars().all(|c| c.is_ascii_digit()) {
-                    let cmdline_path = entry.path().join("cmdline");
-                    if let Ok(cmd) = std::fs::read(cmdline_path) {
-                        let proc_str = if let Some(first) = cmd.split(|&b| b == 0).next() {
-                            std::str::from_utf8(first).ok()
-                        } else {
-                            std::str::from_utf8(&cmd).ok()
-                        };
-                        if let Some(raw) = proc_str {
-                            let clean = sanitize_pkg_name(raw);
-                            if clean == target {
-                                return true;
-                            }
+    running_packages().contains(target)
+}
+
+fn focused_package_uncached() -> Option<String> {
+    for &cgroup_path in CGROUP_TOP_APP_CANDIDATES {
+        if !Path::new(cgroup_path).exists() {
+            continue;
+        }
+
+        if let Ok(content) = fs::read_to_string(cgroup_path) {
+            for line in content.lines().rev() {
+                let pid_str = line.trim();
+                if pid_str.is_empty() {
+                    continue;
+                }
+
+                let cmdline_path = format!("/proc/{}/cmdline", pid_str);
+                if let Ok(bytes) = fs::read(cmdline_path) {
+                    let raw_str = if let Some(pos) = bytes.iter().position(|&b| b == 0) {
+                        std::str::from_utf8(&bytes[..pos]).ok()
+                    } else {
+                        std::str::from_utf8(&bytes).ok()
+                    };
+
+                    if let Some(raw) = raw_str {
+                        let pkg = sanitize_pkg_name(raw);
+                        if !pkg.is_empty()
+                            && !pkg.starts_with('/')
+                            && pkg.contains('.')
+                            && !is_ignored_package(pkg)
+                        {
+                            return Some(pkg.to_string());
                         }
                     }
                 }
             }
         }
     }
-    false
+    None
+}
+
+pub fn get_focused_package_cached() -> Option<String> {
+    if let Ok(guard) = FOCUS_FALLBACK_CACHE.lock() {
+        if let Some((at, pkg)) = guard.as_ref() {
+            if at.elapsed() < FOCUS_FALLBACK_TTL {
+                return pkg.clone();
+            }
+        }
+    }
+
+    let pkg = focused_package_uncached();
+    if let Ok(mut guard) = FOCUS_FALLBACK_CACHE.lock() {
+        *guard = Some((Instant::now(), pkg.clone()));
+    }
+    pkg
 }

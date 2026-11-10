@@ -15,12 +15,16 @@
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
-use std::process::Command;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const STATUS_PATH: &str = "/data/adb/.config/lumina/fps.txt";
-const SAMPLE_INTERVAL: Duration = Duration::from_millis(1500);
+const SAMPLE_INTERVAL: Duration = Duration::from_secs(2);
+const IDLE_INTERVAL: Duration = Duration::from_secs(10);
 const MAX_FRAME_AGE_NS: u64 = 3_000_000_000;
+const IDLE_MARKER: &str = "-1";
 
 #[repr(C)]
 struct Timespec {
@@ -35,7 +39,10 @@ extern "C" {
 const CLOCK_MONOTONIC: i32 = 1;
 
 fn monotonic_ns() -> u64 {
-    let mut value = Timespec { tv_sec: 0, tv_nsec: 0 };
+    let mut value = Timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
     let result = unsafe { clock_gettime(CLOCK_MONOTONIC, &mut value) };
     if result != 0 || value.tv_sec < 0 {
         return 0;
@@ -55,7 +62,7 @@ fn write_status(value: Option<f32>) {
 
     let frame = match value {
         Some(fps) => format!("{:.1} {}", fps.clamp(1.0, 240.0), epoch_ms()),
-        None => format!("-1 {}", epoch_ms()),
+        None => format!("{} {}", IDLE_MARKER, epoch_ms()),
     };
 
     let temp = format!("{}.tmp", STATUS_PATH);
@@ -73,7 +80,7 @@ fn epoch_ms() -> u128 {
 }
 
 fn find_layer(package: &str) -> Option<String> {
-    let output = Command::new("dumpsys")
+    let output = std::process::Command::new("dumpsys")
         .args(["SurfaceFlinger", "--list"])
         .output()
         .ok()?;
@@ -105,7 +112,7 @@ fn find_layer(package: &str) -> Option<String> {
 }
 
 fn query_fps(layer: &str) -> Option<f32> {
-    let output = Command::new("dumpsys")
+    let output = std::process::Command::new("dumpsys")
         .args(["SurfaceFlinger", "--latency", layer])
         .output()
         .ok()?;
@@ -151,56 +158,98 @@ fn query_fps(layer: &str) -> Option<f32> {
     }
 }
 
+enum Request {
+    Track(Option<String>),
+    Stop,
+}
+
 pub struct FpsMonitor {
-    layer: Option<String>,
+    tx: Sender<Request>,
     last_package: Option<String>,
-    last_sample: Option<Instant>,
+    stopped: Arc<Mutex<bool>>,
 }
 
 impl FpsMonitor {
     pub fn new() -> Self {
+        let (tx, rx) = mpsc::channel();
+        let stopped = Arc::new(Mutex::new(false));
+        let worker_stopped = Arc::clone(&stopped);
+
+        let _ = thread::Builder::new()
+            .name("fps-sampler".to_string())
+            .spawn(move || sampler_loop(rx, worker_stopped));
+
         Self {
-            layer: None,
+            tx,
             last_package: None,
-            last_sample: None,
+            stopped,
         }
     }
 
     pub fn observe(&mut self, package: Option<&str>) {
-        let Some(package) = package else {
-            if self.last_package.take().is_some() {
-                self.layer = None;
-                self.last_sample = None;
-                write_status(None);
-            }
-            return;
-        };
+        let package = package.map(str::to_string);
 
-        if self.last_package.as_deref() != Some(package) {
-            self.last_package = Some(package.to_string());
-            self.layer = None;
-            self.last_sample = None;
+        if self.last_package == package {
+            return;
         }
 
-        if let Some(last) = self.last_sample {
-            if last.elapsed() < SAMPLE_INTERVAL {
+        self.last_package = package.clone();
+
+        let _ = self.tx.send(Request::Track(package));
+    }
+
+    pub fn stop(&self) {
+        if let Ok(mut stopped) = self.stopped.lock() {
+            *stopped = true;
+        }
+        let _ = self.tx.send(Request::Stop);
+    }
+}
+
+fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>) {
+    let mut package: Option<String> = None;
+    let mut layer: Option<String> = None;
+
+    loop {
+        if stopped.lock().map(|s| *s).unwrap_or(true) {
+            write_status(None);
+            return;
+        }
+
+        match rx.recv_timeout(if package.is_some() {
+            SAMPLE_INTERVAL
+        } else {
+            IDLE_INTERVAL
+        }) {
+            Ok(Request::Track(next)) => {
+                if next != package {
+                    layer = None;
+                }
+                package = next;
+                if package.is_none() {
+                    layer = None;
+                    write_status(None);
+                    continue;
+                }
+            }
+            Ok(Request::Stop) | Err(mpsc::RecvTimeoutError::Disconnected) => {
+                write_status(None);
                 return;
             }
-        }
-        self.last_sample = Some(Instant::now());
-
-        if self.layer.is_none() {
-            self.layer = find_layer(package);
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
         }
 
-        let result = self
-            .layer
-            .as_deref()
-            .and_then(query_fps);
+        let Some(pkg) = package.as_deref() else {
+            continue;
+        };
 
-        if result.is_none() {
-            self.layer = None;
+        if layer.is_none() {
+            layer = find_layer(pkg);
         }
-        write_status(result);
+        let sampled = layer.as_deref().and_then(query_fps);
+        if sampled.is_none() {
+            layer = None;
+        }
+        write_status(sampled);
     }
 }

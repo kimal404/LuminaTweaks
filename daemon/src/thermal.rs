@@ -13,9 +13,12 @@
 // limitations under the License.
 
 use std::fs;
+use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::{Duration, Instant};
 
 const SAMPLE_INTERVAL: Duration = Duration::from_secs(2);
+const ZONE_RESCAN_INTERVAL: Duration = Duration::from_secs(60);
 const WARM_C: f32 = 68.0;
 const CRITICAL_C: f32 = 78.0;
 const WARM_RECOVER_C: f32 = 62.0;
@@ -29,6 +32,11 @@ pub enum ThermalLevel {
     Critical,
 }
 
+#[derive(Clone)]
+struct Zone {
+    temp: String,
+}
+
 fn normalize(raw: i64) -> Option<f32> {
     let value = if raw.abs() >= 1000 {
         raw as f32 / 1000.0
@@ -40,33 +48,52 @@ fn normalize(raw: i64) -> Option<f32> {
     (value > 0.0 && value <= 150.0).then_some(value)
 }
 
-fn zone_temperature(name: &str) -> Option<f32> {
-    let kind = fs::read_to_string(format!("/sys/class/thermal/{}/type", name))
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    if kind.contains("usb") || kind.contains("charger") || kind.contains("pa_") {
-        return None;
-    }
-
-    let raw = fs::read_to_string(format!("/sys/class/thermal/{}/temp", name))
-        .ok()?
-        .trim()
-        .parse()
-        .ok()?;
-    normalize(raw)
+fn usable_zone(kind: &str) -> bool {
+    !kind.contains("usb")
+        && !kind.contains("charger")
+        && !kind.contains("pa_")
+        && !kind.contains("battery")
+        && !kind.contains("critical")
 }
 
-fn read_temperature() -> Option<f32> {
+fn scan_zones() -> Vec<Zone> {
+    let mut zones = Vec::new();
+    let Ok(entries) = fs::read_dir("/sys/class/thermal") else {
+        return zones;
+    };
+
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !name.starts_with("thermal_zone") {
+            continue;
+        }
+
+        let kind = fs::read_to_string(format!("/sys/class/thermal/{}/type", name))
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        if !usable_zone(&kind) {
+            continue;
+        }
+
+        zones.push(Zone {
+            temp: format!("/sys/class/thermal/{}/temp", name),
+        });
+    }
+
+    zones
+}
+
+fn read_temperature(zones: &[Zone]) -> Option<f32> {
     let mut max: Option<f32> = None;
-    if let Ok(entries) = fs::read_dir("/sys/class/thermal") {
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if !name.starts_with("thermal_zone") {
-                continue;
-            }
-            if let Some(temp) = zone_temperature(&name) {
-                max = Some(max.map_or(temp, |current| current.max(temp)));
-            }
+    for zone in zones {
+        let Ok(raw) = fs::read_to_string(&zone.temp) else {
+            continue;
+        };
+        let Ok(value) = raw.trim().parse::<i64>() else {
+            continue;
+        };
+        if let Some(temp) = normalize(value) {
+            max = Some(max.map_or(temp, |current| current.max(temp)));
         }
     }
 
@@ -85,76 +112,111 @@ fn read_temperature() -> Option<f32> {
     max
 }
 
-pub struct ThermalWatchdog {
-    last_sample: Option<Instant>,
+struct SamplerState {
     smoothed: Option<f32>,
     level: ThermalLevel,
 }
 
+pub struct ThermalWatchdog {
+    level: Arc<Mutex<ThermalLevel>>,
+    state: Arc<Mutex<SamplerState>>,
+}
+
 impl ThermalWatchdog {
     pub fn new() -> Self {
-        Self {
-            last_sample: None,
+        let level = Arc::new(Mutex::new(ThermalLevel::Normal));
+        let state = Arc::new(Mutex::new(SamplerState {
             smoothed: None,
             level: ThermalLevel::Normal,
-        }
+        }));
+
+        let worker_level = Arc::clone(&level);
+        let worker_state = Arc::clone(&state);
+
+        let _ = thread::Builder::new()
+            .name("thermal-sampler".to_string())
+            .spawn(move || {
+                let mut zones = scan_zones();
+                let mut last_scan = Instant::now();
+
+                loop {
+                    thread::sleep(SAMPLE_INTERVAL);
+
+                    if last_scan.elapsed() >= ZONE_RESCAN_INTERVAL {
+                        zones = scan_zones();
+                        last_scan = Instant::now();
+                    }
+
+                    let Some(temp) = read_temperature(&zones) else {
+                        continue;
+                    };
+
+                    let Ok(mut guard) = worker_state.lock() else {
+                        continue;
+                    };
+
+                    let smoothed = match guard.smoothed {
+                        Some(previous) => previous * (1.0 - SMOOTHING) + temp * SMOOTHING,
+                        None => temp,
+                    };
+                    guard.smoothed = Some(smoothed);
+
+                    let next = match guard.level {
+                        ThermalLevel::Normal if smoothed >= CRITICAL_C => ThermalLevel::Critical,
+                        ThermalLevel::Normal if smoothed >= WARM_C => ThermalLevel::Warm,
+                        ThermalLevel::Warm if smoothed >= CRITICAL_C => ThermalLevel::Critical,
+                        ThermalLevel::Warm if smoothed <= WARM_RECOVER_C => ThermalLevel::Normal,
+                        ThermalLevel::Critical if smoothed <= WARM_RECOVER_C => {
+                            ThermalLevel::Normal
+                        }
+                        ThermalLevel::Critical if smoothed <= CRITICAL_RECOVER_C => {
+                            ThermalLevel::Warm
+                        }
+                        current => current,
+                    };
+
+                    if next != guard.level {
+                        crate::log!(
+                            "[THERMAL] {} -> {} at {:.1}C (smoothed {:.1}C)",
+                            name(guard.level),
+                            name(next),
+                            temp,
+                            smoothed
+                        );
+                        guard.level = next;
+                    }
+
+                    if let Ok(mut current) = worker_level.lock() {
+                        *current = next;
+                    }
+                }
+            });
+
+        Self { level, state }
     }
 
     pub fn reset(&mut self) {
-        self.last_sample = None;
-        self.smoothed = None;
-        self.level = ThermalLevel::Normal;
+        if let Ok(mut state) = self.state.lock() {
+            state.smoothed = None;
+            state.level = ThermalLevel::Normal;
+        }
+        if let Ok(mut level) = self.level.lock() {
+            *level = ThermalLevel::Normal;
+        }
     }
 
     pub fn sample(&mut self) -> ThermalLevel {
-        if let Some(last) = self.last_sample {
-            if last.elapsed() < SAMPLE_INTERVAL {
-                return self.level;
-            }
-        }
-        self.last_sample = Some(Instant::now());
-
-        let Some(temp) = read_temperature() else {
-            return self.level;
-        };
-        let smoothed = match self.smoothed {
-            Some(previous) => previous * (1.0 - SMOOTHING) + temp * SMOOTHING,
-            None => temp,
-        };
-        self.smoothed = Some(smoothed);
-
-        let next = match self.level {
-            ThermalLevel::Normal if smoothed >= CRITICAL_C => ThermalLevel::Critical,
-            ThermalLevel::Normal if smoothed >= WARM_C => ThermalLevel::Warm,
-            ThermalLevel::Warm if smoothed >= CRITICAL_C => ThermalLevel::Critical,
-            ThermalLevel::Warm if smoothed <= WARM_RECOVER_C => ThermalLevel::Normal,
-            ThermalLevel::Critical if smoothed <= WARM_RECOVER_C => ThermalLevel::Normal,
-            ThermalLevel::Critical if smoothed <= CRITICAL_RECOVER_C => ThermalLevel::Warm,
-            current => current,
-        };
-
-        if next != self.level {
-            crate::log!(
-                "[THERMAL] {} -> {} at {:.1}C (smoothed {:.1}C)",
-                self.level_name(),
-                Self::name(next),
-                temp,
-                smoothed
-            );
-            self.level = next;
-        }
         self.level
+            .lock()
+            .map(|level| *level)
+            .unwrap_or(ThermalLevel::Normal)
     }
+}
 
-    fn level_name(&self) -> &'static str {
-        Self::name(self.level)
-    }
-
-    fn name(level: ThermalLevel) -> &'static str {
-        match level {
-            ThermalLevel::Normal => "normal",
-            ThermalLevel::Warm => "warm",
-            ThermalLevel::Critical => "critical",
-        }
+fn name(level: ThermalLevel) -> &'static str {
+    match level {
+        ThermalLevel::Normal => "normal",
+        ThermalLevel::Warm => "warm",
+        ThermalLevel::Critical => "critical",
     }
 }

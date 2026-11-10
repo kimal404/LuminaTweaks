@@ -14,10 +14,12 @@
  * limitations under the License.
  */
 
+use std::collections::HashMap;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Command;
+use std::sync::{Mutex, OnceLock};
 
 pub fn get_zen_mode() -> String {
     match Command::new("settings")
@@ -51,6 +53,10 @@ pub fn set_dnd_mode(mode: &str) {
         .status();
 }
 
+pub fn read_sysfs(path: &str) -> std::io::Result<String> {
+    fs::read_to_string(path)
+}
+
 pub fn write_sysfs(path: &str, val: &str, lock: bool) -> bool {
     if !Path::new(path).exists() {
         return false;
@@ -80,16 +86,128 @@ pub fn is_disable_thermal_enabled() -> bool {
     prop == "1"
 }
 
+pub(crate) fn vendor_thermal_managed() -> bool {
+    static MANAGED: OnceLock<bool> = OnceLock::new();
+    *MANAGED.get_or_init(|| {
+        [
+            "ro.miui.ui.version.name",
+            "ro.mi.os.version.name",
+            "ro.oppo.market.name",
+            "ro.build.version.opporom",
+            "ro.vivo.os.version",
+        ]
+        .iter()
+        .any(|prop| !crate::detector::get_system_prop(prop).is_empty())
+            || Path::new("/system_ext/bin/mi_thermald").exists()
+            || Path::new("/vendor/bin/thermal-engine").exists()
+    })
+}
+
+fn zone_is_critical(name: &str) -> bool {
+    let kind = fs::read_to_string(format!("/sys/class/thermal/{}/type", name))
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    kind.contains("critical") || kind.contains("hot") || kind.contains("battery")
+}
+
+static ORIGINAL_POLICIES: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
+
+fn save_vendor_policies() {
+    let Ok(mut guard) = ORIGINAL_POLICIES.lock() else {
+        return;
+    };
+    if guard.is_some() {
+        return;
+    }
+
+    let mut saved = HashMap::new();
+    if let Ok(entries) = fs::read_dir("/sys/class/thermal") {
+        for entry in entries.flatten() {
+            let fname = entry.file_name().to_string_lossy().into_owned();
+            if !fname.starts_with("thermal_zone") || zone_is_critical(&fname) {
+                continue;
+            }
+            let policy = format!("/sys/class/thermal/{}/policy", fname);
+            if let Ok(current) = fs::read_to_string(&policy) {
+                let current = current.trim().to_string();
+                if !current.is_empty() {
+                    saved.insert(fname, current);
+                }
+            }
+        }
+    }
+    *guard = Some(saved);
+}
+
+fn restore_vendor_policies() {
+    let Ok(mut guard) = ORIGINAL_POLICIES.lock() else {
+        return;
+    };
+    let Some(saved) = guard.take() else {
+        return;
+    };
+
+    let mut restored = 0;
+    for (zone, policy) in saved {
+        let path = format!("/sys/class/thermal/{}/policy", zone);
+        if write_sysfs(&path, &policy, false) {
+            restored += 1;
+        }
+    }
+    if restored > 0 {
+        log!("[THERMAL] Restored vendor policy on {} zone(s)", restored);
+    }
+}
+
 pub fn apply_thermal_kill(disable: bool) {
+    if vendor_thermal_managed() {
+        if !disable {
+            restore_vendor_policies();
+            return;
+        }
+
+        save_vendor_policies();
+        let mut tuned = 0;
+        if let Ok(entries) = fs::read_dir("/sys/class/thermal") {
+            for entry in entries.flatten() {
+                let fname = entry.file_name().to_string_lossy().into_owned();
+                if !fname.starts_with("thermal_zone") || zone_is_critical(&fname) {
+                    continue;
+                }
+                let policy = format!("/sys/class/thermal/{}/policy", fname);
+                if write_sysfs(&policy, "step_wise", false) {
+                    tuned += 1;
+                }
+            }
+        }
+        if tuned > 0 {
+            log!(
+                "[THERMAL] Vendor thermal detected; step_wise on {} zone(s), vendor nodes untouched",
+                tuned
+            );
+        }
+        return;
+    }
+
     let mode_str = if disable { "disabled" } else { "enabled" };
 
     if let Ok(entries) = fs::read_dir("/sys/class/thermal") {
         for entry in entries.flatten() {
             let fname = entry.file_name().to_string_lossy().into_owned();
-            if fname.starts_with("thermal_zone") {
-                let path = format!("/sys/class/thermal/{}/mode", fname);
-                write_sysfs(&path, mode_str, false);
+            if !fname.starts_with("thermal_zone") || zone_is_critical(&fname) {
+                continue;
             }
+
+            if disable {
+                let policy = format!("/sys/class/thermal/{}/policy", fname);
+                if Path::new(&policy).exists() {
+                    write_sysfs(&policy, "step_wise", false);
+                    continue;
+                }
+            }
+
+            let path = format!("/sys/class/thermal/{}/mode", fname);
+            write_sysfs(&path, mode_str, false);
         }
     }
 
@@ -126,7 +244,9 @@ pub fn apply_thermal_kill(disable: bool) {
 pub fn apply_boot_profile() {
     log!("[BOOT] Executing universal post-boot & post-flash baseline profile...");
 
-    if let Ok(entries) = fs::read_dir("/sys/class/thermal") {
+    if vendor_thermal_managed() {
+        log!("[BOOT] Vendor thermal manager detected; keeping its trip points");
+    } else if let Ok(entries) = fs::read_dir("/sys/class/thermal") {
         let mut tuned_tz = 0;
         let mut skipped_tz = 0;
         for entry in entries.flatten() {
@@ -147,7 +267,11 @@ pub fn apply_boot_profile() {
                 skipped_tz += 1;
             }
         }
-        log!("[BOOT] Thermal: Locked {} zone(s) to step_wise ({} skipped/unsupported)", tuned_tz, skipped_tz);
+        log!(
+            "[BOOT] Thermal: Locked {} zone(s) to step_wise ({} skipped/unsupported)",
+            tuned_tz,
+            skipped_tz
+        );
     }
 
     write_sysfs("/proc/sys/kernel/panic", "0", false);
@@ -169,10 +293,14 @@ pub fn apply_boot_profile() {
             write_sysfs(&add_random_path, "0", false);
             disk_count += 1;
         }
-        log!("[BOOT] I/O Queue: Disabled iostats & add_random across {} device(s)", disk_count);
+        log!(
+            "[BOOT] I/O Queue: Disabled iostats & add_random across {} device(s)",
+            disk_count
+        );
     }
 
-    let avail_cc = fs::read_to_string("/proc/sys/net/ipv4/tcp_available_congestion_control").unwrap_or_default();
+    let avail_cc = fs::read_to_string("/proc/sys/net/ipv4/tcp_available_congestion_control")
+        .unwrap_or_default();
     let cc_candidates = ["bbr3", "bbr2", "bbrplus", "bbr", "westwood", "cubic"];
     for algo in cc_candidates {
         if avail_cc.contains(algo) {
@@ -195,8 +323,16 @@ pub fn apply_boot_profile() {
     write_sysfs("/proc/sys/kernel/sched_child_runs_first", "1", false);
     write_sysfs("/proc/sys/kernel/sched_nr_migrate", "32", false);
     write_sysfs("/proc/sys/kernel/sched_migration_cost_ns", "50000", false);
-    write_sysfs("/proc/sys/kernel/sched_min_granularity_ns", "1000000", false);
-    write_sysfs("/proc/sys/kernel/sched_wakeup_granularity_ns", "1500000", false);
+    write_sysfs(
+        "/proc/sys/kernel/sched_min_granularity_ns",
+        "1000000",
+        false,
+    );
+    write_sysfs(
+        "/proc/sys/kernel/sched_wakeup_granularity_ns",
+        "1500000",
+        false,
+    );
     write_sysfs("/proc/sys/kernel/printk", "0 0 0 0", false);
     write_sysfs("/sys/kernel/debug/tracing/tracing_on", "0", false);
 
@@ -213,8 +349,23 @@ pub fn apply_boot_profile() {
 
     write_sysfs("/sys/module/opchain/parameters/chain_on", "0", false);
     write_sysfs("/sys/module/cpufreq_bouncing/parameters/enable", "0", false);
-    write_sysfs("/proc/task_info/task_sched_info/task_sched_info_enable", "0", false);
-    write_sysfs("/proc/oplus_scheduler/sched_assist/sched_assist_enabled", "0", false);
+    write_sysfs(
+        "/proc/task_info/task_sched_info/task_sched_info_enable",
+        "0",
+        false,
+    );
+    write_sysfs(
+        "/proc/oplus_scheduler/sched_assist/sched_assist_enabled",
+        "0",
+        false,
+    );
+
+    if Path::new("/sys/kernel/debug/sched_features").exists() {
+        write_sysfs("/sys/kernel/debug/sched_features", "NEXT_BUDDY", false);
+        write_sysfs("/sys/kernel/debug/sched_features", "NO_TTWU_QUEUE", false);
+    }
+
+    write_sysfs("/proc/sys/kernel/split_lock_mitigate", "0", false);
 
     std::thread::spawn(|| {
         let _ = Command::new("sync").status();
@@ -255,11 +406,19 @@ pub fn apply_zram(size_gb: u32, algorithm: &str) {
     let size_matches = current_disksize_bytes == target_disksize_bytes;
 
     if algo_matches && size_matches {
-        log!("[ZRAM] Target config already active ({}GB, {})", size_gb, algorithm);
+        log!(
+            "[ZRAM] Target config already active ({}GB, {})",
+            size_gb,
+            algorithm
+        );
         return;
     }
 
-    log!("[ZRAM] Applying config: {}GB, compression: {}", size_gb, algorithm);
+    log!(
+        "[ZRAM] Applying config: {}GB, compression: {}",
+        size_gb,
+        algorithm
+    );
 
     let _ = Command::new("swapoff").arg(zram_block).status();
     write_sysfs("/sys/block/zram0/reset", "1", false);
@@ -272,9 +431,15 @@ pub fn apply_zram(size_gb: u32, algorithm: &str) {
     write_sysfs("/sys/block/zram0/disksize", &size_str, false);
 
     let _ = Command::new("mkswap").arg(zram_block).status();
-    let _ = Command::new("swapon").args([zram_block, "-p", "32767"]).status();
+    let _ = Command::new("swapon")
+        .args([zram_block, "-p", "32767"])
+        .status();
 
-    log!("[ZRAM] Successfully applied {}GB with {}", size_gb, algorithm);
+    log!(
+        "[ZRAM] Successfully applied {}GB with {}",
+        size_gb,
+        algorithm
+    );
 }
 
 pub fn apply_swappiness(val: u32) {
@@ -291,7 +456,11 @@ pub fn apply_io_scheduler(scheduler: &str) {
     if let Ok(entries) = fs::read_dir("/sys/block") {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with("loop") || name.starts_with("zram") || name.starts_with("ram") || name.starts_with("dm-") {
+            if name.starts_with("loop")
+                || name.starts_with("zram")
+                || name.starts_with("ram")
+                || name.starts_with("dm-")
+            {
                 continue;
             }
             let sched_path = format!("/sys/block/{}/queue/scheduler", name);
@@ -301,7 +470,11 @@ pub fn apply_io_scheduler(scheduler: &str) {
         }
     }
     if applied_count > 0 {
-        log!("[IO] Applied scheduler '{}' across {} block device(s)", scheduler, applied_count);
+        log!(
+            "[IO] Applied scheduler '{}' across {} block device(s)",
+            scheduler,
+            applied_count
+        );
     }
 }
 
@@ -333,8 +506,16 @@ pub fn tune_schedutil_rate_limits(up_us: u64, down_us: u64) {
         }
     }
 
-    write_sysfs("/sys/devices/system/cpu/cpufreq/schedutil/up_rate_limit_us", &up_us.to_string(), false);
-    write_sysfs("/sys/devices/system/cpu/cpufreq/schedutil/down_rate_limit_us", &down_us.to_string(), false);
+    write_sysfs(
+        "/sys/devices/system/cpu/cpufreq/schedutil/up_rate_limit_us",
+        &up_us.to_string(),
+        false,
+    );
+    write_sysfs(
+        "/sys/devices/system/cpu/cpufreq/schedutil/down_rate_limit_us",
+        &down_us.to_string(),
+        false,
+    );
 }
 
 fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool, max_cap_ratio: Option<u64>) {
@@ -395,7 +576,13 @@ fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool, max_cap_ratio
 
                     write_sysfs(&min_path, &hw_min.to_string(), false);
                     write_sysfs(&max_path, &target_max.to_string(), true);
-                    log!("[LITE] {}: Capped max freq to {} kHz (~{}% of {} kHz)", fname, target_max, pct, hw_max);
+                    log!(
+                        "[LITE] {}: Capped max freq to {} kHz (~{}% of {} kHz)",
+                        fname,
+                        target_max,
+                        pct,
+                        hw_max
+                    );
                 } else {
                     write_sysfs(&min_path, &hw_min.to_string(), false);
                     write_sysfs(&max_path, &hw_max.to_string(), false);
@@ -408,7 +595,8 @@ fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool, max_cap_ratio
         for entry in entries.flatten() {
             let fname = entry.file_name().to_string_lossy().into_owned();
             if fname.starts_with("cpu") && fname[3..].chars().all(|c| c.is_ascii_digit()) {
-                let gov_path = format!("/sys/devices/system/cpu/{}/cpufreq/scaling_governor", fname);
+                let gov_path =
+                    format!("/sys/devices/system/cpu/{}/cpufreq/scaling_governor", fname);
                 write_sysfs(&gov_path, gov, lock_gov);
             }
         }
@@ -419,11 +607,16 @@ fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool, max_cap_ratio
         let ra_path = format!("/sys/block/{}/queue/read_ahead_kb", block);
         write_sysfs(&ra_path, ra_val, min_clamp);
     }
-    write_sysfs("/proc/sys/vm/vfs_cache_pressure", if min_clamp { "80" } else { "100" }, min_clamp);
+    write_sysfs(
+        "/proc/sys/vm/vfs_cache_pressure",
+        if min_clamp { "80" } else { "100" },
+        min_clamp,
+    );
 }
 
 pub fn performance_profile() {
     log!("[ENGINE] Applying Performance Profile");
+    crate::sched::apply_performance();
     apply_universal_cpu("performance", true, true, None);
     if is_disable_thermal_enabled() {
         apply_thermal_kill(true);
@@ -438,6 +631,7 @@ pub fn performance_profile() {
 
 pub fn performance_lite_profile() {
     log!("[ENGINE] Applying Performance Lite Profile (72% Dynamic CPU Frequency Cap)");
+    crate::sched::apply_balance();
     apply_universal_cpu("schedutil", true, false, Some(72));
     tune_schedutil_rate_limits(500, 20000);
     apply_thermal_kill(false);
@@ -451,6 +645,7 @@ pub fn performance_lite_profile() {
 
 pub fn balance_profile() {
     log!("[ENGINE] Restoring Balanced Profile");
+    crate::sched::apply_balance();
     apply_universal_cpu("schedutil", false, false, None);
     tune_schedutil_rate_limits(2000, 4000);
     apply_thermal_kill(false);
@@ -468,6 +663,7 @@ pub fn restore_balance() {
 
 pub fn eco_profile() {
     log!("[ENGINE] Applying Eco Profile");
+    crate::sched::apply_eco();
     apply_universal_cpu("powersave", false, false, None);
     tune_schedutil_rate_limits(4000, 8000);
     apply_thermal_kill(false);

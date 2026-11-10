@@ -93,35 +93,7 @@ impl UnisocEngine {
     }
 
     fn apply_gpu_devfreq(lock_max: bool) {
-        if let Ok(entries) = fs::read_dir("/sys/class/devfreq") {
-            for entry in entries.flatten() {
-                let name = entry.file_name().to_string_lossy().into_owned();
-                if name.contains("gpu") || name.contains("mali") {
-                    let base = format!("/sys/class/devfreq/{}", name);
-                    let avail_p = format!("{}/available_frequencies", base);
-                    if let Ok(content) = fs::read_to_string(&avail_p) {
-                        let freqs: Vec<u64> = content
-                            .split_whitespace()
-                            .filter_map(|s| s.parse::<u64>().ok())
-                            .collect();
-
-                        if let Some(&max_f) = freqs.iter().max() {
-                            let min_f = freqs.iter().min().copied().unwrap_or(0);
-                            let max_p = format!("{}/max_freq", base);
-                            let min_p = format!("{}/min_freq", base);
-
-                            if lock_max {
-                                crate::engine::write_sysfs(&max_p, &max_f.to_string(), true);
-                                crate::engine::write_sysfs(&min_p, &max_f.to_string(), true);
-                            } else {
-                                crate::engine::write_sysfs(&max_p, &max_f.to_string(), false);
-                                crate::engine::write_sysfs(&min_p, &min_f.to_string(), false);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        crate::devfreq::apply(&["gpu", "mali"], "", lock_max);
     }
 
     pub fn apply_performance() {
@@ -131,7 +103,11 @@ impl UnisocEngine {
 
         crate::log!("[UNISOC] Applying Unisoc Performance Tuning");
 
-        crate::engine::write_sysfs("/sys/class/misc/mali0/device/power_policy", "always_on", true);
+        crate::engine::write_sysfs(
+            "/sys/class/misc/mali0/device/power_policy",
+            "always_on",
+            true,
+        );
 
         if let Ok(entries) = fs::read_dir("/sys/class/devfreq") {
             for entry in entries.flatten() {
@@ -143,8 +119,16 @@ impl UnisocEngine {
             }
         }
 
-        crate::engine::write_sysfs("/sys/class/devfreq/scene-frequency/sprd_governor/scene_boost_dfs", "1", true);
-        crate::engine::write_sysfs("/sys/class/devfreq/scene-frequency/sprd_governor/backlight_boost", "1", false);
+        crate::engine::write_sysfs(
+            "/sys/class/devfreq/scene-frequency/sprd_governor/scene_boost_dfs",
+            "1",
+            true,
+        );
+        crate::engine::write_sysfs(
+            "/sys/class/devfreq/scene-frequency/sprd_governor/backlight_boost",
+            "1",
+            false,
+        );
 
         if let Ok(entries) = fs::read_dir("/sys/class/devfreq") {
             for entry in entries.flatten() {
@@ -156,7 +140,9 @@ impl UnisocEngine {
             }
         }
 
-        crate::engine::write_sysfs("/sys/module/sprd_thermal/parameters/enable", "0", true);
+        if !crate::engine::vendor_thermal_managed() {
+            crate::engine::write_sysfs("/sys/module/sprd_thermal/parameters/enable", "0", true);
+        }
 
         Self::apply_gpu_devfreq(true);
         Self::lock_cpu_clocks(true);
@@ -169,7 +155,11 @@ impl UnisocEngine {
 
         crate::log!("[UNISOC] Restoring Unisoc Balanced Baseline");
 
-        crate::engine::write_sysfs("/sys/class/misc/mali0/device/power_policy", "coarse_demand", false);
+        crate::engine::write_sysfs(
+            "/sys/class/misc/mali0/device/power_policy",
+            "coarse_demand",
+            false,
+        );
 
         if let Ok(entries) = fs::read_dir("/sys/class/devfreq") {
             for entry in entries.flatten() {
@@ -181,8 +171,16 @@ impl UnisocEngine {
             }
         }
 
-        crate::engine::write_sysfs("/sys/class/devfreq/scene-frequency/sprd_governor/scene_boost_dfs", "0", false);
-        crate::engine::write_sysfs("/sys/class/devfreq/scene-frequency/sprd_governor/backlight_boost", "0", false);
+        crate::engine::write_sysfs(
+            "/sys/class/devfreq/scene-frequency/sprd_governor/scene_boost_dfs",
+            "0",
+            false,
+        );
+        crate::engine::write_sysfs(
+            "/sys/class/devfreq/scene-frequency/sprd_governor/backlight_boost",
+            "0",
+            false,
+        );
 
         if let Ok(entries) = fs::read_dir("/sys/class/devfreq") {
             for entry in entries.flatten() {
@@ -194,7 +192,9 @@ impl UnisocEngine {
             }
         }
 
-        crate::engine::write_sysfs("/sys/module/sprd_thermal/parameters/enable", "1", false);
+        if !crate::engine::vendor_thermal_managed() {
+            crate::engine::write_sysfs("/sys/module/sprd_thermal/parameters/enable", "1", false);
+        }
 
         Self::apply_gpu_devfreq(false);
         Self::lock_cpu_clocks(false);

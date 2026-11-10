@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use serde_json::Value;
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
+use std::sync::Mutex;
 use std::thread;
-use std::time::Duration;
-use serde_json::Value;
+use std::time::{Duration, Instant};
 
 pub const CONFIG_DIR: &str = "/data/adb/.config/lumina";
 
@@ -56,18 +57,35 @@ pub fn apply_refresh_rate_id(id: i32) {
         .output();
 }
 
+static MODE_CACHE: Mutex<Option<(Instant, Option<i32>)>> = Mutex::new(None);
+const MODE_CACHE_TTL: Duration = Duration::from_millis(1000);
+
 pub fn get_saved_mode_id() -> Option<i32> {
+    if let Ok(guard) = MODE_CACHE.lock() {
+        if let Some((at, value)) = guard.as_ref() {
+            if at.elapsed() < MODE_CACHE_TTL {
+                return *value;
+            }
+        }
+    }
+
+    let mut value = None;
     for path in [
         format!("{}/current_rr.txt", CONFIG_DIR),
         "/data/adb/modules/lumina_tweaks/current_rr.txt".to_string(),
     ] {
         if let Ok(content) = fs::read_to_string(path) {
             if let Ok(id) = content.trim().parse::<i32>() {
-                return Some(id);
+                value = Some(id);
+                break;
             }
         }
     }
-    None
+
+    if let Ok(mut guard) = MODE_CACHE.lock() {
+        *guard = Some((Instant::now(), value));
+    }
+    value
 }
 
 pub fn resolve_mode_id(val: &str) -> Option<i32> {
@@ -102,35 +120,33 @@ pub fn resolve_mode_id(val: &str) -> Option<i32> {
 }
 
 pub fn start_screen_toggle_listener() {
-    thread::spawn(|| {
-        loop {
-            let mut child = match Command::new("/system/bin/logcat")
-                .args(["-b", "events", "-s", "screen_toggled"])
-                .stdout(Stdio::piped())
-                .spawn()
-            {
-                Ok(c) => c,
-                Err(_) => {
-                    thread::sleep(Duration::from_secs(5));
-                    continue;
-                }
-            };
+    thread::spawn(|| loop {
+        let mut child = match Command::new("/system/bin/logcat")
+            .args(["-b", "events", "-s", "screen_toggled"])
+            .stdout(Stdio::piped())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(_) => {
+                thread::sleep(Duration::from_secs(5));
+                continue;
+            }
+        };
 
-            if let Some(stdout) = child.stdout.take() {
-                let reader = BufReader::new(stdout);
-                for line in reader.lines().flatten() {
-                    if line.contains(": 1") {
-                        thread::sleep(Duration::from_millis(300));
-                        if let Some(saved_id) = get_saved_mode_id() {
-                            apply_refresh_rate_id(saved_id);
-                        }
+        if let Some(stdout) = child.stdout.take() {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines().flatten() {
+                if line.contains(": 1") {
+                    thread::sleep(Duration::from_millis(300));
+                    if let Some(saved_id) = get_saved_mode_id() {
+                        apply_refresh_rate_id(saved_id);
                     }
                 }
             }
-
-            let _ = child.wait();
-            thread::sleep(Duration::from_secs(2));
         }
+
+        let _ = child.wait();
+        thread::sleep(Duration::from_secs(2));
     });
 }
 

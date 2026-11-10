@@ -86,21 +86,28 @@ fn handle_client(mut stream: UnixStream, monitor: Arc<BinderMonitor>) {
             continue;
         }
 
+        if command.starts_with("WAIT") {
+            let millis = command
+                .strip_prefix("WAIT")
+                .map(str::trim)
+                .filter(|rest| !rest.is_empty())
+                .and_then(|rest| rest.parse::<u64>().ok())
+                .unwrap_or(DEFAULT_WAIT_MS)
+                .min(MAX_WAIT_MS);
+            let response = wait_response(&monitor, millis);
+            if stream.write_all(response.as_bytes()).is_err() {
+                break;
+            }
+            let _ = stream.flush();
+            continue;
+        }
+
         let response = match command {
             "PING" => "PONG\n".to_string(),
             "FOCUS" => match monitor.focused_package() {
                 Some(package) => format!("FOCUS {}\n", package),
                 None => "NONE\n".to_string(),
             },
-            "WAIT" => wait_response(&monitor, DEFAULT_WAIT_MS),
-            other if other.starts_with("WAIT ") => {
-                let millis = other
-                    .strip_prefix("WAIT ")
-                    .and_then(|rest| rest.trim().parse::<u64>().ok())
-                    .unwrap_or(DEFAULT_WAIT_MS)
-                    .min(MAX_WAIT_MS);
-                wait_response(&monitor, millis)
-            }
             _ => "ERROR\n".to_string(),
         };
 

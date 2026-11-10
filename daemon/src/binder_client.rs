@@ -25,6 +25,7 @@ const INITIAL_RETRY: Duration = Duration::from_secs(2);
 
 pub struct BinderClient {
     stream: Option<UnixStream>,
+    reader: Option<BufReader<UnixStream>>,
     next_retry: Instant,
     connected_once: bool,
 }
@@ -33,6 +34,7 @@ impl BinderClient {
     pub fn new() -> Self {
         Self {
             stream: None,
+            reader: None,
             next_retry: Instant::now(),
             connected_once: false,
         }
@@ -56,7 +58,7 @@ impl BinderClient {
     pub fn wait_for_event(&mut self, timeout: Duration) -> bool {
         let millis = timeout.as_millis().min(5000) as u64;
         let command = format!("WAIT {}", millis);
-        self.request(&command, timeout + Duration::from_millis(800))
+        self.request(&command, timeout + Duration::from_millis(150))
             .is_some()
     }
 
@@ -68,29 +70,28 @@ impl BinderClient {
         let stream = self.stream.as_mut()?;
         if stream.set_read_timeout(Some(timeout)).is_err() {
             self.stream = None;
+            self.reader = None;
             return None;
         }
-        let _ = stream.set_write_timeout(Some(Duration::from_millis(500)));
+        let _ = stream.set_write_timeout(Some(Duration::from_millis(300)));
 
         let message = format!("{}\n", command);
         if stream.write_all(message.as_bytes()).is_err() || stream.flush().is_err() {
             self.stream = None;
+            self.reader = None;
             return None;
         }
 
-        let cloned = match stream.try_clone() {
-            Ok(stream) => stream,
-            Err(_) => {
-                self.stream = None;
-                return None;
-            }
+        let Some(reader) = self.reader.as_mut() else {
+            self.stream = None;
+            return None;
         };
-        let mut reader = BufReader::new(cloned);
         let mut response = String::new();
 
         match reader.read_line(&mut response) {
             Ok(0) | Err(_) => {
                 self.stream = None;
+                self.reader = None;
                 None
             }
             Ok(_) => Some(response.trim_end().to_string()),
@@ -106,7 +107,11 @@ impl BinderClient {
             if let Ok(stream) = UnixStream::connect(&path) {
                 let _ = stream.set_read_timeout(Some(Duration::from_millis(300)));
                 let _ = stream.set_write_timeout(Some(Duration::from_millis(300)));
+                let Ok(reader_stream) = stream.try_clone() else {
+                    continue;
+                };
                 self.stream = Some(stream);
+                self.reader = Some(BufReader::new(reader_stream));
                 self.connected_once = true;
                 return true;
             }

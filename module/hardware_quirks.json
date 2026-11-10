@@ -1,12 +1,16 @@
 {
   "_license": "Apache-2.0 (LuminaTweaks)",
+  "_comment": "features are opt-out flags; writes accept /sys and /proc paths only",
   "socs": {
     "snapdragon": { "writes": [] },
     "mediatek": { "writes": [] },
     "exynos": { "writes": [] },
     "tensor": { "writes": [] },
     "unisoc": { "writes": [] },
-    "emulator": { "writes": [] },
+    "emulator": {
+      "features": ["no_schedtune", "no_uclamp"],
+      "writes": []
+    },
     "generic": { "writes": [] }
   },
   "writes": [],
