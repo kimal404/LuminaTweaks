@@ -24,6 +24,33 @@ rm -rf "$MODPATH/system" 2>/dev/null
 
 mkdir -p /data/adb/.config/lumina
 
+BASE_GAMELIST="$MODPATH/gamelist.txt"
+GEN_GAMELIST="$MODPATH/gamelist.json"
+
+if [ -f "$BASE_GAMELIST" ]; then
+    ui_print "- Membuat gamelist.json"
+    {
+        echo "{"
+        first=1
+        while IFS= read -r pkg || [ -n "$pkg" ]; do
+            pkg=$(printf '%s' "$pkg" | tr -d '[:space:]')
+            [ -z "$pkg" ] && continue
+            case "$pkg" in
+                \#*) continue ;;
+            esac
+            pkg=${pkg%%:*}
+            [ -z "$pkg" ] && continue
+            if [ "$first" -eq 1 ]; then
+                first=0
+            else
+                printf ',\n'
+            fi
+            printf '  "%s": {"lite_mode": "default", "dnd": "default"}' "$pkg"
+        done < "$BASE_GAMELIST"
+        printf '\n}\n'
+    } > "$GEN_GAMELIST"
+fi
+
 killall -9 luminad 2>/dev/null
 pkill -9 -f luminad 2>/dev/null
 

@@ -19,6 +19,38 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Command;
 
+pub fn get_zen_mode() -> String {
+    match Command::new("settings")
+        .args(["get", "global", "zen_mode"])
+        .output()
+    {
+        Ok(o) => {
+            let val = String::from_utf8_lossy(&o.stdout).trim().to_string();
+            if !val.is_empty() && val.chars().all(|c| c.is_ascii_digit()) {
+                val
+            } else {
+                "0".to_string()
+            }
+        }
+        Err(_) => "0".to_string(),
+    }
+}
+
+pub fn zen_to_dnd_arg(zen_mode: &str) -> &'static str {
+    match zen_mode {
+        "1" => "priority",
+        "2" => "none",
+        "3" => "alarms",
+        _ => "off",
+    }
+}
+
+pub fn set_dnd_mode(mode: &str) {
+    let _ = Command::new("cmd")
+        .args(["notification", "set_dnd", mode])
+        .status();
+}
+
 pub fn write_sysfs(path: &str, val: &str, lock: bool) -> bool {
     if !Path::new(path).exists() {
         return false;

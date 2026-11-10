@@ -25,6 +25,7 @@ mod renderer;
 mod snapdragon;
 mod unisoc;
 mod utility;
+mod watcher;
 
 use ipc::{IpcServer, SharedState};
 use utility::UtilityController;
@@ -35,8 +36,8 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
 use detector::{
-    get_app_config, get_focused_package, is_app_enabled, is_process_alive,
-    is_lite_mode_active, is_low_power_active, is_master_enabled,
+    get_app_config, get_focused_package, is_app_enabled, is_auto_dnd_enabled,
+    is_process_alive, is_lite_mode_active, is_low_power_active, is_master_enabled,
 };
 use engine::apply_thermal_kill;
 
@@ -84,6 +85,8 @@ struct EngineRuntime {
     last_app_config_mtime: Option<SystemTime>,
     last_global_config_mtime: Option<SystemTime>,
     left_foreground_at: Option<Instant>,
+    dnd_override: bool,
+    prev_zen_mode: String,
     shared_state: Arc<SharedState>,
 }
 
@@ -100,6 +103,8 @@ impl EngineRuntime {
             last_app_config_mtime: None,
             last_global_config_mtime: None,
             left_foreground_at: None,
+            dnd_override: false,
+            prev_zen_mode: "0".to_string(),
             shared_state,
         }
     }
@@ -116,6 +121,27 @@ impl EngineRuntime {
     fn apply_target(&mut self, target_pkg: Option<&str>) {
         let is_global_lite = is_lite_mode_active();
         let target_cfg = target_pkg.and_then(get_app_config);
+
+        let desired_dnd = match target_cfg.as_ref() {
+            Some(cfg) => match cfg.dnd.as_str() {
+                "on" => true,
+                "off" => false,
+                _ => target_pkg.is_some() && is_auto_dnd_enabled(),
+            },
+            None => target_pkg.is_some() && is_auto_dnd_enabled(),
+        };
+
+        if desired_dnd && !self.dnd_override {
+            self.prev_zen_mode = engine::get_zen_mode();
+            engine::set_dnd_mode("priority");
+            self.dnd_override = true;
+            log!("[DND] Notifications suppressed (prev zen_mode={})", self.prev_zen_mode);
+        } else if !desired_dnd && self.dnd_override {
+            let restore = engine::zen_to_dnd_arg(&self.prev_zen_mode);
+            engine::set_dnd_mode(restore);
+            self.dnd_override = false;
+            log!("[DND] Restored notification mode: {}", restore);
+        }
 
         let target_profile = if let Some(ref cfg) = target_cfg {
             let is_lite = match cfg.lite_mode.as_str() {
@@ -208,6 +234,13 @@ impl EngineRuntime {
     }
 
     fn reset_to_balance(&mut self) {
+        if self.dnd_override {
+            let restore = engine::zen_to_dnd_arg(&self.prev_zen_mode);
+            engine::set_dnd_mode(restore);
+            self.dnd_override = false;
+            log!("[DND] Restored notification mode: {}", restore);
+        }
+
         if self.current_profile != Some(Profile::Balance) {
             self.active_target_pkg = None;
             self.left_foreground_at = None;
@@ -255,6 +288,7 @@ fn main() {
 
     log!("[DAEMON] Subsystems online, entering main event loop");
     let mut runtime = EngineRuntime::new(Arc::clone(&shared_state));
+    let mut config_watcher = watcher::ConfigWatcher::new();
     let mut last_pkg_for_texture: Option<String> = None;
 
     loop {
@@ -271,6 +305,10 @@ fn main() {
         utility_ctrl.tick();
 
         let mut config_just_changed = shared_state.reload_flag.swap(false, Ordering::Relaxed);
+
+        if config_watcher.poll_changed() {
+            config_just_changed = true;
+        }
 
         for path in [
             "/data/adb/.config/lumina/app_config.json",
@@ -305,7 +343,14 @@ fn main() {
             engine::sync_global_tweaks();
         }
 
-        let focused = get_focused_package();
+        let screen_awake = UtilityController::is_screen_on();
+        if !screen_awake && runtime.active_target_pkg.is_some() {
+            log!("[SCREEN] Display off -> dropping active target");
+            runtime.active_target_pkg = None;
+            runtime.left_foreground_at = None;
+        }
+
+        let focused = if screen_awake { get_focused_package() } else { None };
 
         let current_target = if is_master_enabled() {
             let newly_focused_target = focused.as_deref().filter(|pkg| is_app_enabled(pkg));

@@ -51,7 +51,12 @@ impl UtilityController {
         }
     }
 
-    fn is_screen_on() -> bool {
+    pub(crate) fn is_screen_on() -> bool {
+        let state = crate::detector::get_system_prop("debug.tracing.screen_state");
+        if !state.is_empty() {
+            return state == "2";
+        }
+
         if let Ok(entries) = fs::read_dir("/sys/class/backlight") {
             for entry in entries.flatten() {
                 let b_path = entry.path().join("brightness");

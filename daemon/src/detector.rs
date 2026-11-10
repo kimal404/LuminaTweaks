@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -25,7 +25,16 @@ use serde_json::Value;
 
 pub const CONFIG_DIR: &str = "/data/adb/.config/lumina";
 
+const GAMELIST_JSON_CANDIDATES: &[&str] = &[
+    "/data/adb/.config/lumina/gamelist.json",
+    "/data/adb/modules/luminatweaks/gamelist.json",
+    "/data/adb/modules/lumina_tweaks/gamelist.json",
+];
+
 const GAMES_TXT_CANDIDATES: &[&str] = &[
+    "/data/adb/.config/lumina/gamelist.txt",
+    "/data/adb/modules/luminatweaks/gamelist.txt",
+    "/data/adb/modules/lumina_tweaks/gamelist.txt",
     "/data/adb/.config/lumina/games.txt",
     "/data/adb/modules/luminatweaks/games.txt",
     "/data/adb/modules/lumina_tweaks/games.txt",
@@ -35,6 +44,7 @@ const GAMES_TXT_CANDIDATES: &[&str] = &[
 pub struct AppConfig {
     pub enabled: bool,
     pub lite_mode: String,
+    pub dnd: String,
     pub refresh_rate: String,
     pub renderer: String,
     pub texture_enabled: bool,
@@ -93,31 +103,113 @@ fn is_ignored_package(pkg: &str) -> bool {
     ) || pkg.contains("inputmethod") || pkg.contains("system_server")
 }
 
+#[derive(Debug, Clone)]
+pub struct GameMeta {
+    pub lite_mode: String,
+    pub dnd: String,
+}
+
+impl Default for GameMeta {
+    fn default() -> Self {
+        Self {
+            lite_mode: "default".to_string(),
+            dnd: "default".to_string(),
+        }
+    }
+}
+
 struct WhitelistState {
-    games: HashSet<String>,
+    games: HashMap<String, GameMeta>,
     last_mtime: Option<SystemTime>,
     active_path: Option<PathBuf>,
 }
 
 static WHITELIST_CACHE: Mutex<Option<WhitelistState>> = Mutex::new(None);
 
-pub fn is_game_whitelisted(pkg: &str) -> bool {
-    let clean = sanitize_pkg_name(pkg);
-    let mut guard = match WHITELIST_CACHE.lock() {
-        Ok(g) => g,
-        Err(p) => p.into_inner(),
-    };
+fn normalize_option(val: &Value) -> Option<String> {
+    match val {
+        Value::Bool(true) => Some("on".to_string()),
+        Value::Bool(false) => Some("off".to_string()),
+        Value::String(s) => match s.trim().to_ascii_lowercase().as_str() {
+            "on" | "true" | "1" => Some("on".to_string()),
+            "off" | "false" | "0" => Some("off".to_string()),
+            "default" | "auto" => Some("default".to_string()),
+            _ => None,
+        },
+        _ => None,
+    }
+}
 
-    let target_path = GAMES_TXT_CANDIDATES
+fn parse_gamelist(path: &Path) -> HashMap<String, GameMeta> {
+    let mut games = HashMap::new();
+    let is_json = path
+        .extension()
+        .map(|e| e.to_string_lossy().eq_ignore_ascii_case("json"))
+        .unwrap_or(false);
+
+    if is_json {
+        if let Ok(content) = fs::read_to_string(path) {
+            if let Ok(Value::Object(obj)) = serde_json::from_str::<Value>(&content) {
+                for (key, value) in obj {
+                    let pkg = sanitize_pkg_name(&key);
+                    if pkg.is_empty() {
+                        continue;
+                    }
+                    let mut meta = GameMeta::default();
+                    if let Value::Object(fields) = value {
+                        if let Some(v) = fields.get("lite_mode").or_else(|| fields.get("liteMode")) {
+                            if let Some(mode) = normalize_option(v) {
+                                meta.lite_mode = mode;
+                            }
+                        }
+                        if let Some(v) = fields.get("dnd") {
+                            if let Some(mode) = normalize_option(v) {
+                                meta.dnd = mode;
+                            }
+                        }
+                    }
+                    games.insert(pkg.to_string(), meta);
+                }
+            }
+        }
+        return games;
+    }
+
+    if let Ok(file) = File::open(path) {
+        for line in BufReader::new(file).lines().flatten() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
+            let pkg = sanitize_pkg_name(trimmed);
+            if !pkg.is_empty() {
+                games.insert(pkg.to_string(), GameMeta::default());
+            }
+        }
+    }
+
+    games
+}
+
+fn find_gamelist_path() -> Option<PathBuf> {
+    GAMELIST_JSON_CANDIDATES
         .iter()
         .map(PathBuf::from)
-        .find(|p| p.exists());
+        .find(|p| p.exists())
+        .or_else(|| {
+            GAMES_TXT_CANDIDATES
+                .iter()
+                .map(PathBuf::from)
+                .find(|p| p.exists())
+        })
+}
 
-    let path = match target_path {
+fn refresh_whitelist<'a>(guard: &'a mut Option<WhitelistState>) -> &'a Option<WhitelistState> {
+    let path = match find_gamelist_path() {
         Some(p) => p,
         None => {
             *guard = None;
-            return false;
+            return guard;
         }
     };
 
@@ -129,32 +221,39 @@ pub fn is_game_whitelisted(pkg: &str) -> bool {
     };
 
     if need_reload {
-        let mut new_set = HashSet::new();
-        if let Ok(file) = File::open(&path) {
-            let reader = BufReader::new(file);
-            for line in reader.lines().flatten() {
-                let trimmed = line.trim();
-                if trimmed.is_empty() || trimmed.starts_with('#') {
-                    continue;
-                }
-                let sanitized = sanitize_pkg_name(trimmed);
-                if !sanitized.is_empty() {
-                    new_set.insert(sanitized.to_string());
-                }
-            }
-        }
         *guard = Some(WhitelistState {
-            games: new_set,
+            games: parse_gamelist(&path),
             last_mtime: current_mtime,
             active_path: Some(path),
         });
     }
 
-    if let Some(ref state) = *guard {
-        state.games.contains(clean)
-    } else {
-        false
-    }
+    guard
+}
+
+pub fn is_game_whitelisted(pkg: &str) -> bool {
+    let clean = sanitize_pkg_name(pkg);
+    let mut guard = match WHITELIST_CACHE.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+    let state = refresh_whitelist(&mut guard);
+
+    state
+        .as_ref()
+        .map(|s| s.games.contains_key(clean))
+        .unwrap_or(false)
+}
+
+pub fn get_game_meta(pkg: &str) -> Option<GameMeta> {
+    let clean = sanitize_pkg_name(pkg);
+    let mut guard = match WHITELIST_CACHE.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+    let state = refresh_whitelist(&mut guard);
+
+    state.as_ref().and_then(|s| s.games.get(clean).cloned())
 }
 
 pub fn get_focused_package() -> Option<String> {
@@ -302,6 +401,17 @@ pub fn is_lite_mode_active() -> bool {
     false
 }
 
+pub fn is_auto_dnd_enabled() -> bool {
+    if let Some(json) = read_global_json() {
+        if let Some(val) = json.get("auto_dnd") {
+            return is_truthy(val);
+        }
+    }
+
+    let val = get_system_prop("persist.lumina.autodnd");
+    val == "1" || val.eq_ignore_ascii_case("true")
+}
+
 pub fn get_global_zram_config() -> (Option<u32>, Option<String>, Option<u32>) {
     let json = match read_global_json() {
         Some(j) => j,
@@ -362,6 +472,15 @@ fn extract_app_config(item: &Value) -> AppConfig {
         _ => "default".to_string(),
     };
 
+    let dnd = match item.get("dnd") {
+        Some(Value::Bool(b)) => if *b { "on".to_string() } else { "off".to_string() },
+        Some(Value::String(s)) => match s.trim().to_ascii_lowercase().as_str() {
+            "on" | "off" | "default" => s.trim().to_ascii_lowercase(),
+            _ => "default".to_string(),
+        },
+        _ => "default".to_string(),
+    };
+
     let refresh_rate = match item.get("refresh_rate").or_else(|| item.get("refreshRate")) {
         Some(Value::Number(n)) => n.to_string(),
         Some(Value::String(s)) => s.clone(),
@@ -397,6 +516,7 @@ fn extract_app_config(item: &Value) -> AppConfig {
     AppConfig {
         enabled,
         lite_mode,
+        dnd,
         refresh_rate,
         renderer,
         texture_enabled,
@@ -430,10 +550,11 @@ pub fn get_app_config(pkg: &str) -> Option<AppConfig> {
         }
     }
 
-    if is_game_whitelisted(clean_pkg) {
+    if let Some(meta) = get_game_meta(clean_pkg) {
         return Some(AppConfig {
             enabled: true,
-            lite_mode: "default".to_string(),
+            lite_mode: meta.lite_mode,
+            dnd: meta.dnd,
             refresh_rate: "default".to_string(),
             renderer: "default".to_string(),
             texture_enabled: false,

@@ -54,7 +54,13 @@ object ConfigRepository {
     private const val APP_CONFIG_PATH = "$CONFIG_DIR/app_config.json"
     private const val BATCH_SEP = "___LUMINA_SEP___"
 
-    private val GAMELIST_CANDIDATES = listOf(
+    private val GAMELIST_JSON_CANDIDATES = listOf(
+        "/data/adb/.config/lumina/gamelist.json",
+        "/data/adb/modules/luminatweaks/gamelist.json",
+        "/data/adb/modules_update/luminatweaks/gamelist.json"
+    )
+
+    private val GAMELIST_TXT_CANDIDATES = listOf(
         "/data/adb/modules/luminatweaks/gamelist.txt",
         "/data/adb/modules_update/luminatweaks/gamelist.txt",
         "/data/adb/.config/lumina/gamelist.txt",
@@ -371,26 +377,65 @@ object ConfigRepository {
         }
     }
 
-    private fun loadGameWhitelist(): Set<String> {
-        val script = GAMELIST_CANDIDATES.joinToString(" ; ") { path ->
-            "[ -f \"$path\" ] && cat \"$path\" 2>/dev/null"
-        }
-        val output = runSuCmd(script)
-        if (output.isBlank()) return emptySet()
+    private fun readFirstExisting(paths: List<String>): String {
+        if (paths.isEmpty()) return ""
+        val args = paths.joinToString(" ")
+        val script = "for f in $args; do if [ -f \"\$f\" ]; then cat \"\$f\" 2>/dev/null; break; fi; done"
+        return runSuCmd(script)
+    }
 
-        return output.lineSequence()
+    private data class GameListMeta(
+        val liteMode: String = "default",
+        val dnd: String = "default"
+    )
+
+    private fun normalizeOption(value: String?): String = when (value?.trim()?.lowercase()) {
+        "on", "true", "1" -> "on"
+        "off", "false", "0" -> "off"
+        else -> "default"
+    }
+
+    private fun loadGameWhitelist(): Map<String, GameListMeta> {
+        val jsonContent = readFirstExisting(GAMELIST_JSON_CANDIDATES)
+        if (jsonContent.isNotBlank()) {
+            try {
+                val obj = JSONObject(jsonContent)
+                val keys = obj.keys()
+                val map = mutableMapOf<String, GameListMeta>()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    val pkg = key.substringBefore(':').trim()
+                    if (pkg.isEmpty()) continue
+                    val item = obj.optJSONObject(key)
+                    val liteRaw = item?.optString("lite_mode")?.takeIf { it.isNotBlank() }
+                        ?: item?.optString("liteMode")
+                    map[pkg] = GameListMeta(
+                        liteMode = normalizeOption(liteRaw),
+                        dnd = normalizeOption(item?.optString("dnd"))
+                    )
+                }
+                if (map.isNotEmpty()) return map
+            } catch (_: Exception) {}
+        }
+
+        val output = readFirstExisting(GAMELIST_TXT_CANDIDATES)
+        if (output.isBlank()) return emptyMap()
+
+        val map = mutableMapOf<String, GameListMeta>()
+        output.lineSequence()
             .map { it.substringBefore('#').trim() }
             .filter { it.isNotEmpty() }
             .map { it.substringBefore(' ').trim().substringBefore(':').trim() }
             .filter { it.isNotEmpty() }
-            .toSet()
+            .forEach { map[it] = GameListMeta() }
+        return map
     }
 
     suspend fun syncInstalledGameWhitelist(installedPackages: Collection<String>): Map<String, AppProfileConfig> =
         withContext(Dispatchers.IO) {
             fileMutex.withLock {
                 val whitelist = loadGameWhitelist()
-                val targets = whitelist.intersect(installedPackages.toSet())
+                val targets = whitelist.keys.intersect(installedPackages.toSet())
                 val currentConfigs = (cachedAppConfigs ?: loadAppConfigsInternal()).toMutableMap()
 
                 if (targets.isEmpty()) {
@@ -402,7 +447,13 @@ object ConfigRepository {
                 for (pkg in targets) {
                     val existing = currentConfigs[pkg]
                     if (existing == null) {
-                        currentConfigs[pkg] = AppProfileConfig(pkg = pkg, saklarUtama = true)
+                        val meta = whitelist[pkg] ?: GameListMeta()
+                        currentConfigs[pkg] = AppProfileConfig(
+                            pkg = pkg,
+                            saklarUtama = true,
+                            liteMode = meta.liteMode,
+                            dnd = meta.dnd
+                        )
                         changed = true
                     } else if (!existing.saklarUtama) {
                         currentConfigs[pkg] = existing.copy(saklarUtama = true)
