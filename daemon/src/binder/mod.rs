@@ -125,7 +125,7 @@ fn run_monitor(shared: Arc<Shared>, running: Arc<AtomicBool>) {
     while running.load(Ordering::Relaxed) {
         let Some(resolver) = find_resolver() else {
             crate::log!(
-                "[BINDER] Resolver APK unavailable, retrying in {}s",
+                "[SYSTEM] Binder Resolver APK unavailable, retrying in {}s",
                 backoff.as_secs()
             );
             sleep_while_running(&running, backoff);
@@ -137,7 +137,7 @@ fn run_monitor(shared: Arc<Shared>, running: Arc<AtomicBool>) {
             Some(codes) => codes,
             None => {
                 crate::log!(
-                    "[BINDER] Transaction codes unavailable, retrying in {}s",
+                    "[SYSTEM] Binder Transaction codes unavailable, retrying in {}s",
                     backoff.as_secs()
                 );
                 sleep_while_running(&running, backoff);
@@ -147,7 +147,7 @@ fn run_monitor(shared: Arc<Shared>, running: Arc<AtomicBool>) {
         };
 
         crate::log!(
-            "[BINDER] Transaction codes resolved (register={}, foreground={}, died={}, display={})",
+            "[SYSTEM] Binder Transaction codes resolved (register={}, foreground={}, died={}, display={})",
             codes.register,
             codes.foreground,
             codes.died,
@@ -158,19 +158,19 @@ fn run_monitor(shared: Arc<Shared>, running: Arc<AtomicBool>) {
         match attach(&codes, &shared) {
             Ok(handles) => {
                 backoff = INITIAL_BACKOFF;
-                crate::log!("[BINDER] Observer registered");
+                crate::log!("[SYSTEM] Binder Observer registered");
 
                 wait_for_death(&shared, &running, &handles);
                 drop(handles);
 
                 if running.load(Ordering::Relaxed) {
-                    crate::log!("[BINDER] Service died, re-resolving transaction codes");
+                    crate::log!("[SYSTEM] Binder Service died, re-resolving transaction codes");
                     shared.clear_focus_state();
                 }
             }
             Err(error) => {
                 crate::log!(
-                    "[BINDER] Attach failed: {}. Retrying in {}s",
+                    "[SYSTEM] Binder Attach failed: {}. Retrying in {}s",
                     error,
                     backoff.as_secs()
                 );
@@ -206,7 +206,7 @@ fn wait_for_death(shared: &Shared, running: &AtomicBool, handles: &Handles) {
             let display_ok = handles.display.is_null() || unsafe { is_alive(handles.display) };
             let power_ok = handles.power.is_null() || unsafe { is_alive(handles.power) };
             if !activity_ok || !display_ok || !power_ok {
-                crate::log!("[BINDER] Service liveness check failed");
+                crate::log!("[SYSTEM] Binder Service liveness check failed");
                 shared.mark_dead();
                 break;
             }
@@ -286,10 +286,10 @@ fn attach(codes: &resolver::Codes, shared: &Shared) -> Result<Handles, String> {
         return Err("activity service missing".to_string());
     }
     if handles.display.is_null() {
-        crate::log!("[BINDER] display service missing; screen events use fallback");
+        crate::log!("[SYSTEM] Binder display service missing; screen events use fallback");
     }
     if handles.power.is_null() {
-        crate::log!("[BINDER] power service missing; screen events use fallback");
+        crate::log!("[SYSTEM] Binder power service missing; screen events use fallback");
     }
 
     if let (Some(new_death), Some(link)) = (api.death_new, api.link_to_death) {
@@ -304,11 +304,11 @@ fn attach(codes: &resolver::Codes, shared: &Shared) -> Result<Handles, String> {
             }
             let status = unsafe { link(binder, death, std::ptr::null_mut()) };
             if status != ffi::STATUS_OK {
-                crate::log!("[BINDER] linkToDeath failed with status {}", status);
+                crate::log!("[SYSTEM] Binder linkToDeath failed with status {}", status);
             }
         }
     } else {
-        crate::log!("[BINDER] death recipient API unavailable; relying on re-resolve");
+        crate::log!("[SYSTEM] Binder death recipient API unavailable; relying on re-resolve");
     }
 
     TX_FOREGROUND.store(codes.foreground, Ordering::Relaxed);
@@ -352,15 +352,17 @@ fn attach(codes: &resolver::Codes, shared: &Shared) -> Result<Handles, String> {
                 ) {
                     handles.display_callback = callback;
                     display_registered = true;
-                    crate::log!("[BINDER] Display callback registered");
+                    crate::log!("[SYSTEM] Binder Display callback registered");
                 } else {
-                    crate::log!("[BINDER] Display callback unavailable; polling screen state");
+                    crate::log!(
+                        "[SYSTEM] Binder Display callback unavailable; polling screen state"
+                    );
                     unsafe { (api.dec_strong)(callback) };
                 }
             }
             Err(error) => {
                 crate::log!(
-                    "[BINDER] Display callback allocation failed: {}; polling screen state",
+                    "[SYSTEM] Binder Display callback allocation failed: {}; polling screen state",
                     error
                 );
             }
@@ -369,7 +371,7 @@ fn attach(codes: &resolver::Codes, shared: &Shared) -> Result<Handles, String> {
 
     if codes.is_interactive != 0 {
         if !display_registered {
-            crate::log!("[BINDER] Screen state polled through IPowerManager");
+            crate::log!("[SYSTEM] Binder Screen state polled through IPowerManager");
         }
         start_screen_worker(api, codes.is_interactive, !display_registered);
     }
@@ -498,10 +500,14 @@ fn try_register(
                 ok = false;
                 let description = unsafe { (api.status_get_description)(reply) };
                 if description.is_null() {
-                    crate::log!("[BINDER] {} registration rejected", descriptor);
+                    crate::log!("[SYSTEM] Binder {} registration rejected", descriptor);
                 } else {
                     let text = unsafe { std::ffi::CStr::from_ptr(description) }.to_string_lossy();
-                    crate::log!("[BINDER] {} registration rejected: {}", descriptor, text);
+                    crate::log!(
+                        "[SYSTEM] Binder {} registration rejected: {}",
+                        descriptor,
+                        text
+                    );
                     unsafe { (api.status_delete_description)(description) };
                 }
             }

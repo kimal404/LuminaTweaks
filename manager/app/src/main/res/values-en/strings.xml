@@ -149,8 +149,6 @@ Features on this page are only active when the system is in the Performance prof
     <string name="tweaks_renderer">Renderer</string>
     <string name="tweaks_lite_mode">Lite Mode</string>
     <string name="tweaks_lite_mode_desc">Limit CPU frequency.</string>
-    <string name="tweaks_disable_thermal">Disable Thermal</string>
-    <string name="tweaks_disable_thermal_desc">Disable thermal throttling completely on Performance profile.</string>
     <string name="tweaks_mtk_desc">FPSGo and Mali GPU subsystem</string>
     <string name="tweaks_dialog_select_rr">Select Refresh Rate</string>
     <string name="tweaks_dialog_select_renderer">Select Graphics Renderer</string>
@@ -162,10 +160,6 @@ Features on this page are only active when the system is in the Performance prof
     <string name="tweak_auto_dnd_desc">Automatically enable DND when Performance profile is active</string>
     <string name="tweak_io_scheduler">I/O Scheduler</string>
     <string name="tweak_io_scheduler_desc">UFS/eMMC storage I/O queue scheduling algorithm</string>
-    <string name="tweaks_hardware_quirks">Device-Specific Tuning</string>
-    <string name="tweaks_hardware_quirks_desc">Automatically adapt performance settings to match your chipset characteristics.</string>
-    <string name="tweaks_memory_prewarm">Instant App Launch</string>
-    <string name="tweaks_memory_prewarm_desc">Preload game assets into RAM cache for faster startup without delay.</string>
     <string name="dialog_reboot_required_title">Reboot Required</string>
     <string name="dialog_reboot_required_desc">A device reboot is required to activate the LuminaTweaks module and start the core daemon properly. Would you like to reboot now?</string>
     <string name="action_reboot_now">Reboot Now</string>
@@ -191,8 +185,6 @@ Features on this page are only active when the system is in the Performance prof
     <string name="memory_zram_size_desc">Total allocated ZRAM swap disksize limit</string>
     <string name="dialog_select_zram_size">Select ZRAM Capacity</string>
     <!-- Utility & FastLoad -->
-    <string name="tweak_fast_load">FastLoad</string>
-    <string name="tweak_fast_load_desc">Temporary CPU &amp; I/O boost during game launch phase</string>
     <string name="section_utility_diagnostics">Utility &amp; Diagnostics</string>
     <string name="hardware_diag_title">Hardware</string>
     <string name="hardware_diag_desc">Battery health, charge cycles, and UFS lifespan</string>

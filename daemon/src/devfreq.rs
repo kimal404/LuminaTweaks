@@ -105,29 +105,3 @@ pub fn apply(needles: &[&str], governor: &str, lock_max: bool) -> usize {
     }
     applied
 }
-
-pub fn apply_patterns(patterns: &[(&str, &str)], lock_max: bool) -> usize {
-    let Ok(entries) = fs::read_dir("/sys/class/devfreq") else {
-        return 0;
-    };
-
-    let mut applied = 0;
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
-        let base = format!("/sys/class/devfreq/{}", entry.file_name().to_string_lossy());
-        if !Path::new(&base).exists() {
-            continue;
-        }
-
-        for (needle, governor) in patterns {
-            if !name.contains(needle) {
-                continue;
-            }
-            write_governor(&base, governor);
-            write_frequency_limits(&base, lock_max);
-            applied += 1;
-            break;
-        }
-    }
-    applied
-}

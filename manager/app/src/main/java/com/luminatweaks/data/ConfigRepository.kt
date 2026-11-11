@@ -33,16 +33,10 @@ data class DisplayRrMode(val id: Int, val hz: Int)
 
 data class TweaksUiState(
     val isGlobalLiteMode: Boolean = false,
-    val isDisableThermal: Boolean = false,
     val rrModes: List<DisplayRrMode> = emptyList(),
     val currentRrId: Int? = null,
     val currentRendererId: String = "default",
-    val isMtkDevice: Boolean = false,
-    val isBypassFpsgo: Boolean = false,
-    val isBoostGed: Boolean = true,
     val isAutoDnd: Boolean = false,
-    val isHardwareQuirks: Boolean = false,
-    val isMemoryPrewarm: Boolean = false,
     val currentIoScheduler: String = "mq-deadline",
     val zramSizeGb: Int = 8,
     val zramAlgorithm: String = "zstd",
@@ -143,19 +137,11 @@ object ConfigRepository {
         val batchScript = listOf(
             "cat $GLOBAL_CONFIG_PATH 2>/dev/null",
             "echo '$BATCH_SEP'",
-            "dt=\$(cat $CONFIG_DIR/disable_thermal.txt 2>/dev/null); [ -z \"\$dt\" ] && dt=\$(getprop persist.lumina.disable_thermal); [ -z \"\$dt\" ] && dt=\"0\"; echo \"\$dt\"",
-            "echo '$BATCH_SEP'",
             "cat $CONFIG_DIR/rr_modes.json 2>/dev/null",
             "echo '$BATCH_SEP'",
             "cat $CONFIG_DIR/current_rr.txt 2>/dev/null",
             "echo '$BATCH_SEP'",
             "ren=\$(cat $CONFIG_DIR/current_renderer.txt 2>/dev/null); [ -z \"\$ren\" ] && ren=\$(getprop persist.lumina.renderer); [ -z \"\$ren\" ] && ren=\$(getprop debug.hwui.renderer); [ -z \"\$ren\" ] && ren=\"default\"; echo \"\$ren\"",
-            "echo '$BATCH_SEP'",
-            "[ -e /sys/kernel/fpsgo/common/force_onoff ] && echo 1 || echo 0",
-            "echo '$BATCH_SEP'",
-            "fgo=\$(cat $CONFIG_DIR/fpsgo_bypass.txt 2>/dev/null); [ -z \"\$fgo\" ] && fgo=\$(getprop persist.lumina.fpsgo_bypass); [ -z \"\$fgo\" ] && fgo=\"0\"; echo \"\$fgo\"",
-            "echo '$BATCH_SEP'",
-            "ged=\$(cat $CONFIG_DIR/ged_boost.txt 2>/dev/null); [ -z \"\$ged\" ] && ged=\$(getprop persist.lumina.ged_boost); [ -z \"\$ged\" ] && ged=\"1\"; echo \"\$ged\""
         ).joinToString(" ; ")
 
         val output = runSuCmd(batchScript)
@@ -171,18 +157,14 @@ object ConfigRepository {
 
         val isLite = globalJson?.optBoolean("lite_mode_global", false) ?: false
         val isAutoDnd = globalJson?.optBoolean("auto_dnd", false) ?: false
-        val isHardwareQuirks = globalJson?.optBoolean("hardware_quirks", false) ?: false
-        val isMemoryPrewarm = globalJson?.optBoolean("memory_prewarm", false) ?: false
         val currentIoSched = globalJson?.optString("io_scheduler", "mq-deadline")?.takeIf { it.isNotBlank() } ?: "mq-deadline"
         val zramSize = globalJson?.optInt("zram_size_gb", 8) ?: 8
         val zramAlgo = globalJson?.optString("zram_algorithm", "zstd")?.takeIf { it.isNotBlank() } ?: "zstd"
         val swappiness = globalJson?.optInt("swappiness", 100) ?: 100
 
-        val isDisableThermal = if (parts.size > 1) parts[1] == "1" else false
-
-        val rrModes = if (parts.size > 2 && parts[2].isNotBlank()) {
+        val rrModes = if (parts.size > 1 && parts[1].isNotBlank()) {
             try {
-                val arr = JSONArray(parts[2])
+                val arr = JSONArray(parts[1])
                 val list = mutableListOf<DisplayRrMode>()
                 for (i in 0 until arr.length()) {
                     val obj = arr.getJSONObject(i)
@@ -194,24 +176,15 @@ object ConfigRepository {
             }
         } else emptyList()
 
-        val currentRr = if (parts.size > 3) parts[3].toIntOrNull() else null
-        val currentRenderer = if (parts.size > 4 && parts[4].isNotBlank()) parts[4] else "default"
-        val isMtk = if (parts.size > 5) parts[5] == "1" else false
-        val isBypassFpsgo = if (parts.size > 6) parts[6] == "1" else false
-        val isBoostGed = if (parts.size > 7) parts[7] == "1" else true
+        val currentRr = if (parts.size > 2) parts[2].toIntOrNull() else null
+        val currentRenderer = if (parts.size > 3 && parts[3].isNotBlank()) parts[3] else "default"
 
         val newState = TweaksUiState(
             isGlobalLiteMode = isLite,
-            isDisableThermal = isDisableThermal,
             rrModes = rrModes,
             currentRrId = currentRr,
             currentRendererId = currentRenderer,
-            isMtkDevice = isMtk,
-            isBypassFpsgo = isBypassFpsgo,
-            isBoostGed = isBoostGed,
             isAutoDnd = isAutoDnd,
-            isHardwareQuirks = isHardwareQuirks,
-            isMemoryPrewarm = isMemoryPrewarm,
             currentIoScheduler = currentIoSched,
             zramSizeGb = zramSize,
             zramAlgorithm = zramAlgo,
@@ -287,23 +260,7 @@ object ConfigRepository {
         }
     }
 
-    suspend fun setHardwareQuirks(enabled: Boolean) = withContext(Dispatchers.IO) {
-        cachedTweaksState = cachedTweaksState?.copy(isHardwareQuirks = enabled)
-        fileMutex.withLock {
-            updateGlobalConfigInternal { it.put("hardware_quirks", enabled) }
-            val propVal = if (enabled) "1" else "0"
-            runSuCmd("setprop persist.lumina.hardware_quirks $propVal")
-        }
-    }
 
-    suspend fun setMemoryPrewarm(enabled: Boolean) = withContext(Dispatchers.IO) {
-        cachedTweaksState = cachedTweaksState?.copy(isMemoryPrewarm = enabled)
-        fileMutex.withLock {
-            updateGlobalConfigInternal { it.put("memory_prewarm", enabled) }
-            val propVal = if (enabled) "1" else "0"
-            runSuCmd("setprop persist.lumina.memory_prewarm $propVal")
-        }
-    }
 
     suspend fun setIoScheduler(scheduler: String) = withContext(Dispatchers.IO) {
         cachedTweaksState = cachedTweaksState?.copy(currentIoScheduler = scheduler)
@@ -327,29 +284,8 @@ object ConfigRepository {
         }
     }
 
-    suspend fun setDisableThermal(enabled: Boolean) = withContext(Dispatchers.IO) {
-        cachedTweaksState = cachedTweaksState?.copy(isDisableThermal = enabled)
-        ensureDir()
-        val valStr = if (enabled) "1" else "0"
-        runSuCmd("echo '$valStr' > $CONFIG_DIR/disable_thermal.txt && setprop persist.lumina.disable_thermal '$valStr'")
-        notifyDaemonReload()
-    }
 
-    suspend fun setFpsgoBypass(enabled: Boolean) = withContext(Dispatchers.IO) {
-        cachedTweaksState = cachedTweaksState?.copy(isBypassFpsgo = enabled)
-        ensureDir()
-        val valStr = if (enabled) "1" else "0"
-        runSuCmd("echo '$valStr' > $CONFIG_DIR/fpsgo_bypass.txt && setprop persist.lumina.fpsgo_bypass '$valStr'")
-        notifyDaemonReload()
-    }
 
-    suspend fun setGedBoost(enabled: Boolean) = withContext(Dispatchers.IO) {
-        cachedTweaksState = cachedTweaksState?.copy(isBoostGed = enabled)
-        ensureDir()
-        val valStr = if (enabled) "1" else "0"
-        runSuCmd("echo '$valStr' > $CONFIG_DIR/ged_boost.txt && setprop persist.lumina.ged_boost '$valStr'")
-        notifyDaemonReload()
-    }
 
     private fun loadAppConfigsInternal(): Map<String, AppProfileConfig> {
         val content = runSuCmd("cat $APP_CONFIG_PATH 2>/dev/null")

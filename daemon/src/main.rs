@@ -22,35 +22,28 @@ mod detector;
 mod devfreq;
 mod display;
 mod engine;
-mod exynos;
 mod fps;
 mod ipc;
-mod mediatek;
 mod perf;
-mod prewarm;
-mod quirks;
 mod renderer;
 mod sched;
-mod snapdragon;
-mod tensor;
-mod thermal;
-mod unisoc;
 mod utility;
 mod watcher;
 
 use ipc::{IpcServer, SharedState};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 use utility::UtilityController;
 
 use detector::{
     get_app_config, get_focused_package, is_app_enabled, is_auto_dnd_enabled, is_lite_mode_active,
     is_low_power_active, is_master_enabled, is_process_alive,
 };
-use engine::apply_thermal_kill;
 
 static SHUTDOWN: AtomicBool = AtomicBool::new(false);
 
@@ -84,6 +77,27 @@ impl Profile {
     }
 }
 
+fn config_hash() -> u64 {
+    let mut hasher = DefaultHasher::new();
+    for path in [
+        "/data/adb/.config/lumina/config.json",
+        "/data/adb/modules/luminatweaks/config.json",
+        "/data/adb/.config/lumina/app_config.json",
+        "/data/adb/modules/luminatweaks/app_config.json",
+    ] {
+        if let Ok(content) = std::fs::read(path) {
+            content.hash(&mut hasher);
+        }
+    }
+    hasher.finish()
+}
+
+fn kernel_release() -> String {
+    std::fs::read_to_string("/proc/sys/kernel/osrelease")
+        .map(|value| value.trim().to_string())
+        .unwrap_or_else(|_| "unknown".to_string())
+}
+
 fn set_system_profile_prop(name: &str) {
     let _ = Command::new("setprop")
         .args(["sys.lumina.profile", name])
@@ -93,14 +107,13 @@ fn set_system_profile_prop(name: &str) {
 struct EngineRuntime {
     current_profile: Option<Profile>,
     active_target_pkg: Option<String>,
+    active_target_pid: i32,
     current_applied_rr: Option<i32>,
     current_applied_renderer: String,
-    last_app_config_mtime: Option<SystemTime>,
-    last_global_config_mtime: Option<SystemTime>,
+    last_config_hash: Option<u64>,
     left_foreground_at: Option<Instant>,
     dnd_override: bool,
     prev_zen_mode: String,
-    thermal: thermal::ThermalWatchdog,
     last_config_poll: Instant,
     shared_state: Arc<SharedState>,
 }
@@ -113,14 +126,13 @@ impl EngineRuntime {
         Self {
             current_profile: None,
             active_target_pkg: None,
+            active_target_pid: 0,
             current_applied_rr: display::get_saved_mode_id(),
             current_applied_renderer: renderer::get_saved_renderer(),
-            last_app_config_mtime: None,
-            last_global_config_mtime: None,
+            last_config_hash: Some(config_hash()),
             left_foreground_at: None,
             dnd_override: false,
             prev_zen_mode: "0".to_string(),
-            thermal: thermal::ThermalWatchdog::new(),
             last_config_poll: Instant::now(),
             shared_state,
         }
@@ -152,15 +164,12 @@ impl EngineRuntime {
             self.prev_zen_mode = engine::get_zen_mode();
             engine::set_dnd_mode("priority");
             self.dnd_override = true;
-            log!(
-                "[DND] Notifications suppressed (prev zen_mode={})",
-                self.prev_zen_mode
-            );
+            log!("[SYSTEM] DND ON (prev zen_mode={})", self.prev_zen_mode);
         } else if !desired_dnd && self.dnd_override {
             let restore = engine::zen_to_dnd_arg(&self.prev_zen_mode);
             engine::set_dnd_mode(restore);
             self.dnd_override = false;
-            log!("[DND] Restored notification mode: {}", restore);
+            log!("[SYSTEM] DND restored -> {}", restore);
         }
 
         let target_profile = if let Some(ref cfg) = target_cfg {
@@ -180,23 +189,6 @@ impl EngineRuntime {
             Profile::Balance
         };
 
-        let target_profile = if target_pkg.is_some() {
-            match self.thermal.sample() {
-                thermal::ThermalLevel::Critical => match target_profile {
-                    Profile::Performance | Profile::PerformanceLite => Profile::Balance,
-                    other => other,
-                },
-                thermal::ThermalLevel::Warm => match target_profile {
-                    Profile::Performance => Profile::PerformanceLite,
-                    other => other,
-                },
-                thermal::ThermalLevel::Normal => target_profile,
-            }
-        } else {
-            self.thermal.reset();
-            target_profile
-        };
-
         let is_profile_changing = self.current_profile != Some(target_profile);
 
         if is_profile_changing {
@@ -204,25 +196,34 @@ impl EngineRuntime {
                 Profile::Performance => {
                     engine::performance_profile();
                     set_system_profile_prop("Performance");
-                    log!("[PROFILE] Switched to Performance -> App: {:?}", target_pkg);
+                    log!(
+                        "[BOOST]  {} ({}) \u{2794} FULL_PERF [CPU: 100% | Sched: 80%]",
+                        target_pkg.unwrap_or("system"),
+                        self.active_target_pid
+                    );
                 }
                 Profile::PerformanceLite => {
                     engine::performance_lite_profile();
                     set_system_profile_prop("Performance Lite");
                     log!(
-                        "[PROFILE] Switched to Performance Lite -> App: {:?}",
-                        target_pkg
+                        "[BOOST]  {} ({}) \u{2794} FULL_PERF_LITE [CPU: 72% | Sched: 0%]",
+                        target_pkg.unwrap_or("system"),
+                        self.active_target_pid
                     );
                 }
                 Profile::Eco => {
                     engine::eco_profile();
                     set_system_profile_prop("Eco");
-                    log!("[PROFILE] Switched to Eco (Power Save Active)");
+                    log!("[POWER] ECO \u{2794} CPU powersave");
                 }
                 Profile::Balance => {
                     engine::balance_profile();
                     set_system_profile_prop("Balanced");
-                    log!("[PROFILE] Switched to Balanced (Dynamic Idle)");
+                    log!(
+                        "[RESET]  {} ({}) \u{2794} BALANCED [Trigger: Inactive]",
+                        target_pkg.unwrap_or("system"),
+                        self.active_target_pid
+                    );
                 }
             }
             self.current_profile = Some(target_profile);
@@ -274,21 +275,30 @@ impl EngineRuntime {
     }
 
     fn reset_to_balance(&mut self) {
-        self.thermal.reset();
+        self.reset_to_balance_triggered("Inactive");
+    }
+
+    fn reset_to_balance_triggered(&mut self, trigger: &str) {
         if self.dnd_override {
             let restore = engine::zen_to_dnd_arg(&self.prev_zen_mode);
             engine::set_dnd_mode(restore);
             self.dnd_override = false;
-            log!("[DND] Restored notification mode: {}", restore);
+            log!("[SYSTEM] DND restored -> {}", restore);
         }
 
         if self.current_profile != Some(Profile::Balance) {
-            self.active_target_pkg = None;
             self.left_foreground_at = None;
             self.current_profile = Some(Profile::Balance);
             engine::balance_profile();
             set_system_profile_prop("Balanced");
-            log!("[PROFILE] Target inactive -> Reverted to Balanced");
+            log!(
+                "[RESET]  {} ({}) \u{2794} BALANCED [Trigger: {}]",
+                self.active_target_pkg.as_deref().unwrap_or("system"),
+                self.active_target_pid,
+                trigger
+            );
+            self.active_target_pkg = None;
+            self.active_target_pid = 0;
             self.update_shared_state(Profile::Balance, None);
 
             let global_rr = display::get_saved_mode_id();
@@ -316,9 +326,11 @@ fn main() {
         signal(SIGTERM, handle_signal);
     }
 
-    log!("[DAEMON] Initializing luminad subsystem...");
+    log!(
+        "[SYSTEM] Online | Kernel {} | Binder Socket pending",
+        kernel_release()
+    );
     sched::tune_daemon();
-    quirks::init();
     display::init_display_subsystem();
     renderer::init_renderer_subsystem();
     engine::sync_global_tweaks();
@@ -334,29 +346,26 @@ fn main() {
     let mut binder_client = binder_client::BinderClient::new();
     let _ = binder_client.poll(Duration::from_millis(200));
     if binder_client.is_push() {
-        log!("[BINDER] Helper event stream connected (cgroup polling kept as fallback)");
+        log!("[SYSTEM] Binder Socket Linked | Event stream active");
     } else if binder_client.ping() {
-        log!("[BINDER] Helper IPC connected (legacy protocol)");
+        log!("[SYSTEM] Binder Socket Linked | Legacy protocol");
     } else {
-        log!("[BINDER] Helper unavailable, using cgroup polling only");
+        log!("[SYSTEM] Binder Socket Unavailable | cgroup fallback");
     }
     let mut config_watcher = watcher::ConfigWatcher::new();
     let mut last_pkg_for_texture: Option<String> = None;
     let mut fallback_blocked_until = Instant::now();
     let mut last_screen_state: Option<bool> = None;
     let mut fps_monitor = fps::FpsMonitor::new();
-    let mut memory_prewarm = prewarm::MemoryPrewarm::new();
 
     loop {
         if SHUTDOWN.load(Ordering::Relaxed) {
-            log!("[DAEMON] Shutdown signal caught, restoring system baseline...");
+            log!("[SYSTEM] Shutdown signal | Restoring baseline");
             runtime.reset_to_balance();
             engine::restore_balance();
-            apply_thermal_kill(false);
             utility_ctrl.restore();
             TextureController::restore();
             fps_monitor.stop();
-            memory_prewarm.stop();
             break;
         }
 
@@ -366,65 +375,39 @@ fn main() {
             .unwrap_or_else(UtilityController::is_screen_on);
         if last_screen_state != Some(screen_awake) {
             if screen_awake {
-                log!("[SCREEN] on -> resuming workers");
+                match display::saved_mode_hz() {
+                    Some(hz) => log!("[POWER]  Screen ON ({}Hz) \u{2794} Workers resumed", hz),
+                    None => log!("[POWER]  Screen ON \u{2794} Workers resumed"),
+                }
             } else {
-                log!("[SCREEN] off -> pausing workers");
+                log!("[POWER]  Screen OFF \u{2794} Background workers paused");
                 fps_monitor.observe(None);
-                memory_prewarm.observe(None);
             }
             last_screen_state = Some(screen_awake);
         }
         utility_ctrl.tick(screen_awake);
 
-        let mut config_just_changed = shared_state.reload_flag.swap(false, Ordering::Relaxed);
-
+        let mut config_dirty = shared_state.reload_flag.swap(false, Ordering::Relaxed);
         if config_watcher.poll_changed() {
-            config_just_changed = true;
+            config_dirty = true;
         }
 
-        if runtime.last_config_poll.elapsed() >= Duration::from_secs(2) {
+        if config_dirty || runtime.last_config_poll.elapsed() >= Duration::from_secs(2) {
             runtime.last_config_poll = Instant::now();
-            for path in [
-                "/data/adb/.config/lumina/app_config.json",
-                "/data/adb/modules/luminatweaks/app_config.json",
-            ] {
-                if let Ok(meta) = std::fs::metadata(path) {
-                    if let Ok(mtime) = meta.modified() {
-                        if runtime.last_app_config_mtime != Some(mtime) {
-                            runtime.last_app_config_mtime = Some(mtime);
-                            config_just_changed = true;
-                        }
-                    }
-                }
+            let hash = config_hash();
+            if runtime.last_config_hash != Some(hash) {
+                runtime.last_config_hash = Some(hash);
+                log!("[SYSTEM] Config reload applied");
+                detector::invalidate_config_cache();
+                engine::sync_global_tweaks();
             }
-
-            for path in [
-                "/data/adb/.config/lumina/config.json",
-                "/data/adb/modules/luminatweaks/config.json",
-            ] {
-                if let Ok(meta) = std::fs::metadata(path) {
-                    if let Ok(mtime) = meta.modified() {
-                        if runtime.last_global_config_mtime != Some(mtime) {
-                            runtime.last_global_config_mtime = Some(mtime);
-                            config_just_changed = true;
-                        }
-                    }
-                }
-            }
-        }
-
-        if config_just_changed {
-            log!("[CONFIG] Reloading system tweaks...");
-            detector::invalidate_config_cache();
-            quirks::reload();
-            memory_prewarm.reset();
-            engine::sync_global_tweaks();
         }
 
         let active_pid = binder_client
             .active_focus()
             .map(|focus| focus.pid)
             .unwrap_or(0);
+        runtime.active_target_pid = active_pid;
         let active_pkg = runtime.active_target_pkg.clone();
         let mut suppress_fallback = false;
 
@@ -435,22 +418,20 @@ fn main() {
 
             if matches_target {
                 log!(
-                    "[SESSION] APP_DIED pkg={} pid={} uid={}. Instant restore to Balanced.",
+                    "[RESET]  {} ({}) \u{2794} BALANCED [Trigger: Died 0ms | uid {}]",
                     died.package.as_deref().unwrap_or("-"),
                     died.pid,
                     died.uid
                 );
-                runtime.active_target_pkg = None;
                 runtime.left_foreground_at = None;
-                runtime.reset_to_balance();
+                runtime.reset_to_balance_triggered("Died 0ms");
                 fps_monitor.observe(None);
-                memory_prewarm.observe(None);
                 TextureController::sync_config(None);
                 last_pkg_for_texture = None;
                 suppress_fallback = true;
             } else {
                 log!(
-                    "[SESSION] APP_DIED pkg={} pid={} uid={} is not active",
+                    "[SYSTEM] APP_DIED {} ({}) uid {} ignored",
                     died.package.as_deref().unwrap_or("-"),
                     died.pid,
                     died.uid
@@ -478,12 +459,7 @@ fn main() {
                             .active_focus()
                             .map(|focus| focus.uid)
                             .unwrap_or(0);
-                        log!(
-                            "[SESSION] APP_FOCUS -> {} (pid={}, uid={})",
-                            package,
-                            pid,
-                            uid
-                        );
+                        log!("[SYSTEM] APP_FOCUS {} (pid={}, uid={})", package, pid, uid);
                     }
                     Some(package)
                 }
@@ -500,29 +476,20 @@ fn main() {
             let target = if let Some(pkg) = newly_focused_target {
                 let pkg_str = pkg.to_string();
                 if runtime.left_foreground_at.is_some() {
-                    log!(
-                        "[SESSION] Focus restored to {}. Grace period cleared.",
-                        pkg_str
-                    );
+                    log!("[SYSTEM] Focus restored -> {}", pkg_str);
                     runtime.left_foreground_at = None;
                 }
                 runtime.active_target_pkg = Some(pkg_str.clone());
                 Some(pkg_str)
             } else if let Some(ref saved_pkg) = runtime.active_target_pkg {
                 if !is_process_alive(saved_pkg) {
-                    log!(
-                        "[SESSION] Process for {} died. Reverting to Balance immediately.",
-                        saved_pkg
-                    );
+                    log!("[SYSTEM] Process {} gone -> BALANCED", saved_pkg);
                     runtime.active_target_pkg = None;
                     runtime.left_foreground_at = None;
                     None
                 } else if is_app_enabled(saved_pkg) {
                     if runtime.left_foreground_at.is_none() {
-                        log!(
-                            "[SESSION] Focus lost from {}. 3s grace period engaged.",
-                            saved_pkg
-                        );
+                        log!("[SYSTEM] Focus lost -> {} grace 3s", saved_pkg);
                         runtime.left_foreground_at = Some(Instant::now());
                     }
 
@@ -530,10 +497,7 @@ fn main() {
                         if left_time.elapsed() < Duration::from_secs(3) {
                             Some(saved_pkg.clone())
                         } else {
-                            log!(
-                                "[SESSION] Grace period 3s expired for {}. Dropping target.",
-                                saved_pkg
-                            );
+                            log!("[SYSTEM] Grace expired -> {}", saved_pkg);
                             runtime.active_target_pkg = None;
                             runtime.left_foreground_at = None;
                             None
@@ -550,7 +514,7 @@ fn main() {
                 None
             };
 
-            if config_just_changed || target != last_pkg_for_texture {
+            if target != last_pkg_for_texture {
                 if let Some(ref pkg) = target {
                     TextureController::apply_foreground(pkg);
                 } else {
@@ -563,15 +527,12 @@ fn main() {
             target
         } else {
             runtime.reset_to_balance();
-            if config_just_changed {
-                TextureController::restore();
-            }
+            TextureController::restore();
             last_pkg_for_texture = None;
             None
         };
 
         fps_monitor.observe(current_target.as_deref());
-        memory_prewarm.observe(current_target.as_deref());
 
         let sleep_ms = if binder_client.is_push() {
             250

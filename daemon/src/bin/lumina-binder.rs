@@ -48,7 +48,10 @@ fn main() {
         std::process::exit(0);
     }
 
-    luminad_core::log!("[BINDER] helper starting (pid={})", std::process::id());
+    luminad_core::log!(
+        "[SYSTEM] Binder helper starting (pid={})",
+        std::process::id()
+    );
 
     let shared = Arc::new(Shared::new());
 
@@ -59,9 +62,9 @@ fn main() {
 
     if let Some(monitor) = BinderMonitor::start(Arc::clone(&shared)) {
         std::mem::forget(monitor);
-        luminad_core::log!("[BINDER] observer thread started");
+        luminad_core::log!("[SYSTEM] Binder observer thread started");
     } else {
-        luminad_core::log!("[BINDER] observer thread failed to start");
+        luminad_core::log!("[SYSTEM] Binder observer thread failed to start");
     }
 
     binder_ipc::serve(shared);

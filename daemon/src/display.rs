@@ -88,6 +88,17 @@ pub fn get_saved_mode_id() -> Option<i32> {
     value
 }
 
+pub fn saved_mode_hz() -> Option<i32> {
+    let id = get_saved_mode_id()?;
+    let content = fs::read_to_string(format!("{}/rr_modes.json", CONFIG_DIR)).ok()?;
+    let json = serde_json::from_str::<Value>(&content).ok()?;
+    json.as_array()?
+        .iter()
+        .find(|item| item.get("id").and_then(|v| v.as_i64()) == Some(id as i64))
+        .and_then(|item| item.get("hz").and_then(|v| v.as_i64()))
+        .map(|hz| hz as i32)
+}
+
 pub fn resolve_mode_id(val: &str) -> Option<i32> {
     let trimmed = val.trim();
     if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("default") {

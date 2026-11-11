@@ -150,8 +150,6 @@ Fitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. P
     <string name="tweaks_renderer">Renderer</string>
     <string name="tweaks_lite_mode">Lite Mode</string>
     <string name="tweaks_lite_mode_desc">Batasi frekuensi CPU.</string>
-    <string name="tweaks_disable_thermal">Disable Thermal</string>
-    <string name="tweaks_disable_thermal_desc">Matikan thermal sepenuhnya pada profil Performance.</string>
     <string name="tweaks_mtk_desc">Subsistem FPSGo dan GPU Mali</string>
     <string name="tweaks_dialog_select_rr">Pilih Refresh Rate</string>
     <string name="tweaks_dialog_select_renderer">Pilih Graphics Renderer</string>
@@ -163,10 +161,6 @@ Fitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. P
     <string name="tweak_auto_dnd_desc">Aktifkan DND otomatis saat profil Performance aktif</string>
     <string name="tweak_io_scheduler">I/O Scheduler</string>
     <string name="tweak_io_scheduler_desc">Algoritma antrean I/O penyimpanan UFS/eMMC</string>
-    <string name="tweaks_hardware_quirks">Tuning Khusus Perangkat</string>
-    <string name="tweaks_hardware_quirks_desc">Sesuaikan setelan performa otomatis mengikuti karakteristik chipset HP kamu.</string>
-    <string name="tweaks_memory_prewarm">Akselerasi Buka Game</string>
-    <string name="tweaks_memory_prewarm_desc">Muat data game ke RAM lebih awal supaya loading awal terasa instan tanpa jeda.</string>
     <string name="dialog_select_io_scheduler">Pilih I/O Scheduler</string>
     <string name="memory_zram_title">Memory &amp; ZRAM</string>
     <string name="memory_status_title">Status Memori &amp; Swap</string>
@@ -188,8 +182,6 @@ Fitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. P
     <string name="memory_zram_size_desc">Alokasi total batas ukuran swap ZRAM</string>
     <string name="dialog_select_zram_size">Pilih Kapasitas ZRAM</string>
     <!-- Utilitas & FastLoad -->
-    <string name="tweak_fast_load">FastLoad</string>
-    <string name="tweak_fast_load_desc">Akselerasi CPU &amp; I/O sementara saat game diluncurkan</string>
     <string name="section_utility_diagnostics">Utilitas &amp; Diagnostik</string>
     <string name="hardware_diag_title">Hardware</string>
     <string name="hardware_diag_desc">Integritas baterai, siklus charge, dan masa pakai UFS</string>

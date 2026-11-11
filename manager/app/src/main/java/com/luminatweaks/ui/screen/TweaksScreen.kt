@@ -43,10 +43,8 @@ import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.Memory
-import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Storage
-import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -56,7 +54,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -131,9 +128,6 @@ fun TweaksScreen() {
 
     val cached = ConfigRepository.cachedTweaksState
     var isGlobalLiteMode by remember { mutableStateOf(cached?.isGlobalLiteMode ?: false) }
-    var isDisableThermal by remember { mutableStateOf(cached?.isDisableThermal ?: false) }
-    var isHardwareQuirks by remember { mutableStateOf(cached?.isHardwareQuirks ?: false) }
-    var isMemoryPrewarm by remember { mutableStateOf(cached?.isMemoryPrewarm ?: false) }
 
     var rrModes by remember { mutableStateOf<List<DisplayRrMode>>(cached?.rrModes ?: emptyList()) }
     var currentRrId by remember { mutableStateOf<Int?>(cached?.currentRrId) }
@@ -147,7 +141,6 @@ fun TweaksScreen() {
     var showIoSchedulerDialog by remember { mutableStateOf(false) }
 
     var inLiteModeSubpage by remember { mutableStateOf(false) }
-    var inDisableThermalSubpage by remember { mutableStateOf(false) }
     var inMemoryZramSubpage by remember { mutableStateOf(false) }
     var inHardwareDiagnosticSubpage by remember { mutableStateOf(false) }
     var inUtilitySubpage by remember { mutableStateOf(false) }
@@ -158,9 +151,6 @@ fun TweaksScreen() {
     LaunchedEffect(Unit) {
         val state = ConfigRepository.getTweaksState()
         isGlobalLiteMode = state.isGlobalLiteMode
-        isDisableThermal = state.isDisableThermal
-        isHardwareQuirks = state.isHardwareQuirks
-        isMemoryPrewarm = state.isMemoryPrewarm
         rrModes = state.rrModes
         currentRrId = state.currentRrId
         currentRendererId = state.currentRendererId
@@ -206,21 +196,6 @@ fun TweaksScreen() {
                 isGlobalLiteMode = newState
                 coroutineScope.launch {
                     ConfigRepository.setGlobalLiteMode(newState)
-                }
-            }
-        )
-        return
-    }
-
-    if (inDisableThermalSubpage) {
-        BackHandler { inDisableThermalSubpage = false }
-        DisableThermalScreen(
-            onBack = { inDisableThermalSubpage = false },
-            isDisableThermal = isDisableThermal,
-            onDisableThermalChange = { newState ->
-                isDisableThermal = newState
-                coroutineScope.launch {
-                    ConfigRepository.setDisableThermal(newState)
                 }
             }
         )
@@ -578,7 +553,7 @@ fun TweaksScreen() {
 
             item {
                 Text(
-                    text = if (isIndonesian) "Performa & Termal" else "Performance & Thermal",
+                    text = if (isIndonesian) "Performa & Boost" else "Performance & Boost",
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium
@@ -589,8 +564,7 @@ fun TweaksScreen() {
             }
 
             item {
-                val perfTopShape = getConnectedContainerShape(ContainerPosition.Top, innerRadius = 4.dp)
-                val perfBottomShape = getConnectedContainerShape(ContainerPosition.Bottom, innerRadius = 4.dp)
+                val perfShape = getConnectedContainerShape(ContainerPosition.Single, innerRadius = 4.dp)
 
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -599,7 +573,7 @@ fun TweaksScreen() {
                     Card(
                         onClick = { inLiteModeSubpage = true },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = perfTopShape,
+                        shape = perfShape,
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                         )
@@ -652,63 +626,6 @@ fun TweaksScreen() {
                             )
                         }
                     }
-
-                    Card(
-                        onClick = { inDisableThermalSubpage = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = perfBottomShape,
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Thermostat,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.tweaks_disable_thermal),
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontSize = 15.5.sp,
-                                        fontWeight = FontWeight.Medium
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = if (isDisableThermal) "Aktif • Bypass Throttling Software" else "Nonaktif • Mitigasi Suhu Vendor",
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontSize = 12.5.sp,
-                                        lineHeight = 16.sp
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Icon(
-                                imageVector = Icons.Rounded.ChevronRight,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
                 }
             }
 
@@ -726,7 +643,6 @@ fun TweaksScreen() {
 
             item {
                 val addTopShape = getConnectedContainerShape(ContainerPosition.Top, innerRadius = 4.dp)
-                val addMiddleShape = getConnectedContainerShape(ContainerPosition.Middle, innerRadius = 4.dp)
                 val addBottomShape = getConnectedContainerShape(ContainerPosition.Bottom, innerRadius = 4.dp)
 
                 Column(
@@ -793,7 +709,7 @@ fun TweaksScreen() {
                     Card(
                         onClick = { showIoSchedulerDialog = true },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = addMiddleShape,
+                        shape = addBottomShape,
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                         )
@@ -847,123 +763,6 @@ fun TweaksScreen() {
                         }
                     }
 
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = addMiddleShape,
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Security,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.tweaks_hardware_quirks),
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontSize = 15.5.sp,
-                                        fontWeight = FontWeight.Medium
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = stringResource(R.string.tweaks_hardware_quirks_desc),
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontSize = 12.5.sp,
-                                        lineHeight = 16.sp
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Switch(
-                                checked = isHardwareQuirks,
-                                onCheckedChange = { enabled ->
-                                    isHardwareQuirks = enabled
-                                    coroutineScope.launch {
-                                        ConfigRepository.setHardwareQuirks(enabled)
-                                    }
-                                }
-                            )
-                        }
-                    }
-
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = addBottomShape,
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Speed,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.tweaks_memory_prewarm),
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontSize = 15.5.sp,
-                                        fontWeight = FontWeight.Medium
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = stringResource(R.string.tweaks_memory_prewarm_desc),
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontSize = 12.5.sp,
-                                        lineHeight = 16.sp
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Switch(
-                                checked = isMemoryPrewarm,
-                                onCheckedChange = { enabled ->
-                                    isMemoryPrewarm = enabled
-                                    coroutineScope.launch {
-                                        ConfigRepository.setMemoryPrewarm(enabled)
-                                    }
-                                }
-                            )
-                        }
-                    }
                 }
             }
 

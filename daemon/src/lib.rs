@@ -15,7 +15,6 @@
  */
 
 #[macro_use]
-#[path = "binder_logger.rs"]
 pub mod logger;
 pub mod binder;
 pub mod binder_ipc;

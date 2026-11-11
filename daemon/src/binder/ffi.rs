@@ -65,7 +65,7 @@ macro_rules! binder_symbols {
             let library = CString::new("libbinder_ndk.so").ok()?;
             let handle = dlopen(library.as_ptr(), RTLD_NOW);
             if handle.is_null() {
-                crate::log!("[BINDER] dlopen(libbinder_ndk.so) failed: {}", last_dl_error());
+                crate::log!("[SYSTEM] Binder dlopen(libbinder_ndk.so) failed: {}", last_dl_error());
                 return None;
             }
             let mut api = Api {
@@ -158,7 +158,7 @@ unsafe fn resolve<T: Copy>(handle: *mut c_void, name: &str) -> Option<T> {
     let pointer = dlsym(handle, symbol.as_ptr());
     if pointer.is_null() {
         crate::log!(
-            "[BINDER] Missing libbinder_ndk symbol: {} ({})",
+            "[SYSTEM] Binder Missing libbinder_ndk symbol: {} ({})",
             name,
             last_dl_error()
         );

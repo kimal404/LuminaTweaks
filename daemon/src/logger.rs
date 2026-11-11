@@ -17,15 +17,14 @@
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
-use std::process::Command;
 use std::sync::{Mutex, Once};
 
 static LOG_LOCK: Mutex<()> = Mutex::new(());
 static INIT_LOGGER_ONCE: Once = Once::new();
 
-const LOG_FILE: &str = "/data/local/tmp/lumina.log";
-const LOG_FILE_OLD: &str = "/data/local/tmp/lumina.log.old";
-const MAX_BYTES: u64 = 1 * 1024 * 1024;
+const LOG_FILE: &str = "/data/local/tmp/luminad.log";
+const LOG_FILE_OLD: &str = "/data/local/tmp/luminad.log.old";
+const MAX_BYTES: u64 = 1024 * 1024;
 
 #[repr(C)]
 struct Tm {
@@ -47,70 +46,78 @@ extern "C" {
     fn localtime_r(timep: *const i64, result: *mut Tm) -> *mut Tm;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum LogLevel {
-    Info = 0,
-    Debug = 1,
-    Verbose = 2,
-}
-
 fn get_timestamp() -> String {
     unsafe {
         let mut now: i64 = 0;
         time(&mut now);
         let mut tm = std::mem::zeroed::<Tm>();
         if !localtime_r(&now, &mut tm).is_null() {
-            return format!(
-                "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
-                tm.tm_year + 1900,
-                tm.tm_mon + 1,
-                tm.tm_mday,
-                tm.tm_hour,
-                tm.tm_min,
-                tm.tm_sec
-            );
+            return format!("{:02}:{:02}:{:02}", tm.tm_hour, tm.tm_min, tm.tm_sec);
         }
     }
-    Command::new("date")
-        .args(["+%Y-%m-%d %H:%M:%S"])
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_default()
+    String::new()
 }
 
 pub fn init_logger() {
     INIT_LOGGER_ONCE.call_once(|| {
-        let _guard = LOG_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        if Path::new(LOG_FILE).exists() {
-            if Path::new(LOG_FILE_OLD).exists() {
-                let _ = fs::remove_file(LOG_FILE_OLD);
-            }
-            let _ = fs::rename(LOG_FILE, LOG_FILE_OLD);
-        }
-
-        if let Ok(mut file) = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(LOG_FILE)
-        {
-            let ts = get_timestamp();
-            let _ = writeln!(file, "[{}] === Luminad Session Started ===", ts);
+        let _guard = LOG_LOCK.lock().unwrap_or_else(|error| error.into_inner());
+        if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(LOG_FILE) {
+            let _ = writeln!(file, "{} [SYSTEM] Session started", get_timestamp());
         }
     });
 }
 
-pub fn write_log_with_level(level: LogLevel, msg: &str) {
-    init_logger();
-    println!("{}", msg);
+type LogWrite =
+    unsafe extern "C" fn(i32, *const std::os::raw::c_char, *const std::os::raw::c_char) -> i32;
 
-    if level == LogLevel::Info {
-        let _ = Command::new("log")
-            .args(["-t", "luminad", "-p", "i", msg])
-            .status();
+static LOGCAT: std::sync::OnceLock<Option<LogWrite>> = std::sync::OnceLock::new();
+
+fn logcat_write(msg: &str) {
+    let writer = LOGCAT.get_or_init(|| unsafe {
+        let handle = libc::dlopen(
+            b"liblog.so\0".as_ptr() as *const std::os::raw::c_char,
+            libc::RTLD_NOW,
+        );
+        if handle.is_null() {
+            return None;
+        }
+        let symbol = libc::dlsym(
+            handle,
+            b"__android_log_write\0".as_ptr() as *const std::os::raw::c_char,
+        );
+        if symbol.is_null() {
+            return None;
+        }
+        Some(std::mem::transmute_copy(&symbol))
+    });
+
+    let Some(writer) = writer else {
+        return;
+    };
+    let Ok(text) = std::ffi::CString::new(msg) else {
+        return;
+    };
+    let tag = std::ffi::CString::new("luminad").unwrap_or_default();
+    unsafe {
+        writer(4, tag.as_ptr(), text.as_ptr());
     }
+}
 
-    let _guard = LOG_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+pub fn write_log(msg: &str) {
+    init_logger();
+
+    let timestamp = get_timestamp();
+    let formatted = if timestamp.is_empty() {
+        msg.to_string()
+    } else {
+        format!("{} {}", timestamp, msg)
+    };
+
+    println!("{}", formatted);
+
+    logcat_write(&formatted);
+
+    let _guard = LOG_LOCK.lock().unwrap_or_else(|error| error.into_inner());
     if let Ok(meta) = fs::metadata(LOG_FILE) {
         if meta.len() >= MAX_BYTES {
             if Path::new(LOG_FILE_OLD).exists() {
@@ -120,39 +127,14 @@ pub fn write_log_with_level(level: LogLevel, msg: &str) {
         }
     }
 
-    let timestamp = get_timestamp();
-    let formatted = if timestamp.is_empty() {
-        msg.to_string()
-    } else {
-        format!("[{}] {}", timestamp, msg)
-    };
-
     if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(LOG_FILE) {
         let _ = writeln!(file, "{}", formatted);
     }
-}
-
-pub fn write_log(msg: &str) {
-    write_log_with_level(LogLevel::Info, msg);
 }
 
 #[macro_export]
 macro_rules! log {
     ($($arg:tt)*) => {
         $crate::logger::write_log(&format!($($arg)*))
-    };
-}
-
-#[macro_export]
-macro_rules! log_info {
-    ($($arg:tt)*) => {
-        $crate::logger::write_log_with_level($crate::logger::LogLevel::Info, &format!($($arg)*))
-    };
-}
-
-#[macro_export]
-macro_rules! log_debug {
-    ($($arg:tt)*) => {
-        $crate::logger::write_log_with_level($crate::logger::LogLevel::Debug, &format!($($arg)*))
     };
 }

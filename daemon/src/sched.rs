@@ -28,24 +28,20 @@ fn write_node(path: &str, value: &str) {
 }
 
 fn tune_top_app(boost: &str, prefer_idle: &str, uclamp_min: &str, uclamp_max: &str) {
-    if !crate::quirks::schedtune_disabled() {
-        for dir in STUNE_DIRS {
-            write_node(&format!("{}/schedtune.boost", dir), boost);
-            write_node(&format!("{}/schedtune.prefer_idle", dir), prefer_idle);
-            write_node(&format!("{}/schedtune.sched_boost_enabled", dir), boost);
-        }
+    for dir in STUNE_DIRS {
+        write_node(&format!("{}/schedtune.boost", dir), boost);
+        write_node(&format!("{}/schedtune.prefer_idle", dir), prefer_idle);
+        write_node(&format!("{}/schedtune.sched_boost_enabled", dir), boost);
     }
 
-    if !crate::quirks::uclamp_disabled() {
-        for dir in UCLAMP_DIRS {
-            write_node(&format!("{}/cpu.uclamp.min", dir), uclamp_min);
-            write_node(&format!("{}/cpu.uclamp.max", dir), uclamp_max);
-        }
+    for dir in UCLAMP_DIRS {
+        write_node(&format!("{}/cpu.uclamp.min", dir), uclamp_min);
+        write_node(&format!("{}/cpu.uclamp.max", dir), uclamp_max);
     }
 }
 
 pub fn apply_performance() {
-    tune_top_app("1", "1", "819", "max");
+    tune_top_app("1", "1", "80", "max");
 }
 
 pub fn apply_balance() {
@@ -53,7 +49,7 @@ pub fn apply_balance() {
 }
 
 pub fn apply_eco() {
-    tune_top_app("0", "1", "0", "512");
+    tune_top_app("0", "1", "0", "50");
 }
 
 pub fn tune_daemon() {

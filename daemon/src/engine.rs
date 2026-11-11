@@ -14,12 +14,10 @@
  * limitations under the License.
  */
 
-use std::collections::HashMap;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Command;
-use std::sync::{Mutex, OnceLock};
 
 pub fn get_zen_mode() -> String {
     match Command::new("settings")
@@ -53,10 +51,6 @@ pub fn set_dnd_mode(mode: &str) {
         .status();
 }
 
-pub fn read_sysfs(path: &str) -> std::io::Result<String> {
-    fs::read_to_string(path)
-}
-
 pub fn write_sysfs(path: &str, val: &str, lock: bool) -> bool {
     if !Path::new(path).exists() {
         return false;
@@ -74,206 +68,7 @@ pub fn write_sysfs(path: &str, val: &str, lock: bool) -> bool {
     res
 }
 
-pub fn is_disable_thermal_enabled() -> bool {
-    if let Ok(val) = fs::read_to_string("/data/adb/.config/lumina/disable_thermal.txt") {
-        return val.trim() == "1";
-    }
-    let prop = Command::new("getprop")
-        .arg("persist.lumina.disable_thermal")
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_default();
-    prop == "1"
-}
-
-pub(crate) fn vendor_thermal_managed() -> bool {
-    static MANAGED: OnceLock<bool> = OnceLock::new();
-    *MANAGED.get_or_init(|| {
-        [
-            "ro.miui.ui.version.name",
-            "ro.mi.os.version.name",
-            "ro.oppo.market.name",
-            "ro.build.version.opporom",
-            "ro.vivo.os.version",
-        ]
-        .iter()
-        .any(|prop| !crate::detector::get_system_prop(prop).is_empty())
-            || Path::new("/system_ext/bin/mi_thermald").exists()
-            || Path::new("/vendor/bin/thermal-engine").exists()
-    })
-}
-
-fn zone_is_critical(name: &str) -> bool {
-    let kind = fs::read_to_string(format!("/sys/class/thermal/{}/type", name))
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    kind.contains("critical") || kind.contains("hot") || kind.contains("battery")
-}
-
-static ORIGINAL_POLICIES: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
-
-fn save_vendor_policies() {
-    let Ok(mut guard) = ORIGINAL_POLICIES.lock() else {
-        return;
-    };
-    if guard.is_some() {
-        return;
-    }
-
-    let mut saved = HashMap::new();
-    if let Ok(entries) = fs::read_dir("/sys/class/thermal") {
-        for entry in entries.flatten() {
-            let fname = entry.file_name().to_string_lossy().into_owned();
-            if !fname.starts_with("thermal_zone") || zone_is_critical(&fname) {
-                continue;
-            }
-            let policy = format!("/sys/class/thermal/{}/policy", fname);
-            if let Ok(current) = fs::read_to_string(&policy) {
-                let current = current.trim().to_string();
-                if !current.is_empty() {
-                    saved.insert(fname, current);
-                }
-            }
-        }
-    }
-    *guard = Some(saved);
-}
-
-fn restore_vendor_policies() {
-    let Ok(mut guard) = ORIGINAL_POLICIES.lock() else {
-        return;
-    };
-    let Some(saved) = guard.take() else {
-        return;
-    };
-
-    let mut restored = 0;
-    for (zone, policy) in saved {
-        let path = format!("/sys/class/thermal/{}/policy", zone);
-        if write_sysfs(&path, &policy, false) {
-            restored += 1;
-        }
-    }
-    if restored > 0 {
-        log!("[THERMAL] Restored vendor policy on {} zone(s)", restored);
-    }
-}
-
-pub fn apply_thermal_kill(disable: bool) {
-    if vendor_thermal_managed() {
-        if !disable {
-            restore_vendor_policies();
-            return;
-        }
-
-        save_vendor_policies();
-        let mut tuned = 0;
-        if let Ok(entries) = fs::read_dir("/sys/class/thermal") {
-            for entry in entries.flatten() {
-                let fname = entry.file_name().to_string_lossy().into_owned();
-                if !fname.starts_with("thermal_zone") || zone_is_critical(&fname) {
-                    continue;
-                }
-                let policy = format!("/sys/class/thermal/{}/policy", fname);
-                if write_sysfs(&policy, "step_wise", false) {
-                    tuned += 1;
-                }
-            }
-        }
-        if tuned > 0 {
-            log!(
-                "[THERMAL] Vendor thermal detected; step_wise on {} zone(s), vendor nodes untouched",
-                tuned
-            );
-        }
-        return;
-    }
-
-    let mode_str = if disable { "disabled" } else { "enabled" };
-
-    if let Ok(entries) = fs::read_dir("/sys/class/thermal") {
-        for entry in entries.flatten() {
-            let fname = entry.file_name().to_string_lossy().into_owned();
-            if !fname.starts_with("thermal_zone") || zone_is_critical(&fname) {
-                continue;
-            }
-
-            if disable {
-                let policy = format!("/sys/class/thermal/{}/policy", fname);
-                if Path::new(&policy).exists() {
-                    write_sysfs(&policy, "step_wise", false);
-                    continue;
-                }
-            }
-
-            let path = format!("/sys/class/thermal/{}/mode", fname);
-            write_sysfs(&path, mode_str, false);
-        }
-    }
-
-    let param_val = if disable { "0" } else { "1" };
-    write_sysfs("/sys/module/thermal/parameters/enabled", param_val, false);
-
-    if disable {
-        let _ = Command::new("cmd")
-            .args(["thermalservice", "override-status", "0"])
-            .status();
-    } else {
-        let _ = Command::new("cmd")
-            .args(["thermalservice", "reset"])
-            .status();
-    }
-
-    let batt_limit_val = if disable { "0" } else { "1" };
-    if let Ok(entries) = fs::read_dir("/sys/class/power_supply") {
-        for entry in entries.flatten() {
-            let limit_path = entry.path().join("thermal_limit");
-            if limit_path.exists() {
-                let _ = fs::write(&limit_path, batt_limit_val.as_bytes());
-            }
-        }
-    }
-
-    if crate::snapdragon::SnapdragonEngine::is_snapdragon() {
-        crate::snapdragon::SnapdragonEngine::set_thermal_throttling(disable);
-    } else if crate::mediatek::is_mtk_device() {
-        crate::mediatek::set_thermal_throttling(disable);
-    }
-}
-
 pub fn apply_boot_profile() {
-    log!("[BOOT] Executing universal post-boot & post-flash baseline profile...");
-
-    if vendor_thermal_managed() {
-        log!("[BOOT] Vendor thermal manager detected; keeping its trip points");
-    } else if let Ok(entries) = fs::read_dir("/sys/class/thermal") {
-        let mut tuned_tz = 0;
-        let mut skipped_tz = 0;
-        for entry in entries.flatten() {
-            let fname = entry.file_name().to_string_lossy().into_owned();
-            if !fname.starts_with("thermal_zone") {
-                continue;
-            }
-
-            let policy_path = format!("/sys/class/thermal/{}/policy", fname);
-            let avail_path = format!("/sys/class/thermal/{}/available_policies", fname);
-            let avail = fs::read_to_string(&avail_path).unwrap_or_default();
-
-            if avail.split_whitespace().any(|p| p == "step_wise") {
-                if write_sysfs(&policy_path, "step_wise", true) {
-                    tuned_tz += 1;
-                }
-            } else {
-                skipped_tz += 1;
-            }
-        }
-        log!(
-            "[BOOT] Thermal: Locked {} zone(s) to step_wise ({} skipped/unsupported)",
-            tuned_tz,
-            skipped_tz
-        );
-    }
-
     write_sysfs("/proc/sys/kernel/panic", "0", false);
     write_sysfs("/proc/sys/kernel/panic_on_oops", "0", false);
     write_sysfs("/proc/sys/kernel/panic_on_warn", "0", false);
@@ -615,46 +410,35 @@ fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool, max_cap_ratio
 }
 
 pub fn performance_profile() {
-    log!("[ENGINE] Applying Performance Profile");
     crate::sched::apply_performance();
     apply_universal_cpu("performance", true, true, None);
-    if is_disable_thermal_enabled() {
-        apply_thermal_kill(true);
-    }
-
-    crate::mediatek::apply_mtk_performance();
-    crate::snapdragon::SnapdragonEngine::apply_performance();
-    crate::unisoc::UnisocEngine::apply_performance();
-    crate::exynos::ExynosEngine::apply_performance();
-    crate::tensor::TensorEngine::apply_performance();
+    crate::devfreq::apply(
+        &["gpu", "mali", "kgsl", "ddr", "bus", "memlat"],
+        "performance",
+        true,
+    );
 }
 
 pub fn performance_lite_profile() {
-    log!("[ENGINE] Applying Performance Lite Profile (72% Dynamic CPU Frequency Cap)");
     crate::sched::apply_balance();
     apply_universal_cpu("schedutil", true, false, Some(72));
     tune_schedutil_rate_limits(500, 20000);
-    apply_thermal_kill(false);
-
-    crate::mediatek::apply_mtk_balance();
-    crate::snapdragon::SnapdragonEngine::apply_balance();
-    crate::unisoc::UnisocEngine::apply_balance();
-    crate::exynos::ExynosEngine::apply_balance();
-    crate::tensor::TensorEngine::apply_balance();
+    crate::devfreq::apply(
+        &["gpu", "mali", "kgsl", "ddr", "bus", "memlat"],
+        "simple_ondemand",
+        false,
+    );
 }
 
 pub fn balance_profile() {
-    log!("[ENGINE] Restoring Balanced Profile");
     crate::sched::apply_balance();
     apply_universal_cpu("schedutil", false, false, None);
     tune_schedutil_rate_limits(2000, 4000);
-    apply_thermal_kill(false);
-
-    crate::mediatek::apply_mtk_balance();
-    crate::snapdragon::SnapdragonEngine::apply_balance();
-    crate::unisoc::UnisocEngine::apply_balance();
-    crate::exynos::ExynosEngine::apply_balance();
-    crate::tensor::TensorEngine::apply_balance();
+    crate::devfreq::apply(
+        &["gpu", "mali", "kgsl", "ddr", "bus", "memlat"],
+        "simple_ondemand",
+        false,
+    );
 }
 
 pub fn restore_balance() {
@@ -662,15 +446,12 @@ pub fn restore_balance() {
 }
 
 pub fn eco_profile() {
-    log!("[ENGINE] Applying Eco Profile");
     crate::sched::apply_eco();
     apply_universal_cpu("powersave", false, false, None);
     tune_schedutil_rate_limits(4000, 8000);
-    apply_thermal_kill(false);
-
-    crate::mediatek::apply_mtk_eco();
-    crate::snapdragon::SnapdragonEngine::apply_balance();
-    crate::unisoc::UnisocEngine::apply_balance();
-    crate::exynos::ExynosEngine::apply_eco();
-    crate::tensor::TensorEngine::apply_eco();
+    crate::devfreq::apply(
+        &["gpu", "mali", "kgsl", "ddr", "bus", "memlat"],
+        "powersave",
+        false,
+    );
 }

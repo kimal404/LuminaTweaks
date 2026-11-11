@@ -44,7 +44,7 @@ const WRITER_TICK: Duration = Duration::from_millis(100);
 
 pub fn serve(shared: Arc<Shared>) -> ! {
     let (listener, path) = bind_listener();
-    crate::log!("[BINDER-IPC] event producer listening on {}", path);
+    crate::log!("[SYSTEM] Binder socket listening on {}", path);
 
     let current: Arc<Mutex<Option<Session>>> = Arc::new(Mutex::new(None));
 
@@ -85,7 +85,7 @@ pub fn serve(shared: Arc<Shared>) -> ! {
             }
             Err(error) => {
                 if error.kind() != ErrorKind::Interrupted {
-                    crate::log!("[BINDER-IPC] accept failed: {}", error);
+                    crate::log!("[SYSTEM] Binder accept failed: {}", error);
                 }
             }
         }
@@ -148,11 +148,11 @@ impl Session {
                 if let Ok(mut handles) = inner.handles.lock() {
                     handles.push(handle);
                 }
-                crate::log!("[BINDER-IPC] legacy client connected");
+                crate::log!("[SYSTEM] Binder legacy client connected");
             }
             Mode::ModernClient | Mode::ModernServer => {
                 if !handshake(&stream, &mut reader, matches!(mode, Mode::ModernClient)) {
-                    crate::log!("[BINDER-IPC] handshake failed");
+                    crate::log!("[SYSTEM] Binder handshake failed");
                     let _ = stream.shutdown(std::net::Shutdown::Both);
                     return None;
                 }
@@ -176,7 +176,7 @@ impl Session {
                     handles.push(writer_handle);
                     handles.push(reader_handle);
                 }
-                crate::log!("[BINDER-IPC] daemon connected");
+                crate::log!("[SYSTEM] Binder daemon connected");
             }
         }
 
@@ -240,7 +240,7 @@ fn bind_listener() -> (UnixListener, String) {
         }
     }
 
-    crate::log!("[BINDER-IPC] failed to bind socket: {}", errors.join("; "));
+    crate::log!("[SYSTEM] Binder bind failed: {}", errors.join("; "));
     std::process::exit(1)
 }
 
@@ -256,7 +256,7 @@ fn authorized(stream: &UnixStream) -> bool {
     match peer_cred(stream.as_raw_fd()) {
         Some((_, 0)) => true,
         Some((pid, uid)) => {
-            crate::log!("[BINDER-IPC] rejected peer pid={} uid={}", pid, uid);
+            crate::log!("[SYSTEM] Binder rejected peer pid={} uid={}", pid, uid);
             false
         }
         None => false,
@@ -313,7 +313,7 @@ fn handshake(stream: &UnixStream, reader: &mut BufReader<UnixStream>, client_hel
     let ok = response.trim() == format!("OK {}", PROTO_VERSION);
     if !ok {
         crate::log!(
-            "[BINDER-IPC] unexpected handshake reply: {}",
+            "[SYSTEM] Binder unexpected handshake reply: {}",
             response.trim()
         );
     }
@@ -409,7 +409,7 @@ fn send_event(inner: &Inner, shared: &Shared, event: Event) -> std::io::Result<(
                 .filter(|value| valid_package(value))
                 .unwrap_or_else(|| "-".to_string());
             crate::log!(
-                "[BINDER] APP_DIED pid={} uid={} pkg={}",
+                "[SYSTEM] APP_DIED pid={} uid={} pkg={}",
                 death.pid,
                 death.uid,
                 package

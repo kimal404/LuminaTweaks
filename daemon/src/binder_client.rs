@@ -355,7 +355,7 @@ impl BinderClient {
                         .and_then(|value| value.parse::<u32>().ok())
                         .unwrap_or(0);
                     if version != 1 {
-                        crate::log!("[BINDER] Unsupported helper protocol {}", version);
+                        crate::log!("[SYSTEM] Binder Unsupported helper protocol {}", version);
                         continue;
                     }
                     let _ = stream.set_read_timeout(Some(READ_TIMEOUT));
