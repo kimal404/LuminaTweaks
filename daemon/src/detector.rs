@@ -25,6 +25,18 @@ use std::time::{Duration, Instant, SystemTime};
 
 pub const CONFIG_DIR: &str = "/data/adb/.config/lumina";
 
+const CONFIG_JSON_CANDIDATES: &[&str] = &[
+    "/data/adb/.config/lumina/config.json",
+    "/data/adb/modules/luminatweaks/config.json",
+    "/data/adb/modules/lumina_tweaks/config.json",
+];
+
+const APP_CONFIG_JSON_CANDIDATES: &[&str] = &[
+    "/data/adb/.config/lumina/app_config.json",
+    "/data/adb/modules/luminatweaks/app_config.json",
+    "/data/adb/modules/lumina_tweaks/app_config.json",
+];
+
 const GAMELIST_JSON_CANDIDATES: &[&str] = &[
     "/data/adb/.config/lumina/gamelist.json",
     "/data/adb/modules/luminatweaks/gamelist.json",
@@ -111,12 +123,19 @@ pub(crate) fn is_ignored_package(pkg: &str) -> bool {
             | "com.lbe.security.miui"
             | "com.miui.guardprovider"
             | "com.google.android.googlequicksearchbox"
+            | "com.google.android.apps.nexuslauncher"
             | "com.miui.home"
             | "com.mi.android.globallauncher"
             | "com.android.launcher"
             | "com.android.launcher3"
+            | "org.lineageos.trebuchet"
+            | "ch.deletescape.lawnchair"
+            | "ch.deletescape.lawnchair.ci"
+            | "com.teslacoilsw.launcher"
+            | "com.sec.android.app.launcher"
     ) || pkg.contains("inputmethod")
         || pkg.contains("system_server")
+        || pkg.contains("overlay")
 }
 
 #[derive(Debug, Clone)]
@@ -396,10 +415,15 @@ pub fn read_global_json() -> Option<Value> {
         }
     }
 
-    let path = format!("{}/config.json", CONFIG_DIR);
-    let json = std::fs::read_to_string(path)
-        .ok()
-        .and_then(|content| serde_json::from_str::<Value>(&content).ok());
+    let mut json = None;
+    for path in CONFIG_JSON_CANDIDATES {
+        if let Ok(content) = std::fs::read_to_string(path) {
+            if let Ok(value) = serde_json::from_str::<Value>(&content) {
+                json = Some(value);
+                break;
+            }
+        }
+    }
 
     if let Some(value) = json {
         if let Ok(mut guard) = GLOBAL_JSON_CACHE.lock() {
@@ -424,10 +448,15 @@ fn read_app_json() -> Option<Value> {
         }
     }
 
-    let path = format!("{}/app_config.json", CONFIG_DIR);
-    let json = std::fs::read_to_string(path)
-        .ok()
-        .and_then(|content| serde_json::from_str::<Value>(&content).ok());
+    let mut json = None;
+    for path in APP_CONFIG_JSON_CANDIDATES {
+        if let Ok(content) = std::fs::read_to_string(path) {
+            if let Ok(value) = serde_json::from_str::<Value>(&content) {
+                json = Some(value);
+                break;
+            }
+        }
+    }
 
     if let Some(value) = json {
         if let Ok(mut guard) = APP_JSON_CACHE.lock() {
@@ -557,7 +586,7 @@ pub fn get_global_io_scheduler() -> Option<String> {
         .and_then(|v| v.as_str().map(|s| s.trim().to_string()))
 }
 
-fn parse_disabled_games(value: Option<&Value>) -> HashSet<String> {
+fn parse_package_set(value: Option<&Value>) -> HashSet<String> {
     let Some(value) = value else {
         return HashSet::new();
     };
@@ -579,6 +608,10 @@ fn parse_disabled_games(value: Option<&Value>) -> HashSet<String> {
             .collect(),
         _ => HashSet::new(),
     }
+}
+
+fn parse_disabled_games(value: Option<&Value>) -> HashSet<String> {
+    parse_package_set(value)
 }
 
 fn app_row_disabled(pkg: &str, json: &Value) -> bool {
@@ -631,6 +664,70 @@ pub fn is_game_disabled(pkg: &str) -> bool {
     false
 }
 
+pub fn is_custom_game(pkg: &str) -> bool {
+    let clean = sanitize_pkg_name(pkg);
+    if clean.is_empty() {
+        return false;
+    }
+
+    if let Some(json) = read_global_json() {
+        let custom_set = parse_package_set(
+            json.get("custom_games")
+                .or_else(|| json.get("customGames")),
+        );
+        if custom_set.contains(clean) {
+            return true;
+        }
+    }
+
+    if let Some(json) = read_app_json() {
+        let custom_set = parse_package_set(
+            json.get("custom_games")
+                .or_else(|| json.get("customGames")),
+        );
+        if custom_set.contains(clean) {
+            return true;
+        }
+
+        if let Some(list) = json.as_array() {
+            for item in list {
+                let row_pkg = item
+                    .get("pkg")
+                    .or_else(|| item.get("package"))
+                    .or_else(|| item.get("packageName"))
+                    .and_then(|value| value.as_str());
+                if row_pkg.map(sanitize_pkg_name) == Some(clean) {
+                    let is_custom = item
+                        .get("custom")
+                        .or_else(|| item.get("saklar_utama"))
+                        .or_else(|| item.get("saklarUtama"))
+                        .or_else(|| item.get("enabled"))
+                        .map(is_truthy)
+                        .unwrap_or(false);
+                    if is_custom {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        if let Some(item) = json.get(clean) {
+            let is_custom = item
+                .get("custom")
+                .or_else(|| item.get("saklar_utama"))
+                .or_else(|| item.get("saklarUtama"))
+                .or_else(|| item.get("enabled"))
+                .map(is_truthy)
+                .unwrap_or(false);
+            if is_custom {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
 fn extract_app_config(item: &Value) -> AppConfig {
     let mut disabled_games = parse_disabled_games(
         item.get("disabled_games")
@@ -654,6 +751,7 @@ fn extract_app_config(item: &Value) -> AppConfig {
         .get("saklar_utama")
         .or_else(|| item.get("saklarUtama"))
         .or_else(|| item.get("enabled"))
+        .or_else(|| item.get("custom"))
         .map(is_truthy)
         .unwrap_or(false);
 
@@ -775,6 +873,21 @@ pub fn get_app_config(pkg: &str) -> Option<AppConfig> {
             texture_detail: 0,
             pixel_sharp: false,
             hard_distance: false,
+            disabled_games: global_disabled.clone(),
+        });
+    }
+
+    if is_custom_game(clean_pkg) {
+        return Some(AppConfig {
+            enabled: true,
+            lite_mode: "default".to_string(),
+            dnd: "default".to_string(),
+            refresh_rate: "default".to_string(),
+            renderer: "default".to_string(),
+            texture_enabled: false,
+            texture_detail: 0,
+            pixel_sharp: false,
+            hard_distance: false,
             disabled_games: global_disabled,
         });
     }
@@ -784,12 +897,19 @@ pub fn get_app_config(pkg: &str) -> Option<AppConfig> {
 
 pub fn is_app_enabled(pkg: &str) -> bool {
     let clean_pkg = sanitize_pkg_name(pkg);
+    if clean_pkg.is_empty() {
+        return false;
+    }
 
     if is_game_disabled(clean_pkg) {
         return false;
     }
 
     if is_game_whitelisted(clean_pkg) {
+        return true;
+    }
+
+    if is_custom_game(clean_pkg) {
         return true;
     }
 

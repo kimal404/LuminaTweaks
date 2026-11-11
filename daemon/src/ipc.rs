@@ -1,24 +1,36 @@
-// Copyright (C) 2026 kimal
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * Copyright (C) 2026 kimal
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
+use std::time::Duration;
+
+pub const IPC_SOCKET_PRIMARY: &str = "/dev/socket/lumina_ipc.sock";
+pub const IPC_SOCKET_FALLBACK: &str = "/data/local/tmp/lumina_ipc.sock";
+
+static CLIENTS: OnceLock<Arc<Mutex<Vec<UnixStream>>>> = OnceLock::new();
+
+fn get_clients() -> &'static Arc<Mutex<Vec<UnixStream>>> {
+    CLIENTS.get_or_init(|| Arc::new(Mutex::new(Vec::new())))
+}
 
 pub struct SharedState {
     pub current_profile: Mutex<String>,
@@ -36,89 +48,123 @@ impl SharedState {
     }
 }
 
-const PRIMARY_SOCKET: &str = "/dev/socket/lumina.sock";
-const FALLBACK_SOCKET: &str = "/data/local/tmp/lumina.sock";
-
 pub struct IpcServer;
 
 impl IpcServer {
-    fn get_bound_listener() -> (UnixListener, &'static str) {
-        let _ = fs::remove_file(PRIMARY_SOCKET);
-        if let Ok(listener) = UnixListener::bind(PRIMARY_SOCKET) {
-            let _ = fs::set_permissions(PRIMARY_SOCKET, fs::Permissions::from_mode(0o666));
-            return (listener, PRIMARY_SOCKET);
+    pub fn start(shared_state: Arc<SharedState>) {
+        thread::Builder::new()
+            .name("lumina-ipc".to_string())
+            .spawn(move || {
+                run_server(shared_state);
+            })
+            .expect("Failed to spawn IPC thread");
+    }
+}
+
+pub fn broadcast_toast(message: &str) {
+    let clients_arc = get_clients();
+    let mut guard = match clients_arc.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+
+    let payload = format!("TOAST {}\n", message);
+    let bytes = payload.as_bytes();
+
+    guard.retain_mut(|client| {
+        let _ = client.set_write_timeout(Some(Duration::from_millis(50)));
+        client.write_all(bytes).is_ok() && client.flush().is_ok()
+    });
+}
+
+fn bind_socket() -> (UnixListener, String) {
+    for path in [IPC_SOCKET_PRIMARY, IPC_SOCKET_FALLBACK] {
+        if let Ok(meta) = fs::symlink_metadata(path) {
+            if !meta.is_dir() {
+                let _ = fs::remove_file(path);
+            }
         }
 
-        let _ = fs::remove_file(FALLBACK_SOCKET);
-        let listener = match UnixListener::bind(FALLBACK_SOCKET) {
-            Ok(listener) => listener,
-            Err(e) => {
-                crate::log!("[IPC] Fatal: gagal mengikat IPC socket: {}", e);
-                std::process::exit(1);
-            }
-        };
-        let _ = fs::set_permissions(FALLBACK_SOCKET, fs::Permissions::from_mode(0o666));
-        (listener, FALLBACK_SOCKET)
+        if let Ok(listener) = UnixListener::bind(path) {
+            let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o666));
+            return (listener, path.to_string());
+        }
     }
 
-    pub fn start(state: Arc<SharedState>) {
-        thread::spawn(move || {
-            let (listener, active_path) = Self::get_bound_listener();
-            crate::log!("[IPC] Unix Domain Socket aktif di {}", active_path);
+    panic!("Failed to bind Lumina IPC UnixListener on all candidate paths");
+}
 
-            for stream in listener.incoming().flatten() {
-                let state_clone = Arc::clone(&state);
+fn run_server(shared_state: Arc<SharedState>) {
+    let (listener, active_path) = bind_socket();
+    crate::log!("[SYSTEM] IPC Server listening on {}", active_path);
+
+    let clients_arc = get_clients();
+
+    for incoming in listener.incoming() {
+        match incoming {
+            Ok(stream) => {
+                let _ = stream.set_read_timeout(Some(Duration::from_millis(200)));
+                let _ = stream.set_write_timeout(Some(Duration::from_millis(200)));
+
+                if let Ok(clone_writer) = stream.try_clone() {
+                    let mut guard = match clients_arc.lock() {
+                        Ok(g) => g,
+                        Err(p) => p.into_inner(),
+                    };
+                    guard.push(clone_writer);
+                }
+
+                let state_clone = Arc::clone(&shared_state);
                 thread::spawn(move || {
-                    Self::handle_client(stream, state_clone);
+                    handle_client(stream, state_clone);
                 });
             }
-        });
-    }
-
-    fn handle_client(mut stream: UnixStream, state: Arc<SharedState>) {
-        let cloned = match stream.try_clone() {
-            Ok(cloned) => cloned,
-            Err(e) => {
-                crate::log!("[IPC] Gagal clone stream: {}", e);
-                return;
+            Err(error) => {
+                crate::log!("[SYSTEM] IPC accept error: {}", error);
             }
-        };
-        let mut reader = BufReader::new(cloned);
-        let mut line = String::new();
+        }
+    }
+}
 
-        if reader.read_line(&mut line).is_ok() {
-            let cmd = line.trim();
-            let response = match cmd {
-                "PING" => "PONG\n".to_string(),
-                "GET_STATUS" => {
-                    let prof = match state.current_profile.lock() {
-                        Ok(guard) => guard.clone(),
-                        Err(e) => e.into_inner().clone(),
-                    };
-                    let pkg = match state.active_package.lock() {
-                        Ok(guard) => guard.clone(),
-                        Err(e) => e.into_inner().clone(),
-                    };
-                    let pkg_json = match pkg {
-                        Some(p) => format!(r#""{}""#, p),
-                        None => "null".to_string(),
-                    };
-                    format!(
-                        r#"{{"status":"OK","daemon_pid":{},"profile":"{}","active_package":{}}}"#,
-                        std::process::id(),
-                        prof,
-                        pkg_json
-                    ) + "\n"
-                }
-                "RELOAD_CONFIG" => {
-                    state.reload_flag.store(true, Ordering::Relaxed);
-                    r#"{"status":"OK","message":"Config reload scheduled"}"#.to_string() + "\n"
-                }
-                _ => r#"{"status":"ERROR","message":"Perintah tidak dikenal"}"#.to_string() + "\n",
-            };
+fn handle_client(stream: UnixStream, shared_state: Arc<SharedState>) {
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
 
-            let _ = stream.write_all(response.as_bytes());
-            let _ = stream.flush();
+    loop {
+        line.clear();
+        match reader.read_line(&mut line) {
+            Ok(0) => break,
+            Ok(_) => {
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+
+                if trimmed == "PING" {
+                    let writer = reader.get_mut();
+                    let _ = writer.write_all(b"PONG\n");
+                    let _ = writer.flush();
+                } else if trimmed == "GET_PROFILE" {
+                    let current = shared_state
+                        .current_profile
+                        .lock()
+                        .map(|p| p.clone())
+                        .unwrap_or_else(|p| p.into_inner().clone());
+                    let resp = format!("PROFILE {}\n", current);
+                    let writer = reader.get_mut();
+                    let _ = writer.write_all(resp.as_bytes());
+                    let _ = writer.flush();
+                } else if trimmed == "RELOAD" {
+                    shared_state.reload_flag.store(true, Ordering::Relaxed);
+                    let writer = reader.get_mut();
+                    let _ = writer.write_all(b"OK\n");
+                    let _ = writer.flush();
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => {
+                thread::sleep(Duration::from_millis(50));
+            }
+            Err(_) => break,
         }
     }
 }

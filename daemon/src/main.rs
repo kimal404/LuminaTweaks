@@ -82,8 +82,10 @@ fn config_hash() -> u64 {
     for path in [
         "/data/adb/.config/lumina/config.json",
         "/data/adb/modules/luminatweaks/config.json",
+        "/data/adb/modules/lumina_tweaks/config.json",
         "/data/adb/.config/lumina/app_config.json",
         "/data/adb/modules/luminatweaks/app_config.json",
+        "/data/adb/modules/lumina_tweaks/app_config.json",
     ] {
         if let Ok(content) = std::fs::read(path) {
             content.hash(&mut hasher);
@@ -108,6 +110,7 @@ struct EngineRuntime {
     current_profile: Option<Profile>,
     active_target_pkg: Option<String>,
     active_target_pid: i32,
+    target_game_pid: i32,
     current_applied_rr: Option<i32>,
     current_applied_renderer: String,
     last_config_hash: Option<u64>,
@@ -127,6 +130,7 @@ impl EngineRuntime {
             current_profile: None,
             active_target_pkg: None,
             active_target_pid: 0,
+            target_game_pid: 0,
             current_applied_rr: display::get_saved_mode_id(),
             current_applied_renderer: renderer::get_saved_renderer(),
             last_config_hash: Some(config_hash()),
@@ -196,6 +200,7 @@ impl EngineRuntime {
                 Profile::Performance => {
                     engine::performance_profile();
                     set_system_profile_prop("Performance");
+                    ipc::broadcast_toast("Profile Performance");
                     log!(
                         "[BOOST]  {} ({}) \u{2794} FULL_PERF [CPU: 100% | Sched: 80%]",
                         target_pkg.unwrap_or("system"),
@@ -205,6 +210,7 @@ impl EngineRuntime {
                 Profile::PerformanceLite => {
                     engine::performance_lite_profile();
                     set_system_profile_prop("Performance Lite");
+                    ipc::broadcast_toast("Profile Performance Lite");
                     log!(
                         "[BOOST]  {} ({}) \u{2794} FULL_PERF_LITE [CPU: 72% | Sched: 0%]",
                         target_pkg.unwrap_or("system"),
@@ -214,11 +220,13 @@ impl EngineRuntime {
                 Profile::Eco => {
                     engine::eco_profile();
                     set_system_profile_prop("Eco");
+                    ipc::broadcast_toast("Profile Eco");
                     log!("[POWER] ECO \u{2794} CPU powersave");
                 }
                 Profile::Balance => {
                     engine::balance_profile();
                     set_system_profile_prop("Balanced");
+                    ipc::broadcast_toast("Profile Balance");
                     log!(
                         "[RESET]  {} ({}) \u{2794} BALANCED [Trigger: Inactive]",
                         target_pkg.unwrap_or("system"),
@@ -291,6 +299,7 @@ impl EngineRuntime {
             self.current_profile = Some(Profile::Balance);
             engine::balance_profile();
             set_system_profile_prop("Balanced");
+            ipc::broadcast_toast("Profile Balance");
             log!(
                 "[RESET]  {} ({}) \u{2794} BALANCED [Trigger: {}]",
                 self.active_target_pkg.as_deref().unwrap_or("system"),
@@ -299,6 +308,7 @@ impl EngineRuntime {
             );
             self.active_target_pkg = None;
             self.active_target_pid = 0;
+            self.target_game_pid = 0;
             self.update_shared_state(Profile::Balance, None);
 
             let global_rr = display::get_saved_mode_id();
@@ -413,17 +423,19 @@ fn main() {
 
         while let Some(died) = binder_client.take_died() {
             let matches_target = active_pkg.as_deref().is_some()
-                && active_pkg.as_deref() == died.package.as_deref()
-                || (active_pid > 0 && active_pid == died.pid);
+                && (active_pkg.as_deref() == died.package.as_deref()
+                    || (runtime.target_game_pid > 0 && runtime.target_game_pid == died.pid)
+                    || (active_pid > 0 && active_pid == died.pid));
 
             if matches_target {
                 log!(
                     "[RESET]  {} ({}) \u{2794} BALANCED [Trigger: Died 0ms | uid {}]",
-                    died.package.as_deref().unwrap_or("-"),
+                    active_pkg.as_deref().or(died.package.as_deref()).unwrap_or("-"),
                     died.pid,
                     died.uid
                 );
                 runtime.left_foreground_at = None;
+                runtime.target_game_pid = 0;
                 runtime.reset_to_balance_triggered("Died 0ms");
                 fps_monitor.observe(None);
                 TextureController::sync_config(None);
@@ -480,25 +492,30 @@ fn main() {
                     runtime.left_foreground_at = None;
                 }
                 runtime.active_target_pkg = Some(pkg_str.clone());
+                if active_pid > 0 {
+                    runtime.target_game_pid = active_pid;
+                }
                 Some(pkg_str)
             } else if let Some(ref saved_pkg) = runtime.active_target_pkg {
                 if !is_process_alive(saved_pkg) {
                     log!("[SYSTEM] Process {} gone -> BALANCED", saved_pkg);
                     runtime.active_target_pkg = None;
+                    runtime.target_game_pid = 0;
                     runtime.left_foreground_at = None;
                     None
                 } else if is_app_enabled(saved_pkg) {
                     if runtime.left_foreground_at.is_none() {
-                        log!("[SYSTEM] Focus lost -> {} grace 3s", saved_pkg);
+                        log!("[SYSTEM] Focus lost -> {} grace 15s", saved_pkg);
                         runtime.left_foreground_at = Some(Instant::now());
                     }
 
                     if let Some(left_time) = runtime.left_foreground_at {
-                        if left_time.elapsed() < Duration::from_secs(3) {
+                        if left_time.elapsed() < Duration::from_secs(15) {
                             Some(saved_pkg.clone())
                         } else {
                             log!("[SYSTEM] Grace expired -> {}", saved_pkg);
                             runtime.active_target_pkg = None;
+                            runtime.target_game_pid = 0;
                             runtime.left_foreground_at = None;
                             None
                         }
@@ -507,6 +524,7 @@ fn main() {
                     }
                 } else {
                     runtime.active_target_pkg = None;
+                    runtime.target_game_pid = 0;
                     runtime.left_foreground_at = None;
                     None
                 }
