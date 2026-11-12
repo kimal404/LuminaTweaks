@@ -415,6 +415,11 @@ impl EngineRuntime {
 }
 
 fn main() {
+    if std::env::args_os().any(|arg| arg == "--restore-all") {
+        tweaks::state::restore_all();
+        engine::restore_boot_profile();
+        return;
+    }
     if std::env::args_os().any(|arg| arg == "--restore-boot") {
         engine::restore_boot_profile();
         return;
@@ -444,6 +449,7 @@ fn main() {
     sched::tune_daemon();
     display::init_display_subsystem();
     renderer::init_renderer_subsystem();
+    tweaks::state::restore_all();
     engine::sync_global_tweaks();
     engine::apply_boot_profile();
 

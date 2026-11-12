@@ -62,7 +62,7 @@ elif [ -f "/data/adb/modules/luminatweaks/luminad" ]; then
 fi
 if [ -n "$RESTORE_BIN" ]; then
     chmod 755 "$RESTORE_BIN" 2>/dev/null || true
-    "$RESTORE_BIN" --restore-boot >/dev/null 2>&1 || true
+    "$RESTORE_BIN" --restore-all >/dev/null 2>&1 || true
 fi
 
 rm -rf /data/adb/luminatweaks

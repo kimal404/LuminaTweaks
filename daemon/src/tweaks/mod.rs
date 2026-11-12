@@ -4,5 +4,6 @@ pub mod engine;
 pub mod fps;
 pub mod renderer;
 pub mod sched;
+pub mod state;
 pub mod texture;
 pub mod utility;

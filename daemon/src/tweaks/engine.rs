@@ -413,18 +413,26 @@ pub fn tune_schedutil_rate_limits(up_us: u64, down_us: u64) {
                 let up_path = format!("{}/schedutil/up_rate_limit_us", p_str);
                 let down_path = format!("{}/schedutil/down_rate_limit_us", p_str);
 
-                write_sysfs(&up_path, &up_us.to_string(), false);
-                write_sysfs(&down_path, &down_us.to_string(), false);
+                crate::tweaks::state::write_tracked(
+                    &up_path,
+                    &up_us.to_string(),
+                    false,
+                );
+                crate::tweaks::state::write_tracked(
+                    &down_path,
+                    &down_us.to_string(),
+                    false,
+                );
             }
         }
     }
 
-    write_sysfs(
+    crate::tweaks::state::write_tracked(
         "/sys/devices/system/cpu/cpufreq/schedutil/up_rate_limit_us",
         &up_us.to_string(),
         false,
     );
-    write_sysfs(
+    crate::tweaks::state::write_tracked(
         "/sys/devices/system/cpu/cpufreq/schedutil/down_rate_limit_us",
         &down_us.to_string(),
         false,
@@ -444,7 +452,7 @@ fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool, max_cap_ratio
                 let hw_min_path = format!("{}/cpuinfo_min_freq", p_str);
                 let hw_max_path = format!("{}/cpuinfo_max_freq", p_str);
 
-                write_sysfs(&gov_path, gov, lock_gov);
+                crate::tweaks::state::write_tracked(&gov_path, gov, lock_gov);
 
                 let hw_min = fs::read_to_string(&hw_min_path)
                     .ok()
@@ -471,8 +479,12 @@ fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool, max_cap_ratio
                         .find(|&f| f >= 900000)
                         .unwrap_or(hw_min);
 
-                    write_sysfs(&min_path, &target_min.to_string(), false);
-                    write_sysfs(&max_path, &hw_max.to_string(), false);
+                    crate::tweaks::state::write_tracked(
+                        &min_path,
+                        &target_min.to_string(),
+                        false,
+                    );
+                    crate::tweaks::state::write_tracked(&max_path, &hw_max.to_string(), false);
                 } else if let Some(pct) = max_cap_ratio {
                     let target_cap = (hw_max * pct) / 100;
                     let target_max = if !freqs.is_empty() {
@@ -487,8 +499,16 @@ fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool, max_cap_ratio
                     };
                     let target_max = target_max.max(hw_min);
 
-                    write_sysfs(&min_path, &hw_min.to_string(), false);
-                    write_sysfs(&max_path, &target_max.to_string(), true);
+                    crate::tweaks::state::write_tracked(
+                        &min_path,
+                        &hw_min.to_string(),
+                        false,
+                    );
+                    crate::tweaks::state::write_tracked(
+                        &max_path,
+                        &target_max.to_string(),
+                        true,
+                    );
                     log!(
                         "[LITE] {}: Capped max freq to {} kHz (~{}% of {} kHz)",
                         fname,
@@ -497,8 +517,16 @@ fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool, max_cap_ratio
                         hw_max
                     );
                 } else {
-                    write_sysfs(&min_path, &hw_min.to_string(), false);
-                    write_sysfs(&max_path, &hw_max.to_string(), false);
+                    crate::tweaks::state::write_tracked(
+                        &min_path,
+                        &hw_min.to_string(),
+                        false,
+                    );
+                    crate::tweaks::state::write_tracked(
+                        &max_path,
+                        &hw_max.to_string(),
+                        false,
+                    );
                 }
             }
         }
@@ -510,7 +538,7 @@ fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool, max_cap_ratio
             if fname.starts_with("cpu") && fname[3..].chars().all(|c| c.is_ascii_digit()) {
                 let gov_path =
                     format!("/sys/devices/system/cpu/{}/cpufreq/scaling_governor", fname);
-                write_sysfs(&gov_path, gov, lock_gov);
+                crate::tweaks::state::write_tracked(&gov_path, gov, lock_gov);
             }
         }
     }
@@ -518,9 +546,9 @@ fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool, max_cap_ratio
     let ra_val = if min_clamp { "1024" } else { "128" };
     for block in ["sda", "sdb", "sdc", "mmcblk0", "dm-0"] {
         let ra_path = format!("/sys/block/{}/queue/read_ahead_kb", block);
-        write_sysfs(&ra_path, ra_val, min_clamp);
+        crate::tweaks::state::write_tracked(&ra_path, ra_val, min_clamp);
     }
-    write_sysfs(
+    crate::tweaks::state::write_tracked(
         "/proc/sys/vm/vfs_cache_pressure",
         if min_clamp { "80" } else { "100" },
         min_clamp,
@@ -549,18 +577,11 @@ pub fn performance_lite_profile() {
 }
 
 pub fn balance_profile() {
-    crate::tweaks::sched::apply_balance();
-    apply_universal_cpu("schedutil", false, false, None);
-    tune_schedutil_rate_limits(2000, 4000);
-    crate::tweaks::devfreq::apply(
-        &["gpu", "mali", "kgsl", "ddr", "bus", "memlat"],
-        "simple_ondemand",
-        false,
-    );
+    crate::tweaks::state::restore_all();
 }
 
 pub fn restore_balance() {
-    balance_profile();
+    crate::tweaks::state::restore_all();
 }
 
 pub fn eco_profile() {

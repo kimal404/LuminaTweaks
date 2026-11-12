@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::path::Path;
-
 const STUNE_DIRS: [&str; 2] = ["/dev/stune/top-app", "/sys/fs/cgroup/stune/top-app"];
 const UCLAMP_DIRS: [&str; 3] = [
     "/sys/fs/cgroup/top-app",
@@ -22,9 +20,7 @@ const UCLAMP_DIRS: [&str; 3] = [
 ];
 
 fn write_node(path: &str, value: &str) {
-    if Path::new(path).exists() {
-        crate::tweaks::engine::write_sysfs(path, value, false);
-    }
+    crate::tweaks::state::write_tracked(path, value, false);
 }
 
 fn tune_top_app(boost: &str, prefer_idle: &str, uclamp_min: &str, uclamp_max: &str) {

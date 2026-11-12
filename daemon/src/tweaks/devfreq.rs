@@ -63,7 +63,7 @@ fn write_governor(base: &str, governor: &str) {
     let path = format!("{}/governor", base);
     let available = fs::read_to_string(format!("{}/available_governors", base)).unwrap_or_default();
     if available.is_empty() || available.split_whitespace().any(|item| item == governor) {
-        crate::tweaks::engine::write_sysfs(&path, governor, false);
+        crate::tweaks::state::write_tracked(&path, governor, false);
     }
 }
 
@@ -74,12 +74,16 @@ fn write_frequency_limits(base: &str, lock_max: bool) {
     };
 
     let min_target = if lock_max { *max } else { *min };
-    crate::tweaks::engine::write_sysfs(
+    crate::tweaks::state::write_tracked(
         &format!("{}/min_freq", base),
         &min_target.to_string(),
         lock_max,
     );
-    crate::tweaks::engine::write_sysfs(&format!("{}/max_freq", base), &max.to_string(), lock_max);
+    crate::tweaks::state::write_tracked(
+        &format!("{}/max_freq", base),
+        &max.to_string(),
+        lock_max,
+    );
 }
 
 pub fn apply(needles: &[&str], governor: &str, lock_max: bool) -> usize {
