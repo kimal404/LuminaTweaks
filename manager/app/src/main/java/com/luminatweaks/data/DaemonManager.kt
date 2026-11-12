@@ -29,6 +29,8 @@ object DaemonManager {
     private const val MODULE_BINDER_PATH = "/data/adb/modules/luminatweaks/lumina-binder"
     private const val MODULE_UPDATE_DIR = "/data/adb/modules_update/luminatweaks"
     private const val PID_FILE_PATH = "/data/local/tmp/lumina.pid"
+    private const val HEARTBEAT_FILE_PATH = "/data/local/tmp/lumina.alive"
+    private const val HEARTBEAT_MAX_AGE_MS = 10_000L
     private const val PUBLIC_FPS_PATH = "/data/local/tmp/lumina.fps"
     private const val LEGACY_FPS_PATH = "/data/adb/.config/lumina/fps.txt"
 
@@ -65,6 +67,17 @@ object DaemonManager {
         }
     }
 
+    private fun readHeartbeatAgeMs(): Long? {
+        return try {
+            val file = File(HEARTBEAT_FILE_PATH)
+            if (!file.exists() || !file.canRead()) return null
+            val timestamp = file.readText().trim().toLongOrNull() ?: return null
+            (System.currentTimeMillis() - timestamp).coerceAtLeast(0L)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private fun readPidFromFile(): String? {
         return try {
             val pidFile = File(PID_FILE_PATH)
@@ -72,11 +85,11 @@ object DaemonManager {
             val pid = pidFile.readText().trim()
             if (pid.isEmpty() || !pid.all { it.isDigit() }) return null
             val commFile = File("/proc/$pid/comm")
-            if (commFile.exists() && commFile.canRead() && commFile.readText().trim() == "luminad") {
-                pid
-            } else {
-                null
+            if (commFile.exists() && commFile.canRead()) {
+                return if (commFile.readText().trim() == "luminad") pid else null
             }
+            val heartbeatAge = readHeartbeatAgeMs()
+            if (heartbeatAge == null || heartbeatAge <= HEARTBEAT_MAX_AGE_MS) pid else null
         } catch (_: Exception) {
             null
         }
@@ -141,7 +154,8 @@ object DaemonManager {
         runSuCmd(
             "killall -15 luminad 2>/dev/null || pkill -15 -x luminad 2>/dev/null || true; " +
                 "i=0; while [ \$i -lt 5 ]; do pidof luminad >/dev/null 2>&1 || break; sleep 0.5; i=\$((i+1)); done; " +
-                "killall -9 luminad 2>/dev/null || pkill -9 -x luminad 2>/dev/null || true",
+                "killall -9 luminad 2>/dev/null || pkill -9 -x luminad 2>/dev/null || true; " +
+                "rm -f $PID_FILE_PATH $HEARTBEAT_FILE_PATH",
             6
         )
         !isDaemonRunning()

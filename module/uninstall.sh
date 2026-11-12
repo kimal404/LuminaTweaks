@@ -46,6 +46,7 @@ rm -f /data/local/tmp/lumina_binder.sock
 rm -f /data/local/tmp/luminad.lock
 rm -f /data/local/tmp/lumina-binder.lock
 rm -f /data/local/tmp/lumina.pid
+rm -f /data/local/tmp/lumina.alive
 rm -f /data/local/tmp/lumina.log*
 rm -f /data/local/tmp/luminad.log*
 rm -f /data/local/tmp/lumina-binder.log*

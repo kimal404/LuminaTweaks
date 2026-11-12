@@ -33,7 +33,7 @@ use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tweaks::texture::TextureController;
 use tweaks::utility::UtilityController;
 use tweaks::{display, engine, fps, renderer, sched};
@@ -51,6 +51,8 @@ const LOCK_EX: i32 = 2;
 const LOCK_NB: i32 = 4;
 
 const PID_FILE_PATH: &str = "/data/local/tmp/lumina.pid";
+const HEARTBEAT_FILE_PATH: &str = "/data/local/tmp/lumina.alive";
+const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(2);
 
 extern "C" fn handle_signal(_: i32) {
     SHUTDOWN.store(true, Ordering::Relaxed);
@@ -120,6 +122,18 @@ fn set_system_profile_prop(name: &str) {
     let _ = Command::new("setprop")
         .args(["sys.lumina.profile", name])
         .status();
+}
+
+fn publish_heartbeat() {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0);
+    let temp_path = format!("{}.tmp", HEARTBEAT_FILE_PATH);
+    if std::fs::write(&temp_path, timestamp.to_string()).is_ok() {
+        let _ = std::fs::set_permissions(&temp_path, std::fs::Permissions::from_mode(0o644));
+        let _ = std::fs::rename(&temp_path, HEARTBEAT_FILE_PATH);
+    }
 }
 
 fn publish_selinux_status() {
@@ -394,6 +408,7 @@ fn main() {
 
     let _ = std::fs::write(PID_FILE_PATH, format!("{}\n", std::process::id()));
     let _ = std::fs::set_permissions(PID_FILE_PATH, std::fs::Permissions::from_mode(0o644));
+    publish_heartbeat();
     publish_selinux_status();
 
     log!(
@@ -427,6 +442,7 @@ fn main() {
     let mut fallback_blocked_until = Instant::now();
     let mut last_screen_state: Option<bool> = None;
     let mut fps_monitor = fps::FpsMonitor::new();
+    let mut last_heartbeat = Instant::now();
 
     loop {
         if SHUTDOWN.load(Ordering::Relaxed) {
@@ -438,7 +454,13 @@ fn main() {
             fps_monitor.stop();
             core::ipc::cleanup_socket();
             let _ = std::fs::remove_file(PID_FILE_PATH);
+            let _ = std::fs::remove_file(HEARTBEAT_FILE_PATH);
             break;
+        }
+
+        if last_heartbeat.elapsed() >= HEARTBEAT_INTERVAL {
+            publish_heartbeat();
+            last_heartbeat = Instant::now();
         }
 
         let loop_started = Instant::now();

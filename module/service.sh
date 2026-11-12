@@ -60,6 +60,7 @@ killall -9 lumina-binder 2>/dev/null || pkill -9 -x lumina-binder 2>/dev/null ||
 rm -f /dev/socket/lumina.sock /dev/socket/lumina_ipc.sock /dev/socket/lumina_binder.sock
 rm -f /data/local/tmp/lumina.sock /data/local/tmp/lumina_ipc.sock /data/local/tmp/lumina_binder.sock
 rm -f /data/local/tmp/lumina.pid
+rm -f /data/local/tmp/lumina.alive
 
 DAEMON_BIN=""
 if [ -f "$MODDIR/luminad" ]; then
