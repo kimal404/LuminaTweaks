@@ -29,6 +29,8 @@ object DaemonManager {
     private const val MODULE_BINDER_PATH = "/data/adb/modules/luminatweaks/lumina-binder"
     private const val MODULE_UPDATE_DIR = "/data/adb/modules_update/luminatweaks"
     private const val PID_FILE_PATH = "/data/local/tmp/lumina.pid"
+    private const val PUBLIC_FPS_PATH = "/data/local/tmp/lumina.fps"
+    private const val LEGACY_FPS_PATH = "/data/adb/.config/lumina/fps.txt"
 
     data class DaemonStatus(
         val pid: String?,
@@ -80,6 +82,19 @@ object DaemonManager {
         }
     }
 
+    private fun readFpsFromFile(): String {
+        for (path in listOf(PUBLIC_FPS_PATH, LEGACY_FPS_PATH)) {
+            try {
+                val file = File(path)
+                if (file.exists() && file.canRead()) {
+                    val value = file.readText().trim()
+                    if (value.isNotEmpty()) return value
+                }
+            } catch (_: Exception) {}
+        }
+        return ""
+    }
+
     suspend fun isRebootRequired(): Boolean = withContext(Dispatchers.IO) {
         runSuCmd("[ -d $MODULE_UPDATE_DIR ] && echo 'YES'", 3).contains("YES")
     }
@@ -102,40 +117,15 @@ object DaemonManager {
     suspend fun isDaemonRunning(): Boolean = getDaemonPid() != null
 
     suspend fun getStatus(): DaemonStatus = withContext(Dispatchers.IO) {
-        val fastPid = readPidFromFile()
-        val fastProfile = readSystemProperty("sys.lumina.profile")
+        val pid = readPidFromFile()
+            ?: return@withContext DaemonStatus(null, "-", "-")
 
-        val output = runSuCmd(
-            "pid=\$(pidof luminad | awk '{print \$1}'); " +
-                "echo \"PID=\$pid\"; " +
-                "echo \"FPS=\$(cat /data/adb/.config/lumina/fps.txt 2>/dev/null)\"",
-            3
+        val profile = readSystemProperty("sys.lumina.profile") ?: "Balanced"
+        DaemonStatus(
+            pid = pid,
+            profile = profile,
+            fps = parseFps(readFpsFromFile())
         )
-
-        var pid: String? = fastPid
-        var fpsRaw = ""
-        output.lineSequence().forEach { line ->
-            when {
-                line.startsWith("PID=") -> {
-                    val parsed = line.removePrefix("PID=").trim()
-                    if (parsed.isNotBlank()) pid = parsed
-                }
-                line.startsWith("FPS=") -> fpsRaw = line.removePrefix("FPS=").trim()
-            }
-        }
-
-        val resolvedPid = pid
-        if (resolvedPid == null) {
-            DaemonStatus(null, "-", "-")
-        } else {
-            val resolvedProfile = fastProfile
-                ?: runSuCmd("getprop sys.lumina.profile", 2).ifBlank { "Balanced" }
-            DaemonStatus(
-                pid = resolvedPid,
-                profile = resolvedProfile,
-                fps = parseFps(fpsRaw)
-            )
-        }
     }
 
     private fun parseFps(raw: String): String {

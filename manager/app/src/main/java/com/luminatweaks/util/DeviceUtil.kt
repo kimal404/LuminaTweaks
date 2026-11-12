@@ -55,7 +55,7 @@ object DeviceUtil {
         return runCmdWithTimeout(arrayOf("su", "-c", "cat $path 2>/dev/null"), 3)
     }
 
-    private fun getSystemProperty(key: String): String? {
+    private fun getSystemProperty(key: String, allowGetpropFallback: Boolean = true): String? {
         return try {
             @SuppressLint("PrivateApi")
             val systemProperties = Class.forName("android.os.SystemProperties")
@@ -63,6 +63,7 @@ object DeviceUtil {
             val result = get.invoke(null, key) as? String
             if (result.isNullOrBlank()) null else result.trim()
         } catch (_: Exception) {
+            if (!allowGetpropFallback) return null
             val value = runCmdWithTimeout(arrayOf("getprop", key), 2)
             value.takeIf { it.isNotBlank() }
         }
@@ -141,6 +142,11 @@ object DeviceUtil {
     }
 
     fun getSelinuxStatus(): String {
+        val daemonValue = getSystemProperty("sys.lumina.selinux", allowGetpropFallback = false)
+        if (!daemonValue.isNullOrBlank()) {
+            return normalizeSelinuxStatus(daemonValue)
+        }
+
         try {
             val enforceFile = File("/sys/fs/selinux/enforce")
             if (enforceFile.exists() && enforceFile.canRead()) {
@@ -152,17 +158,21 @@ object DeviceUtil {
             }
         } catch (_: Exception) {}
 
-        val enforceOut = runCmdWithTimeout(arrayOf("getenforce"), 2)
-        if (enforceOut.isNotBlank()) {
-            return enforceOut.replaceFirstChar { it.uppercase() }
-        }
-
-        val prop = getSystemProperty("ro.boot.selinux")
-        if (!prop.isNullOrBlank()) {
-            return prop.replaceFirstChar { it.uppercase() }
+        val bootValue = getSystemProperty("ro.boot.selinux", allowGetpropFallback = false)
+        if (!bootValue.isNullOrBlank()) {
+            return normalizeSelinuxStatus(bootValue)
         }
 
         return "Unknown"
+    }
+
+    private fun normalizeSelinuxStatus(raw: String): String {
+        return when (raw.trim().lowercase(Locale.ROOT)) {
+            "1", "enforcing" -> "Enforcing"
+            "0", "permissive" -> "Permissive"
+            "disabled" -> "Disabled"
+            else -> "Unknown"
+        }
     }
 
     fun getTotalRamGb(context: Context): Int {

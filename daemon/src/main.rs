@@ -27,6 +27,7 @@ use core::{detector, perf, watcher};
 use std::collections::hash_map::DefaultHasher;
 use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
+use std::os::unix::fs::PermissionsExt;
 use std::os::unix::io::AsRawFd;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -118,6 +119,20 @@ fn kernel_release() -> String {
 fn set_system_profile_prop(name: &str) {
     let _ = Command::new("setprop")
         .args(["sys.lumina.profile", name])
+        .status();
+}
+
+fn publish_selinux_status() {
+    let status = match std::fs::read_to_string("/sys/fs/selinux/enforce") {
+        Ok(value) => match value.trim() {
+            "1" => "Enforcing",
+            "0" => "Permissive",
+            _ => "Unknown",
+        },
+        Err(_) => "Disabled",
+    };
+    let _ = Command::new("setprop")
+        .args(["sys.lumina.selinux", status])
         .status();
 }
 
@@ -378,6 +393,8 @@ fn main() {
     }
 
     let _ = std::fs::write(PID_FILE_PATH, format!("{}\n", std::process::id()));
+    let _ = std::fs::set_permissions(PID_FILE_PATH, std::fs::Permissions::from_mode(0o644));
+    publish_selinux_status();
 
     log!(
         "[SYSTEM] Online | Kernel {} | Binder Socket pending",

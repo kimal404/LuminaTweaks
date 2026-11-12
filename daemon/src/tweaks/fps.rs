@@ -21,6 +21,7 @@ use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const STATUS_PATH: &str = "/data/adb/.config/lumina/fps.txt";
+const PUBLIC_STATUS_PATH: &str = "/data/local/tmp/lumina.fps";
 const SAMPLE_INTERVAL: Duration = Duration::from_secs(2);
 const IDLE_INTERVAL: Duration = Duration::from_secs(10);
 const MAX_FRAME_AGE_NS: u64 = 3_000_000_000;
@@ -52,24 +53,29 @@ fn monotonic_ns() -> u64 {
         .saturating_add(value.tv_nsec.max(0) as u64)
 }
 
-fn write_status(value: Option<f32>) {
-    let Some(parent) = Path::new(STATUS_PATH).parent() else {
+fn write_status_file(path: &str, frame: &str) {
+    let Some(parent) = Path::new(path).parent() else {
         return;
     };
     if fs::create_dir_all(parent).is_err() {
         return;
     }
 
+    let temp = format!("{}.tmp", path);
+    if fs::write(&temp, frame).is_ok() {
+        let _ = fs::set_permissions(&temp, fs::Permissions::from_mode(0o644));
+        let _ = fs::rename(&temp, path);
+    }
+}
+
+fn write_status(value: Option<f32>) {
     let frame = match value {
         Some(fps) => format!("{:.1} {}", fps.clamp(1.0, 240.0), epoch_ms()),
         None => format!("{} {}", IDLE_MARKER, epoch_ms()),
     };
 
-    let temp = format!("{}.tmp", STATUS_PATH);
-    if fs::write(&temp, frame).is_ok() {
-        let _ = fs::set_permissions(&temp, fs::Permissions::from_mode(0o644));
-        let _ = fs::rename(&temp, STATUS_PATH);
-    }
+    write_status_file(STATUS_PATH, &frame);
+    write_status_file(PUBLIC_STATUS_PATH, &frame);
 }
 
 fn epoch_ms() -> u128 {
