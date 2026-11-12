@@ -14,7 +14,13 @@
 
 use crate::log;
 use serde_json::Value;
+use std::fs;
+use std::path::Path;
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+const ANGLE_BACKUP_PATH: &str = "/data/adb/.config/lumina/angle_backup.json";
+static ANGLE_APPLIED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextureDriver {
@@ -82,10 +88,67 @@ fn delete_global_setting(key: &str) {
         .status();
 }
 
+fn save_angle_backup() {
+    if Path::new(ANGLE_BACKUP_PATH).exists() {
+        return;
+    }
+
+    let Some(parent) = Path::new(ANGLE_BACKUP_PATH).parent() else {
+        return;
+    };
+    let _ = fs::create_dir_all(parent);
+
+    let backup = serde_json::json!({
+        "pkgs": get_global_setting("angle_gl_driver_selection_pkgs"),
+        "values": get_global_setting("angle_gl_driver_selection_values"),
+        "features": crate::detector::get_system_prop("debug.angle.feature_overrides_enabled"),
+    });
+    let _ = fs::write(ANGLE_BACKUP_PATH, backup.to_string());
+}
+
+fn restore_global_setting(key: &str, value: Option<&str>) {
+    match value {
+        Some(v) if !v.is_empty() => set_global_setting(key, v),
+        _ => delete_global_setting(key),
+    }
+}
+
+fn restore_angle_backup() {
+    let Ok(content) = fs::read_to_string(ANGLE_BACKUP_PATH) else {
+        return;
+    };
+    let Ok(backup) = serde_json::from_str::<Value>(&content) else {
+        let _ = fs::remove_file(ANGLE_BACKUP_PATH);
+        return;
+    };
+
+    restore_global_setting(
+        "angle_gl_driver_selection_pkgs",
+        backup.get("pkgs").and_then(|v| v.as_str()),
+    );
+    restore_global_setting(
+        "angle_gl_driver_selection_values",
+        backup.get("values").and_then(|v| v.as_str()),
+    );
+
+    let features = backup
+        .get("features")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let _ = Command::new("setprop")
+        .args(["debug.angle.feature_overrides_enabled", features])
+        .status();
+
+    let _ = fs::remove_file(ANGLE_BACKUP_PATH);
+}
+
 pub struct TextureController;
 
 impl TextureController {
     pub fn ensure_setup() {
+        if Path::new(ANGLE_BACKUP_PATH).exists() {
+            restore_angle_backup();
+        }
         Self::sync_config(None);
     }
 
@@ -223,6 +286,8 @@ impl TextureController {
             return;
         }
 
+        save_angle_backup();
+
         let pkgs_joined = active_pkgs.join(",");
         let values_joined = vec!["angle"; active_pkgs.len()].join(",");
 
@@ -238,6 +303,7 @@ impl TextureController {
         let _ = Command::new("setprop")
             .args(["debug.angle.feature_overrides_enabled", &applied_features])
             .status();
+        ANGLE_APPLIED.store(true, Ordering::Relaxed);
 
         log!(
             "[TEXTURE] Synced ANGLE pkgs: [{}] -> Overrides: [{}]",
@@ -251,12 +317,11 @@ impl TextureController {
     }
 
     pub fn restore() {
-        let _ = Command::new("setprop")
-            .args(["debug.angle.feature_overrides_enabled", ""])
-            .status();
-        delete_global_setting("angle_gl_driver_selection_pkgs");
-        delete_global_setting("angle_gl_driver_selection_values");
+        if !ANGLE_APPLIED.swap(false, Ordering::Relaxed) {
+            return;
+        }
 
-        log!("[TEXTURE] All ANGLE driver settings restored to Native");
+        restore_angle_backup();
+        log!("[TEXTURE] ANGLE driver settings restored to previous values");
     }
 }

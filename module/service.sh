@@ -32,11 +32,14 @@ cmd appops set com.luminatweaks AUTO_START allow >/dev/null 2>&1
 cmd appops set com.luminatweaks RUN_IN_BACKGROUND allow >/dev/null 2>&1
 dumpsys deviceidle whitelist +com.luminatweaks >/dev/null 2>&1
 
-killall -9 luminad 2>/dev/null
-pkill -9 -f luminad 2>/dev/null
-killall -9 lumina-binder 2>/dev/null
-pkill -9 -f lumina-binder 2>/dev/null
-rm -f /dev/socket/lumina_binder.sock /data/local/tmp/lumina_binder.sock
+pkill -TERM -f luminad 2>/dev/null || killall -TERM luminad 2>/dev/null
+pkill -TERM -f lumina-binder 2>/dev/null || killall -TERM lumina-binder 2>/dev/null
+sleep 1
+pkill -9 -f luminad 2>/dev/null || killall -9 luminad 2>/dev/null
+pkill -9 -f lumina-binder 2>/dev/null || killall -9 lumina-binder 2>/dev/null
+rm -f /dev/socket/lumina.sock /dev/socket/lumina_ipc.sock /dev/socket/lumina_binder.sock
+rm -f /data/local/tmp/lumina.sock /data/local/tmp/lumina_ipc.sock /data/local/tmp/lumina_binder.sock
+rm -f /data/local/tmp/luminad.lock /data/local/tmp/lumina-binder.lock
 sleep 1
 
 DAEMON_BIN=""
@@ -64,24 +67,32 @@ if [ -n "$DAEMON_BIN" ]; then
     nohup "$DAEMON_BIN" >/dev/null 2>&1 &
 fi
 
-LAST_PID=""
-while true; do
-    if [ -n "$BINDER_BIN" ] && ! pidof lumina-binder >/dev/null 2>&1; then
-        nohup "$BINDER_BIN" >/dev/null 2>&1 &
-    fi
+if [ -f "$MODDIR/module.prop" ]; then
+    sed -i "s|^description=.*|description=Daemon is starting.|" "$MODDIR/module.prop"
+fi
 
-    if [ -n "$DAEMON_BIN" ] && ! pidof luminad >/dev/null 2>&1; then
-        nohup "$DAEMON_BIN" >/dev/null 2>&1 &
-    fi
-
-    CURRENT_PID=$(pidof luminad | awk '{print $1}')
-    if [ "$CURRENT_PID" != "$LAST_PID" ]; then
-        if [ -n "$CURRENT_PID" ]; then
-            sed -i "s|^description=.*|description=Daemon is running (PID ${CURRENT_PID}).|" "$MODDIR/module.prop"
-        else
-            sed -i "s|^description=.*|description=Daemon is stopped.|" "$MODDIR/module.prop"
+(
+    LAST_PID=""
+    while true; do
+        if [ -n "$BINDER_BIN" ] && ! pidof lumina-binder >/dev/null 2>&1; then
+            nohup "$BINDER_BIN" >/dev/null 2>&1 &
         fi
-        LAST_PID="$CURRENT_PID"
-    fi
-    sleep 5
-done
+
+        if [ -n "$DAEMON_BIN" ] && ! pidof luminad >/dev/null 2>&1; then
+            nohup "$DAEMON_BIN" >/dev/null 2>&1 &
+        fi
+
+        CURRENT_PID=$(pidof luminad | awk '{print $1}')
+        if [ "$CURRENT_PID" != "$LAST_PID" ]; then
+            if [ -n "$CURRENT_PID" ]; then
+                sed -i "s|^description=.*|description=Daemon is running (PID ${CURRENT_PID}).|" "$MODDIR/module.prop"
+            else
+                sed -i "s|^description=.*|description=Daemon is stopped.|" "$MODDIR/module.prop"
+            fi
+            LAST_PID="$CURRENT_PID"
+        fi
+        sleep 5
+    done
+) &
+
+exit 0

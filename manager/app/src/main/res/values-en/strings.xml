@@ -74,6 +74,7 @@
     <string name="home_device_model">Device Model</string>
     <string name="home_root_access">Root Access</string>
     <string name="home_root_granted">Granted (Superuser)</string>
+    <string name="home_root_denied">Not granted</string>
     <string name="home_selinux_status">SELinux Status</string>
     <string name="home_support_us">Support Us</string>
     <string name="home_support_us_desc">LuminaTweaks is free and open source forever. Support development through donations.</string>

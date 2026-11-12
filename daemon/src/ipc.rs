@@ -18,31 +18,30 @@ use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
+use std::os::unix::process::CommandExt;
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
 pub const IPC_SOCKET_PRIMARY: &str = "/dev/socket/lumina_ipc.sock";
 pub const IPC_SOCKET_FALLBACK: &str = "/data/local/tmp/lumina_ipc.sock";
 
-static CLIENTS: OnceLock<Arc<Mutex<Vec<UnixStream>>>> = OnceLock::new();
-
-fn get_clients() -> &'static Arc<Mutex<Vec<UnixStream>>> {
-    CLIENTS.get_or_init(|| Arc::new(Mutex::new(Vec::new())))
-}
+const SHELL_UID: u32 = 2000;
+const SHELL_GID: u32 = 2000;
 
 pub struct SharedState {
-    pub current_profile: Mutex<String>,
-    pub active_package: Mutex<Option<String>>,
+    pub current_profile: std::sync::Mutex<String>,
+    pub active_package: std::sync::Mutex<Option<String>>,
     pub reload_flag: AtomicBool,
 }
 
 impl SharedState {
     pub fn new() -> Self {
         Self {
-            current_profile: Mutex::new("Balanced".to_string()),
-            active_package: Mutex::new(None),
+            current_profile: std::sync::Mutex::new("Balanced".to_string()),
+            active_package: std::sync::Mutex::new(None),
             reload_flag: AtomicBool::new(false),
         }
     }
@@ -61,20 +60,32 @@ impl IpcServer {
     }
 }
 
-pub fn broadcast_toast(message: &str) {
-    let clients_arc = get_clients();
-    let mut guard = match clients_arc.lock() {
-        Ok(g) => g,
-        Err(p) => p.into_inner(),
-    };
-
-    let payload = format!("TOAST {}\n", message);
-    let bytes = payload.as_bytes();
-
-    guard.retain_mut(|client| {
-        let _ = client.set_write_timeout(Some(Duration::from_millis(50)));
-        client.write_all(bytes).is_ok() && client.flush().is_ok()
-    });
+pub fn send_toast(message: &str) {
+    let text = message.to_string();
+    let _ = thread::Builder::new()
+        .name("lumina-toast".to_string())
+        .spawn(move || {
+            let _ = Command::new("/system/bin/cmd")
+                .uid(SHELL_UID)
+                .gid(SHELL_GID)
+                .args([
+                    "activity",
+                    "broadcast",
+                    "--user",
+                    "0",
+                    "-a",
+                    "com.luminatweaks.ACTION_NOTIFY",
+                    "-n",
+                    "com.luminatweaks/.receiver.LuminaReceiver",
+                    "--es",
+                    "toast",
+                    &text,
+                ])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
+        });
 }
 
 fn bind_socket() -> (UnixListener, String) {
@@ -86,7 +97,7 @@ fn bind_socket() -> (UnixListener, String) {
         }
 
         if let Ok(listener) = UnixListener::bind(path) {
-            let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o666));
+            let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
             return (listener, path.to_string());
         }
     }
@@ -98,22 +109,11 @@ fn run_server(shared_state: Arc<SharedState>) {
     let (listener, active_path) = bind_socket();
     crate::log!("[SYSTEM] IPC Server listening on {}", active_path);
 
-    let clients_arc = get_clients();
-
     for incoming in listener.incoming() {
         match incoming {
             Ok(stream) => {
                 let _ = stream.set_read_timeout(Some(Duration::from_millis(200)));
                 let _ = stream.set_write_timeout(Some(Duration::from_millis(200)));
-
-                if let Ok(clone_writer) = stream.try_clone() {
-                    let mut guard = match clients_arc.lock() {
-                        Ok(g) => g,
-                        Err(p) => p.into_inner(),
-                    };
-                    guard.push(clone_writer);
-                }
-
                 let state_clone = Arc::clone(&shared_state);
                 thread::spawn(move || {
                     handle_client(stream, state_clone);
@@ -161,7 +161,10 @@ fn handle_client(stream: UnixStream, shared_state: Arc<SharedState>) {
                     let _ = writer.flush();
                 }
             }
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => {
+            Err(e)
+                if e.kind() == std::io::ErrorKind::WouldBlock
+                    || e.kind() == std::io::ErrorKind::TimedOut =>
+            {
                 thread::sleep(Duration::from_millis(50));
             }
             Err(_) => break,

@@ -42,9 +42,5 @@ patch_sepolicy_rule() {
 
 patch_sepolicy_rule "allow domain proc_type file { read open }"
 patch_sepolicy_rule "allow domain proc_type dir { read open search }"
-patch_sepolicy_rule "allow magisk su process { sched_setscheduler }"
-patch_sepolicy_rule "allow * sysfs file mounton"
-patch_sepolicy_rule "allow * sysfs_devices_system_cpu file mounton"
-patch_sepolicy_rule "allow * proc file mounton"
 
 exit 0

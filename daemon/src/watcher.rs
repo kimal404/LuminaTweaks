@@ -91,13 +91,7 @@ impl ConfigWatcher {
         let mut watch_lost = false;
 
         loop {
-            let n = unsafe {
-                c_read(
-                    self.fd,
-                    buf.as_mut_ptr() as *mut c_void,
-                    buf.len(),
-                )
-            };
+            let n = unsafe { c_read(self.fd, buf.as_mut_ptr() as *mut c_void, buf.len()) };
             if n <= 0 {
                 break;
             }

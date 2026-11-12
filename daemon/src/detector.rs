@@ -671,20 +671,16 @@ pub fn is_custom_game(pkg: &str) -> bool {
     }
 
     if let Some(json) = read_global_json() {
-        let custom_set = parse_package_set(
-            json.get("custom_games")
-                .or_else(|| json.get("customGames")),
-        );
+        let custom_set =
+            parse_package_set(json.get("custom_games").or_else(|| json.get("customGames")));
         if custom_set.contains(clean) {
             return true;
         }
     }
 
     if let Some(json) = read_app_json() {
-        let custom_set = parse_package_set(
-            json.get("custom_games")
-                .or_else(|| json.get("customGames")),
-        );
+        let custom_set =
+            parse_package_set(json.get("custom_games").or_else(|| json.get("customGames")));
         if custom_set.contains(clean) {
             return true;
         }

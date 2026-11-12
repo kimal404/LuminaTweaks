@@ -36,12 +36,6 @@ jobs:
           cargo build --target aarch64-linux-android --release
           cd ..
 
-          mkdir -p manager/app/src/main/assets/bin
-          cp daemon/target/aarch64-linux-android/release/luminad manager/app/src/main/assets/bin/luminad
-          chmod 755 manager/app/src/main/assets/bin/luminad
-          cp daemon/target/aarch64-linux-android/release/lumina-binder manager/app/src/main/assets/bin/lumina-binder
-          chmod 755 manager/app/src/main/assets/bin/lumina-binder
-
       - name: Setup Gradle Build Cache
         uses: gradle/actions/setup-gradle@v3
 

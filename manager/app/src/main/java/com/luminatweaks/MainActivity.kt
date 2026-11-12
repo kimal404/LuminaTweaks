@@ -26,7 +26,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
-import com.luminatweaks.service.LuminaToastService
 import com.luminatweaks.ui.screen.HomeScreen
 import com.luminatweaks.ui.screen.SetupWizardScreen
 import com.luminatweaks.ui.theme.LuminaTheme
@@ -38,8 +37,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        LuminaToastService.start(this)
-
         lifecycleScope.launch(Dispatchers.IO) {
             val pkg = packageName
             val cmds = arrayOf(
@@ -49,6 +46,7 @@ class MainActivity : ComponentActivity() {
                 "appops set $pkg query_all_packages allow",
                 "appops set $pkg android:get_installed_apps allow",
                 "appops set $pkg GET_INSTALLED_APPS allow",
+                "appops set $pkg SYSTEM_ALERT_WINDOW allow",
                 "appops set $pkg 10022 allow"
             )
             try {

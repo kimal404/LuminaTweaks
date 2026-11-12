@@ -26,8 +26,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.InputStreamReader
+import java.util.concurrent.TimeUnit
 
 data class DisplayRrMode(val id: Int, val hz: Int)
 
@@ -85,26 +84,26 @@ object ConfigRepository {
     @Volatile
     var customGames: Set<String> = emptySet()
 
-    private fun runSuCmd(cmd: String): String {
+    private fun runSuCmd(cmd: String, timeoutSeconds: Long = 8): String {
         return try {
             val process = ProcessBuilder("su", "-c", cmd)
                 .redirectErrorStream(true)
                 .start()
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            val output = StringBuilder()
-            var line: String?
-            while (reader.readLine().also { line = it } != null) {
-                output.append(line).append("\n")
+            if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+                return ""
             }
-            process.waitFor()
-            output.toString().trim()
+            process.inputStream.bufferedReader().use { it.readText() }.trim()
         } catch (_: Exception) {
             ""
         }
     }
 
     private fun notifyDaemonReload() {
-        runSuCmd("nc -U /dev/socket/lumina.sock <<< 'RELOAD_CONFIG' 2>/dev/null || nc -U /data/local/tmp/lumina.sock <<< 'RELOAD_CONFIG' 2>/dev/null")
+        runSuCmd(
+            "printf 'RELOAD\\n' | nc -U /dev/socket/lumina_ipc.sock 2>/dev/null || " +
+                "printf 'RELOAD\\n' | nc -U /data/local/tmp/lumina_ipc.sock 2>/dev/null"
+        )
     }
 
     fun killApp(packageName: String) {
@@ -223,22 +222,6 @@ object ConfigRepository {
         parsedList
     }
 
-    suspend fun getCurrentProfile(): String = withContext(Dispatchers.IO) {
-        val prop = runSuCmd("getprop sys.lumina.profile").trim()
-        if (prop.isNotBlank()) prop else "Balanced"
-    }
-
-    suspend fun getCurrentFps(): String = withContext(Dispatchers.IO) {
-        val raw = runSuCmd("cat $CONFIG_DIR/fps.txt 2>/dev/null").trim()
-        if (raw.isBlank()) return@withContext "-"
-
-        val parts = raw.split(Regex("\\s+"))
-        val fps = parts.getOrNull(0)?.toFloatOrNull() ?: return@withContext "-"
-        val timestamp = parts.getOrNull(1)?.toLongOrNull() ?: 0L
-        val age = System.currentTimeMillis() - timestamp
-
-        if (fps <= 0f || (timestamp > 0L && age > 5000L)) "-" else fps.toInt().toString()
-    }
 
     suspend fun setGlobalLiteMode(enabled: Boolean) = withContext(Dispatchers.IO) {
         cachedTweaksState = cachedTweaksState?.copy(isGlobalLiteMode = enabled)
@@ -298,6 +281,7 @@ object ConfigRepository {
                 val obj = arr.getJSONObject(i)
                 val pkg = obj.optString("pkg")
                 if (pkg.isNotEmpty()) {
+                    val textureDetail = obj.optInt("texture_detail", 0)
                     result[pkg] = AppProfileConfig(
                         pkg = pkg,
                         saklarUtama = obj.optBoolean("saklar_utama", false),
@@ -311,8 +295,10 @@ object ConfigRepository {
                         refreshRate = obj.optString("refresh_rate", "default"),
                         renderer = obj.optString("renderer", "default"),
                         dnd = obj.optString("dnd", "default"),
+                        textureDriver = obj.optString("texture_driver", "native"),
+                        textureLod = obj.optInt("texture_lod", textureDetail),
                         textureEnabled = obj.optBoolean("texture_enabled", false),
-                        textureDetail = obj.optInt("texture_detail", 0),
+                        textureDetail = textureDetail,
                         pixelSharp = obj.optBoolean("pixel_sharp", false),
                         hardDistance = obj.optBoolean("hard_distance", false)
                     )
@@ -347,6 +333,8 @@ object ConfigRepository {
                 put("refresh_rate", item.refreshRate)
                 put("renderer", item.renderer)
                 put("dnd", item.dnd)
+                put("texture_driver", item.textureDriver)
+                put("texture_lod", item.textureLod)
                 put("texture_enabled", item.textureEnabled)
                 put("texture_detail", item.textureDetail)
                 put("pixel_sharp", item.pixelSharp)

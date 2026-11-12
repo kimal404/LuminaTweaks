@@ -68,7 +68,93 @@ pub fn write_sysfs(path: &str, val: &str, lock: bool) -> bool {
     res
 }
 
+const BOOT_BACKUP_PATH: &str = "/data/adb/.config/lumina/boot_backup.json";
+
+const BOOT_TUNED_PATHS: &[&str] = &[
+    "/proc/sys/kernel/panic",
+    "/proc/sys/kernel/panic_on_oops",
+    "/proc/sys/kernel/panic_on_warn",
+    "/proc/sys/kernel/softlockup_panic",
+    "/proc/sys/net/ipv4/tcp_congestion_control",
+    "/proc/sys/net/ipv4/tcp_low_latency",
+    "/proc/sys/net/ipv4/tcp_ecn",
+    "/proc/sys/net/ipv4/tcp_fastopen",
+    "/proc/sys/net/ipv4/tcp_sack",
+    "/proc/sys/net/ipv4/tcp_timestamps",
+    "/proc/sys/kernel/perf_cpu_time_max_percent",
+    "/proc/sys/kernel/sched_schedstats",
+    "/proc/sys/kernel/task_cpustats_enable",
+    "/proc/sys/kernel/sched_autogroup_enabled",
+    "/proc/sys/kernel/sched_child_runs_first",
+    "/proc/sys/kernel/sched_nr_migrate",
+    "/proc/sys/kernel/sched_migration_cost_ns",
+    "/proc/sys/kernel/sched_min_granularity_ns",
+    "/proc/sys/kernel/sched_wakeup_granularity_ns",
+    "/proc/sys/kernel/printk",
+    "/sys/kernel/debug/tracing/tracing_on",
+    "/proc/sys/kernel/sched_lib_name",
+    "/proc/sys/kernel/sched_lib_mask_force",
+    "/proc/sys/vm/page-cluster",
+    "/proc/sys/vm/compaction_proactiveness",
+    "/proc/sys/vm/stat_interval",
+    "/proc/sys/vm/dirty_ratio",
+    "/proc/sys/vm/dirty_background_ratio",
+    "/sys/module/mmc_core/parameters/use_spi_crc",
+    "/sys/module/opchain/parameters/chain_on",
+    "/sys/module/cpufreq_bouncing/parameters/enable",
+    "/proc/task_info/task_sched_info/task_sched_info_enable",
+    "/proc/oplus_scheduler/sched_assist/sched_assist_enabled",
+    "/sys/kernel/debug/sched_features",
+    "/proc/sys/kernel/split_lock_mitigate",
+];
+
+fn snapshot_boot_settings() -> serde_json::Map<String, serde_json::Value> {
+    let mut map = serde_json::Map::new();
+    for path in BOOT_TUNED_PATHS {
+        if map.contains_key(*path) {
+            continue;
+        }
+        if let Ok(value) = fs::read_to_string(path) {
+            map.insert((*path).to_string(), serde_json::Value::String(value));
+        }
+    }
+    map
+}
+
+pub fn restore_boot_profile() {
+    let Ok(content) = fs::read_to_string(BOOT_BACKUP_PATH) else {
+        return;
+    };
+    let Ok(map) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&content)
+    else {
+        let _ = fs::remove_file(BOOT_BACKUP_PATH);
+        return;
+    };
+
+    for (path, value) in map {
+        if let Some(value) = value.as_str() {
+            write_sysfs(&path, value, false);
+        }
+    }
+
+    let _ = fs::remove_file(BOOT_BACKUP_PATH);
+    log!("[BOOT] Restored original boot settings");
+}
+
 pub fn apply_boot_profile() {
+    if !Path::new(BOOT_BACKUP_PATH).exists() {
+        let snapshot = snapshot_boot_settings();
+        if !snapshot.is_empty() {
+            if let Some(parent) = Path::new(BOOT_BACKUP_PATH).parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            let _ = fs::write(
+                BOOT_BACKUP_PATH,
+                serde_json::Value::Object(snapshot).to_string(),
+            );
+        }
+    }
+
     write_sysfs("/proc/sys/kernel/panic", "0", false);
     write_sysfs("/proc/sys/kernel/panic_on_oops", "0", false);
     write_sysfs("/proc/sys/kernel/panic_on_warn", "0", false);

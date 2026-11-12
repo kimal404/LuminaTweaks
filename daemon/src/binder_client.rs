@@ -71,6 +71,10 @@ impl BinderClient {
         self.push
     }
 
+    pub fn is_connected(&self) -> bool {
+        self.stream.is_some()
+    }
+
     pub fn ping(&mut self) -> bool {
         if self.push {
             return self.stream.is_some();

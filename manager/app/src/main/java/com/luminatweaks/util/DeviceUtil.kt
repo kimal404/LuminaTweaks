@@ -117,12 +117,18 @@ object DeviceUtil {
         return "--.-°C"
     }
 
-    fun getDaemonPid(): String {
-        val pidFile = File("/data/local/tmp/lumina.pid")
-        return if (pidFile.exists() && pidFile.canRead()) {
-            pidFile.readText().trim()
-        } else {
-            "N/A"
+    fun getSelinuxStatus(): String {
+        val prop = getSystemProperty("ro.boot.selinux")
+        if (!prop.isNullOrBlank()) {
+            return prop.replaceFirstChar { it.uppercase() }
+        }
+        return try {
+            val process = ProcessBuilder("getenforce").start()
+            val value = process.inputStream.bufferedReader().use { it.readLine() }
+            process.waitFor()
+            value?.trim()?.takeIf { it.isNotBlank() }?.replaceFirstChar { it.uppercase() } ?: "Unknown"
+        } catch (_: Exception) {
+            "Unknown"
         }
     }
 

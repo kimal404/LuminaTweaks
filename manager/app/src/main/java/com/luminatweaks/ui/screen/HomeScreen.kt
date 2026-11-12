@@ -89,7 +89,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luminatweaks.R
-import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DaemonManager
 import com.luminatweaks.ui.component.LuminaBottomBar
 import com.luminatweaks.ui.theme.LocalCornerRadius
@@ -144,6 +143,8 @@ fun HomeScreen() {
     var daemonPid by remember { mutableStateOf<String?>(null) }
     var currentProfile by remember { mutableStateOf("Balanced") }
     var currentFps by remember { mutableStateOf("-") }
+    var isRootGranted by remember { mutableStateOf(false) }
+    var selinuxStatus by remember { mutableStateOf("Unknown") }
     var showRebootDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -156,30 +157,30 @@ fun HomeScreen() {
 
         withContext(Dispatchers.IO) {
             val initialTemp = DeviceUtil.getBatteryTemperature(context)
-            val initialPid = DaemonManager.getDaemonPid()
-            val initialProfile = if (initialPid != null) ConfigRepository.getCurrentProfile() else "-"
-            val initialFps = if (initialPid != null) ConfigRepository.getCurrentFps() else "-"
+            val initialStatus = DaemonManager.getStatus()
+            val initialRoot = RootUtil.checkRootAccess()
+            val initialSelinux = DeviceUtil.getSelinuxStatus()
 
             withContext(Dispatchers.Main) {
                 batteryTemp = initialTemp
-                daemonPid = initialPid
-                currentProfile = initialProfile
-                currentFps = initialFps
+                daemonPid = initialStatus.pid
+                currentProfile = initialStatus.profile
+                currentFps = initialStatus.fps
+                isRootGranted = initialRoot
+                selinuxStatus = initialSelinux
                 isChecking = false
             }
 
             while (isActive) {
                 delay(1500L)
                 val currentTemp = DeviceUtil.getBatteryTemperature(context)
-                val currentPid = DaemonManager.getDaemonPid()
-                val profileText = if (currentPid != null) ConfigRepository.getCurrentProfile() else "-"
-                val fpsText = if (currentPid != null) ConfigRepository.getCurrentFps() else "-"
+                val status = DaemonManager.getStatus()
 
                 withContext(Dispatchers.Main) {
                     batteryTemp = currentTemp
-                    daemonPid = currentPid
-                    currentProfile = profileText
-                    currentFps = fpsText
+                    daemonPid = status.pid
+                    currentProfile = status.profile
+                    currentFps = status.fps
                 }
             }
         }
@@ -276,6 +277,8 @@ fun HomeScreen() {
                         currentFps = currentFps,
                         kernelVersion = kernelVersion,
                         deviceModel = deviceModel,
+                        isRootGranted = isRootGranted,
+                        selinuxStatus = selinuxStatus,
                         onRequestRebootDialog = { showRebootDialog = true },
                         onRestartDaemon = {
                             daemonPid = null
@@ -328,6 +331,8 @@ fun HomeScreen() {
                         currentFps = currentFps,
                         kernelVersion = kernelVersion,
                         deviceModel = deviceModel,
+                        isRootGranted = isRootGranted,
+                        selinuxStatus = selinuxStatus,
                         onRequestRebootDialog = { showRebootDialog = true },
                         onRestartDaemon = {
                             daemonPid = null
@@ -354,6 +359,8 @@ fun HomeDashboardContent(
     currentFps: String,
     kernelVersion: String,
     deviceModel: String,
+    isRootGranted: Boolean,
+    selinuxStatus: String,
     onRequestRebootDialog: () -> Unit,
     onRestartDaemon: suspend () -> Unit
 ) {
@@ -753,13 +760,15 @@ fun HomeDashboardContent(
                     ConnectedCardRow(
                         icon = Icons.Rounded.Security,
                         title = stringResource(R.string.home_root_access),
-                        subtitle = stringResource(R.string.home_root_granted),
+                        subtitle = stringResource(
+                            if (isRootGranted) R.string.home_root_granted else R.string.home_root_denied
+                        ),
                         position = ContainerPosition.Top
                     )
                     ConnectedCardRow(
                         icon = Icons.Rounded.Security,
                         title = stringResource(R.string.home_selinux_status),
-                        subtitle = "Enforcing",
+                        subtitle = selinuxStatus,
                         position = ContainerPosition.Bottom
                     )
                 }
