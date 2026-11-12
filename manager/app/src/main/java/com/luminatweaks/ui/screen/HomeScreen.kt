@@ -15,6 +15,7 @@
 package com.luminatweaks.ui.screen
 
 import android.widget.Toast
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -56,6 +57,7 @@ import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -77,6 +79,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -88,7 +91,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
@@ -427,11 +429,20 @@ fun HomeDashboardContent(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = "LuminaTweaks",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Column {
+                        Text(
+                            text = "LuminaTweaks",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = deviceModel,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 },
                 actions = {
                     val context = LocalContext.current
@@ -441,8 +452,15 @@ fun HomeDashboardContent(
                     Box(
                         modifier = Modifier
                             .padding(end = 8.dp)
-                            .size(40.dp)
+                            .size(42.dp)
                             .clip(CircleShape)
+                            .background(
+                                when {
+                                    isChecking -> MaterialTheme.colorScheme.surfaceContainerHighest
+                                    isRunning -> MaterialTheme.colorScheme.primaryContainer
+                                    else -> MaterialTheme.colorScheme.errorContainer
+                                }
+                            )
                             .combinedClickable(
                                 onClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -465,8 +483,12 @@ fun HomeDashboardContent(
                         Icon(
                             imageVector = Icons.Rounded.PowerSettingsNew,
                             contentDescription = stringResource(R.string.power_menu_title),
-                            tint = if (isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(24.dp)
+                            tint = when {
+                                isChecking -> MaterialTheme.colorScheme.onSurfaceVariant
+                                isRunning -> MaterialTheme.colorScheme.onPrimaryContainer
+                                else -> MaterialTheme.colorScheme.onErrorContainer
+                            },
+                            modifier = Modifier.size(22.dp)
                         )
                     }
 
@@ -580,30 +602,13 @@ fun HomeDashboardContent(
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item {
-                val bannerToneColor = when {
-                    isChecking -> MaterialTheme.colorScheme.surfaceContainerHighest
-                    isRunning -> MaterialTheme.colorScheme.primaryContainer
-                    else -> MaterialTheme.colorScheme.errorContainer
-                }
-                val bannerContentColor = when {
-                    isChecking -> MaterialTheme.colorScheme.onSurfaceVariant
-                    isRunning -> MaterialTheme.colorScheme.onPrimaryContainer
-                    else -> MaterialTheme.colorScheme.onErrorContainer
-                }
-                val bannerTitle = when {
-                    isChecking -> stringResource(R.string.home_core_checking)
-                    isRestarting -> stringResource(R.string.home_core_starting)
-                    isRunning -> "Alive"
-                    else -> stringResource(R.string.home_core_inactive)
-                }
-                val bannerSubtitle = when {
-                    isChecking -> stringResource(R.string.home_core_scanning)
-                    isRunning -> "PID: ${daemonPid ?: "-"}"
-                    else -> stringResource(R.string.home_core_tap_start)
-                }
-
-                Card(
-                    onClick = {
+                CoreStatusCard(
+                    isChecking = isChecking,
+                    isRestarting = isRestarting,
+                    isRunning = isRunning,
+                    daemonPid = daemonPid,
+                    currentProfile = currentProfile,
+                    onStart = {
                         if (!isChecking && !isRunning && !isRestarting) {
                             coroutineScope.launch {
                                 if (DaemonManager.isRebootRequired()) {
@@ -615,68 +620,8 @@ fun HomeDashboardContent(
                                 }
                             }
                         }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = getConnectedContainerShape(ContainerPosition.Single),
-                    colors = CardDefaults.cardColors(containerColor = bannerToneColor)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 18.dp, vertical = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(bannerContentColor.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = when {
-                                    isRunning -> Icons.Rounded.Check
-                                    isChecking -> Icons.Rounded.Memory
-                                    else -> Icons.Rounded.ErrorOutline
-                                },
-                                contentDescription = null,
-                                tint = bannerContentColor,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(16.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = bannerTitle,
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontSize = 17.sp,
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                color = bannerContentColor
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = bannerSubtitle,
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = 12.5.sp,
-                                    lineHeight = 16.sp
-                                ),
-                                color = bannerContentColor.copy(alpha = 0.85f)
-                            )
-                        }
-
-                        if (!isRunning && !isChecking) {
-                            Icon(
-                                imageVector = Icons.Rounded.PlayArrow,
-                                contentDescription = stringResource(R.string.action_start),
-                                tint = bannerContentColor,
-                                modifier = Modifier.size(26.dp)
-                            )
-                        }
                     }
-                }
+                )
             }
 
             item {
@@ -684,99 +629,24 @@ fun HomeDashboardContent(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Card(
-                        modifier = Modifier.weight(1f),
-                        shape = getConnectedContainerShape(ContainerPosition.Single),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                        )
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primaryContainer),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Thermostat,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    text = stringResource(R.string.home_thermal),
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text(
-                                text = batteryTemp,
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                ),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-
-                    Card(
-                        modifier = Modifier.weight(1f),
-                        shape = getConnectedContainerShape(ContainerPosition.Single),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                        )
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primaryContainer),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Speed,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    text = stringResource(R.string.home_profile),
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text(
-                                text = if (currentFps == "-") currentProfile else "$currentProfile  |  $currentFps FPS",
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                ),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
+                    DashboardMetricCard(
+                        icon = Icons.Rounded.Thermostat,
+                        label = stringResource(R.string.home_thermal),
+                        value = batteryTemp,
+                        supporting = null,
+                        iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
+                        iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
+                        modifier = Modifier.weight(1f)
+                    )
+                    DashboardMetricCard(
+                        icon = Icons.Rounded.Speed,
+                        label = stringResource(R.string.home_profile),
+                        value = currentProfile,
+                        supporting = currentFps.takeIf { it != "-" }?.let { "$it FPS" },
+                        iconContainer = MaterialTheme.colorScheme.secondaryContainer,
+                        iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
 
@@ -795,13 +665,17 @@ fun HomeDashboardContent(
                         icon = Icons.Rounded.Memory,
                         title = stringResource(R.string.home_kernel_version),
                         subtitle = kernelVersion,
-                        position = ContainerPosition.Middle
+                        position = ContainerPosition.Middle,
+                        iconContainer = MaterialTheme.colorScheme.secondaryContainer,
+                        iconTint = MaterialTheme.colorScheme.onSecondaryContainer
                     )
                     ConnectedCardRow(
                         icon = Icons.Rounded.Smartphone,
                         title = stringResource(R.string.home_device_model),
                         subtitle = deviceModel,
-                        position = ContainerPosition.Bottom
+                        position = ContainerPosition.Bottom,
+                        iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
+                        iconTint = MaterialTheme.colorScheme.onTertiaryContainer
                     )
                 }
             }
@@ -817,13 +691,25 @@ fun HomeDashboardContent(
                         subtitle = stringResource(
                             if (isRootGranted) R.string.home_root_granted else R.string.home_root_denied
                         ),
-                        position = ContainerPosition.Top
+                        position = ContainerPosition.Top,
+                        iconContainer = if (isRootGranted) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.errorContainer
+                        },
+                        iconTint = if (isRootGranted) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onErrorContainer
+                        }
                     )
                     ConnectedCardRow(
                         icon = Icons.Rounded.Security,
                         title = stringResource(R.string.home_selinux_status),
                         subtitle = selinuxStatus,
-                        position = ContainerPosition.Bottom
+                        position = ContainerPosition.Bottom,
+                        iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
+                        iconTint = MaterialTheme.colorScheme.onTertiaryContainer
                     )
                 }
             }
@@ -839,14 +725,18 @@ fun HomeDashboardContent(
                         title = stringResource(R.string.home_support_us),
                         subtitle = stringResource(R.string.home_support_us_desc),
                         position = ContainerPosition.Top,
-                        onClick = { uriHandler.openUri("https://sociabuzz.com/kimal404") }
+                        onClick = { uriHandler.openUri("https://sociabuzz.com/kimal404") },
+                        iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
+                        iconTint = MaterialTheme.colorScheme.onTertiaryContainer
                     )
                     ConnectedActionCardRow(
                         icon = Icons.Rounded.MenuBook,
                         title = stringResource(R.string.home_learn_more),
                         subtitle = stringResource(R.string.home_learn_more_desc),
                         position = ContainerPosition.Bottom,
-                        onClick = { uriHandler.openUri("https://github.com/kimal404/LuminaTweaks") }
+                        onClick = { uriHandler.openUri("https://github.com/kimal404/LuminaTweaks") },
+                        iconContainer = MaterialTheme.colorScheme.secondaryContainer,
+                        iconTint = MaterialTheme.colorScheme.onSecondaryContainer
                     )
                 }
             }
@@ -859,60 +749,323 @@ fun HomeDashboardContent(
 }
 
 @Composable
+private fun CoreStatusCard(
+    isChecking: Boolean,
+    isRestarting: Boolean,
+    isRunning: Boolean,
+    daemonPid: String?,
+    currentProfile: String,
+    onStart: () -> Unit
+) {
+    val containerColor by animateColorAsState(
+        targetValue = when {
+            isChecking || isRestarting -> MaterialTheme.colorScheme.surfaceContainerHighest
+            isRunning -> MaterialTheme.colorScheme.primaryContainer
+            else -> MaterialTheme.colorScheme.errorContainer
+        },
+        label = "coreContainer"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = when {
+            isChecking || isRestarting -> MaterialTheme.colorScheme.onSurfaceVariant
+            isRunning -> MaterialTheme.colorScheme.onPrimaryContainer
+            else -> MaterialTheme.colorScheme.onErrorContainer
+        },
+        label = "coreContent"
+    )
+    val canStart = !isChecking && !isRunning && !isRestarting
+    val title = when {
+        isChecking -> stringResource(R.string.home_core_checking)
+        isRestarting -> stringResource(R.string.home_core_starting)
+        isRunning -> "Alive"
+        else -> stringResource(R.string.home_core_inactive)
+    }
+    val subtitle = when {
+        isChecking || isRestarting -> stringResource(R.string.home_core_scanning)
+        isRunning -> stringResource(R.string.home_core_running_format, daemonPid ?: "-")
+        else -> stringResource(R.string.home_core_tap_start)
+    }
+
+    Card(
+        onClick = onStart,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(LocalCornerRadius.current),
+        colors = CardDefaults.cardColors(containerColor = containerColor)
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(contentColor.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    when {
+                        isChecking || isRestarting -> CircularProgressIndicator(
+                            modifier = Modifier.size(26.dp),
+                            color = contentColor,
+                            strokeWidth = 2.5.dp
+                        )
+                        isRunning -> Icon(
+                            imageVector = Icons.Rounded.Check,
+                            contentDescription = null,
+                            tint = contentColor,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        else -> Icon(
+                            imageVector = Icons.Rounded.ErrorOutline,
+                            contentDescription = null,
+                            tint = contentColor,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = contentColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = contentColor.copy(alpha = 0.78f),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                when {
+                    isRunning && !isRestarting -> StatusPill(
+                        text = stringResource(R.string.home_core_working),
+                        contentColor = contentColor
+                    )
+                    canStart -> {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(shape = CircleShape, color = contentColor) {
+                            Box(
+                                modifier = Modifier.size(44.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.PlayArrow,
+                                    contentDescription = stringResource(R.string.action_start),
+                                    tint = containerColor,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (isRunning && !isRestarting) {
+                Spacer(modifier = Modifier.height(18.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CoreStat(
+                        label = "PID",
+                        value = daemonPid ?: "-",
+                        contentColor = contentColor
+                    )
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 18.dp)
+                            .width(1.dp)
+                            .height(28.dp)
+                            .background(contentColor.copy(alpha = 0.2f))
+                    )
+                    CoreStat(
+                        label = stringResource(R.string.home_profile),
+                        value = currentProfile,
+                        contentColor = contentColor
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CoreStat(
+    label: String,
+    value: String,
+    contentColor: Color
+) {
+    Column {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = contentColor.copy(alpha = 0.6f)
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = contentColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun StatusPill(
+    text: String,
+    contentColor: Color
+) {
+    Surface(
+        shape = CircleShape,
+        color = contentColor.copy(alpha = 0.14f)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(contentColor)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Medium,
+                color = contentColor
+            )
+        }
+    }
+}
+
+@Composable
+private fun DashboardMetricCard(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    supporting: String?,
+    iconContainer: Color,
+    iconTint: Color,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(LocalCornerRadius.current),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(iconContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = iconTint,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.height(14.dp))
+            Text(
+                text = value,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (!supporting.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = supporting,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun ConnectedCardRow(
     icon: ImageVector,
     title: String,
     subtitle: String,
     position: ContainerPosition,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    iconContainer: Color = MaterialTheme.colorScheme.primaryContainer,
+    iconTint: Color = MaterialTheme.colorScheme.onPrimaryContainer
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = getConnectedContainerShape(position),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = 16.dp, vertical = 13.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
+                    .size(38.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(iconContainer),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    tint = iconTint,
                     modifier = Modifier.size(20.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(14.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium
-                    ),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(1.dp))
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp
-                    ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -926,65 +1079,72 @@ fun ConnectedActionCardRow(
     subtitle: String,
     position: ContainerPosition,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    iconContainer: Color = MaterialTheme.colorScheme.primaryContainer,
+    iconTint: Color = MaterialTheme.colorScheme.onPrimaryContainer
 ) {
     Card(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
         shape = getConnectedContainerShape(position),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = 16.dp, vertical = 13.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
+                    .size(38.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(iconContainer),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    tint = iconTint,
                     modifier = Modifier.size(20.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(14.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium
-                    ),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(1.dp))
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp
-                    ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
-            Icon(
-                imageVector = Icons.Rounded.ChevronRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
     }
 }
@@ -1010,13 +1170,13 @@ private fun PowerMenuItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 14.dp),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(13.dp))
                     .background(iconBg),
                 contentAlignment = Alignment.Center
             ) {
@@ -1030,12 +1190,16 @@ private fun PowerMenuItem(
             Spacer(modifier = Modifier.width(14.dp))
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold
-                ),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f)
+            )
+            Icon(
+                imageVector = Icons.Rounded.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
             )
         }
     }
