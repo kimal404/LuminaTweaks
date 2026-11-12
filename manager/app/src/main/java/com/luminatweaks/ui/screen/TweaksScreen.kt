@@ -22,6 +22,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -31,13 +32,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -45,15 +49,18 @@ import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Storage
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -69,15 +76,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luminatweaks.R
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DisplayRrMode
+import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -114,6 +126,25 @@ fun getRendererDisplayLabel(id: String, defaultLabel: String): String {
         else -> id
     }
 }
+
+fun getRendererShortLabel(id: String, defaultLabel: String): String {
+    return when (id.lowercase()) {
+        "default" -> defaultLabel
+        "skiavk" -> "Skia Vulkan"
+        "skiavkthreaded" -> "Vulkan MT"
+        "skiagl" -> "Skia GL"
+        "skiaglthreaded" -> "Skia GL MT"
+        "opengl" -> "OpenGL"
+        "openglthreaded" -> "OpenGL MT"
+        "vulkan" -> "Vulkan"
+        else -> id
+    }
+}
+
+private data class TweakOption<T>(
+    val value: T,
+    val label: String
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -183,8 +214,21 @@ fun TweaksScreen() {
         }
     }
 
-    val currentRendererText = remember(currentRendererId, defaultRendererLabel) {
-        getRendererDisplayLabel(currentRendererId, defaultRendererLabel)
+    val currentRendererShortText = remember(currentRendererId, defaultRendererLabel) {
+        getRendererShortLabel(currentRendererId, defaultRendererLabel)
+    }
+
+    val rendererOptions = remember(defaultRendererLabel) {
+        listOf(
+            "default",
+            "skiavk",
+            "skiavkthreaded",
+            "skiagl",
+            "skiaglthreaded",
+            "opengl",
+            "openglthreaded",
+            "vulkan"
+        ).map { TweakOption(it, getRendererDisplayLabel(it, defaultRendererLabel)) }
     }
 
     if (inLiteModeSubpage) {
@@ -221,162 +265,50 @@ fun TweaksScreen() {
     }
 
     if (showRefreshRateDialog) {
-        AlertDialog(
-            onDismissRequest = { showRefreshRateDialog = false },
-            title = {
-                Text(
-                    text = stringResource(R.string.tweaks_dialog_select_rr),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-            },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    rrModes.forEach { mode ->
-                        val isSelected = currentRrId == mode.id
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .selectable(
-                                    selected = isSelected,
-                                    onClick = {
-                                        currentRrId = mode.id
-                                        showRefreshRateDialog = false
-                                        coroutineScope.launch {
-                                            ConfigRepository.setRefreshRate(mode.id)
-                                        }
-                                    },
-                                    role = Role.RadioButton
-                                )
-                                .padding(vertical = 10.dp, horizontal = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(selected = isSelected, onClick = null)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = "${mode.hz} Hz",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
+        TweakOptionDialog(
+            title = stringResource(R.string.tweaks_dialog_select_rr),
+            options = rrModes.map { TweakOption(it.id, "${it.hz} Hz") },
+            isSelected = { it == currentRrId },
+            onSelect = { id ->
+                currentRrId = id
+                showRefreshRateDialog = false
+                coroutineScope.launch {
+                    ConfigRepository.setRefreshRate(id)
                 }
             },
-            confirmButton = {
-                TextButton(onClick = { showRefreshRateDialog = false }) {
-                    Text(stringResource(R.string.action_cancel))
-                }
-            }
+            onDismiss = { showRefreshRateDialog = false }
         )
     }
 
     if (showRenderDialog) {
-        AlertDialog(
-            onDismissRequest = { showRenderDialog = false },
-            title = {
-                Text(
-                    text = stringResource(R.string.tweaks_dialog_select_renderer),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-            },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    listOf("default", "skiavk", "skiavkthreaded", "skiagl", "skiaglthreaded", "opengl", "openglthreaded", "vulkan").forEach { rawId ->
-                        val isSelected = rawId.equals(currentRendererId, ignoreCase = true)
-                        val displayLabel = getRendererDisplayLabel(rawId, defaultRendererLabel)
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .selectable(
-                                    selected = isSelected,
-                                    onClick = {
-                                        currentRendererId = rawId
-                                        showRenderDialog = false
-                                        coroutineScope.launch {
-                                            ConfigRepository.setRenderer(rawId)
-                                        }
-                                    },
-                                    role = Role.RadioButton
-                                )
-                                .padding(vertical = 10.dp, horizontal = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(selected = isSelected, onClick = null)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = displayLabel,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
+        TweakOptionDialog(
+            title = stringResource(R.string.tweaks_dialog_select_renderer),
+            options = rendererOptions,
+            isSelected = { it.equals(currentRendererId, ignoreCase = true) },
+            onSelect = { rawId ->
+                currentRendererId = rawId
+                showRenderDialog = false
+                coroutineScope.launch {
+                    ConfigRepository.setRenderer(rawId)
                 }
             },
-            confirmButton = {
-                TextButton(onClick = { showRenderDialog = false }) {
-                    Text(stringResource(R.string.action_cancel))
-                }
-            }
+            onDismiss = { showRenderDialog = false }
         )
     }
 
     if (showIoSchedulerDialog) {
-        AlertDialog(
-            onDismissRequest = { showIoSchedulerDialog = false },
-            title = {
-                Text(
-                    text = stringResource(R.string.dialog_select_io_scheduler),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-            },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    listOf("none", "mq-deadline", "kyber", "bfq").forEach { scheduler ->
-                        val isSelected = scheduler.equals(currentIoScheduler, ignoreCase = true)
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .selectable(
-                                    selected = isSelected,
-                                    onClick = {
-                                        currentIoScheduler = scheduler
-                                        showIoSchedulerDialog = false
-                                        coroutineScope.launch {
-                                            ConfigRepository.setIoScheduler(scheduler)
-                                        }
-                                    },
-                                    role = Role.RadioButton
-                                )
-                                .padding(vertical = 10.dp, horizontal = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(selected = isSelected, onClick = null)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = scheduler,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
+        TweakOptionDialog(
+            title = stringResource(R.string.dialog_select_io_scheduler),
+            options = listOf("none", "mq-deadline", "kyber", "bfq").map { TweakOption(it, it) },
+            isSelected = { it.equals(currentIoScheduler, ignoreCase = true) },
+            onSelect = { scheduler ->
+                currentIoScheduler = scheduler
+                showIoSchedulerDialog = false
+                coroutineScope.launch {
+                    ConfigRepository.setIoScheduler(scheduler)
                 }
             },
-            confirmButton = {
-                TextButton(onClick = { showIoSchedulerDialog = false }) {
-                    Text(stringResource(R.string.action_cancel))
-                }
-            }
+            onDismiss = { showIoSchedulerDialog = false }
         )
     }
 
@@ -408,499 +340,541 @@ fun TweaksScreen() {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding() + 4.dp,
+                top = innerPadding.calculateTopPadding() + 8.dp,
                 bottom = bottomPadding,
                 start = 16.dp,
                 end = 16.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             item {
-                Text(
-                    text = if (isIndonesian) "Layar & Grafis" else "Display & Graphics",
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 2.dp)
+                TweaksHero(
+                    liveRefreshRate = liveRefreshRate,
+                    rendererLabel = currentRendererShortText,
+                    isLiteMode = isGlobalLiteMode,
+                    isIndonesian = isIndonesian
                 )
             }
 
             item {
-                val dispTopShape = getConnectedContainerShape(ContainerPosition.Top, innerRadius = 4.dp)
-                val dispBottomShape = getConnectedContainerShape(ContainerPosition.Bottom, innerRadius = 4.dp)
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                TweakSection(
+                    title = if (isIndonesian) "Layar & Grafis" else "Display & Graphics",
+                    icon = Icons.Rounded.Speed,
+                    accent = MaterialTheme.colorScheme.primary
                 ) {
-                    Card(
-                        onClick = { showRefreshRateDialog = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = dispTopShape,
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                    TweakGroup {
+                        TweakRow(
+                            icon = Icons.Rounded.Speed,
+                            iconContainer = MaterialTheme.colorScheme.primaryContainer,
+                            iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            title = stringResource(R.string.tweaks_refresh_rate),
+                            subtitle = if (isIndonesian) {
+                                "Atur kecepatan penyegaran layar"
+                            } else {
+                                "Set the display refresh rate"
+                            },
+                            trailingText = currentRrText,
+                            onClick = { showRefreshRateDialog = true }
                         )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Speed,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.tweaks_refresh_rate),
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontSize = 15.5.sp,
-                                        fontWeight = FontWeight.Medium
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "$currentRrText • ${stringResource(R.string.tweaks_display_section)}",
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontSize = 12.5.sp,
-                                        lineHeight = 16.sp
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Icon(
-                                imageVector = Icons.Rounded.ChevronRight,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-
-                    Card(
-                        onClick = { showRenderDialog = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = dispBottomShape,
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        TweakRowDivider()
+                        TweakRow(
+                            icon = Icons.Rounded.DeveloperBoard,
+                            iconContainer = MaterialTheme.colorScheme.primaryContainer,
+                            iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            title = stringResource(R.string.tweaks_renderer),
+                            subtitle = if (isIndonesian) {
+                                "Pilih backend grafis untuk rendering"
+                            } else {
+                                "Choose the graphics rendering backend"
+                            },
+                            trailingText = currentRendererShortText,
+                            onClick = { showRenderDialog = true }
                         )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.DeveloperBoard,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.tweaks_renderer),
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontSize = 15.5.sp,
-                                        fontWeight = FontWeight.Medium
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "$currentRendererText • ${stringResource(R.string.tweaks_graphics_section)}",
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontSize = 12.5.sp,
-                                        lineHeight = 16.sp
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Icon(
-                                imageVector = Icons.Rounded.ChevronRight,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
                     }
                 }
             }
 
             item {
-                Text(
-                    text = if (isIndonesian) "Performa & Boost" else "Performance & Boost",
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 2.dp)
-                )
-            }
-
-            item {
-                val perfShape = getConnectedContainerShape(ContainerPosition.Single, innerRadius = 4.dp)
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                TweakSection(
+                    title = if (isIndonesian) "Performa & Boost" else "Performance & Boost",
+                    icon = Icons.Rounded.BatterySaver,
+                    accent = MaterialTheme.colorScheme.tertiary
                 ) {
-                    Card(
-                        onClick = { inLiteModeSubpage = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = perfShape,
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                    TweakGroup {
+                        TweakRow(
+                            icon = Icons.Rounded.BatterySaver,
+                            iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
+                            iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
+                            title = stringResource(R.string.tweaks_lite_mode),
+                            subtitle = if (isGlobalLiteMode) {
+                                if (isIndonesian) "Aktif • Efisiensi Core Big/Prime" else "On • Big/Prime core efficiency"
+                            } else {
+                                if (isIndonesian) "Nonaktif • Jam Clock Maksimum" else "Off • Maximum clock speed"
+                            },
+                            trailingText = when {
+                                isGlobalLiteMode && isIndonesian -> "Aktif"
+                                isGlobalLiteMode -> "On"
+                                isIndonesian -> "Nonaktif"
+                                else -> "Off"
+                            },
+                            trailingActive = isGlobalLiteMode,
+                            onClick = { inLiteModeSubpage = true }
                         )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.BatterySaver,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.tweaks_lite_mode),
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontSize = 15.5.sp,
-                                        fontWeight = FontWeight.Medium
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = if (isGlobalLiteMode) "Aktif • Efisiensi Core Big/Prime" else "Nonaktif • Jam Clock Maksimum",
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontSize = 12.5.sp,
-                                        lineHeight = 16.sp
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Icon(
-                                imageVector = Icons.Rounded.ChevronRight,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
                     }
                 }
             }
 
             item {
-                Text(
-                    text = stringResource(R.string.section_additional_tweaks),
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 2.dp)
-                )
-            }
-
-            item {
-                val addTopShape = getConnectedContainerShape(ContainerPosition.Top, innerRadius = 4.dp)
-                val addBottomShape = getConnectedContainerShape(ContainerPosition.Bottom, innerRadius = 4.dp)
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                TweakSection(
+                    title = stringResource(R.string.section_additional_tweaks),
+                    icon = Icons.Rounded.Tune,
+                    accent = MaterialTheme.colorScheme.secondary
                 ) {
-                    Card(
-                        onClick = { inMemoryZramSubpage = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = addTopShape,
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                    TweakGroup {
+                        TweakRow(
+                            icon = Icons.Rounded.Memory,
+                            iconContainer = MaterialTheme.colorScheme.secondaryContainer,
+                            iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            title = stringResource(R.string.tweak_memory_zram),
+                            subtitle = stringResource(R.string.tweak_memory_zram_desc),
+                            onClick = { inMemoryZramSubpage = true }
                         )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Memory,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.tweak_memory_zram),
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontSize = 15.5.sp,
-                                        fontWeight = FontWeight.Medium
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = stringResource(R.string.tweak_memory_zram_desc),
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontSize = 12.5.sp,
-                                        lineHeight = 16.sp
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Icon(
-                                imageVector = Icons.Rounded.ChevronRight,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-
-                    Card(
-                        onClick = { showIoSchedulerDialog = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = addBottomShape,
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        TweakRowDivider()
+                        TweakRow(
+                            icon = Icons.Rounded.Storage,
+                            iconContainer = MaterialTheme.colorScheme.secondaryContainer,
+                            iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            title = stringResource(R.string.tweak_io_scheduler),
+                            subtitle = stringResource(R.string.tweak_io_scheduler_desc),
+                            trailingText = currentIoScheduler,
+                            onClick = { showIoSchedulerDialog = true }
                         )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Storage,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.tweak_io_scheduler),
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontSize = 15.5.sp,
-                                        fontWeight = FontWeight.Medium
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "$currentIoScheduler • ${stringResource(R.string.tweak_io_scheduler_desc)}",
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontSize = 12.5.sp,
-                                        lineHeight = 16.sp
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Icon(
-                                imageVector = Icons.Rounded.ChevronRight,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
                     }
-
                 }
             }
 
             item {
-                Text(
-                    text = stringResource(R.string.section_utility_diagnostics),
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 2.dp)
-                )
-            }
-
-            item {
-                val diagShape = getConnectedContainerShape(ContainerPosition.Top, innerRadius = 4.dp)
-                val utilShape = getConnectedContainerShape(ContainerPosition.Bottom, innerRadius = 4.dp)
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                TweakSection(
+                    title = stringResource(R.string.section_utility_diagnostics),
+                    icon = Icons.Rounded.Widgets,
+                    accent = MaterialTheme.colorScheme.primary
                 ) {
-                    Card(
-                        onClick = { inHardwareDiagnosticSubpage = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = diagShape,
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                    TweakGroup {
+                        TweakRow(
+                            icon = Icons.Rounded.DeveloperBoard,
+                            iconContainer = MaterialTheme.colorScheme.primaryContainer,
+                            iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            title = stringResource(R.string.hardware_diag_title),
+                            subtitle = stringResource(R.string.hardware_diag_desc),
+                            onClick = { inHardwareDiagnosticSubpage = true }
                         )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.DeveloperBoard,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.hardware_diag_title),
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontSize = 15.5.sp,
-                                        fontWeight = FontWeight.Medium
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = stringResource(R.string.hardware_diag_desc),
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontSize = 12.5.sp,
-                                        lineHeight = 16.sp
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Icon(
-                                imageVector = Icons.Rounded.ChevronRight,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-
-                    Card(
-                        onClick = { inUtilitySubpage = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = utilShape,
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        TweakRowDivider()
+                        TweakRow(
+                            icon = Icons.Rounded.Widgets,
+                            iconContainer = MaterialTheme.colorScheme.primaryContainer,
+                            iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            title = stringResource(R.string.utility_screen_title),
+                            subtitle = stringResource(R.string.utility_screen_desc),
+                            onClick = { inUtilitySubpage = true }
                         )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Widgets,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.utility_screen_title),
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontSize = 15.5.sp,
-                                        fontWeight = FontWeight.Medium
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = stringResource(R.string.utility_screen_desc),
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontSize = 12.5.sp,
-                                        lineHeight = 16.sp
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Icon(
-                                imageVector = Icons.Rounded.ChevronRight,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun TweaksHero(
+    liveRefreshRate: Int,
+    rendererLabel: String,
+    isLiteMode: Boolean,
+    isIndonesian: Boolean
+) {
+    val scheme = MaterialTheme.colorScheme
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(LocalCornerRadius.current),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.Transparent,
+            contentColor = scheme.onSurface
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(scheme.surfaceContainerHigh, scheme.surfaceContainerHighest)
+                    )
+                )
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 36.dp, y = (-48).dp)
+                    .size(150.dp)
+                    .background(scheme.primary.copy(alpha = 0.10f), CircleShape)
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .offset(x = (-40).dp, y = 36.dp)
+                    .size(120.dp)
+                    .background(scheme.tertiary.copy(alpha = 0.08f), CircleShape)
+            )
+
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(scheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Tune,
+                            contentDescription = null,
+                            tint = scheme.onPrimaryContainer,
+                            modifier = Modifier.size(23.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (isIndonesian) "Pusat Penyetelan" else "Tuning Center",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = scheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = if (isIndonesian) {
+                                "Atur tampilan dan performa dalam satu tempat"
+                            } else {
+                                "Tune display and performance in one place"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = scheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    QuickStat(
+                        label = "REFRESH",
+                        value = "$liveRefreshRate Hz",
+                        live = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickStatDivider()
+                    QuickStat(
+                        label = "RENDERER",
+                        value = rendererLabel,
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickStatDivider()
+                    QuickStat(
+                        label = "LITE MODE",
+                        value = when {
+                            isLiteMode && isIndonesian -> "Aktif"
+                            isLiteMode -> "On"
+                            isIndonesian -> "Nonaktif"
+                            else -> "Off"
+                        },
+                        valueColor = if (isLiteMode) scheme.primary else scheme.onSurface,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickStat(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    live: Boolean = false,
+    valueColor: Color = MaterialTheme.colorScheme.onSurface
+) {
+    Column(modifier = modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (live) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                )
+                Spacer(modifier = Modifier.width(5.dp))
+            }
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 10.sp,
+                    letterSpacing = 0.8.sp
+                ),
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+        }
+        Spacer(modifier = Modifier.height(3.dp))
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = valueColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun QuickStatDivider() {
+    Box(
+        modifier = Modifier
+            .padding(horizontal = 12.dp)
+            .width(1.dp)
+            .height(30.dp)
+            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+    )
+}
+
+@Composable
+private fun TweakSection(
+    title: String,
+    icon: ImageVector,
+    accent: Color,
+    content: @Composable () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            modifier = Modifier.padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .clip(RoundedCornerShape(7.dp))
+                    .background(accent.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge.copy(letterSpacing = 0.3.sp),
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        content()
+    }
+}
+
+@Composable
+private fun TweakGroup(content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(LocalCornerRadius.current),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        )
+    ) {
+        Column(content = content)
+    }
+}
+
+@Composable
+private fun TweakRow(
+    icon: ImageVector,
+    iconContainer: Color,
+    iconTint: Color,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    trailingText: String? = null,
+    trailingActive: Boolean = false
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .clip(RoundedCornerShape(13.dp))
+                .background(iconContainer),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconTint,
+                modifier = Modifier.size(21.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                ),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(3.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 12.5.sp,
+                    lineHeight = 16.sp
+                ),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (trailingText != null) {
+            Spacer(modifier = Modifier.width(10.dp))
+            TweakValueChip(text = trailingText, active = trailingActive)
+            Spacer(modifier = Modifier.width(4.dp))
+        } else {
+            Spacer(modifier = Modifier.width(6.dp))
+        }
+        Icon(
+            imageVector = Icons.Rounded.ChevronRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+            modifier = Modifier.size(18.dp)
+        )
+    }
+}
+
+@Composable
+private fun TweakValueChip(text: String, active: Boolean = false) {
+    val container = if (active) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerHighest
+    }
+    val content = if (active) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Surface(shape = CircleShape, color = container) {
+        Text(
+            text = text,
+            modifier = Modifier
+                .widthIn(max = 104.dp)
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = content,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun TweakRowDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(start = 72.dp, end = 16.dp),
+        thickness = 1.dp,
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+    )
+}
+
+@Composable
+private fun <T> TweakOptionDialog(
+    title: String,
+    options: List<TweakOption<T>>,
+    isSelected: (T) -> Boolean,
+    onSelect: (T) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                options.forEach { option ->
+                    val selected = isSelected(option.value)
+                    val shape = RoundedCornerShape(14.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(shape)
+                            .background(
+                                if (selected) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainerHigh
+                                }
+                            )
+                            .selectable(
+                                selected = selected,
+                                role = Role.RadioButton,
+                                onClick = { onSelect(option.value) }
+                            )
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = selected, onClick = null)
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = option.label,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (selected) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        }
+    )
 }
