@@ -97,7 +97,7 @@ fn apply_vendor(profile: SocProfile) -> usize {
         };
         let target = match profile {
             SocProfile::Performance => max,
-            SocProfile::Lite => (max * 85) / 100,
+            SocProfile::Lite => crate::tweaks::devfreq::mid_frequency(&values).unwrap_or(max),
             SocProfile::Eco => min,
         };
         if !Path::new(&format!("{}/governor", base)).exists() {

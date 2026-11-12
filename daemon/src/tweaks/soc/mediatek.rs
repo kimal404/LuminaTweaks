@@ -128,16 +128,18 @@ fn read_frequencies(base: &str) -> Vec<u64> {
         .unwrap_or_default()
 }
 
+fn gpu_frequency_values() -> Vec<u64> {
+    gpu_devfreq_node()
+        .map(|base| read_frequencies(&base))
+        .unwrap_or_default()
+}
+
 fn gpu_frequency_range() -> Option<(u64, u64)> {
     let base = gpu_devfreq_node()?;
     let values = read_frequencies(&base);
     let min = values.iter().copied().min()?;
     let max = values.iter().copied().max()?;
     Some((min, max))
-}
-
-fn capped_frequency(max: u64, max_pct: u64) -> u64 {
-    (max * max_pct.clamp(1, 100)) / 100
 }
 
 fn boost_values(profile: SocProfile) -> (&'static str, &'static str, &'static str) {
@@ -154,8 +156,9 @@ fn apply_gpu_frequency(profile: SocProfile) -> usize {
     let (bottom, boost, upbound) = match profile {
         SocProfile::Performance => (max, max, max),
         SocProfile::Lite => {
-            let cap = capped_frequency(max, 85);
-            (min.min(cap), cap, cap)
+            let values = gpu_frequency_values();
+            let mid = crate::tweaks::devfreq::mid_frequency(&values).unwrap_or(max);
+            (min.min(mid), mid, mid)
         }
         SocProfile::Eco => (min, min, min),
     };
@@ -207,13 +210,14 @@ fn apply_gpufreq_opp(profile: SocProfile) -> usize {
         let opps = read_opp_table(table_v2);
         let target = match profile {
             SocProfile::Performance => opps.first().map(|(_, freq)| (0usize, *freq)),
-            SocProfile::Lite => opps
-                .iter()
-                .min_by_key(|(_, freq)| freq.abs_diff(capped_frequency(
-                    opps.first().map(|(_, freq)| *freq).unwrap_or(0),
-                    85,
-                )))
-                .copied(),
+            SocProfile::Lite => {
+                let freqs: Vec<u64> = opps.iter().map(|(_, freq)| *freq).collect();
+                let mid = crate::tweaks::devfreq::mid_frequency(&freqs)
+                    .unwrap_or_else(|| opps.first().map(|(_, freq)| *freq).unwrap_or(0));
+                opps.iter()
+                    .min_by_key(|(_, freq)| freq.abs_diff(mid))
+                    .copied()
+            }
             SocProfile::Eco => opps.last().copied(),
         };
 
@@ -230,13 +234,14 @@ fn apply_gpufreq_opp(profile: SocProfile) -> usize {
         let opps = read_opp_table(table_v1);
         let value = match profile {
             SocProfile::Performance => opps.first().map(|(_, freq)| *freq),
-            SocProfile::Lite => opps
-                .iter()
-                .min_by_key(|(_, freq)| freq.abs_diff(capped_frequency(
-                    opps.first().map(|(_, freq)| *freq).unwrap_or(0),
-                    85,
-                )))
-                .map(|(_, freq)| *freq),
+            SocProfile::Lite => {
+                let freqs: Vec<u64> = opps.iter().map(|(_, freq)| *freq).collect();
+                let mid = crate::tweaks::devfreq::mid_frequency(&freqs)
+                    .unwrap_or_else(|| opps.first().map(|(_, freq)| *freq).unwrap_or(0));
+                opps.iter()
+                    .min_by_key(|(_, freq)| freq.abs_diff(mid))
+                    .map(|(_, freq)| *freq)
+            }
             SocProfile::Eco => opps.last().map(|(_, freq)| *freq),
         };
         if let Some(freq) = value {
@@ -408,7 +413,7 @@ pub fn optimize_storage(profile: SocProfile) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{boost_values, capped_frequency, read_opp_table, SocProfile};
+    use super::{boost_values, read_opp_table, SocProfile};
 
     #[test]
     fn performance_enables_all_ged_boosts() {
@@ -419,12 +424,6 @@ mod tests {
     fn lite_and_eco_disable_ged_boosts() {
         assert_eq!(boost_values(SocProfile::Lite), ("0", "0", "0"));
         assert_eq!(boost_values(SocProfile::Eco), ("0", "0", "0"));
-    }
-
-    #[test]
-    fn caps_gpu_frequency_to_percentage() {
-        assert_eq!(capped_frequency(1300000000, 85), 1105000000);
-        assert_eq!(capped_frequency(260000000, 100), 260000000);
     }
 
     #[test]

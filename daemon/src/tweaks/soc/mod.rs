@@ -13,8 +13,13 @@
 // limitations under the License.
 
 pub mod generic;
+pub mod exynos;
+pub mod kirin;
+pub mod mali;
 pub mod mediatek;
 pub mod snapdragon;
+pub mod tegra;
+pub mod tensor;
 pub mod unisoc;
 
 use std::fs;
@@ -62,7 +67,11 @@ const SNAPDRAGON_PLATFORMS: &[&str] = &[
 pub enum Vendor {
     Mediatek,
     Snapdragon,
+    Exynos,
     Unisoc,
+    Tensor,
+    Tegra,
+    Kirin,
     Generic,
 }
 
@@ -71,7 +80,11 @@ impl Vendor {
         match self {
             Self::Mediatek => "MediaTek",
             Self::Snapdragon => "Snapdragon",
+            Self::Exynos => "Exynos",
             Self::Unisoc => "Unisoc",
+            Self::Tensor => "Tensor",
+            Self::Tegra => "Tegra",
+            Self::Kirin => "Kirin",
             Self::Generic => "Generic",
         }
     }
@@ -89,7 +102,11 @@ pub fn apply(profile: SocProfile) -> usize {
     let applied = match vendor {
         Vendor::Mediatek => mediatek::apply(profile),
         Vendor::Snapdragon => snapdragon::apply(profile),
+        Vendor::Exynos => exynos::apply(profile),
         Vendor::Unisoc => unisoc::apply(profile),
+        Vendor::Tensor => tensor::apply(profile),
+        Vendor::Tegra => tegra::apply(profile),
+        Vendor::Kirin => kirin::apply(profile),
         Vendor::Generic => generic::apply(profile),
     };
     log!(
@@ -104,7 +121,11 @@ pub fn optimize_storage(profile: SocProfile) -> usize {
     let applied = match vendor() {
         Vendor::Mediatek => mediatek::optimize_storage(profile),
         Vendor::Snapdragon => snapdragon::optimize_storage(profile),
+        Vendor::Exynos => exynos::optimize_storage(profile),
         Vendor::Unisoc => unisoc::optimize_storage(profile),
+        Vendor::Tensor => tensor::optimize_storage(profile),
+        Vendor::Tegra => tegra::optimize_storage(profile),
+        Vendor::Kirin => kirin::optimize_storage(profile),
         Vendor::Generic => crate::tweaks::devfreq::apply(
             &["ufs", "mmc"],
             match profile {
@@ -165,7 +186,11 @@ fn parse_vendor(value: &str) -> Option<Vendor> {
         "" => None,
         "mediatek" | "mtk" => Some(Vendor::Mediatek),
         "snapdragon" | "qualcomm" | "qcom" => Some(Vendor::Snapdragon),
+        "exynos" | "samsung" => Some(Vendor::Exynos),
         "unisoc" | "sprd" | "spreadtrum" => Some(Vendor::Unisoc),
+        "tensor" | "google" => Some(Vendor::Tensor),
+        "tegra" | "nvidia" => Some(Vendor::Tegra),
+        "kirin" | "huawei" | "hi3" => Some(Vendor::Kirin),
         "generic" | "unknown" => Some(Vendor::Generic),
         value => classify(value),
     }
@@ -193,6 +218,17 @@ fn live_vendor() -> Vendor {
     }
     if has_sprd_devfreq() || Path::new("/sys/module/sprd_gpu").exists() {
         return Vendor::Unisoc;
+    }
+    if Path::new("/sys/kernel/tegra_gpu").exists() {
+        return Vendor::Tegra;
+    }
+    if Path::new("/sys/kernel/gpu").exists() && Path::new("/sys/kernel/debug/tracing").exists() {
+        if has_any_path(&["/sys/devices/platform/17000000.gpu", "/sys/class/devfreq/gpufreq"]) {
+            return Vendor::Tensor;
+        }
+    }
+    if has_any_path(&["/sys/class/devfreq/gpufreq", "/sys/devices/platform/gpufreq"]) {
+        return Vendor::Kirin;
     }
 
     if let Ok(cpuinfo) = fs::read_to_string("/proc/cpuinfo") {
@@ -250,6 +286,30 @@ fn classify(value: &str) -> Option<Vendor> {
             .any(|platform| value.contains(platform))
     {
         return Some(Vendor::Snapdragon);
+    }
+
+    if value.contains("exynos")
+        || value.contains("samsung")
+        || value.starts_with("s5e")
+        || value.starts_with("universal")
+        || value.starts_with("erd")
+    {
+        return Some(Vendor::Exynos);
+    }
+
+    if value.contains("google")
+        || value.contains("tensor")
+        || value.starts_with("gs")
+    {
+        return Some(Vendor::Tensor);
+    }
+
+    if value.contains("tegra") || value.contains("nvidia") {
+        return Some(Vendor::Tegra);
+    }
+
+    if value.contains("kirin") || value.contains("huawei") || value.starts_with("hi3") {
+        return Some(Vendor::Kirin);
     }
 
     if value.contains("unisoc")
@@ -311,9 +371,26 @@ mod tests {
     }
 
     #[test]
+    fn detects_exynos_tensor_tegra_kirin() {
+        assert_eq!(classify("exynos2100"), Some(Vendor::Exynos));
+        assert_eq!(classify("Exynos 2200"), Some(Vendor::Exynos));
+        assert_eq!(classify("gs101"), Some(Vendor::Tensor));
+        assert_eq!(classify("Tensor G3"), Some(Vendor::Tensor));
+        assert_eq!(classify("tegra210"), Some(Vendor::Tegra));
+        assert_eq!(classify("Kirin 9000"), Some(Vendor::Kirin));
+    }
+
+    #[test]
+    fn parses_new_vendor_config() {
+        assert_eq!(parse_vendor("exynos"), Some(Vendor::Exynos));
+        assert_eq!(parse_vendor("tensor"), Some(Vendor::Tensor));
+        assert_eq!(parse_vendor("tegra"), Some(Vendor::Tegra));
+        assert_eq!(parse_vendor("kirin"), Some(Vendor::Kirin));
+    }
+
+    #[test]
     fn leaves_unknown_platform_generic() {
-        assert_eq!(classify("exynos2100"), None);
-        assert_eq!(classify("gs101"), None);
+        assert_eq!(classify("unknownchip"), None);
         assert_eq!(classify(""), None);
     }
 
@@ -326,6 +403,10 @@ mod tests {
         assert_eq!(
             classify_cpuinfo("processor\t: 0\nHardware\t: Qualcomm Technologies, Inc SM8550\n"),
             Some(Vendor::Snapdragon)
+        );
+        assert_eq!(
+            classify_cpuinfo("processor\t: 0\nHardware\t: Exynos 2200\n"),
+            Some(Vendor::Exynos)
         );
         assert_eq!(classify_cpuinfo("processor\t: 0\n"), None);
     }

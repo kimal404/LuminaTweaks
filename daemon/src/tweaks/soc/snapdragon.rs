@@ -108,7 +108,10 @@ fn apply_kgsl_devfreq(profile: SocProfile) -> usize {
 
     let (target_min, target_max) = match profile {
         SocProfile::Performance => (max, max),
-        SocProfile::Lite => (min, (max * 85) / 100),
+        SocProfile::Lite => (
+            crate::tweaks::devfreq::mid_frequency(&values).unwrap_or(min),
+            crate::tweaks::devfreq::mid_frequency(&values).unwrap_or(max),
+        ),
         SocProfile::Eco => (min, min),
     };
 

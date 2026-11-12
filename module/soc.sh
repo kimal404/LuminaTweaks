@@ -35,6 +35,22 @@ detect_lumina_soc() {
                 echo "unisoc"
                 return 0
                 ;;
+            *exynos*|*samsung*|*s5e*|*universal[0-9]*|*erd[0-9]*)
+                echo "exynos"
+                return 0
+                ;;
+            *tensor*|*google*|*gs[0-9]*)
+                echo "tensor"
+                return 0
+                ;;
+            *tegra*|*nvidia*)
+                echo "tegra"
+                return 0
+                ;;
+            *kirin*|*huawei*|*hi[0-9]*)
+                echo "kirin"
+                return 0
+                ;;
         esac
     done
 
@@ -53,6 +69,21 @@ detect_lumina_soc() {
         return 0
     fi
 
+    if [ -e /sys/kernel/tegra_gpu ]; then
+        echo "tegra"
+        return 0
+    fi
+
+    if [ -e /sys/kernel/gpu ]; then
+        echo "exynos"
+        return 0
+    fi
+
+    if [ -e /sys/class/devfreq/gpufreq ] || [ -e /sys/devices/platform/gpufreq ]; then
+        echo "kirin"
+        return 0
+    fi
+
     value=$(grep -iE '^(Hardware|Processor|model name)' /proc/cpuinfo 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')
     case "$value" in
         *mediatek*|*mtk*|*mt[0-9]*)
@@ -63,6 +94,18 @@ detect_lumina_soc() {
             ;;
         *unisoc*|*spreadtrum*|*sprd*|*ums[0-9]*|*sc9[0-9]*)
             echo "unisoc"
+            ;;
+        *exynos*|*samsung*|*s5e*|*universal[0-9]*|*erd[0-9]*)
+            echo "exynos"
+            ;;
+        *tensor*|*google*|*gs[0-9]*)
+            echo "tensor"
+            ;;
+        *tegra*|*nvidia*)
+            echo "tegra"
+            ;;
+        *kirin*|*huawei*|*hi[0-9]*)
+            echo "kirin"
             ;;
         *)
             echo "generic"
