@@ -24,6 +24,9 @@
     <string name="profile_mode_format">Mode %1$s</string>
     <string name="profile_renderer">Graphics Renderer</string>
     <string name="profile_renderer_desc">App graphics rendering backend</string>
+    <string name="profile_renderer_locked_desc">Automatically controlled by the ANGLE driver while Lightweight Textures is on</string>
+    <string name="profile_renderer_angle_badge">Auto (ANGLE)</string>
+    <string name="tweaks_renderer_locked_note">Global Lightweight Textures is on — renderer settings are ignored and ANGLE is used.</string>
     <string name="profile_dnd">DND during Gaming</string>
     <string name="profile_dnd_desc">Automatically disable notifications while app is active</string>
     <string name="profile_texture">Lightweight Textures</string>

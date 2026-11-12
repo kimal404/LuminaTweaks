@@ -34,6 +34,7 @@ data class DisplayRrMode(val id: Int, val hz: Int)
 
 data class TweaksUiState(
     val isGlobalLiteMode: Boolean = false,
+    val isGlobalTextureEnabled: Boolean = false,
     val rrModes: List<DisplayRrMode> = emptyList(),
     val currentRrId: Int? = null,
     val currentRendererId: String = "default",
@@ -164,7 +165,9 @@ object ConfigRepository {
             "echo '$BATCH_SEP'",
             "cat $CONFIG_DIR/current_rr.txt 2>/dev/null",
             "echo '$BATCH_SEP'",
-            "ren=\$(cat $CONFIG_DIR/current_renderer.txt 2>/dev/null); [ -z \"\$ren\" ] && ren=\$(getprop persist.lumina.renderer); [ -z \"\$ren\" ] && ren=\$(getprop debug.hwui.renderer); [ -z \"\$ren\" ] && ren=\"default\"; echo \"\$ren\""
+            "ren=\$(cat $CONFIG_DIR/current_renderer.txt 2>/dev/null); [ -z \"\$ren\" ] && ren=\$(getprop persist.lumina.renderer); [ -z \"\$ren\" ] && ren=\$(getprop debug.hwui.renderer); [ -z \"\$ren\" ] && ren=\"default\"; echo \"\$ren\"",
+            "echo '$BATCH_SEP'",
+            "tex=\$(cat $CONFIG_DIR/texture_global.txt 2>/dev/null); [ -z \"\$tex\" ] && tex=\$(getprop persist.lumina.texture_global); [ -z \"\$tex\" ] && tex=\"0\"; echo \"\$tex\""
         ).joinToString(" ; ")
 
         val output = runSuCmd(batchScript, 5)
@@ -201,9 +204,16 @@ object ConfigRepository {
 
         val currentRr = if (parts.size > 2) parts[2].toIntOrNull() else null
         val currentRenderer = if (parts.size > 3 && parts[3].isNotBlank()) parts[3] else "default"
+        val isTextureGlobal = if (parts.size > 4) {
+            when (parts[4].trim().lowercase()) {
+                "1", "true", "on" -> true
+                else -> false
+            }
+        } else false
 
         val newState = TweaksUiState(
             isGlobalLiteMode = isLite,
+            isGlobalTextureEnabled = isTextureGlobal,
             rrModes = rrModes,
             currentRrId = currentRr,
             currentRendererId = currentRenderer,

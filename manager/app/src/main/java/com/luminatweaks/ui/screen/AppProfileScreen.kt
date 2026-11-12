@@ -52,6 +52,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.Brush
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Speed
@@ -80,6 +81,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -651,7 +653,13 @@ fun AppProfileScreen(
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable { showRendererDialog = true },
+                                        .let { base ->
+                                            if (profile.textureEnabled) {
+                                                base
+                                            } else {
+                                                base.clickable { showRendererDialog = true }
+                                            }
+                                        },
                                     shape = getConnectedContainerShape(ContainerPosition.Bottom, outerRadius = cornerRadius),
                                     colors = CardDefaults.cardColors(
                                         containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
@@ -660,13 +668,18 @@ fun AppProfileScreen(
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                                            .alpha(if (profile.textureEnabled) 0.55f else 1f),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Icon(
                                             imageVector = Icons.Rounded.Brush,
                                             contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
+                                            tint = if (profile.textureEnabled) {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            } else {
+                                                MaterialTheme.colorScheme.primary
+                                            },
                                             modifier = Modifier.size(22.dp)
                                         )
                                         Spacer(modifier = Modifier.width(16.dp))
@@ -679,7 +692,11 @@ fun AppProfileScreen(
                                             )
                                             Spacer(modifier = Modifier.height(2.dp))
                                             Text(
-                                                text = stringResource(R.string.profile_renderer_desc),
+                                                text = if (profile.textureEnabled) {
+                                                    stringResource(R.string.profile_renderer_locked_desc)
+                                                } else {
+                                                    stringResource(R.string.profile_renderer_desc)
+                                                },
                                                 style = MaterialTheme.typography.bodySmall.copy(
                                                     fontSize = 12.sp,
                                                     lineHeight = 16.sp
@@ -691,23 +708,48 @@ fun AppProfileScreen(
                                         Box(
                                             modifier = Modifier
                                                 .background(
-                                                    color = MaterialTheme.colorScheme.secondaryContainer,
+                                                    color = if (profile.textureEnabled) {
+                                                        MaterialTheme.colorScheme.surfaceContainerLow
+                                                    } else {
+                                                        MaterialTheme.colorScheme.secondaryContainer
+                                                    },
                                                     shape = RoundedCornerShape(8.dp)
                                                 )
                                                 .padding(horizontal = 10.dp, vertical = 4.dp),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            val currentRendererLabel = rendererOptions.find { it.id == profile.renderer }?.label ?: defaultRendererLabel
-                                            Text(
-                                                text = currentRendererLabel,
-                                                style = MaterialTheme.typography.labelSmall.copy(
-                                                    fontSize = 11.sp,
-                                                    fontWeight = FontWeight.SemiBold
-                                                ),
-                                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
+                                            if (profile.textureEnabled) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(
+                                                        imageVector = Icons.Rounded.Lock,
+                                                        contentDescription = null,
+                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        modifier = Modifier.size(12.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(
+                                                        text = stringResource(R.string.profile_renderer_angle_badge),
+                                                        style = MaterialTheme.typography.labelSmall.copy(
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.SemiBold
+                                                        ),
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        maxLines = 1
+                                                    )
+                                                }
+                                            } else {
+                                                val currentRendererLabel = rendererOptions.find { it.id == profile.renderer }?.label ?: defaultRendererLabel
+                                                Text(
+                                                    text = currentRendererLabel,
+                                                    style = MaterialTheme.typography.labelSmall.copy(
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.SemiBold
+                                                    ),
+                                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -939,7 +981,7 @@ fun AppProfileScreen(
         )
     }
 
-    if (showRendererDialog) {
+    if (showRendererDialog && !profile.textureEnabled) {
         AlertDialog(
             onDismissRequest = { showRendererDialog = false },
             title = {

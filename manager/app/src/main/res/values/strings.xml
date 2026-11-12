@@ -25,6 +25,9 @@
     <string name="profile_mode_format">Mode %1$s</string>
     <string name="profile_renderer">Graphics Renderer</string>
     <string name="profile_renderer_desc">Backend render grafik aplikasi</string>
+    <string name="profile_renderer_locked_desc">Dikendalikan otomatis oleh driver ANGLE saat Tekstur Ringan aktif</string>
+    <string name="profile_renderer_angle_badge">Auto (ANGLE)</string>
+    <string name="tweaks_renderer_locked_note">Tekstur Ringan global aktif — pengaturan renderer akan diabaikan dan memakai ANGLE.</string>
     <string name="profile_dnd">DND saat Gaming</string>
     <string name="profile_dnd_desc">Matikan notifikasi otomatis saat aplikasi aktif</string>
     <string name="profile_texture">Tekstur Ringan</string>

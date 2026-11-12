@@ -50,6 +50,7 @@ import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DeveloperBoard
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Storage
@@ -80,6 +81,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -160,6 +162,7 @@ fun TweaksScreen() {
 
     val cached = ConfigRepository.cachedTweaksState
     var isGlobalLiteMode by remember { mutableStateOf(cached?.isGlobalLiteMode ?: false) }
+    var isGlobalTextureEnabled by remember { mutableStateOf(cached?.isGlobalTextureEnabled ?: false) }
 
     var rrModes by remember { mutableStateOf<List<DisplayRrMode>>(cached?.rrModes ?: emptyList()) }
     var currentRrId by remember { mutableStateOf<Int?>(cached?.currentRrId) }
@@ -184,6 +187,7 @@ fun TweaksScreen() {
     LaunchedEffect(Unit) {
         val state = ConfigRepository.getTweaksState()
         isGlobalLiteMode = state.isGlobalLiteMode
+        isGlobalTextureEnabled = state.isGlobalTextureEnabled
         rrModes = state.rrModes
         currentRrId = state.currentRrId
         currentRendererId = state.currentRendererId
@@ -361,7 +365,11 @@ fun TweaksScreen() {
             item {
                 TweaksHero(
                     liveRefreshRate = liveRefreshRate,
-                    rendererLabel = currentRendererShortText,
+                    rendererLabel = if (isGlobalTextureEnabled) {
+                        stringResource(R.string.profile_renderer_angle_badge)
+                    } else {
+                        currentRendererShortText
+                    },
                     isLiteMode = isGlobalLiteMode
                 )
             }
@@ -384,14 +392,41 @@ fun TweaksScreen() {
                         )
                         TweakRowDivider()
                         TweakRow(
-                            icon = Icons.Rounded.DeveloperBoard,
-                            iconContainer = MaterialTheme.colorScheme.primaryContainer,
-                            iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            icon = if (isGlobalTextureEnabled) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
+                            iconContainer = if (isGlobalTextureEnabled) {
+                                MaterialTheme.colorScheme.surfaceContainerHighest
+                            } else {
+                                MaterialTheme.colorScheme.primaryContainer
+                            },
+                            iconTint = if (isGlobalTextureEnabled) {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            },
                             title = stringResource(R.string.tweaks_renderer),
-                            subtitle = stringResource(R.string.tweaks_renderer_desc),
-                            trailingText = currentRendererShortText,
-                            onClick = { showRenderDialog = true }
+                            subtitle = if (isGlobalTextureEnabled) {
+                                stringResource(R.string.profile_renderer_locked_desc)
+                            } else {
+                                stringResource(R.string.tweaks_renderer_desc)
+                            },
+                            trailingText = if (isGlobalTextureEnabled) {
+                                stringResource(R.string.profile_renderer_angle_badge)
+                            } else {
+                                currentRendererShortText
+                            },
+                            onClick = {
+                                if (!isGlobalTextureEnabled) showRenderDialog = true
+                            },
+                            enabled = !isGlobalTextureEnabled
                         )
+                        if (isGlobalTextureEnabled) {
+                            Text(
+                                text = stringResource(R.string.tweaks_renderer_locked_note),
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -705,12 +740,14 @@ private fun TweakRow(
     subtitle: String,
     onClick: () -> Unit,
     trailingText: String? = null,
-    trailingActive: Boolean = false
+    trailingActive: Boolean = false,
+    enabled: Boolean = true
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
+            .alpha(if (enabled) 1f else 0.55f)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -759,12 +796,21 @@ private fun TweakRow(
         } else {
             Spacer(modifier = Modifier.width(6.dp))
         }
-        Icon(
-            imageVector = Icons.Rounded.ChevronRight,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
-            modifier = Modifier.size(18.dp)
-        )
+        if (enabled) {
+            Icon(
+                imageVector = Icons.Rounded.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                modifier = Modifier.size(18.dp)
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Rounded.Lock,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                modifier = Modifier.size(16.dp)
+            )
+        }
     }
 }
 
