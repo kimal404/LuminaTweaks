@@ -12,15 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-const STUNE_DIRS: [&str; 2] = ["/dev/stune/top-app", "/sys/fs/cgroup/stune/top-app"];
-const UCLAMP_DIRS: [&str; 3] = [
+const STUNE_DIRS: &[&str] = &["/dev/stune/top-app", "/sys/fs/cgroup/stune/top-app"];
+const UCLAMP_DIRS: &[&str] = &[
     "/sys/fs/cgroup/top-app",
     "/dev/cpuctl/top-app",
     "/sys/fs/cgroup/cpu/top-app",
 ];
 
+fn node_exists(path: &str) -> bool {
+    std::path::Path::new(path).exists()
+}
+
 fn write_node(path: &str, value: &str) {
-    crate::tweaks::state::write_tracked(path, value, false);
+    if node_exists(path) {
+        crate::tweaks::state::write_tracked(path, value, false);
+    }
+}
+
+fn write_first_available(candidates: &[&str], nodes: &[(&str, &str)]) {
+    for dir in candidates {
+        if !node_exists(dir) {
+            continue;
+        }
+        for (name, value) in nodes {
+            write_node(&format!("{}/{}", dir, name), value);
+        }
+    }
 }
 
 fn tune_top_app(
@@ -30,16 +47,22 @@ fn tune_top_app(
     uclamp_min: &str,
     uclamp_max: &str,
 ) {
-    for dir in STUNE_DIRS {
-        write_node(&format!("{}/schedtune.boost", dir), boost);
-        write_node(&format!("{}/schedtune.prefer_idle", dir), prefer_idle);
-        write_node(&format!("{}/schedtune.sched_boost_enabled", dir), boost_enabled);
-    }
+    write_first_available(
+        STUNE_DIRS,
+        &[
+            ("schedtune.boost", boost),
+            ("schedtune.prefer_idle", prefer_idle),
+            ("schedtune.sched_boost_enabled", boost_enabled),
+        ],
+    );
 
-    for dir in UCLAMP_DIRS {
-        write_node(&format!("{}/cpu.uclamp.min", dir), uclamp_min);
-        write_node(&format!("{}/cpu.uclamp.max", dir), uclamp_max);
-    }
+    write_first_available(
+        UCLAMP_DIRS,
+        &[
+            ("cpu.uclamp.min", uclamp_min),
+            ("cpu.uclamp.max", uclamp_max),
+        ],
+    );
 }
 
 pub fn apply_performance() {

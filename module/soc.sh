@@ -38,17 +38,17 @@ detect_lumina_soc() {
         esac
     done
 
-    if [ -e /sys/class/kgsl ]; then
+    if [ -e /sys/class/kgsl ] || [ -e /sys/module/adreno_idler ]; then
         echo "snapdragon"
         return 0
     fi
 
-    if [ -e /proc/gpufreq ] || [ -e /sys/kernel/ged ]; then
+    if [ -e /proc/gpufreq ] || [ -e /sys/kernel/ged ] || [ -e /sys/module/ged ]; then
         echo "mediatek"
         return 0
     fi
 
-    if ls /sys/class/devfreq/sprd-* >/dev/null 2>&1; then
+    if ls /sys/class/devfreq/sprd-* >/dev/null 2>&1 || [ -e /sys/module/sprd_gpu ]; then
         echo "unisoc"
         return 0
     fi

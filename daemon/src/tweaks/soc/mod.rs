@@ -100,6 +100,27 @@ pub fn apply(profile: SocProfile) -> usize {
     applied
 }
 
+pub fn optimize_storage(profile: SocProfile) -> usize {
+    let applied = match vendor() {
+        Vendor::Mediatek => mediatek::optimize_storage(profile),
+        Vendor::Snapdragon => snapdragon::optimize_storage(profile),
+        Vendor::Unisoc => unisoc::optimize_storage(profile),
+        Vendor::Generic => crate::tweaks::devfreq::apply(
+            &["ufs", "mmc"],
+            match profile {
+                SocProfile::Performance => "performance",
+                SocProfile::Lite => "simple_ondemand",
+                SocProfile::Eco => "powersave",
+            },
+            profile == SocProfile::Performance,
+        ),
+    };
+    if applied > 0 {
+        log!("[SOC] Storage tuned on {} devfreq node(s)", applied);
+    }
+    applied
+}
+
 pub(crate) fn apply_devfreq(profile: SocProfile, needles: &[&str]) -> usize {
     match profile {
         SocProfile::Performance => crate::tweaks::devfreq::apply(needles, "performance", true),
@@ -164,13 +185,13 @@ fn live_vendor() -> Vendor {
         }
     }
 
-    if Path::new("/sys/class/kgsl").exists() {
+    if has_any_path(&["/sys/class/kgsl", "/sys/module/adreno_idler"]) {
         return Vendor::Snapdragon;
     }
-    if Path::new("/proc/gpufreq").exists() || Path::new("/sys/kernel/ged").exists() {
+    if has_any_path(&["/proc/gpufreq", "/sys/kernel/ged", "/sys/module/ged"]) {
         return Vendor::Mediatek;
     }
-    if has_sprd_devfreq() {
+    if has_sprd_devfreq() || Path::new("/sys/module/sprd_gpu").exists() {
         return Vendor::Unisoc;
     }
 
@@ -181,6 +202,10 @@ fn live_vendor() -> Vendor {
     }
 
     Vendor::Generic
+}
+
+fn has_any_path(paths: &[&str]) -> bool {
+    paths.iter().any(|path| Path::new(path).exists())
 }
 
 fn has_sprd_devfreq() -> bool {

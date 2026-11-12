@@ -536,9 +536,15 @@ fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool, max_cap_ratio
     }
 
     let ra_val = if min_clamp { "1024" } else { "128" };
-    for block in ["sda", "sdb", "sdc", "mmcblk0", "dm-0"] {
-        let ra_path = format!("/sys/block/{}/queue/read_ahead_kb", block);
-        crate::tweaks::state::write_tracked(&ra_path, ra_val, min_clamp);
+    if let Ok(entries) = fs::read_dir("/sys/block") {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with("loop") || name.starts_with("ram") {
+                continue;
+            }
+            let ra_path = format!("/sys/block/{}/queue/read_ahead_kb", name);
+            crate::tweaks::state::write_tracked(&ra_path, ra_val, min_clamp);
+        }
     }
     crate::tweaks::state::write_tracked(
         "/proc/sys/vm/vfs_cache_pressure",
@@ -549,15 +555,19 @@ fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool, max_cap_ratio
 
 pub fn performance_profile() {
     crate::tweaks::sched::apply_performance();
+    crate::tweaks::thermal::apply("performance");
     apply_universal_cpu("performance", true, true, None);
     soc::apply(SocProfile::Performance);
+    soc::optimize_storage(SocProfile::Performance);
 }
 
 pub fn performance_lite_profile() {
     crate::tweaks::sched::apply_balance();
+    crate::tweaks::thermal::apply("lite");
     apply_universal_cpu("schedutil", true, false, Some(72));
     tune_schedutil_rate_limits(500, 20000);
     soc::apply(SocProfile::Lite);
+    soc::optimize_storage(SocProfile::Lite);
 }
 
 pub fn balance_profile() {
@@ -570,6 +580,7 @@ pub fn restore_balance() {
 
 pub fn eco_profile() {
     crate::tweaks::sched::apply_eco();
+    crate::tweaks::thermal::apply("eco");
     apply_universal_cpu("powersave", false, false, None);
     tune_schedutil_rate_limits(4000, 8000);
     soc::apply(SocProfile::Eco);
