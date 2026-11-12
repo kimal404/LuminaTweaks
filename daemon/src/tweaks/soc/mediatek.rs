@@ -16,6 +16,16 @@ use super::{generic, SocProfile};
 use crate::tweaks::state;
 
 const GED_PARAMS_PATH: &str = "/sys/module/ged/parameters";
+const NEEDLES: &[&str] = &[
+    "gpu",
+    "mali",
+    "kgsl",
+    "ddr",
+    "bus",
+    "memlat",
+    "mtk-dvfsrc",
+    "dvfsrc",
+];
 
 fn boost_values(profile: SocProfile) -> (&'static str, &'static str, &'static str) {
     match profile {
@@ -25,15 +35,11 @@ fn boost_values(profile: SocProfile) -> (&'static str, &'static str, &'static st
 }
 
 fn write_param(name: &str, value: &str) {
-    state::write_tracked(
-        &format!("{}/{}", GED_PARAMS_PATH, name),
-        value,
-        false,
-    );
+    state::write_tracked(&format!("{}/{}", GED_PARAMS_PATH, name), value, false);
 }
 
 pub fn apply(profile: SocProfile) -> usize {
-    let applied = generic::apply(profile);
+    let applied = generic::apply_with(profile, NEEDLES);
     let (boost_gpu, ged_boost, smart_boost) = boost_values(profile);
     write_param("boost_gpu_enable", boost_gpu);
     write_param("ged_boost_enable", ged_boost);

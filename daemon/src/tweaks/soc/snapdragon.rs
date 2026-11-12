@@ -17,6 +17,9 @@ use crate::tweaks::state;
 
 const KGSL_PATH: &str = "/sys/class/kgsl/kgsl-3d0";
 const ADRENO_IDLER_PATH: &str = "/sys/module/adreno_idler/parameters/adreno_idler_active";
+const NEEDLES: &[&str] = &[
+    "gpu", "mali", "kgsl", "ddr", "bus", "memlat", "qcom", "cpubw",
+];
 
 fn force_values(profile: SocProfile) -> (&'static str, &'static str) {
     match profile {
@@ -30,9 +33,14 @@ fn write_kgsl(name: &str, value: &str) {
 }
 
 pub fn apply(profile: SocProfile) -> usize {
-    let applied = generic::apply(profile);
+    let applied = generic::apply_with(profile, NEEDLES);
     let (force, idler) = force_values(profile);
-    for node in ["force_clk_on", "force_bus_on", "force_rail_on", "force_no_nap"] {
+    for node in [
+        "force_clk_on",
+        "force_bus_on",
+        "force_rail_on",
+        "force_no_nap",
+    ] {
         write_kgsl(node, force);
     }
     state::write_tracked(ADRENO_IDLER_PATH, idler, false);
