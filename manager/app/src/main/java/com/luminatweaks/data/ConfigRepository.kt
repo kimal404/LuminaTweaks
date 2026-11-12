@@ -167,7 +167,9 @@ object ConfigRepository {
             "echo '$BATCH_SEP'",
             "ren=\$(cat $CONFIG_DIR/current_renderer.txt 2>/dev/null); [ -z \"\$ren\" ] && ren=\$(getprop persist.lumina.renderer); [ -z \"\$ren\" ] && ren=\$(getprop debug.hwui.renderer); [ -z \"\$ren\" ] && ren=\"default\"; echo \"\$ren\"",
             "echo '$BATCH_SEP'",
-            "cat $APP_CONFIG_PATH 2>/dev/null"
+            "cat $APP_CONFIG_PATH 2>/dev/null",
+            "echo '$BATCH_SEP'",
+            "dumpsys activity activities 2>/dev/null | grep -m1 -E 'topResumedActivity|mResumedActivity' | sed -n 's/.*{[^ ]* [^ ]* \\([^ \\/}]*\\)[\\/}].*/\\1/p'"
         ).joinToString(" ; ")
 
         val output = runSuCmd(batchScript, 5)
@@ -204,11 +206,15 @@ object ConfigRepository {
 
         val currentRr = if (parts.size > 2) parts[2].toIntOrNull() else null
         val currentRenderer = if (parts.size > 3 && parts[3].isNotBlank()) parts[3] else "default"
-        val isTextureGlobal = if (parts.size > 4 && parts[4].isNotBlank()) {
+
+        val anglePkgs = mutableSetOf<String>()
+        if (parts.size > 4 && parts[4].isNotBlank()) {
             try {
                 val arr = JSONArray(parts[4])
-                (0 until arr.length()).any { i ->
-                    val obj = arr.optJSONObject(i) ?: return@any false
+                for (i in 0 until arr.length()) {
+                    val obj = arr.optJSONObject(i) ?: continue
+                    val pkg = obj.optString("pkg").trim()
+                    if (pkg.isEmpty()) continue
                     val driver = obj.optString("texture_driver", "").trim().lowercase()
                     val legacyEnabled = obj.optBoolean("texture_enabled", false)
                     val lod = if (obj.has("texture_lod")) {
@@ -216,12 +222,19 @@ object ConfigRepository {
                     } else {
                         obj.optInt("texture_detail", 0)
                     }
-                    driver == "angle" || legacyEnabled || lod > 0
+                    if (driver == "angle" || legacyEnabled || lod > 0) {
+                        anglePkgs.add(pkg)
+                    }
                 }
             } catch (_: Exception) {
-                false
+                anglePkgs.clear()
             }
-        } else false
+        }
+
+        val foregroundPkg = if (parts.size > 5) parts[5].trim() else ""
+        val isTextureGlobal = foregroundPkg.isNotEmpty() && anglePkgs.any {
+            it.equals(foregroundPkg, ignoreCase = true)
+        }
 
         val newState = TweaksUiState(
             isGlobalLiteMode = isLite,
