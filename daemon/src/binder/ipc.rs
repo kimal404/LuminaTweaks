@@ -33,7 +33,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use crate::binder::producer::{monotonic_ms, Event, Focus, Shared, PROTO_VERSION};
-use crate::binder::protocol;
+use crate::binder::protocol as binder_protocol;
 
 const LINE_LIMIT: usize = 512;
 const WRITE_TIMEOUT: Duration = Duration::from_millis(5);

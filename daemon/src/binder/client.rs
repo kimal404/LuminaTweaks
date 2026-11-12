@@ -17,7 +17,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::time::{Duration, Instant};
 
-use crate::binder::protocol;
+use crate::binder::protocol as binder_protocol;
 
 const CONNECT_RETRY: Duration = Duration::from_secs(5);
 const INITIAL_RETRY: Duration = Duration::from_secs(2);
