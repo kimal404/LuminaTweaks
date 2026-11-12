@@ -167,7 +167,7 @@ object ConfigRepository {
             "echo '$BATCH_SEP'",
             "ren=\$(cat $CONFIG_DIR/current_renderer.txt 2>/dev/null); [ -z \"\$ren\" ] && ren=\$(getprop persist.lumina.renderer); [ -z \"\$ren\" ] && ren=\$(getprop debug.hwui.renderer); [ -z \"\$ren\" ] && ren=\"default\"; echo \"\$ren\"",
             "echo '$BATCH_SEP'",
-            "texglob=\$(cat $CONFIG_DIR/texture_global.txt 2>/dev/null); [ -z \"\$texglob\" ] && texglob=\$(getprop persist.lumina.texture_global); if [ -n \"\$texglob\" ]; then tex=\"\$texglob\"; else apkgs=\$(settings get global angle_gl_driver_selection_pkgs 2>/dev/null); [ -z \"\$apkgs\" ] || [ \"\$apkgs\" = \"null\" ] && tex=\"0\" || tex=\"1\"; fi; echo \"\$tex\""
+            "cat $APP_CONFIG_PATH 2>/dev/null"
         ).joinToString(" ; ")
 
         val output = runSuCmd(batchScript, 5)
@@ -204,10 +204,22 @@ object ConfigRepository {
 
         val currentRr = if (parts.size > 2) parts[2].toIntOrNull() else null
         val currentRenderer = if (parts.size > 3 && parts[3].isNotBlank()) parts[3] else "default"
-        val isTextureGlobal = if (parts.size > 4) {
-            when (parts[4].trim().lowercase()) {
-                "1", "true", "on" -> true
-                else -> false
+        val isTextureGlobal = if (parts.size > 4 && parts[4].isNotBlank()) {
+            try {
+                val arr = JSONArray(parts[4])
+                (0 until arr.length()).any { i ->
+                    val obj = arr.optJSONObject(i) ?: return@any false
+                    val driver = obj.optString("texture_driver", "").trim().lowercase()
+                    val legacyEnabled = obj.optBoolean("texture_enabled", false)
+                    val lod = if (obj.has("texture_lod")) {
+                        obj.optInt("texture_lod", obj.optInt("texture_detail", 0))
+                    } else {
+                        obj.optInt("texture_detail", 0)
+                    }
+                    driver == "angle" || legacyEnabled || lod > 0
+                }
+            } catch (_: Exception) {
+                false
             }
         } else false
 
