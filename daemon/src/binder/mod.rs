@@ -32,6 +32,9 @@
 mod ffi;
 pub mod producer;
 mod resolver;
+pub mod client;
+pub mod ipc;
+pub mod protocol;
 
 use std::ffi::CString;
 use std::os::raw::c_void;
@@ -40,7 +43,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
-use crate::detector::sanitize_pkg_name;
+use crate::core::detector::sanitize_pkg_name;
 
 use ffi::{AIBinder, AParcel, AStatus};
 use producer::{Death, Event, Focus, Shared};

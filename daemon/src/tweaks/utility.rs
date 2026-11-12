@@ -72,7 +72,7 @@ impl UtilityController {
     }
 
     fn read_screen_on() -> bool {
-        let state = crate::detector::get_system_prop("debug.tracing.screen_state");
+        let state = crate::core::detector::get_system_prop("debug.tracing.screen_state");
         if !state.is_empty() {
             return state == "2";
         }

@@ -18,9 +18,9 @@ use std::fs::OpenOptions;
 use std::os::fd::AsRawFd;
 use std::sync::Arc;
 
+use luminad_core::binder::ipc as binder_ipc;
 use luminad_core::binder::producer::Shared;
 use luminad_core::binder::BinderMonitor;
-use luminad_core::binder_ipc;
 
 const LOCK_PATH: &str = "/data/local/tmp/lumina-binder.lock";
 
@@ -55,7 +55,7 @@ fn main() {
 
     let shared = Arc::new(Shared::new());
 
-    let screen = luminad_core::detector::get_system_prop("debug.tracing.screen_state");
+    let screen = luminad_core::core::detector::get_system_prop("debug.tracing.screen_state");
     if !screen.is_empty() {
         shared.set_initial_screen(screen == "2");
     }

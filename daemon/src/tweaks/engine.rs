@@ -360,14 +360,14 @@ pub fn apply_io_scheduler(scheduler: &str) {
 }
 
 pub fn sync_global_tweaks() {
-    let (zram_size, zram_algo, swappiness) = crate::detector::get_global_zram_config();
+    let (zram_size, zram_algo, swappiness) = crate::core::detector::get_global_zram_config();
     if let (Some(size), Some(algo)) = (zram_size, zram_algo) {
         apply_zram(size, &algo);
     }
     if let Some(swap) = swappiness {
         apply_swappiness(swap);
     }
-    if let Some(sched) = crate::detector::get_global_io_scheduler() {
+    if let Some(sched) = crate::core::detector::get_global_io_scheduler() {
         apply_io_scheduler(&sched);
     }
 }
@@ -496,9 +496,9 @@ fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool, max_cap_ratio
 }
 
 pub fn performance_profile() {
-    crate::sched::apply_performance();
+    crate::tweaks::sched::apply_performance();
     apply_universal_cpu("performance", true, true, None);
-    crate::devfreq::apply(
+    crate::tweaks::devfreq::apply(
         &["gpu", "mali", "kgsl", "ddr", "bus", "memlat"],
         "performance",
         true,
@@ -506,10 +506,10 @@ pub fn performance_profile() {
 }
 
 pub fn performance_lite_profile() {
-    crate::sched::apply_balance();
+    crate::tweaks::sched::apply_balance();
     apply_universal_cpu("schedutil", true, false, Some(72));
     tune_schedutil_rate_limits(500, 20000);
-    crate::devfreq::apply(
+    crate::tweaks::devfreq::apply(
         &["gpu", "mali", "kgsl", "ddr", "bus", "memlat"],
         "simple_ondemand",
         false,
@@ -517,10 +517,10 @@ pub fn performance_lite_profile() {
 }
 
 pub fn balance_profile() {
-    crate::sched::apply_balance();
+    crate::tweaks::sched::apply_balance();
     apply_universal_cpu("schedutil", false, false, None);
     tune_schedutil_rate_limits(2000, 4000);
-    crate::devfreq::apply(
+    crate::tweaks::devfreq::apply(
         &["gpu", "mali", "kgsl", "ddr", "bus", "memlat"],
         "simple_ondemand",
         false,
@@ -532,10 +532,10 @@ pub fn restore_balance() {
 }
 
 pub fn eco_profile() {
-    crate::sched::apply_eco();
+    crate::tweaks::sched::apply_eco();
     apply_universal_cpu("powersave", false, false, None);
     tune_schedutil_rate_limits(4000, 8000);
-    crate::devfreq::apply(
+    crate::tweaks::devfreq::apply(
         &["gpu", "mali", "kgsl", "ddr", "bus", "memlat"],
         "powersave",
         false,

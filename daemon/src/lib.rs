@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
+#![allow(dead_code)]
+
 #[macro_use]
-pub mod logger;
+pub mod core;
 pub mod binder;
-pub mod binder_ipc;
-pub mod binder_protocol;
-pub mod detector;

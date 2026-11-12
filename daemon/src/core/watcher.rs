@@ -18,7 +18,7 @@ use std::ffi::CString;
 use std::os::raw::{c_char, c_int, c_void};
 use std::path::Path;
 
-use crate::detector::CONFIG_DIR;
+use crate::core::detector::CONFIG_DIR;
 
 const IN_NONBLOCK: c_int = 0o4000;
 const IN_CLOEXEC: c_int = 0o2000000;

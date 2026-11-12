@@ -23,7 +23,7 @@ const UCLAMP_DIRS: [&str; 3] = [
 
 fn write_node(path: &str, value: &str) {
     if Path::new(path).exists() {
-        crate::engine::write_sysfs(path, value, false);
+        crate::tweaks::engine::write_sysfs(path, value, false);
     }
 }
 

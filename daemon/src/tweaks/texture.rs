@@ -97,7 +97,7 @@ fn save_angle_backup() {
     let backup = serde_json::json!({
         "pkgs": get_global_setting("angle_gl_driver_selection_pkgs"),
         "values": get_global_setting("angle_gl_driver_selection_values"),
-        "features": crate::detector::get_system_prop("debug.angle.feature_overrides_enabled"),
+        "features": crate::core::detector::get_system_prop("debug.angle.feature_overrides_enabled"),
     });
     let _ = fs::write(ANGLE_BACKUP_PATH, backup.to_string());
 }
@@ -295,7 +295,7 @@ impl TextureController {
     }
 
     pub fn is_angle_active_for(target_pkg: &str) -> bool {
-        let Some(json) = crate::detector::read_app_json_cached() else {
+        let Some(json) = crate::core::detector::read_app_json_cached() else {
             return false;
         };
 
@@ -321,7 +321,7 @@ impl TextureController {
     }
 
     pub fn sync_config(focused_pkg: Option<&str>) {
-        let json: Value = match crate::detector::read_app_json_cached() {
+        let json: Value = match crate::core::detector::read_app_json_cached() {
             Some(json) => json,
             None => {
                 Self::restore();

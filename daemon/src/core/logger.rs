@@ -135,6 +135,6 @@ pub fn write_log(msg: &str) {
 #[macro_export]
 macro_rules! log {
     ($($arg:tt)*) => {
-        $crate::logger::write_log(&format!($($arg)*))
+        $crate::core::logger::write_log(&format!($($arg)*))
     };
 }

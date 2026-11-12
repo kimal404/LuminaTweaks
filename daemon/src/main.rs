@@ -12,25 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod texture;
-use texture::TextureController;
 #[macro_use]
-mod logger;
-mod binder_client;
-mod binder_protocol;
-mod detector;
-mod devfreq;
-mod display;
-mod engine;
-mod fps;
-mod ipc;
-mod perf;
-mod renderer;
-mod sched;
-mod utility;
-mod watcher;
+mod core;
+mod binder;
+mod tweaks;
 
-use ipc::{IpcServer, SharedState};
+use binder::client as binder_client;
+use core::detector::{
+    get_app_config, get_focused_package, is_app_enabled, is_auto_dnd_enabled, is_lite_mode_active,
+    is_low_power_active, is_master_enabled, is_process_alive,
+};
+use core::ipc::{IpcServer, SharedState};
+use core::{detector, perf, watcher};
 use std::collections::hash_map::DefaultHasher;
 use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
@@ -40,12 +33,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
-use utility::UtilityController;
-
-use detector::{
-    get_app_config, get_focused_package, is_app_enabled, is_auto_dnd_enabled, is_lite_mode_active,
-    is_low_power_active, is_master_enabled, is_process_alive,
-};
+use tweaks::texture::TextureController;
+use tweaks::utility::UtilityController;
+use tweaks::{display, engine, fps, renderer, sched};
 
 static SHUTDOWN: AtomicBool = AtomicBool::new(false);
 
@@ -294,7 +284,8 @@ impl EngineRuntime {
         let global_renderer = renderer::get_saved_renderer();
         let desired_renderer = if let Some(ref cfg) = target_cfg {
             if angle_active {
-                if cfg.renderer != "default" && !cfg.renderer.is_empty()
+                if cfg.renderer != "default"
+                    && !cfg.renderer.is_empty()
                     && self.skipped_renderer_notice_pkg.as_deref() != target_pkg
                 {
                     log!(
@@ -428,7 +419,7 @@ fn main() {
             utility_ctrl.restore();
             TextureController::restore();
             fps_monitor.stop();
-            ipc::cleanup_socket();
+            core::ipc::cleanup_socket();
             let _ = std::fs::remove_file(PID_FILE_PATH);
             break;
         }
