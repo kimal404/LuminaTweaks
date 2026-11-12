@@ -18,6 +18,19 @@ import android.content.Context
 import android.os.Build
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -43,8 +56,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.Check
@@ -60,10 +73,14 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialExpressiveTheme
+import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Surface
@@ -71,6 +88,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -85,6 +103,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -329,190 +348,189 @@ fun TweaksScreen() {
 
     val isFloating = LocalFloatingNavBar.current
     val bottomPadding = if (isFloating) {
-        110.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        100.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     } else {
-        24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        16.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = stringResource(R.string.tweaks_title),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                },
-                windowInsets = WindowInsets.statusBars,
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
-            )
-        }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding() + 8.dp,
-                bottom = bottomPadding,
-                start = 16.dp,
-                end = 16.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
-            item {
-                TweaksHero(
-                    liveRefreshRate = liveRefreshRate,
-                    rendererLabel = if (isGlobalTextureEnabled) {
-                        stringResource(R.string.profile_renderer_angle_badge)
-                    } else {
-                        currentRendererShortText
+    MaterialExpressiveTheme(
+        colorScheme = MaterialTheme.colorScheme,
+        shapes = MaterialTheme.shapes,
+        typography = MaterialTheme.typography,
+        motionScheme = MotionScheme.expressive()
+    ) {
+        Scaffold(
+            contentWindowInsets = WindowInsets(0.dp),
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = stringResource(R.string.tweaks_title),
+                            style = MaterialTheme.typography.titleLargeEmphasized
+                        )
                     },
-                    isLiteMode = isGlobalLiteMode
+                    windowInsets = WindowInsets.statusBars,
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background
+                    )
                 )
             }
+        ) { innerPadding ->
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    top = innerPadding.calculateTopPadding() + 8.dp,
+                    bottom = bottomPadding,
+                    start = 16.dp,
+                    end = 16.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                item {
+                    TweaksHero(
+                        liveRefreshRate = liveRefreshRate,
+                        rendererLabel = if (isGlobalTextureEnabled) {
+                            stringResource(R.string.profile_renderer_angle_badge)
+                        } else {
+                            currentRendererShortText
+                        },
+                        isLiteMode = isGlobalLiteMode
+                    )
+                }
 
-            item {
-                TweakSection(
-                    title = stringResource(R.string.tweaks_section_display_graphics),
-                    icon = Icons.Rounded.Speed,
-                    accent = MaterialTheme.colorScheme.primary
-                ) {
-                    TweakGroup {
-                        TweakRow(
-                            icon = Icons.Rounded.Speed,
-                            iconContainer = MaterialTheme.colorScheme.primaryContainer,
-                            iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            title = stringResource(R.string.tweaks_refresh_rate),
-                            subtitle = stringResource(R.string.tweaks_refresh_rate_desc),
-                            trailingText = currentRrText,
-                            onClick = { showRefreshRateDialog = true }
-                        )
-                        TweakRowDivider()
-                        TweakRow(
-                            icon = if (isGlobalTextureEnabled) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
-                            iconContainer = if (isGlobalTextureEnabled) {
-                                MaterialTheme.colorScheme.surfaceContainerHighest
-                            } else {
-                                MaterialTheme.colorScheme.primaryContainer
-                            },
-                            iconTint = if (isGlobalTextureEnabled) {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            } else {
-                                MaterialTheme.colorScheme.onPrimaryContainer
-                            },
-                            title = stringResource(R.string.tweaks_renderer),
-                            subtitle = if (isGlobalTextureEnabled) {
-                                stringResource(R.string.profile_renderer_locked_desc)
-                            } else {
-                                stringResource(R.string.tweaks_renderer_desc)
-                            },
-                            trailingText = if (isGlobalTextureEnabled) {
-                                stringResource(R.string.profile_renderer_angle_badge)
-                            } else {
-                                currentRendererShortText
-                            },
-                            onClick = {
-                                if (!isGlobalTextureEnabled) showRenderDialog = true
-                            },
-                            enabled = !isGlobalTextureEnabled
-                        )
-                        if (isGlobalTextureEnabled) {
-                            Text(
-                                text = stringResource(R.string.tweaks_renderer_locked_note),
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                item {
+                    TweakSection(
+                        title = stringResource(R.string.tweaks_section_display_graphics),
+                        icon = Icons.Rounded.Speed,
+                        accent = MaterialTheme.colorScheme.primary
+                    ) {
+                        TweakGroup {
+                            TweakRow(
+                                icon = Icons.Rounded.Speed,
+                                iconContainer = MaterialTheme.colorScheme.primaryContainer,
+                                iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                title = stringResource(R.string.tweaks_refresh_rate),
+                                subtitle = stringResource(R.string.tweaks_refresh_rate_desc),
+                                trailingText = currentRrText,
+                                onClick = { showRefreshRateDialog = true }
+                            )
+                            TweakRowDivider()
+                            TweakRow(
+                                icon = if (isGlobalTextureEnabled) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
+                                iconContainer = if (isGlobalTextureEnabled) {
+                                    MaterialTheme.colorScheme.surfaceContainerHighest
+                                } else {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                },
+                                iconTint = if (isGlobalTextureEnabled) {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                } else {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                },
+                                title = stringResource(R.string.tweaks_renderer),
+                                subtitle = if (isGlobalTextureEnabled) {
+                                    stringResource(R.string.profile_renderer_locked_desc)
+                                } else {
+                                    stringResource(R.string.tweaks_renderer_desc)
+                                },
+                                trailingText = if (isGlobalTextureEnabled) {
+                                    stringResource(R.string.profile_renderer_angle_badge)
+                                } else {
+                                    currentRendererShortText
+                                },
+                                onClick = {
+                                    if (!isGlobalTextureEnabled) showRenderDialog = true
+                                },
+                                enabled = !isGlobalTextureEnabled
+                            )
+                            AnimatedRendererLockNote(visible = isGlobalTextureEnabled)
+                        }
+                    }
+                }
+
+                item {
+                    TweakSection(
+                        title = stringResource(R.string.tweaks_section_performance),
+                        icon = Icons.Rounded.BatterySaver,
+                        accent = MaterialTheme.colorScheme.tertiary
+                    ) {
+                        TweakGroup {
+                            TweakRow(
+                                icon = Icons.Rounded.BatterySaver,
+                                iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
+                                iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                title = stringResource(R.string.tweaks_lite_mode),
+                                subtitle = if (isGlobalLiteMode) {
+                                    stringResource(R.string.tweaks_lite_on_desc)
+                                } else {
+                                    stringResource(R.string.tweaks_lite_off_desc)
+                                },
+                                trailingText = if (isGlobalLiteMode) {
+                                    stringResource(R.string.status_on)
+                                } else {
+                                    stringResource(R.string.status_off)
+                                },
+                                trailingActive = isGlobalLiteMode,
+                                onClick = { inLiteModeSubpage = true }
                             )
                         }
                     }
                 }
-            }
 
-            item {
-                TweakSection(
-                    title = stringResource(R.string.tweaks_section_performance),
-                    icon = Icons.Rounded.BatterySaver,
-                    accent = MaterialTheme.colorScheme.tertiary
-                ) {
-                    TweakGroup {
-                        TweakRow(
-                            icon = Icons.Rounded.BatterySaver,
-                            iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
-                            iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
-                            title = stringResource(R.string.tweaks_lite_mode),
-                            subtitle = if (isGlobalLiteMode) {
-                                stringResource(R.string.tweaks_lite_on_desc)
-                            } else {
-                                stringResource(R.string.tweaks_lite_off_desc)
-                            },
-                            trailingText = if (isGlobalLiteMode) {
-                                stringResource(R.string.status_on)
-                            } else {
-                                stringResource(R.string.status_off)
-                            },
-                            trailingActive = isGlobalLiteMode,
-                            onClick = { inLiteModeSubpage = true }
-                        )
+                item {
+                    TweakSection(
+                        title = stringResource(R.string.section_additional_tweaks),
+                        icon = Icons.Rounded.Tune,
+                        accent = MaterialTheme.colorScheme.secondary
+                    ) {
+                        TweakGroup {
+                            TweakRow(
+                                icon = Icons.Rounded.Memory,
+                                iconContainer = MaterialTheme.colorScheme.secondaryContainer,
+                                iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                title = stringResource(R.string.tweak_memory_zram),
+                                subtitle = stringResource(R.string.tweak_memory_zram_desc),
+                                onClick = { inMemoryZramSubpage = true }
+                            )
+                            TweakRowDivider()
+                            TweakRow(
+                                icon = Icons.Rounded.Storage,
+                                iconContainer = MaterialTheme.colorScheme.secondaryContainer,
+                                iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                title = stringResource(R.string.tweak_io_scheduler),
+                                subtitle = stringResource(R.string.tweak_io_scheduler_desc),
+                                trailingText = currentIoScheduler,
+                                onClick = { showIoSchedulerDialog = true }
+                            )
+                        }
                     }
                 }
-            }
 
-            item {
-                TweakSection(
-                    title = stringResource(R.string.section_additional_tweaks),
-                    icon = Icons.Rounded.Tune,
-                    accent = MaterialTheme.colorScheme.secondary
-                ) {
-                    TweakGroup {
-                        TweakRow(
-                            icon = Icons.Rounded.Memory,
-                            iconContainer = MaterialTheme.colorScheme.secondaryContainer,
-                            iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
-                            title = stringResource(R.string.tweak_memory_zram),
-                            subtitle = stringResource(R.string.tweak_memory_zram_desc),
-                            onClick = { inMemoryZramSubpage = true }
-                        )
-                        TweakRowDivider()
-                        TweakRow(
-                            icon = Icons.Rounded.Storage,
-                            iconContainer = MaterialTheme.colorScheme.secondaryContainer,
-                            iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
-                            title = stringResource(R.string.tweak_io_scheduler),
-                            subtitle = stringResource(R.string.tweak_io_scheduler_desc),
-                            trailingText = currentIoScheduler,
-                            onClick = { showIoSchedulerDialog = true }
-                        )
-                    }
-                }
-            }
-
-            item {
-                TweakSection(
-                    title = stringResource(R.string.section_utility_diagnostics),
-                    icon = Icons.Rounded.Widgets,
-                    accent = MaterialTheme.colorScheme.primary
-                ) {
-                    TweakGroup {
-                        TweakRow(
-                            icon = Icons.Rounded.DeveloperBoard,
-                            iconContainer = MaterialTheme.colorScheme.primaryContainer,
-                            iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            title = stringResource(R.string.hardware_diag_title),
-                            subtitle = stringResource(R.string.hardware_diag_desc),
-                            onClick = { inHardwareDiagnosticSubpage = true }
-                        )
-                        TweakRowDivider()
-                        TweakRow(
-                            icon = Icons.Rounded.Widgets,
-                            iconContainer = MaterialTheme.colorScheme.primaryContainer,
-                            iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            title = stringResource(R.string.utility_screen_title),
-                            subtitle = stringResource(R.string.utility_screen_desc),
-                            onClick = { inUtilitySubpage = true }
-                        )
+                item {
+                    TweakSection(
+                        title = stringResource(R.string.section_utility_diagnostics),
+                        icon = Icons.Rounded.Widgets,
+                        accent = MaterialTheme.colorScheme.primary
+                    ) {
+                        TweakGroup {
+                            TweakRow(
+                                icon = Icons.Rounded.DeveloperBoard,
+                                iconContainer = MaterialTheme.colorScheme.primaryContainer,
+                                iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                title = stringResource(R.string.hardware_diag_title),
+                                subtitle = stringResource(R.string.hardware_diag_desc),
+                                onClick = { inHardwareDiagnosticSubpage = true }
+                            )
+                            TweakRowDivider()
+                            TweakRow(
+                                icon = Icons.Rounded.Widgets,
+                                iconContainer = MaterialTheme.colorScheme.primaryContainer,
+                                iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                title = stringResource(R.string.utility_screen_title),
+                                subtitle = stringResource(R.string.utility_screen_desc),
+                                onClick = { inUtilitySubpage = true }
+                            )
+                        }
                     }
                 }
             }
@@ -520,6 +538,7 @@ fun TweaksScreen() {
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun TweaksHero(
     liveRefreshRate: Int,
@@ -527,6 +546,21 @@ private fun TweaksHero(
     isLiteMode: Boolean
 ) {
     val scheme = MaterialTheme.colorScheme
+    val motion = MaterialTheme.motionScheme
+
+    val spin = rememberInfiniteTransition(label = "liveSpin")
+    val liveAngle by spin.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(9000, easing = LinearEasing)),
+        label = "liveAngle"
+    )
+
+    val liteStatColor by animateColorAsState(
+        targetValue = if (isLiteMode) scheme.primary else scheme.onSurface,
+        animationSpec = motion.defaultEffectsSpec(),
+        label = "liteStatColor"
+    )
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -557,7 +591,7 @@ private fun TweaksHero(
                     .align(Alignment.BottomStart)
                     .offset(x = (-40).dp, y = 36.dp)
                     .size(120.dp)
-                    .background(scheme.tertiary.copy(alpha = 0.08f), CircleShape)
+                    .background(scheme.tertiary.copy(alpha = 0.08f), MaterialShapes.SoftBurst.toShape())
             )
 
             Column(modifier = Modifier.padding(20.dp)) {
@@ -580,8 +614,7 @@ private fun TweaksHero(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = stringResource(R.string.tweaks_hero_title),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleLargeEmphasized,
                             color = scheme.onSurface
                         )
                         Spacer(modifier = Modifier.height(2.dp))
@@ -602,6 +635,7 @@ private fun TweaksHero(
                         label = stringResource(R.string.tweaks_quick_refresh),
                         value = "$liveRefreshRate Hz",
                         live = true,
+                        liveAngle = liveAngle,
                         modifier = Modifier.weight(1f)
                     )
                     QuickStatDivider()
@@ -618,7 +652,7 @@ private fun TweaksHero(
                         } else {
                             stringResource(R.string.status_off)
                         },
-                        valueColor = if (isLiteMode) scheme.primary else scheme.onSurface,
+                        valueColor = liteStatColor,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -627,12 +661,14 @@ private fun TweaksHero(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun QuickStat(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
     live: Boolean = false,
+    liveAngle: Float = 0f,
     valueColor: Color = MaterialTheme.colorScheme.onSurface
 ) {
     Column(modifier = modifier) {
@@ -640,18 +676,15 @@ private fun QuickStat(
             if (live) {
                 Box(
                     modifier = Modifier
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary)
+                        .size(8.dp)
+                        .graphicsLayer { rotationZ = liveAngle }
+                        .background(MaterialTheme.colorScheme.primary, MaterialShapes.Sunny.toShape())
                 )
                 Spacer(modifier = Modifier.width(5.dp))
             }
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 10.sp,
-                    letterSpacing = 0.8.sp
-                ),
+                style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1
@@ -660,8 +693,7 @@ private fun QuickStat(
         Spacer(modifier = Modifier.height(3.dp))
         Text(
             text = value,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleSmallEmphasized,
             color = valueColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -743,25 +775,48 @@ private fun TweakRow(
     trailingActive: Boolean = false,
     enabled: Boolean = true
 ) {
+    val motion = MaterialTheme.motionScheme
+
+    val rowAlpha by animateFloatAsState(
+        targetValue = if (enabled) 1f else 0.55f,
+        animationSpec = motion.fastEffectsSpec(),
+        label = "rowAlpha"
+    )
+    val iconCorner by animateDpAsState(
+        targetValue = if (enabled) 13.dp else 21.dp,
+        animationSpec = motion.fastSpatialSpec(),
+        label = "iconCorner"
+    )
+    val animatedIconContainer by animateColorAsState(
+        targetValue = iconContainer,
+        animationSpec = motion.defaultEffectsSpec(),
+        label = "iconContainer"
+    )
+    val animatedIconTint by animateColorAsState(
+        targetValue = iconTint,
+        animationSpec = motion.defaultEffectsSpec(),
+        label = "iconTint"
+    )
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(enabled = enabled, onClick = onClick)
-            .alpha(if (enabled) 1f else 0.55f)
+            .alpha(rowAlpha)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
                 .size(42.dp)
-                .clip(RoundedCornerShape(13.dp))
-                .background(iconContainer),
+                .clip(RoundedCornerShape(iconCorner))
+                .background(animatedIconContainer),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = iconTint,
+                tint = animatedIconTint,
                 modifier = Modifier.size(21.dp)
             )
         }
@@ -769,10 +824,8 @@ private fun TweakRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold
-                ),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -780,10 +833,7 @@ private fun TweakRow(
             Spacer(modifier = Modifier.height(3.dp))
             Text(
                 text = subtitle,
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontSize = 12.5.sp,
-                    lineHeight = 16.sp
-                ),
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -815,17 +865,46 @@ private fun TweakRow(
 }
 
 @Composable
+private fun AnimatedRendererLockNote(visible: Boolean) {
+    val motion = MaterialTheme.motionScheme
+    AnimatedVisibility(
+        visible = visible,
+        enter = expandVertically(animationSpec = motion.defaultSpatialSpec()) +
+            fadeIn(animationSpec = motion.defaultEffectsSpec()),
+        exit = shrinkVertically(animationSpec = motion.defaultSpatialSpec()) +
+            fadeOut(animationSpec = motion.defaultEffectsSpec())
+    ) {
+        Text(
+            text = stringResource(R.string.tweaks_renderer_locked_note),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+        )
+    }
+}
+
+@Composable
 private fun TweakValueChip(text: String, active: Boolean = false) {
-    val container = if (active) {
-        MaterialTheme.colorScheme.primaryContainer
-    } else {
-        MaterialTheme.colorScheme.surfaceContainerHighest
-    }
-    val content = if (active) {
-        MaterialTheme.colorScheme.onPrimaryContainer
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
+    val motion = MaterialTheme.motionScheme
+
+    val container by animateColorAsState(
+        targetValue = if (active) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHighest
+        },
+        animationSpec = motion.defaultEffectsSpec(),
+        label = "chipContainer"
+    )
+    val content by animateColorAsState(
+        targetValue = if (active) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        animationSpec = motion.defaultEffectsSpec(),
+        label = "chipContent"
+    )
 
     Surface(shape = CircleShape, color = container) {
         Text(
