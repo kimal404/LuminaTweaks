@@ -10,7 +10,6 @@ val dynamicBuildInfo = "ci$ciRun-$gitCommit"
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
 
@@ -26,7 +25,7 @@ android {
     }
 
     namespace = "com.luminatweaks"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         ndk {
@@ -59,23 +58,23 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlin {
-        compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_17)
-        }
-    }
-
     buildFeatures {
         buildConfig = true
         compose = true
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
+}
+
 dependencies {
     implementation("io.coil-kt:coil-compose:2.6.0")
 
-    val composeBom = platform("androidx.compose:compose-bom:2024.10.00")
-    implementation(composeBom)
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.material3)
 
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
@@ -84,7 +83,6 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("com.materialkolor:material-kolor:5.0.0-alpha07")
 }

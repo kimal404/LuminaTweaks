@@ -18,8 +18,8 @@ import android.content.Context
 import android.os.Build
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,19 +32,21 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BatterySaver
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.Memory
@@ -53,19 +55,20 @@ import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
+import androidx.compose.material3.MediumFlexibleTopAppBar
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -77,12 +80,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -90,7 +93,6 @@ import androidx.compose.ui.unit.sp
 import com.luminatweaks.R
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DisplayRrMode
-import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.DeviceUtil
 import kotlin.math.roundToInt
@@ -326,22 +328,31 @@ fun TweaksScreen() {
     } else {
         24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     }
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         contentWindowInsets = WindowInsets(0.dp),
         topBar = {
-            TopAppBar(
+            MediumFlexibleTopAppBar(
                 title = {
                     Text(
                         text = stringResource(R.string.tweaks_title),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold
+                        style = MaterialTheme.typography.titleLargeEmphasized
                     )
                 },
-                windowInsets = WindowInsets.statusBars,
+                subtitle = {
+                    Text(
+                        text = stringResource(R.string.tweaks_hero_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer
+                ),
+                scrollBehavior = scrollBehavior
             )
         }
     ) { innerPadding ->
@@ -353,7 +364,7 @@ fun TweaksScreen() {
                 start = 16.dp,
                 end = 16.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            verticalArrangement = Arrangement.spacedBy(28.dp)
         ) {
             item {
                 TweaksHero(
@@ -371,6 +382,8 @@ fun TweaksScreen() {
                 ) {
                     TweakGroup {
                         TweakRow(
+                            index = 0,
+                            count = 2,
                             icon = Icons.Rounded.Speed,
                             iconContainer = MaterialTheme.colorScheme.primaryContainer,
                             iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -379,8 +392,9 @@ fun TweaksScreen() {
                             trailingText = currentRrText,
                             onClick = { showRefreshRateDialog = true }
                         )
-                        TweakRowDivider()
                         TweakRow(
+                            index = 1,
+                            count = 2,
                             icon = Icons.Rounded.DeveloperBoard,
                             iconContainer = MaterialTheme.colorScheme.primaryContainer,
                             iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -401,6 +415,8 @@ fun TweaksScreen() {
                 ) {
                     TweakGroup {
                         TweakRow(
+                            index = 0,
+                            count = 1,
                             icon = Icons.Rounded.BatterySaver,
                             iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
                             iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -430,6 +446,8 @@ fun TweaksScreen() {
                 ) {
                     TweakGroup {
                         TweakRow(
+                            index = 0,
+                            count = 2,
                             icon = Icons.Rounded.Memory,
                             iconContainer = MaterialTheme.colorScheme.secondaryContainer,
                             iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -437,8 +455,9 @@ fun TweaksScreen() {
                             subtitle = stringResource(R.string.tweak_memory_zram_desc),
                             onClick = { inMemoryZramSubpage = true }
                         )
-                        TweakRowDivider()
                         TweakRow(
+                            index = 1,
+                            count = 2,
                             icon = Icons.Rounded.Storage,
                             iconContainer = MaterialTheme.colorScheme.secondaryContainer,
                             iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -459,6 +478,8 @@ fun TweaksScreen() {
                 ) {
                     TweakGroup {
                         TweakRow(
+                            index = 0,
+                            count = 2,
                             icon = Icons.Rounded.DeveloperBoard,
                             iconContainer = MaterialTheme.colorScheme.primaryContainer,
                             iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -466,8 +487,9 @@ fun TweaksScreen() {
                             subtitle = stringResource(R.string.hardware_diag_desc),
                             onClick = { inHardwareDiagnosticSubpage = true }
                         )
-                        TweakRowDivider()
                         TweakRow(
+                            index = 1,
+                            count = 2,
                             icon = Icons.Rounded.Widgets,
                             iconContainer = MaterialTheme.colorScheme.primaryContainer,
                             iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -482,6 +504,7 @@ fun TweaksScreen() {
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun TweaksHero(
     liveRefreshRate: Int,
@@ -489,98 +512,99 @@ private fun TweaksHero(
     isLiteMode: Boolean
 ) {
     val scheme = MaterialTheme.colorScheme
+    val motion = MaterialTheme.motionScheme
+    val animatedHz by animateIntAsState(
+        targetValue = liveRefreshRate,
+        animationSpec = motion.defaultSpatialSpec(),
+        label = "liveRefreshRate"
+    )
 
-    Card(
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(LocalCornerRadius.current),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.Transparent,
-            contentColor = scheme.onSurface
-        )
+        shape = MaterialTheme.shapes.extraLargeIncreased,
+        color = scheme.primaryContainer,
+        contentColor = scheme.onPrimaryContainer
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(scheme.surfaceContainerHigh, scheme.surfaceContainerHighest)
-                    )
-                )
-        ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .offset(x = 36.dp, y = (-48).dp)
-                    .size(150.dp)
-                    .background(scheme.primary.copy(alpha = 0.10f), CircleShape)
+                    .offset(x = 42.dp, y = (-52).dp)
+                    .size(152.dp)
+                    .rotate(12f)
+                    .background(
+                        scheme.tertiaryContainer.copy(alpha = 0.45f),
+                        MaterialShapes.Cookie9Sided.toShape()
+                    )
             )
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .offset(x = (-40).dp, y = 36.dp)
-                    .size(120.dp)
-                    .background(scheme.tertiary.copy(alpha = 0.08f), CircleShape)
+                    .offset(x = (-34).dp, y = 42.dp)
+                    .size(104.dp)
+                    .rotate(-18f)
+                    .background(
+                        scheme.secondaryContainer.copy(alpha = 0.45f),
+                        MaterialShapes.Clover4Leaf.toShape()
+                    )
             )
 
-            Column(modifier = Modifier.padding(20.dp)) {
+            Column(modifier = Modifier.padding(22.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(46.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(scheme.primaryContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Tune,
-                            contentDescription = null,
-                            tint = scheme.onPrimaryContainer,
-                            modifier = Modifier.size(23.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(14.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = stringResource(R.string.tweaks_hero_title),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = scheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = stringResource(R.string.tweaks_hero_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = scheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(scheme.tertiary)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = stringResource(R.string.tweaks_quick_refresh),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.2.sp,
+                        color = scheme.onPrimaryContainer.copy(alpha = 0.72f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = "$animatedHz",
+                        style = MaterialTheme.typography.displayMediumEmphasized,
+                        color = scheme.onPrimaryContainer
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Hz",
+                        modifier = Modifier.padding(bottom = 10.dp),
+                        style = MaterialTheme.typography.headlineSmallEmphasized,
+                        color = scheme.onPrimaryContainer.copy(alpha = 0.8f)
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(18.dp))
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    QuickStat(
-                        label = stringResource(R.string.tweaks_quick_refresh),
-                        value = "$liveRefreshRate Hz",
-                        live = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    QuickStatDivider()
-                    QuickStat(
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HeroMetric(
+                        icon = Icons.Rounded.DeveloperBoard,
                         label = stringResource(R.string.tweaks_quick_renderer),
                         value = rendererLabel,
+                        container = scheme.secondaryContainer,
+                        content = scheme.onSecondaryContainer,
                         modifier = Modifier.weight(1f)
                     )
-                    QuickStatDivider()
-                    QuickStat(
+                    HeroMetric(
+                        icon = Icons.Rounded.BatterySaver,
                         label = stringResource(R.string.tweaks_quick_lite_mode),
                         value = if (isLiteMode) {
                             stringResource(R.string.status_on)
                         } else {
                             stringResource(R.string.status_off)
                         },
-                        valueColor = if (isLiteMode) scheme.primary else scheme.onSurface,
+                        container = scheme.tertiaryContainer,
+                        content = scheme.onTertiaryContainer,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -590,56 +614,49 @@ private fun TweaksHero(
 }
 
 @Composable
-private fun QuickStat(
+private fun HeroMetric(
+    icon: ImageVector,
     label: String,
     value: String,
-    modifier: Modifier = Modifier,
-    live: Boolean = false,
-    valueColor: Color = MaterialTheme.colorScheme.onSurface
+    container: Color,
+    content: Color,
+    modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (live) {
-                Box(
-                    modifier = Modifier
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary)
-                )
-                Spacer(modifier = Modifier.width(5.dp))
-            }
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 10.sp,
-                    letterSpacing = 0.8.sp
-                ),
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.large,
+        color = container,
+        contentColor = content
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = content,
+                modifier = Modifier.size(18.dp)
             )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = content.copy(alpha = 0.72f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.titleSmallEmphasized,
+                    color = content,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
-        Spacer(modifier = Modifier.height(3.dp))
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = valueColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
     }
-}
-
-@Composable
-private fun QuickStatDivider() {
-    Box(
-        modifier = Modifier
-            .padding(horizontal = 12.dp)
-            .width(1.dp)
-            .height(30.dp)
-            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-    )
 }
 
 @Composable
@@ -656,8 +673,8 @@ private fun TweakSection(
         ) {
             Box(
                 modifier = Modifier
-                    .size(22.dp)
-                    .clip(RoundedCornerShape(7.dp))
+                    .size(30.dp)
+                    .clip(MaterialTheme.shapes.small)
                     .background(accent.copy(alpha = 0.14f)),
                 contentAlignment = Alignment.Center
             ) {
@@ -665,15 +682,14 @@ private fun TweakSection(
                     imageVector = icon,
                     contentDescription = null,
                     tint = accent,
-                    modifier = Modifier.size(14.dp)
+                    modifier = Modifier.size(16.dp)
                 )
             }
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(10.dp))
             Text(
                 text = title,
-                style = MaterialTheme.typography.labelLarge.copy(letterSpacing = 0.3.sp),
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.titleMediumEmphasized,
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
         content()
@@ -682,19 +698,17 @@ private fun TweakSection(
 
 @Composable
 private fun TweakGroup(content: @Composable ColumnScope.() -> Unit) {
-    Card(
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(LocalCornerRadius.current),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        )
-    ) {
-        Column(content = content)
-    }
+        verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
+        content = content
+    )
 }
 
 @Composable
 private fun TweakRow(
+    index: Int,
+    count: Int,
     icon: ImageVector,
     iconContainer: Color,
     iconTint: Color,
@@ -704,63 +718,59 @@ private fun TweakRow(
     trailingText: String? = null,
     trailingActive: Boolean = false
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(42.dp)
-                .clip(RoundedCornerShape(13.dp))
-                .background(iconContainer),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = iconTint,
-                modifier = Modifier.size(21.dp)
-            )
-        }
-        Spacer(modifier = Modifier.width(14.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold
-                ),
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(3.dp))
+    SegmentedListItem(
+        onClick = onClick,
+        shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
+        colors = ListItemDefaults.segmentedColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            supportingContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+        ),
+        leadingContent = {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(MaterialTheme.shapes.medium)
+                    .background(iconContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(21.dp)
+                )
+            }
+        },
+        supportingContent = {
             Text(
                 text = subtitle,
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontSize = 12.5.sp,
-                    lineHeight = 16.sp
-                ),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
+        },
+        trailingContent = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (trailingText != null) {
+                    TweakValueChip(text = trailingText, active = trailingActive)
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Icon(
+                    imageVector = Icons.Rounded.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
-        if (trailingText != null) {
-            Spacer(modifier = Modifier.width(10.dp))
-            TweakValueChip(text = trailingText, active = trailingActive)
-            Spacer(modifier = Modifier.width(4.dp))
-        } else {
-            Spacer(modifier = Modifier.width(6.dp))
-        }
-        Icon(
-            imageVector = Icons.Rounded.ChevronRight,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
-            modifier = Modifier.size(18.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMediumEmphasized,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -778,7 +788,7 @@ private fun TweakValueChip(text: String, active: Boolean = false) {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
 
-    Surface(shape = CircleShape, color = container) {
+    Surface(shape = CircleShape, color = container, contentColor = content) {
         Text(
             text = text,
             modifier = Modifier
@@ -794,15 +804,6 @@ private fun TweakValueChip(text: String, active: Boolean = false) {
 }
 
 @Composable
-private fun TweakRowDivider() {
-    HorizontalDivider(
-        modifier = Modifier.padding(start = 72.dp, end = 16.dp),
-        thickness = 1.dp,
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-    )
-}
-
-@Composable
 private fun <T> TweakOptionDialog(
     title: String,
     options: List<TweakOption<T>>,
@@ -812,49 +813,59 @@ private fun <T> TweakOptionDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = MaterialTheme.shapes.extraLarge,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         title = {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
+                style = MaterialTheme.typography.titleLargeEmphasized
             )
         },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)
             ) {
-                options.forEach { option ->
+                options.forEachIndexed { index, option ->
                     val selected = isSelected(option.value)
-                    val shape = RoundedCornerShape(14.dp)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(shape)
-                            .background(
+                    SegmentedListItem(
+                        selected = selected,
+                        onClick = { onSelect(option.value) },
+                        shapes = ListItemDefaults.segmentedShapes(
+                            index = index,
+                            count = options.size
+                        ),
+                        colors = ListItemDefaults.segmentedColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            selectedLeadingContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ),
+                        leadingContent = {
+                            Box(
+                                modifier = Modifier.size(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 if (selected) {
-                                    MaterialTheme.colorScheme.primaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceContainerHigh
+                                    Icon(
+                                        imageVector = Icons.Rounded.Check,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(20.dp)
+                                    )
                                 }
-                            )
-                            .selectable(
-                                selected = selected,
-                                role = Role.RadioButton,
-                                onClick = { onSelect(option.value) }
-                            )
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            }
+                        }
                     ) {
-                        RadioButton(selected = selected, onClick = null)
-                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = option.label,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = if (selected) {
-                                MaterialTheme.colorScheme.onPrimaryContainer
+                            style = if (selected) {
+                                MaterialTheme.typography.titleSmallEmphasized
                             } else {
-                                MaterialTheme.colorScheme.onSurface
+                                MaterialTheme.typography.bodyLarge
                             },
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
