@@ -124,15 +124,40 @@ fn set_system_profile_prop(name: &str) {
         .status();
 }
 
+fn write_runtime_file(path: &str, value: &str) -> bool {
+    let temp_path = format!("{}.tmp", path);
+    if std::fs::write(&temp_path, value).is_err() {
+        let _ = std::fs::remove_file(&temp_path);
+        return false;
+    }
+    let _ = std::fs::set_permissions(&temp_path, std::fs::Permissions::from_mode(0o644));
+    match std::fs::rename(&temp_path, path) {
+        Ok(()) => true,
+        Err(_) => {
+            let _ = std::fs::remove_file(&temp_path);
+            false
+        }
+    }
+}
+
+fn publish_pid() {
+    if !write_runtime_file(PID_FILE_PATH, &format!("{}\n", std::process::id())) {
+        log!("[WARN] PID file unavailable; manager may not detect daemon");
+    }
+}
+
 fn publish_heartbeat() {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis())
         .unwrap_or(0);
-    let temp_path = format!("{}.tmp", HEARTBEAT_FILE_PATH);
-    if std::fs::write(&temp_path, timestamp.to_string()).is_ok() {
-        let _ = std::fs::set_permissions(&temp_path, std::fs::Permissions::from_mode(0o644));
-        let _ = std::fs::rename(&temp_path, HEARTBEAT_FILE_PATH);
+    let _ = write_runtime_file(HEARTBEAT_FILE_PATH, &timestamp.to_string());
+}
+
+fn cleanup_runtime_files() {
+    for path in [PID_FILE_PATH, HEARTBEAT_FILE_PATH] {
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(format!("{}.tmp", path));
     }
 }
 
@@ -280,10 +305,6 @@ impl EngineRuntime {
             self.update_shared_state(target_profile, target_pkg);
         }
 
-        if !is_profile_changing && target_pkg.is_none() {
-            return;
-        }
-
         let global_rr = display::get_saved_mode_id();
         let desired_rr = if let Some(ref cfg) = target_cfg {
             if cfg.refresh_rate != "default" && !cfg.refresh_rate.is_empty() {
@@ -357,9 +378,6 @@ impl EngineRuntime {
         }
 
         if self.current_profile != Some(Profile::Balance) {
-            self.left_foreground_at = None;
-            self.skipped_renderer_notice_pkg = None;
-            self.current_profile = Some(Profile::Balance);
             engine::balance_profile();
             set_system_profile_prop("Balanced");
             log!(
@@ -368,31 +386,40 @@ impl EngineRuntime {
                 self.active_target_pid,
                 trigger
             );
-            self.active_target_pkg = None;
-            self.active_target_pid = 0;
-            self.target_game_pid = 0;
-            self.update_shared_state(Profile::Balance, None);
+        }
 
-            let global_rr = display::get_saved_mode_id();
-            if global_rr != self.current_applied_rr {
-                if let Some(id) = global_rr {
-                    display::apply_refresh_rate_id(id);
-                } else {
-                    display::apply_refresh_rate_id(-1);
-                }
-                self.current_applied_rr = global_rr;
-            }
+        self.current_profile = Some(Profile::Balance);
+        self.left_foreground_at = None;
+        self.skipped_renderer_notice_pkg = None;
+        self.active_target_pkg = None;
+        self.active_target_pid = 0;
+        self.target_game_pid = 0;
+        self.update_shared_state(Profile::Balance, None);
 
-            let global_renderer = renderer::get_saved_renderer();
-            if global_renderer != self.current_applied_renderer {
-                renderer::setrender(&global_renderer);
-                self.current_applied_renderer = global_renderer;
+        let global_rr = display::get_saved_mode_id();
+        if global_rr != self.current_applied_rr {
+            if let Some(id) = global_rr {
+                display::apply_refresh_rate_id(id);
+            } else {
+                display::apply_refresh_rate_id(-1);
             }
+            self.current_applied_rr = global_rr;
+        }
+
+        let global_renderer = renderer::get_saved_renderer();
+        if global_renderer != self.current_applied_renderer {
+            renderer::setrender(&global_renderer);
+            self.current_applied_renderer = global_renderer;
         }
     }
 }
 
 fn main() {
+    if std::env::args_os().any(|arg| arg == "--restore-boot") {
+        engine::restore_boot_profile();
+        return;
+    }
+
     let _instance_lock = match acquire_instance_lock() {
         Some(lock) => lock,
         None => {
@@ -406,8 +433,7 @@ fn main() {
         signal(SIGTERM, handle_signal);
     }
 
-    let _ = std::fs::write(PID_FILE_PATH, format!("{}\n", std::process::id()));
-    let _ = std::fs::set_permissions(PID_FILE_PATH, std::fs::Permissions::from_mode(0o644));
+    publish_pid();
     publish_heartbeat();
     publish_selinux_status();
 
@@ -453,8 +479,7 @@ fn main() {
             TextureController::restore();
             fps_monitor.stop();
             core::ipc::cleanup_socket();
-            let _ = std::fs::remove_file(PID_FILE_PATH);
-            let _ = std::fs::remove_file(HEARTBEAT_FILE_PATH);
+            cleanup_runtime_files();
             break;
         }
 

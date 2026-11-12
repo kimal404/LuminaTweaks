@@ -46,12 +46,14 @@ pub struct IpcServer;
 
 impl IpcServer {
     pub fn start(shared_state: Arc<SharedState>) {
-        thread::Builder::new()
+        let spawned = thread::Builder::new()
             .name("lumina-ipc".to_string())
             .spawn(move || {
                 run_server(shared_state);
-            })
-            .expect("Failed to spawn IPC thread");
+            });
+        if let Err(error) = spawned {
+            crate::log!("[WARN] Failed to start IPC server: {}", error);
+        }
     }
 }
 
@@ -61,7 +63,7 @@ pub fn cleanup_socket() {
     }
 }
 
-fn bind_socket() -> (UnixListener, String) {
+fn bind_socket() -> Option<(UnixListener, String)> {
     for path in [IPC_SOCKET_PRIMARY, IPC_SOCKET_FALLBACK] {
         if let Ok(meta) = fs::symlink_metadata(path) {
             if !meta.is_dir() {
@@ -71,15 +73,18 @@ fn bind_socket() -> (UnixListener, String) {
 
         if let Ok(listener) = UnixListener::bind(path) {
             let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
-            return (listener, path.to_string());
+            return Some((listener, path.to_string()));
         }
     }
 
-    panic!("Failed to bind Lumina IPC UnixListener on all candidate paths");
+    None
 }
 
 fn run_server(shared_state: Arc<SharedState>) {
-    let (listener, active_path) = bind_socket();
+    let Some((listener, active_path)) = bind_socket() else {
+        crate::log!("[WARN] IPC unavailable: failed to bind any socket path");
+        return;
+    };
     crate::log!("[SYSTEM] IPC Server listening on {}", active_path);
 
     for incoming in listener.incoming() {

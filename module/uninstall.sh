@@ -53,6 +53,18 @@ rm -f /data/local/tmp/lumina-binder.log*
 
 setprop sys.lumina.profile Balanced 2>/dev/null || true
 
+MODDIR=${0%/*}
+RESTORE_BIN=""
+if [ -f "$MODDIR/luminad" ]; then
+    RESTORE_BIN="$MODDIR/luminad"
+elif [ -f "/data/adb/modules/luminatweaks/luminad" ]; then
+    RESTORE_BIN="/data/adb/modules/luminatweaks/luminad"
+fi
+if [ -n "$RESTORE_BIN" ]; then
+    chmod 755 "$RESTORE_BIN" 2>/dev/null || true
+    "$RESTORE_BIN" --restore-boot >/dev/null 2>&1 || true
+fi
+
 rm -rf /data/adb/luminatweaks
 rm -rf /data/adb/.config/lumina
 rm -f /data/adb/service.d/luminad_boot.sh

@@ -131,14 +131,17 @@ pub fn restore_boot_profile() {
         return;
     };
 
+    let mut restored = 0;
     for (path, value) in map {
         if let Some(value) = value.as_str() {
-            write_sysfs(&path, value, false);
+            if write_sysfs(&path, value, false) {
+                restored += 1;
+            }
         }
     }
 
     let _ = fs::remove_file(BOOT_BACKUP_PATH);
-    log!("[BOOT] Restored original boot settings");
+    log!("[BOOT] Restored {} original boot setting(s)", restored);
 }
 
 pub fn apply_boot_profile() {
@@ -302,19 +305,48 @@ pub fn apply_zram(size_gb: u32, algorithm: &str) {
     );
 
     let _ = Command::new("swapoff").arg(zram_block).status();
-    write_sysfs("/sys/block/zram0/reset", "1", false);
+    if !write_sysfs("/sys/block/zram0/reset", "1", false) {
+        log!("[ZRAM] Failed to reset {}; aborting", zram_block);
+        return;
+    }
 
-    if !algorithm.is_empty() {
-        write_sysfs("/sys/block/zram0/comp_algorithm", algorithm, false);
+    if !algorithm.is_empty()
+        && !write_sysfs("/sys/block/zram0/comp_algorithm", algorithm, false)
+    {
+        log!(
+            "[ZRAM] Compression '{}' unavailable; using device default",
+            algorithm
+        );
     }
 
     let size_str = format!("{}", target_disksize_bytes);
-    write_sysfs("/sys/block/zram0/disksize", &size_str, false);
+    if !write_sysfs("/sys/block/zram0/disksize", &size_str, false) {
+        log!(
+            "[ZRAM] Failed to set size to {} bytes; aborting",
+            target_disksize_bytes
+        );
+        return;
+    }
 
-    let _ = Command::new("mkswap").arg(zram_block).status();
-    let _ = Command::new("swapon")
+    let formatted = Command::new("mkswap")
+        .arg(zram_block)
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false);
+    if !formatted {
+        log!("[ZRAM] mkswap failed for {}; aborting", zram_block);
+        return;
+    }
+
+    let swapon = Command::new("swapon")
         .args([zram_block, "-p", "32767"])
-        .status();
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false);
+    if !swapon {
+        log!("[ZRAM] swapon failed for {}; aborting", zram_block);
+        return;
+    }
 
     log!(
         "[ZRAM] Successfully applied {}GB with {}",

@@ -18,6 +18,7 @@ MODDIR=${0%/*}
 [ -d "$MODDIR" ] || MODDIR="/data/adb/modules/luminatweaks"
 
 WATCHDOG_PID_FILE="/data/local/tmp/lumina_watchdog.pid"
+HEARTBEAT_FILE="/data/local/tmp/lumina.alive"
 
 until [ "$(getprop sys.boot_completed)" = "1" ]; do
     sleep 2
@@ -100,6 +101,21 @@ fi
 
         if [ -n "$DAEMON_BIN" ] && ! pidof luminad >/dev/null 2>&1; then
             nohup "$DAEMON_BIN" >/dev/null 2>&1 &
+        elif [ -n "$DAEMON_BIN" ] && [ -f "$HEARTBEAT_FILE" ]; then
+            NOW=$(date +%s 2>/dev/null)
+            MTIME=$(stat -c %Y "$HEARTBEAT_FILE" 2>/dev/null)
+            if [ -n "$NOW" ] && [ -n "$MTIME" ] && [ $((NOW - MTIME)) -gt 20 ]; then
+                sleep 5
+                NOW=$(date +%s 2>/dev/null)
+                MTIME=$(stat -c %Y "$HEARTBEAT_FILE" 2>/dev/null)
+                if [ -n "$NOW" ] && [ -n "$MTIME" ] && [ $((NOW - MTIME)) -gt 20 ]; then
+                    killall -15 luminad 2>/dev/null || pkill -15 -x luminad 2>/dev/null || true
+                    sleep 5
+                    if pidof luminad >/dev/null 2>&1; then
+                        killall -9 luminad 2>/dev/null || pkill -9 -x luminad 2>/dev/null || true
+                    fi
+                fi
+            fi
         fi
 
         CURRENT_PID=$(pidof luminad | awk '{print $1}')
