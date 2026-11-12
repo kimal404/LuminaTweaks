@@ -167,7 +167,7 @@ object ConfigRepository {
             "echo '$BATCH_SEP'",
             "ren=\$(cat $CONFIG_DIR/current_renderer.txt 2>/dev/null); [ -z \"\$ren\" ] && ren=\$(getprop persist.lumina.renderer); [ -z \"\$ren\" ] && ren=\$(getprop debug.hwui.renderer); [ -z \"\$ren\" ] && ren=\"default\"; echo \"\$ren\"",
             "echo '$BATCH_SEP'",
-            "tex=\$(cat $CONFIG_DIR/texture_global.txt 2>/dev/null); [ -z \"\$tex\" ] && tex=\$(getprop persist.lumina.texture_global); [ -z \"\$tex\" ] && tex=\"0\"; echo \"\$tex\""
+            "texglob=\$(cat $CONFIG_DIR/texture_global.txt 2>/dev/null); [ -z \"\$texglob\" ] && texglob=\$(getprop persist.lumina.texture_global); if [ -n \"\$texglob\" ]; then tex=\"\$texglob\"; else apkgs=\$(settings get global angle_gl_driver_selection_pkgs 2>/dev/null); [ -z \"\$apkgs\" ] || [ \"\$apkgs\" = \"null\" ] && tex=\"0\" || tex=\"1\"; fi; echo \"\$tex\""
         ).joinToString(" ; ")
 
         val output = runSuCmd(batchScript, 5)
@@ -436,6 +436,7 @@ object ConfigRepository {
             cachedAppConfigs = currentConfigs
             refreshGameSets(currentConfigs)
             persistAppConfigsInternal(currentConfigs)
+            cachedTweaksState = cachedTweaksState?.copy(isLoaded = false)
         }
     }
 

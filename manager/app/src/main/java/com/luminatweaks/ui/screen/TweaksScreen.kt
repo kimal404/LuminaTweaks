@@ -185,7 +185,7 @@ fun TweaksScreen() {
     val defaultRendererLabel = stringResource(R.string.tweaks_renderer_system_default)
 
     LaunchedEffect(Unit) {
-        val state = ConfigRepository.getTweaksState()
+        val state = ConfigRepository.getTweaksState(forceRefresh = true)
         isGlobalLiteMode = state.isGlobalLiteMode
         isGlobalTextureEnabled = state.isGlobalTextureEnabled
         rrModes = state.rrModes
