@@ -200,7 +200,6 @@ impl EngineRuntime {
                 Profile::Performance => {
                     engine::performance_profile();
                     set_system_profile_prop("Performance");
-                    ipc::send_toast("Profile Performance");
                     log!(
                         "[BOOST]  {} ({}) \u{2794} FULL_PERF [CPU: 100% | Sched: 80%]",
                         target_pkg.unwrap_or("system"),
@@ -210,7 +209,6 @@ impl EngineRuntime {
                 Profile::PerformanceLite => {
                     engine::performance_lite_profile();
                     set_system_profile_prop("Performance Lite");
-                    ipc::send_toast("Profile Performance Lite");
                     log!(
                         "[BOOST]  {} ({}) \u{2794} FULL_PERF_LITE [CPU: 72% | Sched: 0%]",
                         target_pkg.unwrap_or("system"),
@@ -220,13 +218,11 @@ impl EngineRuntime {
                 Profile::Eco => {
                     engine::eco_profile();
                     set_system_profile_prop("Eco");
-                    ipc::send_toast("Profile Eco");
                     log!("[POWER] ECO \u{2794} CPU powersave");
                 }
                 Profile::Balance => {
                     engine::balance_profile();
                     set_system_profile_prop("Balanced");
-                    ipc::send_toast("Profile Balance");
                     log!(
                         "[RESET]  {} ({}) \u{2794} BALANCED [Trigger: Inactive]",
                         target_pkg.unwrap_or("system"),
@@ -299,7 +295,6 @@ impl EngineRuntime {
             self.current_profile = Some(Profile::Balance);
             engine::balance_profile();
             set_system_profile_prop("Balanced");
-            ipc::send_toast("Profile Balance");
             log!(
                 "[RESET]  {} ({}) \u{2794} BALANCED [Trigger: {}]",
                 self.active_target_pkg.as_deref().unwrap_or("system"),
