@@ -607,7 +607,6 @@ fun HomeDashboardContent(
                     isRestarting = isRestarting,
                     isRunning = isRunning,
                     daemonPid = daemonPid,
-                    currentProfile = currentProfile,
                     onStart = {
                         if (!isChecking && !isRunning && !isRestarting) {
                             coroutineScope.launch {
@@ -754,7 +753,6 @@ private fun CoreStatusCard(
     isRestarting: Boolean,
     isRunning: Boolean,
     daemonPid: String?,
-    currentProfile: String,
     onStart: () -> Unit
 ) {
     val containerColor by animateColorAsState(
@@ -866,54 +864,7 @@ private fun CoreStatusCard(
                     }
                 }
             }
-
-            if (isRunning && !isRestarting) {
-                Spacer(modifier = Modifier.height(18.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CoreStat(
-                        label = "PID",
-                        value = daemonPid ?: "-",
-                        contentColor = contentColor
-                    )
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 18.dp)
-                            .width(1.dp)
-                            .height(28.dp)
-                            .background(contentColor.copy(alpha = 0.2f))
-                    )
-                    CoreStat(
-                        label = stringResource(R.string.home_profile),
-                        value = currentProfile,
-                        contentColor = contentColor
-                    )
-                }
-            }
         }
-    }
-}
-
-@Composable
-private fun CoreStat(
-    label: String,
-    value: String,
-    contentColor: Color
-) {
-    Column {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = contentColor.copy(alpha = 0.6f)
-        )
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = contentColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
     }
 }
 
