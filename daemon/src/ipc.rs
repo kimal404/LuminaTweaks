@@ -18,8 +18,6 @@ use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
-use std::os::unix::process::CommandExt;
-use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -27,9 +25,6 @@ use std::time::Duration;
 
 pub const IPC_SOCKET_PRIMARY: &str = "/dev/socket/lumina_ipc.sock";
 pub const IPC_SOCKET_FALLBACK: &str = "/data/local/tmp/lumina_ipc.sock";
-
-const SHELL_UID: u32 = 2000;
-const SHELL_GID: u32 = 2000;
 
 pub struct SharedState {
     pub current_profile: std::sync::Mutex<String>,
@@ -58,34 +53,6 @@ impl IpcServer {
             })
             .expect("Failed to spawn IPC thread");
     }
-}
-
-pub fn send_toast(message: &str) {
-    let text = message.to_string();
-    let _ = thread::Builder::new()
-        .name("lumina-toast".to_string())
-        .spawn(move || {
-            let _ = Command::new("/system/bin/cmd")
-                .uid(SHELL_UID)
-                .gid(SHELL_GID)
-                .args([
-                    "activity",
-                    "broadcast",
-                    "--user",
-                    "0",
-                    "-a",
-                    "com.luminatweaks.ACTION_NOTIFY",
-                    "-n",
-                    "com.luminatweaks/.receiver.LuminaReceiver",
-                    "--es",
-                    "toast",
-                    &text,
-                ])
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status();
-        });
 }
 
 fn bind_socket() -> (UnixListener, String) {

@@ -46,7 +46,6 @@ class MainActivity : ComponentActivity() {
                 "appops set $pkg query_all_packages allow",
                 "appops set $pkg android:get_installed_apps allow",
                 "appops set $pkg GET_INSTALLED_APPS allow",
-                "appops set $pkg SYSTEM_ALERT_WINDOW allow",
                 "appops set $pkg 10022 allow"
             )
             try {
