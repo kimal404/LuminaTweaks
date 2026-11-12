@@ -52,9 +52,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.luminatweaks.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,7 +71,7 @@ fun LiteModeScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Mode Lite",
+                        text = stringResource(R.string.tweaks_lite_mode),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -78,7 +80,7 @@ fun LiteModeScreen(
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = "Kembali"
+                            contentDescription = stringResource(R.string.action_back)
                         )
                     }
                 },
@@ -122,14 +124,14 @@ fun LiteModeScreen(
                         Spacer(modifier = Modifier.width(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Arsitektur Frekuensi CPU",
+                                text = stringResource(R.string.lite_mode_cpu_title),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Mode Lite mengatur ceiling scaling_max_freq pada kluster Big dan Prime tanpa mematikan core. Strategi ini mempertahankan stabilitas kurva frame-time sekaligus memangkas konsumsi daya serta lonjakan suhu drastis.",
+                                text = stringResource(R.string.lite_mode_cpu_desc),
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     fontSize = 12.sp,
                                     lineHeight = 16.sp
@@ -165,7 +167,7 @@ fun LiteModeScreen(
                         )
                         Spacer(modifier = Modifier.width(16.dp))
                         Text(
-                            text = "Mode Lite",
+                            text = stringResource(R.string.tweaks_lite_mode),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurface,

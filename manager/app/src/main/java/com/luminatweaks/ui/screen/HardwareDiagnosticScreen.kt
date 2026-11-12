@@ -89,7 +89,7 @@ fun HardwareDiagnosticScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Diagnostik Hardware",
+                        text = stringResource(R.string.hardware_diag_screen_title),
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -142,7 +142,7 @@ fun HardwareDiagnosticScreen(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Layar Diagnostik Siap",
+                            text = stringResource(R.string.hardware_diag_ready),
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -150,7 +150,7 @@ fun HardwareDiagnosticScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Tekan tombol di bawah untuk memindai status hardware.",
+                            text = stringResource(R.string.hardware_diag_ready_desc),
                             fontFamily = FontFamily.Monospace,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                             fontSize = 12.sp
@@ -232,7 +232,7 @@ fun HardwareDiagnosticScreen(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "Memindai Kernel...",
+                        text = stringResource(R.string.hardware_diag_scanning),
                         fontWeight = FontWeight.SemiBold,
                         fontFamily = FontFamily.Monospace
                     )
@@ -244,7 +244,7 @@ fun HardwareDiagnosticScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (state.hasScanned) "Pindai Ulang Hardware" else "Mulai Pindai Hardware",
+                        text = if (state.hasScanned) stringResource(R.string.hardware_diag_rescan) else stringResource(R.string.hardware_diag_start),
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp
                     )

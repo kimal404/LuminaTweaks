@@ -93,7 +93,6 @@ import com.luminatweaks.data.DisplayRrMode
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.DeviceUtil
-import java.util.Locale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -155,11 +154,6 @@ private data class TweakOption<T>(
 fun TweaksScreen() {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-
-    val isIndonesian = remember {
-        val lang = Locale.getDefault().language
-        lang == "in" || lang == "id"
-    }
 
     val cached = ConfigRepository.cachedTweaksState
     var isGlobalLiteMode by remember { mutableStateOf(cached?.isGlobalLiteMode ?: false) }
@@ -365,14 +359,13 @@ fun TweaksScreen() {
                 TweaksHero(
                     liveRefreshRate = liveRefreshRate,
                     rendererLabel = currentRendererShortText,
-                    isLiteMode = isGlobalLiteMode,
-                    isIndonesian = isIndonesian
+                    isLiteMode = isGlobalLiteMode
                 )
             }
 
             item {
                 TweakSection(
-                    title = if (isIndonesian) "Layar & Grafis" else "Display & Graphics",
+                    title = stringResource(R.string.tweaks_section_display_graphics),
                     icon = Icons.Rounded.Speed,
                     accent = MaterialTheme.colorScheme.primary
                 ) {
@@ -382,11 +375,7 @@ fun TweaksScreen() {
                             iconContainer = MaterialTheme.colorScheme.primaryContainer,
                             iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
                             title = stringResource(R.string.tweaks_refresh_rate),
-                            subtitle = if (isIndonesian) {
-                                "Atur kecepatan penyegaran layar"
-                            } else {
-                                "Set the display refresh rate"
-                            },
+                            subtitle = stringResource(R.string.tweaks_refresh_rate_desc),
                             trailingText = currentRrText,
                             onClick = { showRefreshRateDialog = true }
                         )
@@ -396,11 +385,7 @@ fun TweaksScreen() {
                             iconContainer = MaterialTheme.colorScheme.primaryContainer,
                             iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
                             title = stringResource(R.string.tweaks_renderer),
-                            subtitle = if (isIndonesian) {
-                                "Pilih backend grafis untuk rendering"
-                            } else {
-                                "Choose the graphics rendering backend"
-                            },
+                            subtitle = stringResource(R.string.tweaks_renderer_desc),
                             trailingText = currentRendererShortText,
                             onClick = { showRenderDialog = true }
                         )
@@ -410,7 +395,7 @@ fun TweaksScreen() {
 
             item {
                 TweakSection(
-                    title = if (isIndonesian) "Performa & Boost" else "Performance & Boost",
+                    title = stringResource(R.string.tweaks_section_performance),
                     icon = Icons.Rounded.BatterySaver,
                     accent = MaterialTheme.colorScheme.tertiary
                 ) {
@@ -421,15 +406,14 @@ fun TweaksScreen() {
                             iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
                             title = stringResource(R.string.tweaks_lite_mode),
                             subtitle = if (isGlobalLiteMode) {
-                                if (isIndonesian) "Aktif • Efisiensi Core Big/Prime" else "On • Big/Prime core efficiency"
+                                stringResource(R.string.tweaks_lite_on_desc)
                             } else {
-                                if (isIndonesian) "Nonaktif • Jam Clock Maksimum" else "Off • Maximum clock speed"
+                                stringResource(R.string.tweaks_lite_off_desc)
                             },
-                            trailingText = when {
-                                isGlobalLiteMode && isIndonesian -> "Aktif"
-                                isGlobalLiteMode -> "On"
-                                isIndonesian -> "Nonaktif"
-                                else -> "Off"
+                            trailingText = if (isGlobalLiteMode) {
+                                stringResource(R.string.status_on)
+                            } else {
+                                stringResource(R.string.status_off)
                             },
                             trailingActive = isGlobalLiteMode,
                             onClick = { inLiteModeSubpage = true }
@@ -502,8 +486,7 @@ fun TweaksScreen() {
 private fun TweaksHero(
     liveRefreshRate: Int,
     rendererLabel: String,
-    isLiteMode: Boolean,
-    isIndonesian: Boolean
+    isLiteMode: Boolean
 ) {
     val scheme = MaterialTheme.colorScheme
 
@@ -558,18 +541,14 @@ private fun TweaksHero(
                     Spacer(modifier = Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (isIndonesian) "Pusat Penyetelan" else "Tuning Center",
+                            text = stringResource(R.string.tweaks_hero_title),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = scheme.onSurface
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = if (isIndonesian) {
-                                "Atur tampilan dan performa dalam satu tempat"
-                            } else {
-                                "Tune display and performance in one place"
-                            },
+                            text = stringResource(R.string.tweaks_hero_desc),
                             style = MaterialTheme.typography.bodySmall,
                             color = scheme.onSurfaceVariant,
                             maxLines = 2,
@@ -582,25 +561,24 @@ private fun TweaksHero(
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     QuickStat(
-                        label = "REFRESH",
+                        label = stringResource(R.string.tweaks_quick_refresh),
                         value = "$liveRefreshRate Hz",
                         live = true,
                         modifier = Modifier.weight(1f)
                     )
                     QuickStatDivider()
                     QuickStat(
-                        label = "RENDERER",
+                        label = stringResource(R.string.tweaks_quick_renderer),
                         value = rendererLabel,
                         modifier = Modifier.weight(1f)
                     )
                     QuickStatDivider()
                     QuickStat(
-                        label = "LITE MODE",
-                        value = when {
-                            isLiteMode && isIndonesian -> "Aktif"
-                            isLiteMode -> "On"
-                            isIndonesian -> "Nonaktif"
-                            else -> "Off"
+                        label = stringResource(R.string.tweaks_quick_lite_mode),
+                        value = if (isLiteMode) {
+                            stringResource(R.string.status_on)
+                        } else {
+                            stringResource(R.string.status_off)
                         },
                         valueColor = if (isLiteMode) scheme.primary else scheme.onSurface,
                         modifier = Modifier.weight(1f)

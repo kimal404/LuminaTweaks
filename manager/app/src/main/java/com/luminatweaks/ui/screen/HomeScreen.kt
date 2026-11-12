@@ -168,7 +168,8 @@ fun HomeScreen() {
     val context = LocalContext.current
     var selectedTab by remember { mutableIntStateOf(0) }
     var currentSubscreen by remember { mutableStateOf<String?>(null) }
-    val kernelVersion = remember { System.getProperty("os.version") ?: "Unknown" }
+    val unknownLabel = stringResource(R.string.status_unknown)
+    val kernelVersion = remember(unknownLabel) { System.getProperty("os.version") ?: unknownLabel }
     val deviceModel = remember { DeviceUtil.getMarketDeviceName(context) }
 
     var batteryTemp by remember { mutableStateOf(DeviceUtil.getBatteryTemperature(context)) }
@@ -468,7 +469,7 @@ fun HomeDashboardContent(
             TopAppBar(
                 title = {
                     Text(
-                        text = "LuminaTweaks",
+                        text = stringResource(R.string.app_name),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -688,7 +689,10 @@ fun HomeDashboardContent(
                     ConnectedCardRow(
                         icon = Icons.Rounded.DeveloperBoard,
                         title = stringResource(R.string.home_manager_version),
-                        subtitle = "v${com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")} (Release)",
+                        subtitle = stringResource(
+                            R.string.home_version_release_format,
+                            com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")
+                        ),
                         position = ContainerPosition.Top
                     )
                     ConnectedCardRow(
@@ -810,16 +814,16 @@ private fun CoreStatusCard(
     val title = when {
         isChecking -> stringResource(R.string.home_core_checking)
         isRestarting -> stringResource(R.string.home_core_starting)
-        isRunning -> "Alive"
+        isRunning -> stringResource(R.string.home_core_alive)
         isRebootRequired -> stringResource(R.string.dialog_reboot_required_title)
-        !isModuleInstalled -> "Module Not Active"
+        !isModuleInstalled -> stringResource(R.string.home_core_module_inactive)
         else -> stringResource(R.string.home_core_inactive)
     }
     val subtitle = when {
         isChecking || isRestarting -> stringResource(R.string.home_core_scanning)
-        isRunning -> "PID: ${daemonPid ?: "-"}"
-        isRebootRequired -> "Reboot device to activate module"
-        !isModuleInstalled -> "Install or enable LuminaTweaks module first"
+        isRunning -> stringResource(R.string.home_core_pid_format, daemonPid ?: "-")
+        isRebootRequired -> stringResource(R.string.home_core_reboot_hint)
+        !isModuleInstalled -> stringResource(R.string.home_core_install_hint)
         else -> stringResource(R.string.home_core_tap_start)
     }
     val isAlive = isRunning && !isRestarting

@@ -391,17 +391,17 @@ fun TeksturRinganScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Texture level",
+                                text = stringResource(R.string.texture_level_title),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             val levelLabel = when (currentLod) {
-                                1 -> "1 · High"
-                                2 -> "2 · Medium"
-                                3 -> "3 · Low"
-                                4 -> "4 · Lowest"
-                                else -> "Default"
+                                1 -> stringResource(R.string.texture_level_1)
+                                2 -> stringResource(R.string.texture_level_2)
+                                3 -> stringResource(R.string.texture_level_3)
+                                4 -> stringResource(R.string.texture_level_4)
+                                else -> stringResource(R.string.texture_level_default)
                             }
                             Text(
                                 text = levelLabel,
@@ -471,7 +471,7 @@ fun TeksturRinganScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "Blur",
+                                    text = stringResource(R.string.texture_mode_blur),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = if (isBlur) MaterialTheme.colorScheme.onPrimary
@@ -494,7 +494,7 @@ fun TeksturRinganScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "Pixel",
+                                    text = stringResource(R.string.texture_mode_pixel),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = if (isPixel) MaterialTheme.colorScheme.onPrimary
@@ -576,7 +576,7 @@ fun TeksturRinganScreen(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Default")
+                        Text(stringResource(R.string.opt_default))
                     }
 
                     Button(

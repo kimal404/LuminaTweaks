@@ -135,7 +135,7 @@ fun AboutScreen(
                     ) {
                         AsyncImage(
                             model = com.luminatweaks.R.mipmap.ic_launcher,
-                            contentDescription = "Logo LuminaTweaks",
+                            contentDescription = stringResource(R.string.about_logo_content_desc),
                             modifier = Modifier
                                 .size(64.dp)
                                 .clip(CircleShape),
@@ -143,7 +143,7 @@ fun AboutScreen(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "LuminaTweaks",
+                            text = stringResource(R.string.app_name),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -315,7 +315,7 @@ fun AboutScreen(
                     ) {
                         Image(
                             painter = rememberVectorPainter(Icons.Rounded.Person),
-                            contentDescription = "Avatar MalCLA",
+                            contentDescription = stringResource(R.string.about_avatar_content_desc),
                             modifier = Modifier
                                 .size(40.dp)
                                 .clip(CircleShape),
@@ -356,7 +356,7 @@ fun AboutScreen(
             onDismissRequest = { showLicenseDialog = false },
             title = {
                 Text(
-                    text = "Apache License 2.0",
+                    text = stringResource(R.string.about_license_dialog_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )

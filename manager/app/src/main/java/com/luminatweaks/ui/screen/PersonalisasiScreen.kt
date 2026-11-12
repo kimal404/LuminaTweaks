@@ -869,7 +869,7 @@ private fun MockLuminaScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
-                text = "LuminaTweaks",
+                text = stringResource(R.string.app_name),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground,

@@ -97,7 +97,6 @@ import com.luminatweaks.data.DisplayRrMode
 import com.luminatweaks.model.AppItem
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
-import java.util.Locale
 
 enum class OptionItem(val value: String) {
     OFF("off"),
@@ -144,11 +143,6 @@ fun AppProfileScreen(
     val packageManager = remember { context.packageManager }
     val cornerRadius = LocalCornerRadius.current
     val isFloating = LocalFloatingNavBar.current
-
-    val isIndonesian = remember {
-        val lang = Locale.getDefault().language
-        lang == "in" || lang == "id"
-    }
 
     var rrModes by remember { mutableStateOf<List<DisplayRrMode>>(emptyList()) }
 
@@ -447,7 +441,7 @@ fun AppProfileScreen(
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             ProfileSectionTitle(
-                                title = if (isIndonesian) "Performa" else "Performance",
+                                title = stringResource(R.string.profile_section_performance),
                                 icon = Icons.Rounded.Speed
                             )
 
@@ -516,7 +510,7 @@ fun AppProfileScreen(
 
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             ProfileSectionTitle(
-                                title = if (isIndonesian) "Tampilan & Render" else "Display & Render",
+                                title = stringResource(R.string.profile_section_display_render),
                                 icon = Icons.Rounded.Brush
                             )
 
@@ -722,7 +716,7 @@ fun AppProfileScreen(
 
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             ProfileSectionTitle(
-                                title = if (isIndonesian) "Pengaturan Tambahan" else "Additional Settings",
+                                title = stringResource(R.string.profile_section_additional),
                                 icon = Icons.Rounded.Tune
                             )
 

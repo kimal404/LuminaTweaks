@@ -74,10 +74,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.luminatweaks.R
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.LogUtil
@@ -128,7 +130,7 @@ fun SettingsScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = if (currentLanguage == "en") "Settings" else "Pengaturan",
+                        text = stringResource(R.string.title_settings),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -153,7 +155,7 @@ fun SettingsScreen(
             item {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = "Personalisasi",
+                        text = stringResource(R.string.section_personalization),
                         style = MaterialTheme.typography.bodyMedium.copy(
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Medium
@@ -193,14 +195,14 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Personalisasi",
+                                    text = stringResource(R.string.personalization_title),
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Tema, warna, dan kustomisasi antarmuka",
+                                    text = stringResource(R.string.settings_personalization_desc),
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         fontSize = 12.sp,
                                         lineHeight = 16.sp
@@ -225,7 +227,7 @@ fun SettingsScreen(
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
-                        text = "Lainnya",
+                        text = stringResource(R.string.section_others),
                         style = MaterialTheme.typography.bodyMedium.copy(
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Medium
@@ -270,14 +272,14 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Simpan Log",
+                                    text = stringResource(R.string.settings_save_log),
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = if (isGeneratingLog) "Sedang membundel berkas log..." else "Ekspor atau bagikan log diagnosis daemon Lumina",
+                                    text = if (isGeneratingLog) stringResource(R.string.settings_save_log_bundling) else stringResource(R.string.settings_save_log_desc),
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         fontSize = 12.sp,
                                         lineHeight = 16.sp
@@ -313,14 +315,14 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Bahasa",
+                                    text = stringResource(R.string.settings_language),
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = if (currentLanguage == "en") "English" else "Bahasa Indonesia",
+                                    text = if (currentLanguage == "en") stringResource(R.string.language_english) else stringResource(R.string.language_indonesian),
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         fontSize = 12.sp,
                                         lineHeight = 16.sp
@@ -342,7 +344,7 @@ fun SettingsScreen(
             item {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = "Tentang",
+                        text = stringResource(R.string.section_about),
                         style = MaterialTheme.typography.bodyMedium.copy(
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Medium
@@ -382,14 +384,14 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Tentang LuminaTweaks",
+                                    text = stringResource(R.string.settings_about),
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Versi ${com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")}",
+                                    text = stringResource(R.string.settings_version_format, com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")),
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         fontSize = 12.sp,
                                         lineHeight = 16.sp
@@ -411,7 +413,7 @@ fun SettingsScreen(
             item {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = "Manajemen Modul",
+                        text = stringResource(R.string.settings_module_management),
                         style = MaterialTheme.typography.bodyMedium.copy(
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Medium
@@ -445,14 +447,14 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Copot Modul",
+                                    text = stringResource(R.string.settings_module_uninstall_title),
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.error
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Hapus modul dan seluruh data konfigurasi",
+                                    text = stringResource(R.string.settings_module_uninstall_desc),
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         fontSize = 12.sp,
                                         lineHeight = 16.sp
@@ -486,7 +488,7 @@ fun SettingsScreen(
             },
             title = {
                 Text(
-                    text = "Copot Modul",
+                    text = stringResource(R.string.settings_module_uninstall_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center
@@ -494,7 +496,7 @@ fun SettingsScreen(
             },
             text = {
                 Text(
-                    text = "Seluruh berkas modul, konfigurasi daemon, dan aplikasi Lumina Manager akan dihapus dari sistem.",
+                    text = stringResource(R.string.settings_module_uninstall_dialog_desc),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -510,7 +512,7 @@ fun SettingsScreen(
                     enabled = !isUninstalling
                 ) {
                     Text(
-                        text = if (isUninstalling) "Memproses..." else "Copot",
+                        text = if (isUninstalling) stringResource(R.string.settings_module_uninstall_processing) else stringResource(R.string.settings_module_uninstall_confirm),
                         color = MaterialTheme.colorScheme.error,
                         fontWeight = FontWeight.Bold
                     )
@@ -522,7 +524,7 @@ fun SettingsScreen(
                     enabled = !isUninstalling
                 ) {
                     Text(
-                        text = "Batal",
+                        text = stringResource(R.string.action_cancel),
                         fontWeight = FontWeight.SemiBold
                     )
                 }
@@ -545,7 +547,7 @@ fun SettingsScreen(
             },
             title = {
                 Text(
-                    text = "Pilih Bahasa",
+                    text = stringResource(R.string.dialog_select_language),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center
@@ -557,7 +559,7 @@ fun SettingsScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     LanguageOptionItem(
-                        title = "Bahasa Indonesia",
+                        title = stringResource(R.string.language_indonesian),
                         isSelected = currentLanguage == "id",
                         cornerRadius = cornerRadius,
                         onClick = {
@@ -573,7 +575,7 @@ fun SettingsScreen(
                     )
 
                     LanguageOptionItem(
-                        title = "English",
+                        title = stringResource(R.string.language_english),
                         isSelected = currentLanguage == "en",
                         cornerRadius = cornerRadius,
                         onClick = {
@@ -593,7 +595,7 @@ fun SettingsScreen(
             dismissButton = {
                 TextButton(onClick = { showLanguageDialog = false }) {
                     Text(
-                        text = "Batal",
+                        text = stringResource(R.string.action_cancel),
                         fontWeight = FontWeight.SemiBold
                     )
                 }
@@ -616,7 +618,7 @@ fun SettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "Log Subsystem",
+                    text = stringResource(R.string.dialog_log_subsystem),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -625,8 +627,8 @@ fun SettingsScreen(
 
                 LogOptionCard(
                     icon = Icons.Rounded.FileDownload,
-                    title = "Simpan Log",
-                    subtitle = "Simpan berkas log ke folder Download",
+                    title = stringResource(R.string.settings_save_log),
+                    subtitle = stringResource(R.string.log_option_save_desc),
                     cornerRadius = cornerRadius,
                     onClick = {
                         showLogBottomSheet = false
@@ -635,9 +637,9 @@ fun SettingsScreen(
                             val file = LogUtil.dumpDiagnosticLogs(context, saveToDownloads = true)
                             isGeneratingLog = false
                             if (file != null) {
-                                Toast.makeText(context, "Log tersimpan: Download/${file.name}", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, context.getString(R.string.toast_log_saved, file.name), Toast.LENGTH_LONG).show()
                             } else {
-                                Toast.makeText(context, "Gagal mengekspor log sistem", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.toast_log_export_failed), Toast.LENGTH_SHORT).show()
                             }
                         }
                     }
@@ -645,8 +647,8 @@ fun SettingsScreen(
 
                 LogOptionCard(
                     icon = Icons.Rounded.Share,
-                    title = "Bagikan Log",
-                    subtitle = "Bagikan berkas log langsung ke aplikasi lain",
+                    title = stringResource(R.string.log_option_share),
+                    subtitle = stringResource(R.string.log_option_share_desc),
                     cornerRadius = cornerRadius,
                     onClick = {
                         showLogBottomSheet = false
@@ -658,7 +660,7 @@ fun SettingsScreen(
                                 val intent = LogUtil.getShareLogIntent(context, file)
                                 context.startActivity(intent)
                             } else {
-                                Toast.makeText(context, "Gagal menyiapkan berkas log untuk dibagikan", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.toast_log_share_failed), Toast.LENGTH_SHORT).show()
                             }
                         }
                     }
