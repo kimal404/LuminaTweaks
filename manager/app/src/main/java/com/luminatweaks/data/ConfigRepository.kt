@@ -19,6 +19,7 @@ package com.luminatweaks.data
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Base64
 import com.luminatweaks.model.AppItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -26,6 +27,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
 data class DisplayRrMode(val id: Int, val hz: Int)
@@ -47,6 +49,8 @@ object ConfigRepository {
     private const val CONFIG_DIR = "/data/adb/.config/lumina"
     private const val GLOBAL_CONFIG_PATH = "$CONFIG_DIR/config.json"
     private const val APP_CONFIG_PATH = "$CONFIG_DIR/app_config.json"
+    private const val IPC_SOCKET_PRIMARY = "/dev/socket/lumina_ipc.sock"
+    private const val IPC_SOCKET_FALLBACK = "/data/local/tmp/lumina_ipc.sock"
     private const val BATCH_SEP = "___LUMINA_SEP___"
 
     private val GAMELIST_JSON_CANDIDATES = listOf(
@@ -84,7 +88,7 @@ object ConfigRepository {
     @Volatile
     var customGames: Set<String> = emptySet()
 
-    private fun runSuCmd(cmd: String, timeoutSeconds: Long = 8): String {
+    private fun runSuCmd(cmd: String, timeoutSeconds: Long = 6): String {
         return try {
             val process = ProcessBuilder("su", "-c", cmd)
                 .redirectErrorStream(true)
@@ -99,32 +103,48 @@ object ConfigRepository {
         }
     }
 
+    private fun writeFileAtomically(targetPath: String, content: String) {
+        val encoded = Base64.encodeToString(content.toByteArray(StandardCharsets.UTF_8), Base64.NO_WRAP)
+        val tmpPath = "$targetPath.tmp"
+        runSuCmd(
+            "mkdir -p $CONFIG_DIR && " +
+                "printf '%s' '$encoded' | base64 -d > '$tmpPath' && " +
+                "mv -f '$tmpPath' '$targetPath'",
+            5
+        )
+    }
+
     private fun notifyDaemonReload() {
         runSuCmd(
-            "printf 'RELOAD\\n' | nc -U /dev/socket/lumina_ipc.sock 2>/dev/null || " +
-                "printf 'RELOAD\\n' | nc -U /data/local/tmp/lumina_ipc.sock 2>/dev/null"
+            "(printf 'RELOAD\\n' | nc -U $IPC_SOCKET_PRIMARY 2>/dev/null || " +
+                "printf 'RELOAD\\n' | toybox nc -U $IPC_SOCKET_PRIMARY 2>/dev/null || " +
+                "printf 'RELOAD\\n' | nc -U $IPC_SOCKET_FALLBACK 2>/dev/null || " +
+                "printf 'RELOAD\\n' | toybox nc -U $IPC_SOCKET_FALLBACK 2>/dev/null) >/dev/null 2>&1 &",
+            3
         )
     }
 
     fun killApp(packageName: String) {
-        runSuCmd("am force-stop $packageName")
+        val safePkg = packageName.replace(Regex("[^a-zA-Z0-9._]"), "")
+        if (safePkg.isNotEmpty()) {
+            runSuCmd("am force-stop $safePkg", 4)
+        }
     }
 
     private fun ensureDir() {
-        runSuCmd("mkdir -p $CONFIG_DIR")
+        runSuCmd("mkdir -p $CONFIG_DIR", 3)
     }
 
     private fun updateGlobalConfigInternal(updater: (JSONObject) -> Unit) {
         ensureDir()
-        val currentContent = runSuCmd("cat $GLOBAL_CONFIG_PATH 2>/dev/null")
+        val currentContent = runSuCmd("cat $GLOBAL_CONFIG_PATH 2>/dev/null", 4)
         val json = try {
             if (currentContent.isNotBlank()) JSONObject(currentContent) else JSONObject()
         } catch (_: Exception) {
             JSONObject()
         }
         updater(json)
-        val raw = json.toString()
-        runSuCmd("echo '$raw' > $GLOBAL_CONFIG_PATH")
+        writeFileAtomically(GLOBAL_CONFIG_PATH, json.toString())
         notifyDaemonReload()
     }
 
@@ -140,10 +160,10 @@ object ConfigRepository {
             "echo '$BATCH_SEP'",
             "cat $CONFIG_DIR/current_rr.txt 2>/dev/null",
             "echo '$BATCH_SEP'",
-            "ren=\$(cat $CONFIG_DIR/current_renderer.txt 2>/dev/null); [ -z \"\$ren\" ] && ren=\$(getprop persist.lumina.renderer); [ -z \"\$ren\" ] && ren=\$(getprop debug.hwui.renderer); [ -z \"\$ren\" ] && ren=\"default\"; echo \"\$ren\"",
+            "ren=\$(cat $CONFIG_DIR/current_renderer.txt 2>/dev/null); [ -z \"\$ren\" ] && ren=\$(getprop persist.lumina.renderer); [ -z \"\$ren\" ] && ren=\$(getprop debug.hwui.renderer); [ -z \"\$ren\" ] && ren=\"default\"; echo \"\$ren\""
         ).joinToString(" ; ")
 
-        val output = runSuCmd(batchScript)
+        val output = runSuCmd(batchScript, 5)
         val parts = output.split(BATCH_SEP).map { it.trim() }
 
         val globalJson = if (parts.isNotEmpty() && parts[0].isNotBlank()) {
@@ -222,15 +242,12 @@ object ConfigRepository {
         parsedList
     }
 
-
     suspend fun setGlobalLiteMode(enabled: Boolean) = withContext(Dispatchers.IO) {
         cachedTweaksState = cachedTweaksState?.copy(isGlobalLiteMode = enabled)
         fileMutex.withLock {
             updateGlobalConfigInternal { it.put("lite_mode_global", enabled) }
             val propVal = if (enabled) "1" else "0"
-            runSuCmd("setprop persist.lumina.litemode $propVal")
-            val confVal = if (enabled) "1" else "0"
-            runSuCmd("echo '$confVal' > $CONFIG_DIR/lite_mode.conf")
+            runSuCmd("setprop persist.lumina.litemode $propVal && echo '$propVal' > $CONFIG_DIR/lite_mode.conf", 4)
         }
     }
 
@@ -239,11 +256,9 @@ object ConfigRepository {
         fileMutex.withLock {
             updateGlobalConfigInternal { it.put("auto_dnd", enabled) }
             val propVal = if (enabled) "1" else "0"
-            runSuCmd("setprop persist.lumina.autodnd $propVal")
+            runSuCmd("setprop persist.lumina.autodnd $propVal", 4)
         }
     }
-
-
 
     suspend fun setIoScheduler(scheduler: String) = withContext(Dispatchers.IO) {
         cachedTweaksState = cachedTweaksState?.copy(currentIoScheduler = scheduler)
@@ -267,11 +282,8 @@ object ConfigRepository {
         }
     }
 
-
-
-
     private fun loadAppConfigsInternal(): Map<String, AppProfileConfig> {
-        val content = runSuCmd("cat $APP_CONFIG_PATH 2>/dev/null")
+        val content = runSuCmd("cat $APP_CONFIG_PATH 2>/dev/null", 4)
         if (content.isBlank()) return emptyMap()
 
         val result = mutableMapOf<String, AppProfileConfig>()
@@ -281,7 +293,18 @@ object ConfigRepository {
                 val obj = arr.getJSONObject(i)
                 val pkg = obj.optString("pkg")
                 if (pkg.isNotEmpty()) {
-                    val textureDetail = obj.optInt("texture_detail", 0)
+                    val rawDetail = obj.optInt("texture_detail", 0).coerceIn(0, 4)
+                    val resolvedLod = (if (obj.has("texture_lod")) obj.optInt("texture_lod", rawDetail) else rawDetail).coerceIn(0, 4)
+
+                    val rawDriver = obj.optString("texture_driver", "").trim().lowercase()
+                    val legacyEnabled = obj.optBoolean("texture_enabled", false)
+                    val resolvedDriver = when {
+                        rawDriver == "angle" || rawDriver == "native" -> rawDriver
+                        legacyEnabled || resolvedLod > 0 -> "angle"
+                        else -> "native"
+                    }
+                    val resolvedTextureEnabled = resolvedDriver == "angle" || legacyEnabled
+
                     result[pkg] = AppProfileConfig(
                         pkg = pkg,
                         saklarUtama = obj.optBoolean("saklar_utama", false),
@@ -295,10 +318,10 @@ object ConfigRepository {
                         refreshRate = obj.optString("refresh_rate", "default"),
                         renderer = obj.optString("renderer", "default"),
                         dnd = obj.optString("dnd", "default"),
-                        textureDriver = obj.optString("texture_driver", "native"),
-                        textureLod = obj.optInt("texture_lod", textureDetail),
-                        textureEnabled = obj.optBoolean("texture_enabled", false),
-                        textureDetail = textureDetail,
+                        textureDriver = resolvedDriver,
+                        textureLod = resolvedLod,
+                        textureEnabled = resolvedTextureEnabled,
+                        textureDetail = resolvedLod,
                         pixelSharp = obj.optBoolean("pixel_sharp", false),
                         hardDistance = obj.optBoolean("hard_distance", false)
                     )
@@ -324,6 +347,15 @@ object ConfigRepository {
         ensureDir()
         val arr = JSONArray()
         for (item in configs.values) {
+            val normalizedLod = (if (item.textureLod > 0) item.textureLod else item.textureDetail).coerceIn(0, 4)
+            val normalizedDriver = when {
+                item.textureDriver.equals("angle", ignoreCase = true) -> "angle"
+                item.textureDriver.equals("native", ignoreCase = true) -> "native"
+                item.textureEnabled || normalizedLod > 0 -> "angle"
+                else -> "native"
+            }
+            val normalizedEnabled = normalizedDriver == "angle" || item.textureEnabled
+
             val obj = JSONObject().apply {
                 put("pkg", item.pkg)
                 put("saklar_utama", item.saklarUtama)
@@ -333,18 +365,18 @@ object ConfigRepository {
                 put("refresh_rate", item.refreshRate)
                 put("renderer", item.renderer)
                 put("dnd", item.dnd)
-                put("texture_driver", item.textureDriver)
-                put("texture_lod", item.textureLod)
-                put("texture_enabled", item.textureEnabled)
-                put("texture_detail", item.textureDetail)
+                put("texture_driver", normalizedDriver)
+                put("texture_lod", normalizedLod)
+                put("texture_enabled", normalizedEnabled)
+                put("texture_detail", normalizedLod)
                 put("pixel_sharp", item.pixelSharp)
                 put("hard_distance", item.hardDistance)
             }
             arr.put(obj)
         }
-        runSuCmd("echo '$arr' > $APP_CONFIG_PATH")
+        writeFileAtomically(APP_CONFIG_PATH, arr.toString())
 
-        val globalContent = runSuCmd("cat $GLOBAL_CONFIG_PATH 2>/dev/null")
+        val globalContent = runSuCmd("cat $GLOBAL_CONFIG_PATH 2>/dev/null", 4)
         val globalJson = try {
             if (globalContent.isNotBlank()) JSONObject(globalContent) else JSONObject()
         } catch (_: Exception) {
@@ -353,14 +385,28 @@ object ConfigRepository {
         val disabledSet = JSONArray()
         configs.values.filter { it.disabled }.forEach { disabledSet.put(it.pkg) }
         globalJson.put("disabled_games", disabledSet)
-        runSuCmd("echo '$globalJson' > $GLOBAL_CONFIG_PATH")
+        writeFileAtomically(GLOBAL_CONFIG_PATH, globalJson.toString())
         notifyDaemonReload()
     }
 
     suspend fun saveAppConfig(profile: AppProfileConfig) = withContext(Dispatchers.IO) {
         fileMutex.withLock {
+            val normalizedLod = (if (profile.textureLod > 0) profile.textureLod else profile.textureDetail).coerceIn(0, 4)
+            val normalizedDriver = when {
+                profile.textureDriver.equals("angle", ignoreCase = true) -> "angle"
+                profile.textureDriver.equals("native", ignoreCase = true) -> "native"
+                profile.textureEnabled || normalizedLod > 0 -> "angle"
+                else -> "native"
+            }
+            val normalizedProfile = profile.copy(
+                textureDriver = normalizedDriver,
+                textureLod = normalizedLod,
+                textureEnabled = normalizedDriver == "angle" || profile.textureEnabled,
+                textureDetail = normalizedLod
+            )
+
             val currentConfigs = (cachedAppConfigs ?: loadAppConfigsInternal()).toMutableMap()
-            currentConfigs[profile.pkg] = profile
+            currentConfigs[normalizedProfile.pkg] = normalizedProfile
             cachedAppConfigs = currentConfigs
             refreshGameSets(currentConfigs)
             persistAppConfigsInternal(currentConfigs)
@@ -371,7 +417,7 @@ object ConfigRepository {
         if (paths.isEmpty()) return ""
         val args = paths.joinToString(" ")
         val script = "for f in $args; do if [ -f \"\$f\" ]; then cat \"\$f\" 2>/dev/null; break; fi; done"
-        return runSuCmd(script)
+        return runSuCmd(script, 4)
     }
 
     private data class GameListMeta(
@@ -488,7 +534,7 @@ object ConfigRepository {
         cachedTweaksState?.let {
             if (it.rrModes.isNotEmpty()) return@withContext it.rrModes
         }
-        val content = runSuCmd("cat $CONFIG_DIR/rr_modes.json 2>/dev/null")
+        val content = runSuCmd("cat $CONFIG_DIR/rr_modes.json 2>/dev/null", 4)
         if (content.isBlank()) return@withContext emptyList()
         val list = mutableListOf<DisplayRrMode>()
         try {
@@ -503,7 +549,7 @@ object ConfigRepository {
 
     suspend fun getCurrentRefreshRateId(): Int? = withContext(Dispatchers.IO) {
         cachedTweaksState?.let { return@withContext it.currentRrId }
-        val content = runSuCmd("cat $CONFIG_DIR/current_rr.txt 2>/dev/null").trim()
+        val content = runSuCmd("cat $CONFIG_DIR/current_rr.txt 2>/dev/null", 3).trim()
         content.toIntOrNull()
     }
 
@@ -511,10 +557,9 @@ object ConfigRepository {
         cachedTweaksState = cachedTweaksState?.copy(currentRrId = id)
         ensureDir()
         if (id != null) {
-            runSuCmd("echo $id > $CONFIG_DIR/current_rr.txt")
-            runSuCmd("/system/bin/service call SurfaceFlinger 1035 i32 $id")
+            runSuCmd("echo $id > $CONFIG_DIR/current_rr.txt && /system/bin/service call SurfaceFlinger 1035 i32 $id", 4)
         } else {
-            runSuCmd("rm -f $CONFIG_DIR/current_rr.txt")
+            runSuCmd("rm -f $CONFIG_DIR/current_rr.txt", 3)
         }
         notifyDaemonReload()
     }
@@ -557,7 +602,7 @@ object ConfigRepository {
                 }
             }
         }
-        runSuCmd(cmds.joinToString(" && "))
+        runSuCmd(cmds.joinToString(" && "), 5)
         notifyDaemonReload()
     }
 }

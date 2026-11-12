@@ -14,23 +14,43 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-pkill -TERM luminad 2>/dev/null || killall -TERM luminad 2>/dev/null
-pkill -TERM lumina-binder 2>/dev/null || killall -TERM lumina-binder 2>/dev/null
-sleep 1
-pkill -9 luminad 2>/dev/null || killall -9 luminad 2>/dev/null
-pkill -9 lumina-binder 2>/dev/null || killall -9 lumina-binder 2>/dev/null
+WATCHDOG_PID_FILE="/data/local/tmp/lumina_watchdog.pid"
+if [ -f "$WATCHDOG_PID_FILE" ]; then
+    WD_PID=$(cat "$WATCHDOG_PID_FILE" 2>/dev/null)
+    [ -n "$WD_PID" ] && kill -9 "$WD_PID" 2>/dev/null || true
+    rm -f "$WATCHDOG_PID_FILE"
+fi
+
+killall -15 luminad 2>/dev/null || pkill -15 -x luminad 2>/dev/null || true
+killall -15 lumina-binder 2>/dev/null || pkill -15 -x lumina-binder 2>/dev/null || true
+
+WAIT_COUNT=0
+while [ "$WAIT_COUNT" -lt 5 ]; do
+    if ! pidof luminad >/dev/null 2>&1 && ! pidof lumina-binder >/dev/null 2>&1; then
+        break
+    fi
+    sleep 0.5
+    WAIT_COUNT=$((WAIT_COUNT + 1))
+done
+
+killall -9 luminad 2>/dev/null || pkill -9 -x luminad 2>/dev/null || true
+killall -9 lumina-binder 2>/dev/null || pkill -9 -x lumina-binder 2>/dev/null || true
 
 rm -f /dev/socket/lumina.sock
 rm -f /dev/socket/lumina_ipc.sock
 rm -f /dev/socket/lumina_binder.sock
+rm -f /dev/socket/luminad.lock
 rm -f /data/local/tmp/lumina.sock
 rm -f /data/local/tmp/lumina_ipc.sock
 rm -f /data/local/tmp/lumina_binder.sock
 rm -f /data/local/tmp/luminad.lock
 rm -f /data/local/tmp/lumina-binder.lock
+rm -f /data/local/tmp/lumina.pid
 rm -f /data/local/tmp/lumina.log*
 rm -f /data/local/tmp/luminad.log*
 rm -f /data/local/tmp/lumina-binder.log*
+
+setprop sys.lumina.profile Balanced 2>/dev/null || true
 
 rm -rf /data/adb/luminatweaks
 rm -rf /data/adb/.config/lumina

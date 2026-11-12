@@ -66,6 +66,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -88,6 +89,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import com.luminatweaks.R
 import com.luminatweaks.data.DaemonManager
 import com.luminatweaks.ui.component.LuminaBottomBar
@@ -103,6 +107,17 @@ import kotlinx.coroutines.withContext
 
 enum class ContainerPosition {
     Top, Middle, Bottom, Single
+}
+
+private fun readSystemProperty(key: String): String? {
+    return try {
+        val spClass = Class.forName("android.os.SystemProperties")
+        val getMethod = spClass.getMethod("get", String::class.java, String::class.java)
+        val value = getMethod.invoke(null, key, "") as? String
+        value?.takeIf { it.isNotBlank() }
+    } catch (_: Exception) {
+        null
+    }
 }
 
 @Composable
@@ -141,11 +156,33 @@ fun HomeScreen() {
     var batteryTemp by remember { mutableStateOf(DeviceUtil.getBatteryTemperature(context)) }
     var isChecking by remember { mutableStateOf(true) }
     var daemonPid by remember { mutableStateOf<String?>(null) }
-    var currentProfile by remember { mutableStateOf("Balanced") }
+    var currentProfile by remember {
+        mutableStateOf(readSystemProperty("sys.lumina.profile") ?: "Balanced")
+    }
     var currentFps by remember { mutableStateOf("-") }
     var isRootGranted by remember { mutableStateOf(false) }
     var selinuxStatus by remember { mutableStateOf("Unknown") }
     var showRebootDialog by remember { mutableStateOf(false) }
+    var isScreenResumed by remember { mutableStateOf(true) }
+
+    DisposableEffect(context) {
+        val lifecycleOwner = context as? LifecycleOwner
+        if (lifecycleOwner == null) {
+            onDispose { }
+        } else {
+            val observer = LifecycleEventObserver { _, event ->
+                when (event) {
+                    Lifecycle.Event.ON_RESUME -> isScreenResumed = true
+                    Lifecycle.Event.ON_PAUSE -> isScreenResumed = false
+                    else -> Unit
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose {
+                lifecycleOwner.lifecycle.removeObserver(observer)
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         val needsReboot = DaemonManager.isRebootRequired()
@@ -158,30 +195,47 @@ fun HomeScreen() {
         withContext(Dispatchers.IO) {
             val initialTemp = DeviceUtil.getBatteryTemperature(context)
             val initialStatus = DaemonManager.getStatus()
+            val propProfile = readSystemProperty("sys.lumina.profile")
             val initialRoot = RootUtil.checkRootAccess()
             val initialSelinux = DeviceUtil.getSelinuxStatus()
 
             withContext(Dispatchers.Main) {
                 batteryTemp = initialTemp
                 daemonPid = initialStatus.pid
-                currentProfile = initialStatus.profile
+                currentProfile = propProfile ?: initialStatus.profile
                 currentFps = initialStatus.fps
                 isRootGranted = initialRoot
                 selinuxStatus = initialSelinux
                 isChecking = false
             }
+        }
+    }
+
+    LaunchedEffect(selectedTab, isScreenResumed, currentSubscreen) {
+        if (selectedTab != 0 || !isScreenResumed || currentSubscreen != null) {
+            return@LaunchedEffect
+        }
+
+        withContext(Dispatchers.IO) {
+            val refreshedRoot = RootUtil.checkRootAccess()
+            val refreshedSelinux = DeviceUtil.getSelinuxStatus()
+            withContext(Dispatchers.Main) {
+                isRootGranted = refreshedRoot
+                selinuxStatus = refreshedSelinux
+            }
 
             while (isActive) {
-                delay(1500L)
                 val currentTemp = DeviceUtil.getBatteryTemperature(context)
+                val propProfile = readSystemProperty("sys.lumina.profile")
                 val status = DaemonManager.getStatus()
 
                 withContext(Dispatchers.Main) {
                     batteryTemp = currentTemp
                     daemonPid = status.pid
-                    currentProfile = status.profile
+                    currentProfile = propProfile ?: status.profile
                     currentFps = status.fps
                 }
+                delay(2500L)
             }
         }
     }

@@ -3,4 +3,4 @@ name=LuminaTweaks
 version=v2.3
 versionCode=230
 author=kimal
-description=Daemon is stopped.
+description=Event-driven gaming performance optimizer and hardware governor daemon.

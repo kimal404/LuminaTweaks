@@ -55,6 +55,12 @@ impl IpcServer {
     }
 }
 
+pub fn cleanup_socket() {
+    for path in [IPC_SOCKET_PRIMARY, IPC_SOCKET_FALLBACK] {
+        let _ = fs::remove_file(path);
+    }
+}
+
 fn bind_socket() -> (UnixListener, String) {
     for path in [IPC_SOCKET_PRIMARY, IPC_SOCKET_FALLBACK] {
         if let Ok(meta) = fs::symlink_metadata(path) {
@@ -121,7 +127,7 @@ fn handle_client(stream: UnixStream, shared_state: Arc<SharedState>) {
                     let writer = reader.get_mut();
                     let _ = writer.write_all(resp.as_bytes());
                     let _ = writer.flush();
-                } else if trimmed == "RELOAD" {
+                } else if trimmed == "RELOAD" || trimmed == "RELOAD_CONFIG" {
                     shared_state.reload_flag.store(true, Ordering::Relaxed);
                     let writer = reader.get_mut();
                     let _ = writer.write_all(b"OK\n");

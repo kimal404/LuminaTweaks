@@ -16,15 +16,19 @@
 
 package com.luminatweaks.data
 
+import android.annotation.SuppressLint
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 object DaemonManager {
     private const val MODULE_DAEMON_PATH = "/data/adb/modules/luminatweaks/luminad"
+    private const val MODULE_BINDER_PATH = "/data/adb/modules/luminatweaks/lumina-binder"
     private const val MODULE_UPDATE_DIR = "/data/adb/modules_update/luminatweaks"
+    private const val PID_FILE_PATH = "/data/local/tmp/lumina.pid"
 
     data class DaemonStatus(
         val pid: String?,
@@ -32,7 +36,7 @@ object DaemonManager {
         val fps: String
     )
 
-    private fun runSuCmd(cmd: String, timeoutSeconds: Long = 8): String {
+    private fun runSuCmd(cmd: String, timeoutSeconds: Long = 5): String {
         return try {
             val process = ProcessBuilder("su", "-c", cmd)
                 .redirectErrorStream(true)
@@ -47,25 +51,47 @@ object DaemonManager {
         }
     }
 
-    suspend fun autoGrantPermissions(): Boolean = withContext(Dispatchers.IO) {
-        val cmds = """
-            pm grant com.luminatweaks android.permission.POST_NOTIFICATIONS 2>/dev/null
-            cmd appops set com.luminatweaks POST_NOTIFICATION allow 2>/dev/null
-        """.trimIndent()
-        runSuCmd(cmds)
-        true
+    private fun readSystemProperty(key: String): String? {
+        return try {
+            @SuppressLint("PrivateApi")
+            val spClass = Class.forName("android.os.SystemProperties")
+            val getMethod = spClass.getMethod("get", String::class.java, String::class.java)
+            val value = getMethod.invoke(null, key, "") as? String
+            value?.trim()?.takeIf { it.isNotEmpty() }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun readPidFromFile(): String? {
+        return try {
+            val pidFile = File(PID_FILE_PATH)
+            if (!pidFile.exists() || !pidFile.canRead()) return null
+            val pid = pidFile.readText().trim()
+            if (pid.isEmpty() || !pid.all { it.isDigit() }) return null
+            val commFile = File("/proc/$pid/comm")
+            if (commFile.exists() && commFile.canRead() && commFile.readText().trim() == "luminad") {
+                pid
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     suspend fun isRebootRequired(): Boolean = withContext(Dispatchers.IO) {
-        runSuCmd("[ -d $MODULE_UPDATE_DIR ] && echo 'YES'").contains("YES")
+        runSuCmd("[ -d $MODULE_UPDATE_DIR ] && echo 'YES'", 3).contains("YES")
     }
 
     suspend fun isModuleInstalled(): Boolean = withContext(Dispatchers.IO) {
-        runSuCmd("[ -f $MODULE_DAEMON_PATH ] && echo 'OK'").contains("OK")
+        runSuCmd("[ -f $MODULE_DAEMON_PATH ] && echo 'OK'", 3).contains("OK")
     }
 
     suspend fun getDaemonPid(): String? = withContext(Dispatchers.IO) {
-        val pid = runSuCmd("pidof luminad")
+        readPidFromFile()?.let { return@withContext it }
+
+        val pid = runSuCmd("pidof luminad", 3)
         if (pid.isNotBlank() && pid.all { it.isDigit() || it.isWhitespace() }) {
             pid.split("\\s+".toRegex()).firstOrNull { it.isNotBlank() }
         } else {
@@ -76,20 +102,24 @@ object DaemonManager {
     suspend fun isDaemonRunning(): Boolean = getDaemonPid() != null
 
     suspend fun getStatus(): DaemonStatus = withContext(Dispatchers.IO) {
+        val fastPid = readPidFromFile()
+        val fastProfile = readSystemProperty("sys.lumina.profile")
+
         val output = runSuCmd(
             "pid=\$(pidof luminad | awk '{print \$1}'); " +
                 "echo \"PID=\$pid\"; " +
-                "echo \"PROFILE=\$(getprop sys.lumina.profile)\"; " +
-                "echo \"FPS=\$(cat /data/adb/.config/lumina/fps.txt 2>/dev/null)\""
+                "echo \"FPS=\$(cat /data/adb/.config/lumina/fps.txt 2>/dev/null)\"",
+            3
         )
 
-        var pid: String? = null
-        var profile = ""
+        var pid: String? = fastPid
         var fpsRaw = ""
         output.lineSequence().forEach { line ->
             when {
-                line.startsWith("PID=") -> pid = line.removePrefix("PID=").trim().ifBlank { null }
-                line.startsWith("PROFILE=") -> profile = line.removePrefix("PROFILE=").trim()
+                line.startsWith("PID=") -> {
+                    val parsed = line.removePrefix("PID=").trim()
+                    if (parsed.isNotBlank()) pid = parsed
+                }
                 line.startsWith("FPS=") -> fpsRaw = line.removePrefix("FPS=").trim()
             }
         }
@@ -98,9 +128,11 @@ object DaemonManager {
         if (resolvedPid == null) {
             DaemonStatus(null, "-", "-")
         } else {
+            val resolvedProfile = fastProfile
+                ?: runSuCmd("getprop sys.lumina.profile", 2).ifBlank { "Balanced" }
             DaemonStatus(
                 pid = resolvedPid,
-                profile = profile.ifBlank { "Balanced" },
+                profile = resolvedProfile,
                 fps = parseFps(fpsRaw)
             )
         }
@@ -117,29 +149,32 @@ object DaemonManager {
 
     suspend fun stopDaemon(): Boolean = withContext(Dispatchers.IO) {
         runSuCmd(
-            "pkill -TERM luminad 2>/dev/null || killall -TERM luminad 2>/dev/null; " +
-                "sleep 1; " +
-                "pkill -9 luminad 2>/dev/null || killall -9 luminad 2>/dev/null"
+            "killall -15 luminad 2>/dev/null || pkill -15 -x luminad 2>/dev/null || true; " +
+                "i=0; while [ \$i -lt 5 ]; do pidof luminad >/dev/null 2>&1 || break; sleep 0.5; i=\$((i+1)); done; " +
+                "killall -9 luminad 2>/dev/null || pkill -9 -x luminad 2>/dev/null || true",
+            6
         )
         !isDaemonRunning()
     }
 
     suspend fun startDaemon(context: Context): Boolean = withContext(Dispatchers.IO) {
-        autoGrantPermissions()
-
         if (isDaemonRunning()) return@withContext true
 
-        // Jangan jalankan daemon jika modul baru di-flash dan menunggu reboot
         if (isRebootRequired()) {
             return@withContext false
         }
 
-        // Hanya boleh jalan jika modul terpasang resmi di KernelSU/Magisk
         if (!isModuleInstalled()) {
             return@withContext false
         }
 
-        runSuCmd("$MODULE_DAEMON_PATH </dev/null >/dev/null 2>&1 &")
+        runSuCmd(
+            "if [ -f $MODULE_BINDER_PATH ] && ! pidof lumina-binder >/dev/null 2>&1; then " +
+                "chmod 755 $MODULE_BINDER_PATH && nohup $MODULE_BINDER_PATH >/dev/null 2>&1 & sleep 1; " +
+                "fi; " +
+                "chmod 755 $MODULE_DAEMON_PATH && nohup $MODULE_DAEMON_PATH >/dev/null 2>&1 &",
+            5
+        )
 
         var retries = 5
         while (retries > 0) {

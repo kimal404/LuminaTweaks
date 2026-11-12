@@ -32,7 +32,9 @@ mod watcher;
 
 use ipc::{IpcServer, SharedState};
 use std::collections::hash_map::DefaultHasher;
+use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
+use std::os::unix::io::AsRawFd;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -49,13 +51,36 @@ static SHUTDOWN: AtomicBool = AtomicBool::new(false);
 
 extern "C" {
     fn signal(signum: i32, handler: extern "C" fn(i32)) -> usize;
+    fn flock(fd: i32, operation: i32) -> i32;
 }
 
 const SIGINT: i32 = 2;
 const SIGTERM: i32 = 15;
+const LOCK_EX: i32 = 2;
+const LOCK_NB: i32 = 4;
+
+const PID_FILE_PATH: &str = "/data/local/tmp/lumina.pid";
 
 extern "C" fn handle_signal(_: i32) {
     SHUTDOWN.store(true, Ordering::Relaxed);
+}
+
+fn acquire_instance_lock() -> Option<File> {
+    for lock_path in ["/dev/socket/luminad.lock", "/data/local/tmp/luminad.lock"] {
+        if let Ok(file) = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .open(lock_path)
+        {
+            let rc = unsafe { flock(file.as_raw_fd(), LOCK_EX | LOCK_NB) };
+            if rc == 0 {
+                return Some(file);
+            }
+            return None;
+        }
+    }
+    None
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -113,6 +138,7 @@ struct EngineRuntime {
     target_game_pid: i32,
     current_applied_rr: Option<i32>,
     current_applied_renderer: String,
+    skipped_renderer_notice_pkg: Option<String>,
     last_config_hash: Option<u64>,
     left_foreground_at: Option<Instant>,
     dnd_override: bool,
@@ -133,6 +159,7 @@ impl EngineRuntime {
             target_game_pid: 0,
             current_applied_rr: display::get_saved_mode_id(),
             current_applied_renderer: renderer::get_saved_renderer(),
+            skipped_renderer_notice_pkg: None,
             last_config_hash: Some(config_hash()),
             left_foreground_at: None,
             dnd_override: false,
@@ -260,14 +287,33 @@ impl EngineRuntime {
             self.current_applied_rr = desired_rr;
         }
 
+        let angle_active = target_pkg
+            .map(TextureController::is_angle_active_for)
+            .unwrap_or(false);
+
         let global_renderer = renderer::get_saved_renderer();
         let desired_renderer = if let Some(ref cfg) = target_cfg {
-            if cfg.renderer != "default" && !cfg.renderer.is_empty() {
+            if angle_active {
+                if cfg.renderer != "default" && !cfg.renderer.is_empty()
+                    && self.skipped_renderer_notice_pkg.as_deref() != target_pkg
+                {
+                    log!(
+                        "[RENDERER] Skipped custom renderer '{}' for {} (Texture ANGLE active)",
+                        cfg.renderer,
+                        target_pkg.unwrap_or("system")
+                    );
+                    self.skipped_renderer_notice_pkg = target_pkg.map(|s| s.to_string());
+                }
+                global_renderer
+            } else if cfg.renderer != "default" && !cfg.renderer.is_empty() {
+                self.skipped_renderer_notice_pkg = None;
                 cfg.renderer.clone()
             } else {
+                self.skipped_renderer_notice_pkg = None;
                 global_renderer
             }
         } else {
+            self.skipped_renderer_notice_pkg = None;
             global_renderer
         };
 
@@ -292,6 +338,7 @@ impl EngineRuntime {
 
         if self.current_profile != Some(Profile::Balance) {
             self.left_foreground_at = None;
+            self.skipped_renderer_notice_pkg = None;
             self.current_profile = Some(Profile::Balance);
             engine::balance_profile();
             set_system_profile_prop("Balanced");
@@ -326,10 +373,20 @@ impl EngineRuntime {
 }
 
 fn main() {
+    let _instance_lock = match acquire_instance_lock() {
+        Some(lock) => lock,
+        None => {
+            log!("[SYSTEM] Another luminad instance is already active, exiting");
+            return;
+        }
+    };
+
     unsafe {
         signal(SIGINT, handle_signal);
         signal(SIGTERM, handle_signal);
     }
+
+    let _ = std::fs::write(PID_FILE_PATH, format!("{}\n", std::process::id()));
 
     log!(
         "[SYSTEM] Online | Kernel {} | Binder Socket pending",
@@ -371,6 +428,8 @@ fn main() {
             utility_ctrl.restore();
             TextureController::restore();
             fps_monitor.stop();
+            ipc::cleanup_socket();
+            let _ = std::fs::remove_file(PID_FILE_PATH);
             break;
         }
 
@@ -558,9 +617,13 @@ fn main() {
         perf::record(loop_started.elapsed());
 
         let timeout = Duration::from_millis(sleep_ms);
+        let poll_started = Instant::now();
         let had_event = binder_client.poll(timeout);
         if !had_event && !binder_client.is_push() {
-            thread::sleep(timeout);
+            let elapsed = poll_started.elapsed();
+            if elapsed < timeout {
+                thread::sleep(timeout - elapsed);
+            }
         }
     }
 }

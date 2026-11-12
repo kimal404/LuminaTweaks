@@ -14,13 +14,16 @@
 
 use crate::log;
 use serde_json::Value;
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 
 const ANGLE_BACKUP_PATH: &str = "/data/adb/.config/lumina/angle_backup.json";
 static ANGLE_APPLIED: AtomicBool = AtomicBool::new(false);
+static LAST_SYNC_STATE: Mutex<Option<String>> = Mutex::new(None);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextureDriver {
@@ -33,13 +36,6 @@ impl TextureDriver {
         match s.trim().to_ascii_lowercase().as_str() {
             "angle" => TextureDriver::Angle,
             _ => TextureDriver::Native,
-        }
-    }
-
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            TextureDriver::Native => "native",
-            TextureDriver::Angle => "angle",
         }
     }
 }
@@ -106,6 +102,57 @@ fn save_angle_backup() {
     let _ = fs::write(ANGLE_BACKUP_PATH, backup.to_string());
 }
 
+fn merge_with_user_angle_settings(lumina_pkgs: &[String]) -> (String, String) {
+    let lumina_set: HashSet<&str> = lumina_pkgs.iter().map(|s| s.as_str()).collect();
+    let mut merged: Vec<(String, String)> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+
+    if let Ok(content) = fs::read_to_string(ANGLE_BACKUP_PATH) {
+        if let Ok(backup) = serde_json::from_str::<Value>(&content) {
+            let orig_pkgs = backup.get("pkgs").and_then(|v| v.as_str()).unwrap_or("");
+            let orig_vals = backup.get("values").and_then(|v| v.as_str()).unwrap_or("");
+
+            if !orig_pkgs.is_empty() {
+                let pkg_iter = orig_pkgs.split(',').map(str::trim);
+                let val_iter = orig_vals.split(',').map(str::trim);
+
+                for (pkg, val) in pkg_iter.zip(val_iter) {
+                    if pkg.is_empty() || !seen.insert(pkg.to_string()) {
+                        continue;
+                    }
+                    let effective_val = if lumina_set.contains(pkg) {
+                        "angle".to_string()
+                    } else if val.is_empty() {
+                        "default".to_string()
+                    } else {
+                        val.to_string()
+                    };
+                    merged.push((pkg.to_string(), effective_val));
+                }
+            }
+        }
+    }
+
+    for pkg in lumina_pkgs {
+        if seen.insert(pkg.clone()) {
+            merged.push((pkg.clone(), "angle".to_string()));
+        }
+    }
+
+    let pkgs_joined = merged
+        .iter()
+        .map(|(p, _)| p.as_str())
+        .collect::<Vec<_>>()
+        .join(",");
+    let values_joined = merged
+        .iter()
+        .map(|(_, v)| v.as_str())
+        .collect::<Vec<_>>()
+        .join(",");
+
+    (pkgs_joined, values_joined)
+}
+
 fn restore_global_setting(key: &str, value: Option<&str>) {
     match value {
         Some(v) if !v.is_empty() => set_global_setting(key, v),
@@ -149,6 +196,9 @@ impl TextureController {
         if Path::new(ANGLE_BACKUP_PATH).exists() {
             restore_angle_backup();
         }
+        if let Ok(mut state) = LAST_SYNC_STATE.lock() {
+            *state = None;
+        }
         Self::sync_config(None);
     }
 
@@ -160,22 +210,114 @@ impl TextureController {
         }
 
         match lod.clamp(0, 4) {
-            1 => {
-                features.push("forceTextureLodOffset1");
-            }
-            2 => {
-                features.push("forceTextureLodOffset2");
-            }
-            3 => {
-                features.push("forceTextureLodOffset3");
-            }
-            4 => {
-                features.push("forceTextureLodOffset4");
-            }
+            1 => features.push("forceTextureLodOffset1"),
+            2 => features.push("forceTextureLodOffset2"),
+            3 => features.push("forceTextureLodOffset3"),
+            4 => features.push("forceTextureLodOffset4"),
             _ => (),
         }
 
         features.join(":")
+    }
+
+    fn parse_angle_entry(key_opt: Option<String>, item: &Value) -> Option<(String, String)> {
+        let master = item
+            .get("saklar_utama")
+            .or_else(|| item.get("saklarUtama"))
+            .or_else(|| item.get("enabled"))
+            .map(is_truthy)
+            .unwrap_or(false);
+
+        if !master {
+            return None;
+        }
+
+        let driver_str = item
+            .get("texture_driver")
+            .or_else(|| item.get("textureDriver"))
+            .and_then(|v| v.as_str());
+
+        let driver = match driver_str {
+            Some(s) => TextureDriver::from_str(s),
+            None => {
+                let legacy_enabled = item
+                    .get("texture_enabled")
+                    .or_else(|| item.get("textureEnabled"))
+                    .map(is_truthy)
+                    .unwrap_or(false);
+
+                if legacy_enabled {
+                    TextureDriver::Angle
+                } else {
+                    TextureDriver::Native
+                }
+            }
+        };
+
+        if driver != TextureDriver::Angle {
+            return None;
+        }
+
+        let pkg = item
+            .get("pkg")
+            .or_else(|| item.get("package"))
+            .or_else(|| item.get("packageName"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .or(key_opt)?;
+
+        let raw_lod = item
+            .get("texture_lod")
+            .or_else(|| item.get("textureLod"))
+            .or_else(|| item.get("texture_detail"))
+            .or_else(|| item.get("textureDetail"))
+            .and_then(|v| {
+                if let Some(n) = v.as_i64() {
+                    Some(n as i32)
+                } else if let Some(s) = v.as_str() {
+                    s.parse::<i32>().ok()
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(0);
+
+        let lod = raw_lod.clamp(0, 4);
+
+        let pixel_sharp = item
+            .get("pixel_sharp")
+            .or_else(|| item.get("pixelSharp"))
+            .map(is_truthy)
+            .unwrap_or(false);
+
+        let features = Self::build_features_string(lod, pixel_sharp);
+        Some((pkg, features))
+    }
+
+    pub fn is_angle_active_for(target_pkg: &str) -> bool {
+        let Some(json) = crate::detector::read_app_json_cached() else {
+            return false;
+        };
+
+        if let Some(list) = json.as_array() {
+            for item in list {
+                if let Some((pkg, _)) = Self::parse_angle_entry(None, item) {
+                    if pkg == target_pkg {
+                        return true;
+                    }
+                }
+            }
+        } else if let Some(map) = json.as_object() {
+            for (k, v) in map {
+                if let Some((pkg, _)) = Self::parse_angle_entry(Some(k.clone()), v) {
+                    if pkg == target_pkg {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        false
     }
 
     pub fn sync_config(focused_pkg: Option<&str>) {
@@ -203,80 +345,16 @@ impl TextureController {
         }
 
         for (key_opt, item) in items {
-            let master = item
-                .get("saklar_utama")
-                .or_else(|| item.get("saklarUtama"))
-                .or_else(|| item.get("enabled"))
-                .map(is_truthy)
-                .unwrap_or(false);
+            if let Some((pkg, feat)) = Self::parse_angle_entry(key_opt, item) {
+                active_pkgs.push(pkg.clone());
 
-            let driver_str = item
-                .get("texture_driver")
-                .or_else(|| item.get("textureDriver"))
-                .and_then(|v| v.as_str());
-
-            let driver = match driver_str {
-                Some(s) => TextureDriver::from_str(s),
-                None => {
-                    let legacy_enabled = item
-                        .get("texture_enabled")
-                        .or_else(|| item.get("textureEnabled"))
-                        .map(is_truthy)
-                        .unwrap_or(false);
-
-                    if legacy_enabled {
-                        TextureDriver::Angle
-                    } else {
-                        TextureDriver::Native
+                if let Some(f_pkg) = focused_pkg {
+                    if pkg == f_pkg {
+                        target_features = Some(feat.clone());
                     }
                 }
-            };
-
-            let raw_lod = item
-                .get("texture_lod")
-                .or_else(|| item.get("textureLod"))
-                .or_else(|| item.get("texture_detail"))
-                .or_else(|| item.get("textureDetail"))
-                .and_then(|v| {
-                    if let Some(n) = v.as_i64() {
-                        Some(n as i32)
-                    } else if let Some(s) = v.as_str() {
-                        s.parse::<i32>().ok()
-                    } else {
-                        None
-                    }
-                })
-                .unwrap_or(0);
-
-            let lod = raw_lod.clamp(0, 4);
-
-            let pixel_sharp = item
-                .get("pixel_sharp")
-                .or_else(|| item.get("pixelSharp"))
-                .map(is_truthy)
-                .unwrap_or(false);
-
-            let pkg_name = item
-                .get("pkg")
-                .or_else(|| item.get("package"))
-                .or_else(|| item.get("packageName"))
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string())
-                .or(key_opt);
-
-            if master && driver == TextureDriver::Angle {
-                if let Some(pkg) = pkg_name {
-                    active_pkgs.push(pkg.clone());
-
-                    let feat = Self::build_features_string(lod, pixel_sharp);
-                    if let Some(f_pkg) = focused_pkg {
-                        if pkg == f_pkg {
-                            target_features = Some(feat.clone());
-                        }
-                    }
-                    if fallback_features.is_none() {
-                        fallback_features = Some(feat);
-                    }
+                if fallback_features.is_none() {
+                    fallback_features = Some(feat);
                 }
             }
         }
@@ -288,17 +366,26 @@ impl TextureController {
 
         save_angle_backup();
 
-        let pkgs_joined = active_pkgs.join(",");
-        let values_joined = vec!["angle"; active_pkgs.len()].join(",");
-
-        set_global_setting("angle_gl_driver_selection_pkgs", &pkgs_joined);
-        set_global_setting("angle_gl_driver_selection_values", &values_joined);
+        let (pkgs_joined, values_joined) = merge_with_user_angle_settings(&active_pkgs);
 
         let applied_features = if focused_pkg.is_some() {
             target_features.unwrap_or_else(|| fallback_features.unwrap_or_default())
         } else {
             fallback_features.unwrap_or_default()
         };
+
+        let next_state = format!("{}|{}|{}", pkgs_joined, values_joined, applied_features);
+        if let Ok(mut state_guard) = LAST_SYNC_STATE.lock() {
+            if ANGLE_APPLIED.load(Ordering::Relaxed)
+                && state_guard.as_deref() == Some(next_state.as_str())
+            {
+                return;
+            }
+            *state_guard = Some(next_state);
+        }
+
+        set_global_setting("angle_gl_driver_selection_pkgs", &pkgs_joined);
+        set_global_setting("angle_gl_driver_selection_values", &values_joined);
 
         let _ = Command::new("setprop")
             .args(["debug.angle.feature_overrides_enabled", &applied_features])
@@ -317,7 +404,12 @@ impl TextureController {
     }
 
     pub fn restore() {
-        if !ANGLE_APPLIED.swap(false, Ordering::Relaxed) {
+        if let Ok(mut state) = LAST_SYNC_STATE.lock() {
+            *state = None;
+        }
+
+        let was_applied = ANGLE_APPLIED.swap(false, Ordering::Relaxed);
+        if !was_applied && !Path::new(ANGLE_BACKUP_PATH).exists() {
             return;
         }
 

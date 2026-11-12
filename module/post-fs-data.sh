@@ -40,7 +40,9 @@ patch_sepolicy_rule() {
     fi
 }
 
-patch_sepolicy_rule "allow domain proc_type file { read open }"
-patch_sepolicy_rule "allow domain proc_type dir { read open search }"
+for ctx in magisk su init kernel; do
+    patch_sepolicy_rule "allow $ctx proc_type file { read open getattr }"
+    patch_sepolicy_rule "allow $ctx proc_type dir { read open search getattr }"
+done
 
 exit 0

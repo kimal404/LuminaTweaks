@@ -25,8 +25,36 @@ import android.os.Build
 import android.provider.Settings
 import java.io.File
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 object DeviceUtil {
+    private fun runCmdWithTimeout(cmd: Array<String>, timeoutSeconds: Long = 3): String {
+        return try {
+            val process = ProcessBuilder(*cmd)
+                .redirectErrorStream(true)
+                .start()
+            if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+                return ""
+            }
+            process.inputStream.bufferedReader().use { it.readText() }.trim()
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    private fun readNodeOrSu(path: String): String {
+        try {
+            val file = File(path)
+            if (file.exists() && file.canRead()) {
+                val text = file.readText().trim()
+                if (text.isNotEmpty()) return text
+            }
+        } catch (_: Exception) {}
+
+        return runCmdWithTimeout(arrayOf("su", "-c", "cat $path 2>/dev/null"), 3)
+    }
+
     private fun getSystemProperty(key: String): String? {
         return try {
             @SuppressLint("PrivateApi")
@@ -35,13 +63,8 @@ object DeviceUtil {
             val result = get.invoke(null, key) as? String
             if (result.isNullOrBlank()) null else result.trim()
         } catch (_: Exception) {
-            try {
-                val process = ProcessBuilder("getprop", key).start()
-                val value = process.inputStream.bufferedReader().use { it.readLine() }
-                if (value.isNullOrBlank()) null else value.trim()
-            } catch (_: Exception) {
-                null
-            }
+            val value = runCmdWithTimeout(arrayOf("getprop", key), 2)
+            value.takeIf { it.isNotBlank() }
         }
     }
 
@@ -118,23 +141,33 @@ object DeviceUtil {
     }
 
     fun getSelinuxStatus(): String {
+        try {
+            val enforceFile = File("/sys/fs/selinux/enforce")
+            if (enforceFile.exists() && enforceFile.canRead()) {
+                return when (enforceFile.readText().trim()) {
+                    "1" -> "Enforcing"
+                    "0" -> "Permissive"
+                    else -> "Unknown"
+                }
+            }
+        } catch (_: Exception) {}
+
+        val enforceOut = runCmdWithTimeout(arrayOf("getenforce"), 2)
+        if (enforceOut.isNotBlank()) {
+            return enforceOut.replaceFirstChar { it.uppercase() }
+        }
+
         val prop = getSystemProperty("ro.boot.selinux")
         if (!prop.isNullOrBlank()) {
             return prop.replaceFirstChar { it.uppercase() }
         }
-        return try {
-            val process = ProcessBuilder("getenforce").start()
-            val value = process.inputStream.bufferedReader().use { it.readLine() }
-            process.waitFor()
-            value?.trim()?.takeIf { it.isNotBlank() }?.replaceFirstChar { it.uppercase() } ?: "Unknown"
-        } catch (_: Exception) {
-            "Unknown"
-        }
+
+        return "Unknown"
     }
 
-    fun getTotalRamGb(context: android.content.Context): Int {
+    fun getTotalRamGb(context: Context): Int {
         return try {
-            val actManager = context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+            val actManager = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
             val memInfo = android.app.ActivityManager.MemoryInfo()
             actManager.getMemoryInfo(memInfo)
             val totalGb = memInfo.totalMem.toDouble() / (1024.0 * 1024.0 * 1024.0)
@@ -145,76 +178,27 @@ object DeviceUtil {
     }
 
     fun getCurrentZramDisksizeGb(): Int {
-        val raw = try {
-            val f = java.io.File("/sys/block/zram0/disksize")
-            if (f.exists() && f.canRead()) {
-                f.readText().trim()
-            } else {
-                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat /sys/block/zram0/disksize"))
-                val out = process.inputStream.bufferedReader().readText().trim()
-                process.waitFor()
-                out
-            }
-        } catch (_: Exception) {
-            ""
-        }
+        val raw = readNodeOrSu("/sys/block/zram0/disksize")
         val bytes = raw.toLongOrNull() ?: return 8
         val gb = (bytes.toDouble() / (1024.0 * 1024.0 * 1024.0)).let { kotlin.math.round(it).toInt() }
         return gb.coerceAtLeast(1)
     }
 
     fun getSwappiness(): Int {
-        val raw = try {
-            val f = java.io.File("/proc/sys/vm/swappiness")
-            if (f.exists() && f.canRead()) {
-                f.readText().trim()
-            } else {
-                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat /proc/sys/vm/swappiness"))
-                val out = process.inputStream.bufferedReader().readText().trim()
-                process.waitFor()
-                out
-            }
-        } catch (_: Exception) {
-            ""
-        }
+        val raw = readNodeOrSu("/proc/sys/vm/swappiness")
         return raw.toIntOrNull()?.coerceIn(0, 200) ?: 100
     }
 
     fun getActiveZramAlgorithm(): String {
-        val raw = try {
-            val f = java.io.File("/sys/block/zram0/comp_algorithm")
-            if (f.exists() && f.canRead()) {
-                f.readText().trim()
-            } else {
-                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat /sys/block/zram0/comp_algorithm"))
-                val out = process.inputStream.bufferedReader().readText().trim()
-                process.waitFor()
-                out
-            }
-        } catch (_: Exception) {
-            ""
-        }
+        val raw = readNodeOrSu("/sys/block/zram0/comp_algorithm")
         val active = raw.substringAfter('[', "").substringBefore(']', "")
         return if (active.isNotBlank()) active else "zstd"
     }
 
     fun getAvailableZramAlgorithms(): List<String> {
-        val raw = try {
-            val f = java.io.File("/sys/block/zram0/comp_algorithm")
-            if (f.exists() && f.canRead()) {
-                f.readText().trim()
-            } else {
-                val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat /sys/block/zram0/comp_algorithm"))
-                val out = process.inputStream.bufferedReader().readText().trim()
-                process.waitFor()
-                out
-            }
-        } catch (_: Exception) {
-            ""
-        }
+        val raw = readNodeOrSu("/sys/block/zram0/comp_algorithm")
         val cleaned = raw.replace("[", "").replace("]", "").trim()
         val list = cleaned.split(" ", "\t", "\n").filter { it.isNotBlank() }
         return if (list.isNotEmpty()) list else listOf("zstd", "lz4", "lzo-rle", "lzo")
     }
-
 }

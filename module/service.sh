@@ -17,6 +17,8 @@
 MODDIR=${0%/*}
 [ -d "$MODDIR" ] || MODDIR="/data/adb/modules/luminatweaks"
 
+WATCHDOG_PID_FILE="/data/local/tmp/lumina_watchdog.pid"
+
 until [ "$(getprop sys.boot_completed)" = "1" ]; do
     sleep 2
 done
@@ -26,21 +28,38 @@ sleep 3
 echo 0 > "$MODDIR/.bootcount"
 rm -f "$MODDIR/.bootloop_guard"
 
-pm grant com.luminatweaks android.permission.POST_NOTIFICATIONS >/dev/null 2>&1
-cmd appops set com.luminatweaks POST_NOTIFICATION allow >/dev/null 2>&1
 cmd appops set com.luminatweaks AUTO_START allow >/dev/null 2>&1
 cmd appops set com.luminatweaks RUN_IN_BACKGROUND allow >/dev/null 2>&1
 dumpsys deviceidle whitelist +com.luminatweaks >/dev/null 2>&1
 
-pkill -TERM -f luminad 2>/dev/null || killall -TERM luminad 2>/dev/null
-pkill -TERM -f lumina-binder 2>/dev/null || killall -TERM lumina-binder 2>/dev/null
-sleep 1
-pkill -9 -f luminad 2>/dev/null || killall -9 luminad 2>/dev/null
-pkill -9 -f lumina-binder 2>/dev/null || killall -9 lumina-binder 2>/dev/null
+# Stop previous watchdog subshell before restarting daemons
+if [ -f "$WATCHDOG_PID_FILE" ]; then
+    OLD_WD_PID=$(cat "$WATCHDOG_PID_FILE" 2>/dev/null)
+    if [ -n "$OLD_WD_PID" ] && [ "$OLD_WD_PID" != "$$" ]; then
+        kill -9 "$OLD_WD_PID" 2>/dev/null || true
+    fi
+    rm -f "$WATCHDOG_PID_FILE"
+fi
+
+# Graceful shutdown (SIGTERM + wait up to 2.5s so luminad unlocks 0444 nodes and restores balance)
+killall -15 luminad 2>/dev/null || pkill -15 -x luminad 2>/dev/null || true
+killall -15 lumina-binder 2>/dev/null || pkill -15 -x lumina-binder 2>/dev/null || true
+
+WAIT_COUNT=0
+while [ "$WAIT_COUNT" -lt 5 ]; do
+    if ! pidof luminad >/dev/null 2>&1 && ! pidof lumina-binder >/dev/null 2>&1; then
+        break
+    fi
+    sleep 0.5
+    WAIT_COUNT=$((WAIT_COUNT + 1))
+done
+
+killall -9 luminad 2>/dev/null || pkill -9 -x luminad 2>/dev/null || true
+killall -9 lumina-binder 2>/dev/null || pkill -9 -x lumina-binder 2>/dev/null || true
+
 rm -f /dev/socket/lumina.sock /dev/socket/lumina_ipc.sock /dev/socket/lumina_binder.sock
 rm -f /data/local/tmp/lumina.sock /data/local/tmp/lumina_ipc.sock /data/local/tmp/lumina_binder.sock
-rm -f /data/local/tmp/luminad.lock /data/local/tmp/lumina-binder.lock
-sleep 1
+rm -f /data/local/tmp/lumina.pid
 
 DAEMON_BIN=""
 if [ -f "$MODDIR/luminad" ]; then
@@ -91,8 +110,10 @@ fi
             fi
             LAST_PID="$CURRENT_PID"
         fi
-        sleep 5
+        sleep 10
     done
-) &
+) >/dev/null 2>&1 &
+
+echo $! > "$WATCHDOG_PID_FILE"
 
 exit 0
