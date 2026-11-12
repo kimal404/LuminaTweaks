@@ -86,6 +86,39 @@ fn write_frequency_limits(base: &str, lock_max: bool) {
     );
 }
 
+fn capped_max(values: &[u64], max_pct: u64) -> Option<u64> {
+    let max = values.iter().copied().max()?;
+    let min = values.iter().copied().min()?;
+    let pct = max_pct.clamp(1, 100);
+    let cap = (max * pct) / 100;
+    Some(
+        values
+            .iter()
+            .copied()
+            .filter(|&value| value <= cap)
+            .max()
+            .unwrap_or(min),
+    )
+}
+
+fn write_capped_frequency_limits(base: &str, max_pct: u64) {
+    let values = frequencies(base);
+    let (Some(min), Some(max_target)) = (values.iter().min(), capped_max(&values, max_pct)) else {
+        return;
+    };
+
+    crate::tweaks::state::write_tracked(
+        &format!("{}/min_freq", base),
+        &min.to_string(),
+        false,
+    );
+    crate::tweaks::state::write_tracked(
+        &format!("{}/max_freq", base),
+        &max_target.to_string(),
+        true,
+    );
+}
+
 pub fn apply(needles: &[&str], governor: &str, lock_max: bool) -> usize {
     let Ok(entries) = fs::read_dir("/sys/class/devfreq") else {
         return 0;
@@ -108,4 +141,61 @@ pub fn apply(needles: &[&str], governor: &str, lock_max: bool) -> usize {
         applied += 1;
     }
     applied
+}
+
+pub fn apply_capped(needles: &[&str], governor: &str, max_pct: u64) -> usize {
+    let Ok(entries) = fs::read_dir("/sys/class/devfreq") else {
+        return 0;
+    };
+
+    let mut applied = 0;
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+        if !needles.iter().any(|needle| name.contains(needle)) {
+            continue;
+        }
+
+        let base = format!("/sys/class/devfreq/{}", entry.file_name().to_string_lossy());
+        if !Path::new(&base).exists() {
+            continue;
+        }
+
+        write_governor(&base, governor);
+        write_capped_frequency_limits(&base, max_pct);
+        applied += 1;
+    }
+
+    if applied > 0 {
+        log!(
+            "[SOC] Capped {} devfreq node(s) to {}% max",
+            applied,
+            max_pct.clamp(1, 100)
+        );
+    }
+    applied
+}
+
+#[cfg(test)]
+mod tests {
+    use super::capped_max;
+
+    #[test]
+    fn caps_to_highest_available_frequency() {
+        assert_eq!(capped_max(&[100, 200, 300, 400, 500], 85), Some(400));
+    }
+
+    #[test]
+    fn full_percentage_keeps_maximum() {
+        assert_eq!(capped_max(&[100, 300, 500], 100), Some(500));
+    }
+
+    #[test]
+    fn empty_frequency_list_has_no_cap() {
+        assert_eq!(capped_max(&[], 85), None);
+    }
+
+    #[test]
+    fn cap_below_minimum_falls_back_to_minimum() {
+        assert_eq!(capped_max(&[100, 1000], 1), Some(100));
+    }
 }

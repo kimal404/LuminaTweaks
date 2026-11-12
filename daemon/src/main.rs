@@ -281,7 +281,7 @@ impl EngineRuntime {
                     engine::performance_lite_profile();
                     set_system_profile_prop("Performance Lite");
                     log!(
-                        "[BOOST]  {} ({}) \u{2794} FULL_PERF_LITE [CPU: 72% | Sched: 0%]",
+                        "[BOOST]  {} ({}) \u{2794} FULL_PERF_LITE [CPU: 72% | SoC: 85% | Sched: 0%]",
                         target_pkg.unwrap_or("system"),
                         self.active_target_pid
                     );
