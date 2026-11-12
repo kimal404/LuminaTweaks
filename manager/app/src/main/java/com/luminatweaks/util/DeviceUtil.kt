@@ -201,4 +201,40 @@ object DeviceUtil {
         val list = cleaned.split(" ", "\t", "\n").filter { it.isNotBlank() }
         return if (list.isNotEmpty()) list else listOf("zstd", "lz4", "lzo-rle", "lzo")
     }
+
+    fun getAvailableIoSchedulers(): List<String> {
+        val schedulers = linkedSetOf<String>()
+
+        fun parse(raw: String) {
+            raw.replace('[', ' ')
+                .replace(']', ' ')
+                .split(Regex("\\s+"))
+                .filter { it.isNotBlank() }
+                .forEach { schedulers.add(it) }
+        }
+
+        try {
+            File("/sys/block").listFiles()?.forEach { device ->
+                try {
+                    val schedulerFile = File(device, "queue/scheduler")
+                    if (schedulerFile.exists() && schedulerFile.canRead()) {
+                        parse(schedulerFile.readText())
+                    }
+                } catch (_: Exception) {}
+            }
+        } catch (_: Exception) {}
+
+        parse(
+            runCmdWithTimeout(
+                arrayOf(
+                    "su",
+                    "-c",
+                    "for f in /sys/block/*/queue/scheduler; do cat \"\$f\" 2>/dev/null; echo; done"
+                ),
+                4
+            )
+        )
+
+        return schedulers.toList()
+    }
 }

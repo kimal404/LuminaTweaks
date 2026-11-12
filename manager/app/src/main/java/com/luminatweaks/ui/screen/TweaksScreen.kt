@@ -92,11 +92,14 @@ import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DisplayRrMode
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
+import com.luminatweaks.util.DeviceUtil
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class RendererItem(
     val id: String,
@@ -167,6 +170,7 @@ fun TweaksScreen() {
 
     var currentRendererId by remember { mutableStateOf(cached?.currentRendererId ?: "default") }
     var currentIoScheduler by remember { mutableStateOf(cached?.currentIoScheduler ?: "mq-deadline") }
+    var availableIoSchedulers by remember { mutableStateOf(emptyList<String>()) }
 
     var showRefreshRateDialog by remember { mutableStateOf(false) }
     var showRenderDialog by remember { mutableStateOf(false) }
@@ -187,6 +191,9 @@ fun TweaksScreen() {
         currentRrId = state.currentRrId
         currentRendererId = state.currentRendererId
         currentIoScheduler = state.currentIoScheduler
+        availableIoSchedulers = withContext(Dispatchers.IO) {
+            DeviceUtil.getAvailableIoSchedulers()
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -230,6 +237,12 @@ fun TweaksScreen() {
             "openglthreaded",
             "vulkan"
         ).map { TweakOption(it, getRendererDisplayLabel(it, defaultRendererLabel)) }
+    }
+
+    val ioSchedulerOptions = remember(availableIoSchedulers, currentIoScheduler) {
+        (availableIoSchedulers + currentIoScheduler)
+            .filter { it.isNotBlank() }
+            .distinct()
     }
 
     if (inLiteModeSubpage) {
@@ -300,7 +313,7 @@ fun TweaksScreen() {
     if (showIoSchedulerDialog) {
         TweakOptionDialog(
             title = stringResource(R.string.dialog_select_io_scheduler),
-            options = listOf("none", "mq-deadline", "kyber", "bfq").map { TweakOption(it, it) },
+            options = ioSchedulerOptions.map { TweakOption(it, it) },
             isSelected = { it.equals(currentIoScheduler, ignoreCase = true) },
             onSelect = { scheduler ->
                 currentIoScheduler = scheduler
