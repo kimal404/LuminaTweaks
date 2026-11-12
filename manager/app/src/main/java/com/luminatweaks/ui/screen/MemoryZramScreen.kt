@@ -55,6 +55,7 @@ import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -101,6 +102,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
+private data class MemoryZramInit(
+    val physicalRamGb: Int,
+    val zramSizeGb: Float,
+    val algorithm: String,
+    val algorithms: List<String>,
+    val swappiness: Float,
+    val needsReapply: Boolean
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MemoryZramScreen(
@@ -119,32 +129,48 @@ fun MemoryZramScreen(
     var swappinessValue by remember { mutableFloatStateOf(100f) }
 
     var showAlgorithmDialog by remember { mutableStateOf(false) }
+    var isLoaded by remember { mutableStateOf(false) }
 
     val maxZramLimit = remember(physicalRamGb) {
         (physicalRamGb * 1.5).roundToInt().coerceAtLeast(4)
     }
 
     LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
+        val loaded = withContext(Dispatchers.IO) {
             val totalRam = DeviceUtil.getTotalRamGb(context)
             val currentZram = DeviceUtil.getCurrentZramDisksizeGb()
             val currentSwap = DeviceUtil.getSwappiness()
             val activeAlgo = DeviceUtil.getActiveZramAlgorithm()
             val availableAlgos = DeviceUtil.getAvailableZramAlgorithms()
 
-            val state = ConfigRepository.getTweaksState()
+            val state = ConfigRepository.getTweaksState(forceRefresh = true)
             val targetZramSize = if (state.zramSizeGb > 0) state.zramSizeGb else currentZram
             val targetAlgo = if (state.zramAlgorithm.isNotBlank()) state.zramAlgorithm else activeAlgo
             val targetSwap = if (state.swappiness in 0..200) state.swappiness else currentSwap
+            val dynamicMax = (totalRam * 1.5).roundToInt().coerceAtLeast(4)
+            val needsReapply = targetZramSize != currentZram ||
+                !targetAlgo.equals(activeAlgo, ignoreCase = true) ||
+                targetSwap != currentSwap
 
-            withContext(Dispatchers.Main) {
-                physicalRamGb = totalRam
-                val dynamicMax = (totalRam * 1.5).roundToInt().coerceAtLeast(4)
-                zramSizeGb = targetZramSize.toFloat().coerceIn(1f, dynamicMax.toFloat())
-                swappinessValue = targetSwap.toFloat()
-                selectedAlgorithm = targetAlgo
-                algorithms = availableAlgos
-            }
+            MemoryZramInit(
+                physicalRamGb = totalRam,
+                zramSizeGb = targetZramSize.toFloat().coerceIn(1f, dynamicMax.toFloat()),
+                algorithm = targetAlgo,
+                algorithms = availableAlgos,
+                swappiness = targetSwap.toFloat(),
+                needsReapply = needsReapply
+            )
+        }
+
+        physicalRamGb = loaded.physicalRamGb
+        zramSizeGb = loaded.zramSizeGb
+        selectedAlgorithm = loaded.algorithm
+        algorithms = loaded.algorithms
+        swappinessValue = loaded.swappiness
+        isLoaded = true
+
+        if (loaded.needsReapply) {
+            ConfigRepository.reapplyGlobalTweaks()
         }
     }
 
@@ -215,9 +241,7 @@ fun MemoryZramScreen(
                             onValueChangeFinished = {
                                 coroutineScope.launch {
                                     ConfigRepository.setZramConfig(
-                                        sizeGb = zramSizeGb.roundToInt(),
-                                        algorithm = selectedAlgorithm,
-                                        swappiness = swappinessValue.roundToInt()
+                                        sizeGb = zramSizeGb.roundToInt()
                                     )
                                 }
                             }
@@ -242,8 +266,6 @@ fun MemoryZramScreen(
                             onValueChangeFinished = {
                                 coroutineScope.launch {
                                     ConfigRepository.setZramConfig(
-                                        sizeGb = zramSizeGb.roundToInt(),
-                                        algorithm = selectedAlgorithm,
                                         swappiness = swappinessValue.roundToInt()
                                     )
                                 }
@@ -307,6 +329,19 @@ fun MemoryZramScreen(
                 }
             }
         }
+
+        if (!isLoaded) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .background(MaterialTheme.colorScheme.background)
+                    .clickable(onClick = {}),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        }
     }
 
     if (showAlgorithmDialog) {
@@ -317,11 +352,7 @@ fun MemoryZramScreen(
                 selectedAlgorithm = algo
                 showAlgorithmDialog = false
                 coroutineScope.launch {
-                    ConfigRepository.setZramConfig(
-                        sizeGb = zramSizeGb.roundToInt(),
-                        algorithm = algo,
-                        swappiness = swappinessValue.roundToInt()
-                    )
+                    ConfigRepository.setZramConfig(algorithm = algo)
                 }
             },
             onDismiss = { showAlgorithmDialog = false }

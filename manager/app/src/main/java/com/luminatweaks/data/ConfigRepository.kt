@@ -148,6 +148,10 @@ object ConfigRepository {
         notifyDaemonReload()
     }
 
+    suspend fun reapplyGlobalTweaks() = withContext(Dispatchers.IO) {
+        notifyDaemonReload()
+    }
+
     suspend fun getTweaksState(forceRefresh: Boolean = false): TweaksUiState = withContext(Dispatchers.IO) {
         if (!forceRefresh && cachedTweaksState != null && cachedTweaksState!!.isLoaded) {
             return@withContext cachedTweaksState!!
@@ -267,17 +271,29 @@ object ConfigRepository {
         }
     }
 
-    suspend fun setZramConfig(sizeGb: Int, algorithm: String, swappiness: Int) = withContext(Dispatchers.IO) {
-        cachedTweaksState = cachedTweaksState?.copy(
-            zramSizeGb = sizeGb,
-            zramAlgorithm = algorithm,
-            swappiness = swappiness
-        )
+    suspend fun setZramConfig(
+        sizeGb: Int? = null,
+        algorithm: String? = null,
+        swappiness: Int? = null
+    ) = withContext(Dispatchers.IO) {
+        if (sizeGb == null && algorithm == null && swappiness == null) {
+            return@withContext
+        }
+
+        val cached = cachedTweaksState
+        if (cached != null) {
+            cachedTweaksState = cached.copy(
+                zramSizeGb = sizeGb ?: cached.zramSizeGb,
+                zramAlgorithm = algorithm ?: cached.zramAlgorithm,
+                swappiness = swappiness ?: cached.swappiness
+            )
+        }
+
         fileMutex.withLock {
-            updateGlobalConfigInternal {
-                it.put("zram_size_gb", sizeGb)
-                it.put("zram_algorithm", algorithm)
-                it.put("swappiness", swappiness)
+            updateGlobalConfigInternal { json ->
+                sizeGb?.let { json.put("zram_size_gb", it) }
+                algorithm?.let { json.put("zram_algorithm", it) }
+                swappiness?.let { json.put("swappiness", it) }
             }
         }
     }

@@ -442,15 +442,16 @@ fn main() {
         }
         utility_ctrl.tick(screen_awake);
 
-        let mut config_dirty = shared_state.reload_flag.swap(false, Ordering::Relaxed);
-        if config_watcher.poll_changed() {
-            config_dirty = true;
-        }
+        let reload_requested = shared_state.reload_flag.swap(false, Ordering::Relaxed);
+        let files_changed = config_watcher.poll_changed();
 
-        if config_dirty || runtime.last_config_poll.elapsed() >= Duration::from_secs(2) {
+        if reload_requested
+            || files_changed
+            || runtime.last_config_poll.elapsed() >= Duration::from_secs(2)
+        {
             runtime.last_config_poll = Instant::now();
             let hash = config_hash();
-            if runtime.last_config_hash != Some(hash) {
+            if reload_requested || runtime.last_config_hash != Some(hash) {
                 runtime.last_config_hash = Some(hash);
                 log!("[SYSTEM] Config reload applied");
                 detector::invalidate_config_cache();
