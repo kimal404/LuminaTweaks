@@ -97,6 +97,24 @@ fn capped_max(values: &[u64], max_pct: u64) -> Option<u64> {
     )
 }
 
+pub fn mid_frequency(values: &[u64]) -> Option<u64> {
+    if values.is_empty() {
+        return None;
+    }
+    let mut sorted = values.to_vec();
+    sorted.sort_unstable_by(|a, b| b.cmp(a));
+    let mid_index = (sorted.len() - 1) / 2;
+    Some(sorted[mid_index])
+}
+
+pub fn frequency_range(base: &str) -> Option<(u64, u64, u64)> {
+    let values = frequencies(base);
+    let min = values.iter().copied().min()?;
+    let max = values.iter().copied().max()?;
+    let mid = mid_frequency(&values)?;
+    Some((min, mid, max))
+}
+
 fn write_capped_frequency_limits(base: &str, max_pct: u64) {
     let values = frequencies(base);
     let (Some(min), Some(max_target)) = (values.iter().min(), capped_max(&values, max_pct)) else {
@@ -169,7 +187,7 @@ pub fn apply_capped(needles: &[&str], governor: &str, max_pct: u64) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::capped_max;
+    use super::{capped_max, mid_frequency};
 
     #[test]
     fn caps_to_highest_available_frequency() {
@@ -189,5 +207,13 @@ mod tests {
     #[test]
     fn cap_below_minimum_falls_back_to_minimum() {
         assert_eq!(capped_max(&[100, 1000], 1), Some(100));
+    }
+
+    #[test]
+    fn picks_median_frequency() {
+        assert_eq!(mid_frequency(&[100, 200, 300, 400, 500]), Some(300));
+        assert_eq!(mid_frequency(&[500, 100, 300, 200, 400]), Some(300));
+        assert_eq!(mid_frequency(&[100, 200, 300, 400]), Some(300));
+        assert_eq!(mid_frequency(&[]), None);
     }
 }
