@@ -17,13 +17,5 @@ use super::SocProfile;
 const NEEDLES: &[&str] = &["gpu", "mali", "kgsl", "ddr", "bus", "memlat"];
 
 pub fn apply(profile: SocProfile) -> usize {
-    apply_with(profile, NEEDLES)
-}
-
-pub(crate) fn apply_with(profile: SocProfile, needles: &[&str]) -> usize {
-    match profile {
-        SocProfile::Performance => crate::tweaks::devfreq::apply(needles, "performance", true),
-        SocProfile::Lite => crate::tweaks::devfreq::apply_capped(needles, "simple_ondemand", 85),
-        SocProfile::Eco => crate::tweaks::devfreq::apply(needles, "powersave", false),
-    }
+    super::apply_devfreq(profile, NEEDLES)
 }

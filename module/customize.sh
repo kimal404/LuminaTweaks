@@ -25,6 +25,27 @@ rm -rf "$MODPATH/system" 2>/dev/null
 mkdir -p /data/adb/.config/lumina
 rm -f "$MODPATH/.bootcount" "$MODPATH/.bootloop_guard" "$MODPATH/disable"
 
+SOC="generic"
+if [ -f "$MODPATH/soc.sh" ]; then
+    . "$MODPATH/soc.sh"
+    SOC=$(detect_lumina_soc 2>/dev/null)
+fi
+case "$SOC" in
+    mediatek|snapdragon|unisoc|generic) ;;
+    *) SOC="generic" ;;
+esac
+printf '%s\n' "$SOC" > /data/adb/.config/lumina/soc.conf
+chmod 644 /data/adb/.config/lumina/soc.conf
+setprop persist.lumina.soc "$SOC" 2>/dev/null
+case "$SOC" in
+    mediatek) SOC_LABEL="MediaTek" ;;
+    snapdragon) SOC_LABEL="Snapdragon" ;;
+    unisoc) SOC_LABEL="Unisoc" ;;
+    *) SOC_LABEL="Generic" ;;
+esac
+ui_print "- SoC terdeteksi: $SOC_LABEL"
+ui_print "- Tweak SoC: ${SOC}.rs"
+
 BASE_GAMELIST="$MODPATH/gamelist.txt"
 GEN_GAMELIST="$MODPATH/gamelist.json"
 
@@ -106,5 +127,6 @@ set_perm "$MODPATH/service.sh" 0 0 0755
 set_perm "$MODPATH/post-fs-data.sh" 0 0 0755
 set_perm "$MODPATH/action.sh" 0 0 0755
 set_perm "$MODPATH/uninstall.sh" 0 0 0755
+set_perm "$MODPATH/soc.sh" 0 0 0755
 
 ui_print "- Selesai"

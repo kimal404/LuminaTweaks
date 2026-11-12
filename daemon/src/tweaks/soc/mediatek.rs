@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{generic, SocProfile};
+use super::SocProfile;
 use crate::tweaks::state;
 
 const GED_PARAMS_PATH: &str = "/sys/module/ged/parameters";
@@ -39,7 +39,7 @@ fn write_param(name: &str, value: &str) {
 }
 
 pub fn apply(profile: SocProfile) -> usize {
-    let applied = generic::apply_with(profile, NEEDLES);
+    let applied = super::apply_devfreq(profile, NEEDLES);
     let (boost_gpu, ged_boost, smart_boost) = boost_values(profile);
     write_param("boost_gpu_enable", boost_gpu);
     write_param("ged_boost_enable", ged_boost);

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{generic, SocProfile};
+use super::SocProfile;
 use crate::tweaks::state;
 
 const KGSL_PATH: &str = "/sys/class/kgsl/kgsl-3d0";
@@ -33,7 +33,7 @@ fn write_kgsl(name: &str, value: &str) {
 }
 
 pub fn apply(profile: SocProfile) -> usize {
-    let applied = generic::apply_with(profile, NEEDLES);
+    let applied = super::apply_devfreq(profile, NEEDLES);
     let (force, idler) = force_values(profile);
     for node in [
         "force_clk_on",

@@ -46,6 +46,13 @@ pub fn apply_performance() {
     tune_top_app("100", "1", "1", "100", "max");
 }
 
+pub fn enforce_performance() {
+    for dir in UCLAMP_DIRS {
+        write_node(&format!("{}/cpu.uclamp.min", dir), "100");
+        write_node(&format!("{}/cpu.uclamp.max", dir), "max");
+    }
+}
+
 pub fn apply_balance() {
     tune_top_app("0", "0", "0", "0", "max");
 }

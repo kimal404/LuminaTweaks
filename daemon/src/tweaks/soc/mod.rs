@@ -15,9 +15,17 @@
 pub mod generic;
 pub mod mediatek;
 pub mod snapdragon;
+pub mod unisoc;
 
 use std::fs;
 use std::path::Path;
+use std::sync::OnceLock;
+
+const SOC_CONFIG_PATHS: &[&str] = &[
+    "/data/adb/.config/lumina/soc.conf",
+    "/data/adb/modules/luminatweaks/soc.conf",
+    "/data/adb/modules/lumina_tweaks/soc.conf",
+];
 
 const SNAPDRAGON_PLATFORMS: &[&str] = &[
     "bengal",
@@ -54,6 +62,7 @@ const SNAPDRAGON_PLATFORMS: &[&str] = &[
 pub enum Vendor {
     Mediatek,
     Snapdragon,
+    Unisoc,
     Generic,
 }
 
@@ -62,6 +71,7 @@ impl Vendor {
         match self {
             Self::Mediatek => "MediaTek",
             Self::Snapdragon => "Snapdragon",
+            Self::Unisoc => "Unisoc",
             Self::Generic => "Generic",
         }
     }
@@ -79,6 +89,7 @@ pub fn apply(profile: SocProfile) -> usize {
     let applied = match vendor {
         Vendor::Mediatek => mediatek::apply(profile),
         Vendor::Snapdragon => snapdragon::apply(profile),
+        Vendor::Unisoc => unisoc::apply(profile),
         Vendor::Generic => generic::apply(profile),
     };
     log!(
@@ -89,7 +100,57 @@ pub fn apply(profile: SocProfile) -> usize {
     applied
 }
 
+pub(crate) fn apply_devfreq(profile: SocProfile, needles: &[&str]) -> usize {
+    match profile {
+        SocProfile::Performance => crate::tweaks::devfreq::apply(needles, "performance", true),
+        SocProfile::Lite => crate::tweaks::devfreq::apply_capped(needles, "simple_ondemand", 85),
+        SocProfile::Eco => crate::tweaks::devfreq::apply(needles, "powersave", false),
+    }
+}
+
+static DETECTED_VENDOR: OnceLock<Vendor> = OnceLock::new();
+
 pub fn vendor() -> Vendor {
+    *DETECTED_VENDOR.get_or_init(|| {
+        if let Some(vendor) = configured_vendor() {
+            crate::log!(
+                "[SOC] Detected {} from flash config",
+                vendor.as_str()
+            );
+            return vendor;
+        }
+
+        let vendor = live_vendor();
+        crate::log!("[SOC] Detected {} from live probe", vendor.as_str());
+        vendor
+    })
+}
+
+fn configured_vendor() -> Option<Vendor> {
+    for path in SOC_CONFIG_PATHS {
+        if let Ok(content) = fs::read_to_string(path) {
+            if let Some(vendor) = parse_vendor(content.trim()) {
+                return Some(vendor);
+            }
+        }
+    }
+
+    let value = crate::core::detector::get_system_prop("persist.lumina.soc");
+    parse_vendor(value.trim())
+}
+
+fn parse_vendor(value: &str) -> Option<Vendor> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "" => None,
+        "mediatek" | "mtk" => Some(Vendor::Mediatek),
+        "snapdragon" | "qualcomm" | "qcom" => Some(Vendor::Snapdragon),
+        "unisoc" | "sprd" | "spreadtrum" => Some(Vendor::Unisoc),
+        "generic" | "unknown" => Some(Vendor::Generic),
+        value => classify(value),
+    }
+}
+
+fn live_vendor() -> Vendor {
     for prop in [
         "ro.soc.manufacturer",
         "ro.soc.model",
@@ -109,6 +170,9 @@ pub fn vendor() -> Vendor {
     if Path::new("/proc/gpufreq").exists() || Path::new("/sys/kernel/ged").exists() {
         return Vendor::Mediatek;
     }
+    if has_sprd_devfreq() {
+        return Vendor::Unisoc;
+    }
 
     if let Ok(cpuinfo) = fs::read_to_string("/proc/cpuinfo") {
         if let Some(vendor) = classify_cpuinfo(&cpuinfo) {
@@ -117,6 +181,20 @@ pub fn vendor() -> Vendor {
     }
 
     Vendor::Generic
+}
+
+fn has_sprd_devfreq() -> bool {
+    fs::read_dir("/sys/class/devfreq")
+        .map(|entries| {
+            entries.flatten().any(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .to_ascii_lowercase()
+                    .contains("sprd")
+            })
+        })
+        .unwrap_or(false)
 }
 
 fn classify_cpuinfo(content: &str) -> Option<Vendor> {
@@ -149,12 +227,23 @@ fn classify(value: &str) -> Option<Vendor> {
         return Some(Vendor::Snapdragon);
     }
 
+    if value.contains("unisoc")
+        || value.contains("spreadtrum")
+        || value.starts_with("sprd")
+        || value.starts_with("ums")
+        || value.starts_with("sc98")
+        || value.starts_with("sc99")
+        || value.starts_with("t6")
+    {
+        return Some(Vendor::Unisoc);
+    }
+
     None
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{classify, classify_cpuinfo, Vendor};
+    use super::{classify, classify_cpuinfo, parse_vendor, Vendor};
 
     #[test]
     fn detects_mediatek_from_soc_model() {
@@ -177,6 +266,23 @@ mod tests {
     fn detects_snapdragon_platform_codename() {
         assert_eq!(classify("kalama"), Some(Vendor::Snapdragon));
         assert_eq!(classify("lahaina"), Some(Vendor::Snapdragon));
+    }
+
+    #[test]
+    fn detects_unisoc_from_soc_model() {
+        assert_eq!(classify("Unisoc UMS9230"), Some(Vendor::Unisoc));
+        assert_eq!(classify("ums512"), Some(Vendor::Unisoc));
+        assert_eq!(classify("T606"), Some(Vendor::Unisoc));
+        assert_eq!(classify("SC9863A"), Some(Vendor::Unisoc));
+    }
+
+    #[test]
+    fn parses_flash_config_vendor() {
+        assert_eq!(parse_vendor("mediatek"), Some(Vendor::Mediatek));
+        assert_eq!(parse_vendor("Snapdragon"), Some(Vendor::Snapdragon));
+        assert_eq!(parse_vendor("unisoc"), Some(Vendor::Unisoc));
+        assert_eq!(parse_vendor("generic"), Some(Vendor::Generic));
+        assert_eq!(parse_vendor(""), None);
     }
 
     #[test]

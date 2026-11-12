@@ -63,7 +63,7 @@ const POWER_DESCRIPTOR: &str = "android.os.IPowerManager";
 
 const INITIAL_BACKOFF: Duration = Duration::from_secs(5);
 const MAX_BACKOFF: Duration = Duration::from_secs(60);
-const DEATH_POLL: Duration = Duration::from_millis(250);
+const DEATH_POLL: Duration = Duration::from_millis(1000);
 
 static TX_FOREGROUND: AtomicU32 = AtomicU32::new(0);
 static TX_DIED: AtomicU32 = AtomicU32::new(0);

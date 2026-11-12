@@ -40,7 +40,7 @@ const WRITE_TIMEOUT: Duration = Duration::from_millis(5);
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_millis(800);
 const CLASSIFY_TIMEOUT: Duration = Duration::from_millis(60);
 const READ_TIMEOUT: Duration = Duration::from_millis(250);
-const WRITER_TICK: Duration = Duration::from_millis(100);
+const WRITER_TICK: Duration = Duration::from_millis(500);
 
 pub fn serve(shared: Arc<Shared>) -> ! {
     let (listener, path) = bind_listener();
@@ -211,7 +211,7 @@ impl Session {
 
     fn wait(&self) {
         while !self.inner.stop.load(Ordering::Relaxed) {
-            thread::sleep(Duration::from_millis(250));
+            thread::sleep(Duration::from_millis(500));
         }
         self.join();
     }

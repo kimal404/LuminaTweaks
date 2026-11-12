@@ -36,7 +36,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tweaks::texture::TextureController;
 use tweaks::utility::UtilityController;
-use tweaks::{display, engine, fps, renderer, sched};
+use tweaks::{display, engine, fps, renderer, sched, soc};
 
 static SHUTDOWN: AtomicBool = AtomicBool::new(false);
 
@@ -188,6 +188,7 @@ struct EngineRuntime {
     dnd_override: bool,
     prev_zen_mode: String,
     last_config_poll: Instant,
+    last_sched_enforce: Instant,
     shared_state: Arc<SharedState>,
 }
 
@@ -209,6 +210,7 @@ impl EngineRuntime {
             dnd_override: false,
             prev_zen_mode: "0".to_string(),
             last_config_poll: Instant::now(),
+            last_sched_enforce: Instant::now(),
             shared_state,
         }
     }
@@ -303,6 +305,16 @@ impl EngineRuntime {
             }
             self.current_profile = Some(target_profile);
             self.update_shared_state(target_profile, target_pkg);
+            if target_profile == Profile::Performance {
+                self.last_sched_enforce = Instant::now();
+            }
+        }
+
+        if target_profile == Profile::Performance
+            && self.last_sched_enforce.elapsed() >= Duration::from_secs(1)
+        {
+            sched::enforce_performance();
+            self.last_sched_enforce = Instant::now();
         }
 
         let global_rr = display::get_saved_mode_id();
@@ -452,6 +464,7 @@ fn main() {
     tweaks::state::restore_all();
     engine::sync_global_tweaks();
     engine::apply_boot_profile();
+    soc::vendor();
 
     let shared_state = Arc::new(SharedState::new());
     IpcServer::start(Arc::clone(&shared_state));
