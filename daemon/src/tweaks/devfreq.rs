@@ -79,11 +79,7 @@ fn write_frequency_limits(base: &str, lock_max: bool) {
         &min_target.to_string(),
         lock_max,
     );
-    crate::tweaks::state::write_tracked(
-        &format!("{}/max_freq", base),
-        &max.to_string(),
-        lock_max,
-    );
+    crate::tweaks::state::write_tracked(&format!("{}/max_freq", base), &max.to_string(), lock_max);
 }
 
 fn capped_max(values: &[u64], max_pct: u64) -> Option<u64> {
@@ -107,11 +103,7 @@ fn write_capped_frequency_limits(base: &str, max_pct: u64) {
         return;
     };
 
-    crate::tweaks::state::write_tracked(
-        &format!("{}/min_freq", base),
-        &min.to_string(),
-        false,
-    );
+    crate::tweaks::state::write_tracked(&format!("{}/min_freq", base), &min.to_string(), false);
     crate::tweaks::state::write_tracked(
         &format!("{}/max_freq", base),
         &max_target.to_string(),
