@@ -32,10 +32,7 @@ val LuminaShapes = Shapes(
     small = RoundedCornerShape(12.dp),
     medium = RoundedCornerShape(20.dp),
     large = RoundedCornerShape(28.dp),
-    extraLarge = RoundedCornerShape(36.dp),
-    largeIncreased = RoundedCornerShape(32.dp),
-    extraLargeIncreased = RoundedCornerShape(40.dp),
-    extraExtraLarge = RoundedCornerShape(48.dp)
+    extraLarge = RoundedCornerShape(36.dp)
 )
 
 fun createLuminaShapes(baseRadius: Int): Shapes {
@@ -46,9 +43,6 @@ fun createLuminaShapes(baseRadius: Int): Shapes {
         small = RoundedCornerShape((12f * ratio).dp),
         medium = RoundedCornerShape(r.dp),
         large = RoundedCornerShape((28f * ratio).dp),
-        extraLarge = RoundedCornerShape((36f * ratio).dp),
-        largeIncreased = RoundedCornerShape((32f * ratio).dp),
-        extraLargeIncreased = RoundedCornerShape((40f * ratio).dp),
-        extraExtraLarge = RoundedCornerShape((48f * ratio).dp)
+        extraLarge = RoundedCornerShape((36f * ratio).dp)
     )
 }
