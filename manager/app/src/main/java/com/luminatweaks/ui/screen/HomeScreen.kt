@@ -174,6 +174,8 @@ fun HomeScreen() {
     var batteryTemp by remember { mutableStateOf(DeviceUtil.getBatteryTemperature(context)) }
     var isChecking by remember { mutableStateOf(true) }
     var daemonPid by remember { mutableStateOf<String?>(null) }
+    var isModuleInstalled by remember { mutableStateOf(true) }
+    var isRebootRequired by remember { mutableStateOf(false) }
     var currentProfile by remember {
         mutableStateOf(readSystemProperty("sys.lumina.profile") ?: "Balanced")
     }
@@ -204,9 +206,13 @@ fun HomeScreen() {
 
     LaunchedEffect(Unit) {
         val needsReboot = DaemonManager.isRebootRequired()
+        val moduleInstalled = DaemonManager.isModuleInstalled()
+        isRebootRequired = needsReboot
+        isModuleInstalled = moduleInstalled
+
         if (needsReboot) {
             showRebootDialog = true
-        } else {
+        } else if (moduleInstalled) {
             DaemonManager.startDaemon(context)
         }
 
@@ -246,10 +252,14 @@ fun HomeScreen() {
                 val currentTemp = DeviceUtil.getBatteryTemperature(context)
                 val propProfile = readSystemProperty("sys.lumina.profile")
                 val status = DaemonManager.getStatus()
+                val rebootNeeded = if (status.pid == null) DaemonManager.isRebootRequired() else false
+                val installed = if (status.pid == null) DaemonManager.isModuleInstalled() else true
 
                 withContext(Dispatchers.Main) {
                     batteryTemp = currentTemp
                     daemonPid = status.pid
+                    isRebootRequired = rebootNeeded
+                    isModuleInstalled = installed
                     currentProfile = propProfile ?: status.profile
                     currentFps = status.fps
                 }
@@ -331,6 +341,20 @@ fun HomeScreen() {
         return
     }
 
+    val restartAction: suspend () -> Unit = {
+        daemonPid = null
+        currentProfile = "-"
+        DaemonManager.restartDaemon(context)
+        val updated = DaemonManager.getStatus()
+        daemonPid = updated.pid
+        currentProfile = readSystemProperty("sys.lumina.profile") ?: updated.profile
+        currentFps = updated.fps
+        if (updated.pid == null) {
+            isRebootRequired = DaemonManager.isRebootRequired()
+            isModuleInstalled = DaemonManager.isModuleInstalled()
+        }
+    }
+
     if (isFloating) {
         Box(
             modifier = Modifier
@@ -345,6 +369,8 @@ fun HomeScreen() {
                         batteryTemp = batteryTemp,
                         daemonPid = daemonPid,
                         isChecking = isChecking,
+                        isModuleInstalled = isModuleInstalled,
+                        isRebootRequired = isRebootRequired,
                         currentProfile = currentProfile,
                         currentFps = currentFps,
                         kernelVersion = kernelVersion,
@@ -352,11 +378,7 @@ fun HomeScreen() {
                         isRootGranted = isRootGranted,
                         selinuxStatus = selinuxStatus,
                         onRequestRebootDialog = { showRebootDialog = true },
-                        onRestartDaemon = {
-                            daemonPid = null
-                            currentProfile = "-"
-                            DaemonManager.restartDaemon(context)
-                        }
+                        onRestartDaemon = restartAction
                     )
                     1 -> AppsScreen()
                     2 -> TweaksScreen()
@@ -399,6 +421,8 @@ fun HomeScreen() {
                         batteryTemp = batteryTemp,
                         daemonPid = daemonPid,
                         isChecking = isChecking,
+                        isModuleInstalled = isModuleInstalled,
+                        isRebootRequired = isRebootRequired,
                         currentProfile = currentProfile,
                         currentFps = currentFps,
                         kernelVersion = kernelVersion,
@@ -406,11 +430,7 @@ fun HomeScreen() {
                         isRootGranted = isRootGranted,
                         selinuxStatus = selinuxStatus,
                         onRequestRebootDialog = { showRebootDialog = true },
-                        onRestartDaemon = {
-                            daemonPid = null
-                            currentProfile = "-"
-                            DaemonManager.restartDaemon(context)
-                        }
+                        onRestartDaemon = restartAction
                     )
                     1 -> AppsScreen()
                     2 -> TweaksScreen()
@@ -427,6 +447,8 @@ fun HomeDashboardContent(
     batteryTemp: String,
     daemonPid: String?,
     isChecking: Boolean = false,
+    isModuleInstalled: Boolean = true,
+    isRebootRequired: Boolean = false,
     currentProfile: String,
     currentFps: String,
     kernelVersion: String,
@@ -613,13 +635,15 @@ fun HomeDashboardContent(
                     isChecking = isChecking,
                     isRestarting = isRestarting,
                     isRunning = isRunning,
+                    isModuleInstalled = isModuleInstalled,
+                    isRebootRequired = isRebootRequired,
                     daemonPid = daemonPid,
                     onStart = {
                         if (!isChecking && !isRunning && !isRestarting) {
                             coroutineScope.launch {
-                                if (DaemonManager.isRebootRequired()) {
+                                if (isRebootRequired || DaemonManager.isRebootRequired()) {
                                     onRequestRebootDialog()
-                                } else {
+                                } else if (isModuleInstalled || DaemonManager.isModuleInstalled()) {
                                     isRestarting = true
                                     onRestartDaemon()
                                     isRestarting = false
@@ -759,6 +783,8 @@ private fun CoreStatusCard(
     isChecking: Boolean,
     isRestarting: Boolean,
     isRunning: Boolean,
+    isModuleInstalled: Boolean,
+    isRebootRequired: Boolean,
     daemonPid: String?,
     onStart: () -> Unit
 ) {
@@ -766,6 +792,7 @@ private fun CoreStatusCard(
         targetValue = when {
             isChecking || isRestarting -> MaterialTheme.colorScheme.surfaceContainerHighest
             isRunning -> MaterialTheme.colorScheme.primaryContainer
+            isRebootRequired -> MaterialTheme.colorScheme.tertiaryContainer
             else -> MaterialTheme.colorScheme.errorContainer
         },
         label = "coreContainer"
@@ -774,20 +801,25 @@ private fun CoreStatusCard(
         targetValue = when {
             isChecking || isRestarting -> MaterialTheme.colorScheme.onSurfaceVariant
             isRunning -> MaterialTheme.colorScheme.onPrimaryContainer
+            isRebootRequired -> MaterialTheme.colorScheme.onTertiaryContainer
             else -> MaterialTheme.colorScheme.onErrorContainer
         },
         label = "coreContent"
     )
-    val canStart = !isChecking && !isRunning && !isRestarting
+    val canStart = !isChecking && !isRunning && !isRestarting && (isModuleInstalled || isRebootRequired)
     val title = when {
         isChecking -> stringResource(R.string.home_core_checking)
         isRestarting -> stringResource(R.string.home_core_starting)
         isRunning -> "Alive"
+        isRebootRequired -> stringResource(R.string.dialog_reboot_required_title)
+        !isModuleInstalled -> "Module Not Active"
         else -> stringResource(R.string.home_core_inactive)
     }
     val subtitle = when {
         isChecking || isRestarting -> stringResource(R.string.home_core_scanning)
-        isRunning -> stringResource(R.string.home_core_running_format, daemonPid ?: "-")
+        isRunning -> "PID: ${daemonPid ?: "-"}"
+        isRebootRequired -> "Reboot device to activate module"
+        !isModuleInstalled -> "Install or enable LuminaTweaks module first"
         else -> stringResource(R.string.home_core_tap_start)
     }
     val isAlive = isRunning && !isRestarting
@@ -882,6 +914,12 @@ private fun CoreStatusCard(
                                     tint = contentColor,
                                     modifier = Modifier.size(28.dp)
                                 )
+                                isRebootRequired -> Icon(
+                                    imageVector = Icons.Rounded.Refresh,
+                                    contentDescription = null,
+                                    tint = contentColor,
+                                    modifier = Modifier.size(28.dp)
+                                )
                                 else -> Icon(
                                     imageVector = Icons.Rounded.ErrorOutline,
                                     contentDescription = null,
@@ -894,7 +932,10 @@ private fun CoreStatusCard(
 
                     Spacer(modifier = Modifier.width(16.dp))
 
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.Center
+                    ) {
                         Text(
                             text = title,
                             style = MaterialTheme.typography.titleLarge,
@@ -913,25 +954,23 @@ private fun CoreStatusCard(
                         )
                     }
 
-                    when {
-                        isAlive -> StatusPill(
-                            text = stringResource(R.string.home_core_working),
-                            contentColor = contentColor
-                        )
-                        canStart -> {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Surface(shape = CircleShape, color = contentColor) {
-                                Box(
-                                    modifier = Modifier.size(44.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.PlayArrow,
-                                        contentDescription = stringResource(R.string.action_start),
-                                        tint = containerColor,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
+                    if (canStart) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(shape = CircleShape, color = contentColor) {
+                            Box(
+                                modifier = Modifier.size(44.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (isRebootRequired) {
+                                        Icons.Rounded.Refresh
+                                    } else {
+                                        Icons.Rounded.PlayArrow
+                                    },
+                                    contentDescription = stringResource(R.string.action_start),
+                                    tint = containerColor,
+                                    modifier = Modifier.size(24.dp)
+                                )
                             }
                         }
                     }
@@ -981,36 +1020,6 @@ private fun LiveWave(
             color = color.copy(alpha = 0.45f),
             style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
         )
-    }
-}
-
-@Composable
-private fun StatusPill(
-    text: String,
-    contentColor: Color
-) {
-    Surface(
-        shape = CircleShape,
-        color = contentColor.copy(alpha = 0.14f)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(contentColor)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Medium,
-                color = contentColor
-            )
-        }
     }
 }
 
