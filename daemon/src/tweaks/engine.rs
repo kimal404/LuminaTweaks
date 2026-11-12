@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+use crate::tweaks::soc::{self, SocProfile};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
@@ -558,22 +559,14 @@ fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool, max_cap_ratio
 pub fn performance_profile() {
     crate::tweaks::sched::apply_performance();
     apply_universal_cpu("performance", true, true, None);
-    crate::tweaks::devfreq::apply(
-        &["gpu", "mali", "kgsl", "ddr", "bus", "memlat"],
-        "performance",
-        true,
-    );
+    soc::apply(SocProfile::Performance);
 }
 
 pub fn performance_lite_profile() {
     crate::tweaks::sched::apply_balance();
     apply_universal_cpu("schedutil", true, false, Some(72));
     tune_schedutil_rate_limits(500, 20000);
-    crate::tweaks::devfreq::apply(
-        &["gpu", "mali", "kgsl", "ddr", "bus", "memlat"],
-        "simple_ondemand",
-        false,
-    );
+    soc::apply(SocProfile::Lite);
 }
 
 pub fn balance_profile() {
@@ -588,9 +581,5 @@ pub fn eco_profile() {
     crate::tweaks::sched::apply_eco();
     apply_universal_cpu("powersave", false, false, None);
     tune_schedutil_rate_limits(4000, 8000);
-    crate::tweaks::devfreq::apply(
-        &["gpu", "mali", "kgsl", "ddr", "bus", "memlat"],
-        "powersave",
-        false,
-    );
+    soc::apply(SocProfile::Eco);
 }
