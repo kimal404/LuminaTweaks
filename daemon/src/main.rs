@@ -272,7 +272,7 @@ impl EngineRuntime {
                     engine::performance_profile();
                     set_system_profile_prop("Performance");
                     log!(
-                        "[BOOST]  {} ({}) \u{2794} FULL_PERF [CPU: 100% | Sched: 80%]",
+                        "[BOOST]  {} ({}) \u{2794} FULL_PERF [CPU: 100% | Sched: 100%]",
                         target_pkg.unwrap_or("system"),
                         self.active_target_pid
                     );

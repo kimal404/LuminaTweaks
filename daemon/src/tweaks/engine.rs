@@ -471,18 +471,9 @@ fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool, max_cap_ratio
                     .collect();
 
                 if min_clamp {
-                    let mut sorted_freqs = freqs.clone();
-                    sorted_freqs.sort_unstable();
-
-                    let target_min = sorted_freqs
-                        .iter()
-                        .copied()
-                        .find(|&f| f >= 900000)
-                        .unwrap_or(hw_min);
-
                     crate::tweaks::state::write_tracked(
                         &min_path,
-                        &target_min.to_string(),
+                        &hw_max.to_string(),
                         false,
                     );
                     crate::tweaks::state::write_tracked(&max_path, &hw_max.to_string(), false);

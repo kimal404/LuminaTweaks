@@ -23,11 +23,17 @@ fn write_node(path: &str, value: &str) {
     crate::tweaks::state::write_tracked(path, value, false);
 }
 
-fn tune_top_app(boost: &str, prefer_idle: &str, uclamp_min: &str, uclamp_max: &str) {
+fn tune_top_app(
+    boost: &str,
+    prefer_idle: &str,
+    boost_enabled: &str,
+    uclamp_min: &str,
+    uclamp_max: &str,
+) {
     for dir in STUNE_DIRS {
         write_node(&format!("{}/schedtune.boost", dir), boost);
         write_node(&format!("{}/schedtune.prefer_idle", dir), prefer_idle);
-        write_node(&format!("{}/schedtune.sched_boost_enabled", dir), boost);
+        write_node(&format!("{}/schedtune.sched_boost_enabled", dir), boost_enabled);
     }
 
     for dir in UCLAMP_DIRS {
@@ -37,15 +43,15 @@ fn tune_top_app(boost: &str, prefer_idle: &str, uclamp_min: &str, uclamp_max: &s
 }
 
 pub fn apply_performance() {
-    tune_top_app("1", "1", "80", "max");
+    tune_top_app("100", "1", "1", "100", "max");
 }
 
 pub fn apply_balance() {
-    tune_top_app("0", "0", "0", "max");
+    tune_top_app("0", "0", "0", "0", "max");
 }
 
 pub fn apply_eco() {
-    tune_top_app("0", "1", "0", "50");
+    tune_top_app("0", "1", "0", "0", "50");
 }
 
 pub fn tune_daemon() {
