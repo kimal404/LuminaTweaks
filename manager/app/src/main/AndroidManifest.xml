@@ -20,7 +20,7 @@
 
         <activity
             android:name=".MainActivity"
-            android:configChanges="locale|layoutDirection|orientation|screenSize|screenLayout|keyboardHidden"
+            android:configChanges="locale|layoutDirection|orientation|screenSize|screenLayout|keyboardHidden|uiMode"
             android:exported="true"
             android:theme="@style/Theme.LuminaTweaks">
             <intent-filter>

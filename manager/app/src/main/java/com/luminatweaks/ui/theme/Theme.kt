@@ -21,6 +21,11 @@
 package com.luminatweaks.ui.theme
 
 import android.app.Activity
+import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
+import android.app.UiModeManager
+import android.content.res.Configuration
 import android.content.Context
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -40,6 +45,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
@@ -94,6 +100,7 @@ fun LuminaTheme(
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
     val prefs = remember { context.getSharedPreferences("settings", Context.MODE_PRIVATE) }
     var themeState by remember { mutableStateOf(ThemeController.getAppSettings(context)) }
 
@@ -107,7 +114,20 @@ fun LuminaTheme(
         }
     }
 
-    val systemDarkTheme = isSystemInDarkTheme()
+    LaunchedEffect(themeState.colorMode) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val uiModeManager = context.getSystemService(UiModeManager::class.java)
+            val nightMode = when (themeState.colorMode) {
+                ColorMode.SYSTEM -> UiModeManager.MODE_NIGHT_AUTO
+                ColorMode.LIGHT -> UiModeManager.MODE_NIGHT_NO
+                ColorMode.DARK, ColorMode.DARKAMOLED -> UiModeManager.MODE_NIGHT_YES
+            }
+            runCatching { uiModeManager?.setApplicationNightMode(nightMode) }
+        }
+    }
+
+    val configNight = (configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+    val systemDarkTheme = configNight || isSystemInDarkTheme()
     val isDark = themeState.colorMode.getDarkThemeValue(systemDarkTheme)
     val amoledMode = themeState.colorMode == ColorMode.DARKAMOLED
     val isDynamic = themeState.keyColor == 0
@@ -157,6 +177,20 @@ fun LuminaTheme(
 
     val view = LocalView.current
     LaunchedEffect(isDark) {
+        val activity = context as? ComponentActivity
+        if (activity != null) {
+            val barStyle = if (isDark) {
+                SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+            } else {
+                SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
+            }
+            runCatching {
+                activity.enableEdgeToEdge(
+                    statusBarStyle = barStyle,
+                    navigationBarStyle = barStyle
+                )
+            }
+        }
         val window = (context as? Activity)?.window ?: return@LaunchedEffect
         val controller = WindowInsetsControllerCompat(window, view)
         controller.isAppearanceLightStatusBars = !isDark
