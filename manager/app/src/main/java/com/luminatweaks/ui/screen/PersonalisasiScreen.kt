@@ -297,6 +297,21 @@ fun PersonalisasiScreen(
             currentEdgeSwipeBack = currentEdgeSwipeBack,
             currentPageTransition = currentPageTransition,
             isDark = isDark,
+            onRequestSheet = { sheet ->
+                when (sheet) {
+                    "palette" -> showPaletteSheet = true
+                    "spec" -> showSpecSheet = true
+                    else -> showTransitionSheet = true
+                }
+            },
+            onScrollAnimationChange = { checked ->
+                currentScrollAnimation = checked
+                ThemeController.saveScrollAnimation(context, checked)
+            },
+            onEdgeSwipeBackChange = { checked ->
+                currentEdgeSwipeBack = checked
+                ThemeController.saveEdgeSwipeBack(context, checked)
+            },
             modifier = Modifier.fillMaxSize()
         )
     }
@@ -383,6 +398,7 @@ private fun LuminaPageTransition(
 @Composable
 private fun PersonalizationContent(
     innerPadding: PaddingValues,
+    onRequestSheet: (String) -> Unit,
     previewColorScheme: ColorScheme,
     currentColorMode: ColorMode,
     currentKeyColor: Int,
@@ -393,6 +409,8 @@ private fun PersonalizationContent(
     currentColorStyle: ColorStyle,
     currentScrollAnimation: Boolean,
     currentEdgeSwipeBack: Boolean,
+    onScrollAnimationChange: (Boolean) -> Unit,
+    onEdgeSwipeBackChange: (Boolean) -> Unit,
     currentPageTransition: PageTransition,
     isDark: Boolean,
     modifier: Modifier = Modifier
@@ -505,7 +523,7 @@ private fun PersonalizationContent(
                             R.string.personalization_palette_style_desc
                         ).lowercase().replaceFirstChar { it.uppercase() },
                         trailingText = stringResource(currentColorStyle.labelRes()),
-                        onClick = { showPaletteSheet = true }
+                        onClick = { onRequestSheet("palette") }
                     )
                     SoftRow(
                         position = PreviewSoftPosition.Bottom,
@@ -521,7 +539,7 @@ private fun PersonalizationContent(
                                 R.string.color_spec_2021
                             }
                         ),
-                        onClick = { showSpecSheet = true }
+                        onClick = { onRequestSheet("spec") }
                     )
                 }
             }
@@ -552,8 +570,7 @@ private fun PersonalizationContent(
                         checked = currentScrollAnimation,
                         onCheckedChange = { checked ->
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            currentScrollAnimation = checked
-                            ThemeController.saveScrollAnimation(context, checked)
+                            onScrollAnimationChange(checked)
                         }
                     )
                     SoftToggleRow(
@@ -564,8 +581,7 @@ private fun PersonalizationContent(
                         checked = currentEdgeSwipeBack,
                         onCheckedChange = { checked ->
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            currentEdgeSwipeBack = checked
-                            ThemeController.saveEdgeSwipeBack(context, checked)
+                            onEdgeSwipeBackChange(checked)
                         }
                     )
                     SoftRow(
@@ -586,7 +602,7 @@ private fun PersonalizationContent(
                                 PageTransition.Vertical -> R.string.page_transition_vertical
                             }
                         ),
-                        onClick = { showTransitionSheet = true }
+                        onClick = { onRequestSheet("transition") }
                     )
                 }
             }
