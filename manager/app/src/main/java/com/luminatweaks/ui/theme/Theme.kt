@@ -157,6 +157,7 @@ fun LuminaTheme(
     MaterialExpressiveTheme(
         colorScheme = animatedColorScheme,
         motionScheme = MotionScheme.expressive(),
+        typography = LuminaTypography,
         shapes = dynamicShapes
     ) {
         CompositionLocalProvider(
