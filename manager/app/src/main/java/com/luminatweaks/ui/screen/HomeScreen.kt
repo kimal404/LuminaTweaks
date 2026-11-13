@@ -799,8 +799,7 @@ private fun CoreStatusIndicator(
             CircularWavyProgressIndicator(
                 modifier = Modifier.size(20.dp),
                 color = content,
-                trackColor = content.copy(alpha = 0.24f),
-                stroke = Stroke(width = 2.dp)
+                trackColor = content.copy(alpha = 0.24f)
             )
         } else {
             Icon(
