@@ -21,19 +21,10 @@ import android.os.Build
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -63,7 +54,6 @@ import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DeveloperBoard
-import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Speed
@@ -84,8 +74,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -99,7 +87,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -182,8 +169,9 @@ private data class TweakOption<T>(
 
 private enum class SoftPosition { Top, Middle, Bottom, Single }
 
+@Composable
 private fun softContainerShape(position: SoftPosition): RoundedCornerShape {
-    val outer = 22.dp
+    val outer = LocalCornerRadius.current.coerceAtLeast(24.dp)
     val inner = 7.dp
     return when (position) {
         SoftPosition.Top -> RoundedCornerShape(
@@ -477,76 +465,19 @@ fun TweaksScreen() {
                     contentColor = MaterialTheme.colorScheme.onErrorContainer
                 )
             }
-        },
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        Text(
-                            text = stringResource(R.string.tweaks_title),
-                            style = MaterialTheme.typography.titleLargeEmphasized,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = localizedLabel(
-                                "Kontrol performa global",
-                                "Global performance controls"
-                            ),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                },
-                actions = {
-                    LiveRefreshPill(
-                        hz = liveRefreshRate,
-                        modifier = Modifier.padding(end = 12.dp)
-                    )
-                },
-                windowInsets = WindowInsets.statusBars,
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
-            )
         }
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding() + 8.dp,
+                top = innerPadding.calculateTopPadding() +
+                    WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 12.dp,
                 bottom = bottomPadding,
                 start = 16.dp,
                 end = 16.dp
             ),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            item(key = "active_global_summary") {
-                ActiveGlobalSummaryCard(
-                    refreshRateText = currentRrText,
-                    rendererText = effectiveRendererText,
-                    isTextureActive = isGlobalTextureEnabled,
-                    isLiteModeActive = isGlobalLiteMode,
-                    liteModeText = if (isGlobalLiteMode) {
-                        stringResource(R.string.status_on)
-                    } else {
-                        stringResource(R.string.status_off)
-                    },
-                    ioSchedulerText = currentIoScheduler,
-                    isCustomRr = currentRrId != null,
-                    isCustomRenderer = isGlobalTextureEnabled ||
-                        !currentRendererId.equals("default", ignoreCase = true),
-                    onRefreshRateClick = { showRefreshRateDialog = true },
-                    onRendererClick = {
-                        if (!isGlobalTextureEnabled) showRenderDialog = true
-                    },
-                    onLiteModeClick = { inLiteModeSubpage = true },
-                    onIoSchedulerClick = { showIoSchedulerDialog = true }
-                )
-            }
-
             item(key = "display_performance") {
                 TweakSection(
                     title = stringResource(R.string.tweaks_section_performance),
@@ -664,326 +595,6 @@ fun TweaksScreen() {
                 }
             }
 
-            item(key = "global_footnote") {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.65f))
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Info,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.tertiary,
-                        modifier = Modifier
-                            .padding(top = 2.dp)
-                            .size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = localizedLabel(
-                            "Pengaturan global menimpa profil per-aplikasi. Renderer terkunci selama mode ANGLE aktif.",
-                            "Global settings override per-app profiles. The renderer stays locked while ANGLE mode is active."
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        lineHeight = 17.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Live refresh-rate pill (top bar)
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun LiveRefreshPill(hz: Int, modifier: Modifier = Modifier) {
-    val transition = rememberInfiniteTransition(label = "livePulse")
-    val pulse by transition.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "livePulseAlpha"
-    )
-    Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f),
-        modifier = modifier
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(7.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = pulse))
-            )
-            Spacer(modifier = Modifier.width(7.dp))
-            Text(
-                text = "$hz Hz",
-                style = MaterialTheme.typography.labelMediumEmphasized,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                maxLines = 1
-            )
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Hero summary card
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun ActiveGlobalSummaryCard(
-    refreshRateText: String,
-    rendererText: String,
-    isTextureActive: Boolean,
-    isLiteModeActive: Boolean,
-    liteModeText: String,
-    ioSchedulerText: String,
-    isCustomRr: Boolean,
-    isCustomRenderer: Boolean,
-    onRefreshRateClick: () -> Unit,
-    onRendererClick: () -> Unit,
-    onLiteModeClick: () -> Unit,
-    onIoSchedulerClick: () -> Unit
-) {
-    val headerTitle = localizedLabel("Pengaturan Global Aktif", "Active Global Settings")
-    val headerCaption = localizedLabel("Berlaku untuk semua aplikasi", "Applies to all apps")
-    val activeCount = listOf(isCustomRr, isCustomRenderer, isLiteModeActive).count { it }
-    val statusBadgeText = if (activeCount > 0) {
-        localizedLabel("$activeCount Kustom", "$activeCount Active")
-    } else {
-        localizedLabel("Standar", "Default")
-    }
-    val badgeContainer by animateColorAsState(
-        targetValue = if (activeCount > 0) {
-            MaterialTheme.colorScheme.primaryContainer
-        } else {
-            MaterialTheme.colorScheme.surfaceContainerHighest
-        },
-        label = "summaryBadgeContainer"
-    )
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(LocalCornerRadius.current.coerceAtLeast(26.dp)),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.50f),
-                            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.24f),
-                            MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.10f)
-                        )
-                    )
-                )
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Tune,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = headerTitle,
-                            style = MaterialTheme.typography.titleMediumEmphasized,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = headerCaption,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Surface(shape = CircleShape, color = badgeContainer) {
-                        Text(
-                            text = statusBadgeText,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (activeCount > 0) {
-                                MaterialTheme.colorScheme.onPrimaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                            maxLines = 1
-                        )
-                    }
-                }
-
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        GlobalStatusMiniTile(
-                            icon = Icons.Rounded.Speed,
-                            label = stringResource(R.string.tweaks_refresh_rate),
-                            value = refreshRateText,
-                            highlighted = isCustomRr,
-                            onClick = onRefreshRateClick,
-                            modifier = Modifier.weight(1f)
-                        )
-                        GlobalStatusMiniTile(
-                            icon = if (isTextureActive) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
-                            label = stringResource(R.string.tweaks_renderer),
-                            value = rendererText,
-                            highlighted = isCustomRenderer,
-                            enabled = !isTextureActive,
-                            onClick = onRendererClick,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        GlobalStatusMiniTile(
-                            icon = Icons.Rounded.BatterySaver,
-                            label = stringResource(R.string.tweaks_lite_mode),
-                            value = liteModeText,
-                            highlighted = isLiteModeActive,
-                            onClick = onLiteModeClick,
-                            modifier = Modifier.weight(1f)
-                        )
-                        GlobalStatusMiniTile(
-                            icon = Icons.Rounded.Storage,
-                            label = stringResource(R.string.tweak_io_scheduler),
-                            value = ioSchedulerText,
-                            highlighted = false,
-                            onClick = onIoSchedulerClick,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun GlobalStatusMiniTile(
-    icon: ImageVector,
-    label: String,
-    value: String,
-    highlighted: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed && enabled) 0.96f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
-        label = "tileScale"
-    )
-    val containerColor by animateColorAsState(
-        targetValue = if (highlighted) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
-        } else {
-            MaterialTheme.colorScheme.surfaceContainerLow
-        },
-        label = "tileContainer"
-    )
-
-    Surface(
-        onClick = onClick,
-        enabled = enabled,
-        shape = RoundedCornerShape(18.dp),
-        color = containerColor,
-        border = if (highlighted) {
-            BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.28f))
-        } else {
-            null
-        },
-        interactionSource = interactionSource,
-        modifier = modifier.graphicsLayer {
-            scaleX = scale
-            scaleY = scale
-        }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 11.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = if (highlighted) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    modifier = Modifier.size(14.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                color = if (highlighted) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
         }
     }
 }
@@ -1066,7 +677,7 @@ private fun TweakRow(
         onClick = onClick,
         enabled = enabled,
         shape = softContainerShape(position),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         interactionSource = interactionSource,
         modifier = Modifier
             .fillMaxWidth()
@@ -1101,7 +712,7 @@ private fun TweakRow(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
