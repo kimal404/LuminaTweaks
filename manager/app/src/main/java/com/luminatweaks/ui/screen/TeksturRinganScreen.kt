@@ -224,7 +224,7 @@ fun TextureComparisonPreview(
 
             Surface(
                 shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.88f),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.88f),
                 tonalElevation = 2.dp,
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -254,7 +254,7 @@ fun TextureComparisonPreview(
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = if (isActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f)
-                else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.92f),
+                else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
                 tonalElevation = 2.dp,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -376,7 +376,7 @@ fun TeksturRinganScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                     )
                 ) {
                     Column(
@@ -511,7 +511,7 @@ fun TeksturRinganScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.65f)
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.65f)
                     )
                 ) {
                     Row(

@@ -777,7 +777,7 @@ private fun <T> TweakOptionDialog(
                             count = options.size
                         ),
                         colors = ListItemDefaults.segmentedColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                             selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                             selectedContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                             selectedLeadingContentColor = MaterialTheme.colorScheme.onPrimaryContainer

@@ -143,7 +143,7 @@ fun AppProfileScreen(
 
     val context = LocalContext.current
     val packageManager = remember { context.packageManager }
-    val cornerRadius = LocalCornerRadius.current
+    val cornerRadius = LocalCornerRadius.current.coerceAtLeast(24.dp)
     val isFloating = LocalFloatingNavBar.current
 
     var rrModes by remember { mutableStateOf<List<DisplayRrMode>>(emptyList()) }
@@ -263,7 +263,7 @@ fun AppProfileScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(cornerRadius),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                     )
                 ) {
                     Row(
@@ -328,7 +328,7 @@ fun AppProfileScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.65f)
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.65f)
                     )
                 ) {
                     Row(
@@ -380,7 +380,7 @@ fun AppProfileScreen(
                         },
                     shape = getConnectedContainerShape(ContainerPosition.Single, outerRadius = cornerRadius),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                     )
                 ) {
                     Row(
@@ -453,7 +453,7 @@ fun AppProfileScreen(
                                     .clickable { showLiteModeDialog = true },
                                 shape = getConnectedContainerShape(ContainerPosition.Single, outerRadius = cornerRadius),
                                 colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                                 )
                             ) {
                                 Row(
@@ -472,18 +472,15 @@ fun AppProfileScreen(
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = stringResource(R.string.profile_lite_mode),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Medium,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
                                             text = stringResource(R.string.profile_lite_mode_desc),
-                                            style = MaterialTheme.typography.bodySmall.copy(
-                                                fontSize = 12.sp,
-                                                lineHeight = 16.sp
-                                            ),
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
                                         )
                                     }
                                     Spacer(modifier = Modifier.width(10.dp))
@@ -523,7 +520,7 @@ fun AppProfileScreen(
                                         .clickable { inTeksturRinganScreen = true },
                                     shape = getConnectedContainerShape(ContainerPosition.Top, outerRadius = cornerRadius),
                                     colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                                     )
                                 ) {
                                     Row(
@@ -542,18 +539,15 @@ fun AppProfileScreen(
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(
                                                 text = stringResource(R.string.profile_texture),
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.Medium,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
                                                 color = MaterialTheme.colorScheme.onSurface
                                             )
                                             Spacer(modifier = Modifier.height(2.dp))
                                             Text(
                                                 text = stringResource(R.string.profile_texture_desc),
-                                                style = MaterialTheme.typography.bodySmall.copy(
-                                                    fontSize = 12.sp,
-                                                    lineHeight = 16.sp
-                                                ),
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
                                             )
                                         }
                                         Spacer(modifier = Modifier.width(10.dp))
@@ -595,7 +589,7 @@ fun AppProfileScreen(
                                         .clickable { showRefreshRateDialog = true },
                                     shape = getConnectedContainerShape(ContainerPosition.Middle, outerRadius = cornerRadius),
                                     colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                                     )
                                 ) {
                                     Row(
@@ -614,18 +608,15 @@ fun AppProfileScreen(
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(
                                                 text = stringResource(R.string.profile_refresh_rate),
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.Medium,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
                                                 color = MaterialTheme.colorScheme.onSurface
                                             )
                                             Spacer(modifier = Modifier.height(2.dp))
                                             Text(
                                                 text = stringResource(R.string.profile_refresh_rate_desc),
-                                                style = MaterialTheme.typography.bodySmall.copy(
-                                                    fontSize = 12.sp,
-                                                    lineHeight = 16.sp
-                                                ),
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
                                             )
                                         }
                                         Spacer(modifier = Modifier.width(10.dp))
@@ -662,7 +653,7 @@ fun AppProfileScreen(
                                         },
                                     shape = getConnectedContainerShape(ContainerPosition.Bottom, outerRadius = cornerRadius),
                                     colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                                     )
                                 ) {
                                     Row(
@@ -686,8 +677,8 @@ fun AppProfileScreen(
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(
                                                 text = stringResource(R.string.profile_renderer),
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.Medium,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
                                                 color = MaterialTheme.colorScheme.onSurface
                                             )
                                             Spacer(modifier = Modifier.height(2.dp))
@@ -697,11 +688,8 @@ fun AppProfileScreen(
                                                 } else {
                                                     stringResource(R.string.profile_renderer_desc)
                                                 },
-                                                style = MaterialTheme.typography.bodySmall.copy(
-                                                    fontSize = 12.sp,
-                                                    lineHeight = 16.sp
-                                                ),
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
                                             )
                                         }
                                         Spacer(modifier = Modifier.width(10.dp))
@@ -768,7 +756,7 @@ fun AppProfileScreen(
                                     .clickable { showDndDialog = true },
                                 shape = getConnectedContainerShape(ContainerPosition.Single, outerRadius = cornerRadius),
                                 colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                                 )
                             ) {
                                 Row(
@@ -787,18 +775,15 @@ fun AppProfileScreen(
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = stringResource(R.string.profile_dnd),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Medium,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
                                             text = stringResource(R.string.profile_dnd_desc),
-                                            style = MaterialTheme.typography.bodySmall.copy(
-                                                fontSize = 12.sp,
-                                                lineHeight = 16.sp
-                                            ),
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
                                         )
                                     }
                                     Spacer(modifier = Modifier.width(10.dp))

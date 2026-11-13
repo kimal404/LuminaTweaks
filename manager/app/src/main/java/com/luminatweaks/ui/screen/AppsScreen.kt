@@ -346,7 +346,7 @@ fun AppRowCard(
             .clickable(onClick = onClick),
         shape = getConnectedContainerShape(position, outerRadius = 18.dp, innerRadius = 4.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     ) {
         Row(
