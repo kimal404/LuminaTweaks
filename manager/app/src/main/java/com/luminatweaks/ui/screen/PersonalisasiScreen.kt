@@ -32,6 +32,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
@@ -61,6 +65,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -109,6 +114,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -125,6 +131,7 @@ import com.luminatweaks.ui.theme.AccentIntensity
 import com.luminatweaks.ui.theme.ColorEngine
 import com.luminatweaks.ui.theme.ColorMode
 import com.luminatweaks.ui.theme.ColorStyle
+import com.luminatweaks.ui.theme.LocalPageTransition
 import com.luminatweaks.ui.theme.PageTransition
 import com.luminatweaks.ui.theme.ThemeController
 import com.luminatweaks.ui.theme.animateColorSchemeAsState
@@ -162,7 +169,6 @@ private fun ColorStyle.toPaletteStyle(): PaletteStyle = when (this.name) {
     "TonalSpot" -> PaletteStyle.TonalSpot
     "Vibrant" -> PaletteStyle.Vibrant
     "Expressive" -> PaletteStyle.Expressive
-    "Spritz" -> PaletteStyle.Spritz
     "Rainbow" -> PaletteStyle.Rainbow
     "FruitSalad" -> PaletteStyle.FruitSalad
     "Content" -> PaletteStyle.Content
@@ -277,18 +283,154 @@ fun PersonalisasiScreen(
             )
         }
     ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = innerPadding.calculateTopPadding()),
-            contentPadding = PaddingValues(
-                top = 12.dp,
-                bottom = 28.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
-                start = 16.dp,
-                end = 16.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
+        PersonalizationContent(
+            innerPadding = innerPadding,
+            previewColorScheme = previewColorScheme,
+            currentColorMode = currentColorMode,
+            currentKeyColor = currentKeyColor,
+            currentColorSpec = currentColorSpec,
+            currentIntensity = currentIntensity,
+            currentCornerRadius = currentCornerRadius,
+            isFloatingNavBar = isFloatingNavBar,
+            currentColorStyle = currentColorStyle,
+            currentScrollAnimation = currentScrollAnimation,
+            currentEdgeSwipeBack = currentEdgeSwipeBack,
+            currentPageTransition = currentPageTransition,
+            isDark = isDark,
+            modifier = Modifier.fillMaxSize()
+        )
+    }
+
+
+    if (showPaletteSheet) {
+        OptionBottomSheet(
+            title = stringResource(R.string.personalization_dialog_pick_palette),
+            options = paletteStyleOptions.map { it.second },
+            selectedIndex = paletteStyleOptions.indexOfFirst { it.first == currentColorStyle },
+            onSelect = { index ->
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                updateTheme(style = paletteStyleOptions[index].first)
+                showPaletteSheet = false
+            },
+            onDismiss = { showPaletteSheet = false }
+        )
+    }
+
+    if (showSpecSheet) {
+        OptionBottomSheet(
+            title = stringResource(R.string.personalization_dialog_pick_spec),
+            options = colorSpecOptions.map { it.second },
+            selectedIndex = colorSpecOptions.indexOfFirst { it.first == currentColorSpec },
+            onSelect = { index ->
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                updateTheme(spec = colorSpecOptions[index].first)
+                showSpecSheet = false
+            },
+            onDismiss = { showSpecSheet = false }
+        )
+    }
+
+    if (showTransitionSheet) {
+        OptionBottomSheet(
+            title = stringResource(R.string.personalization_dialog_pick_transition),
+            options = pageTransitionOptions.map { it.second },
+            selectedIndex = pageTransitionOptions.indexOfFirst { it.first == currentPageTransition },
+            onSelect = { index ->
+                val transition = pageTransitionOptions[index].first
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                currentPageTransition = transition
+                ThemeController.savePageTransition(context, transition)
+                showTransitionSheet = false
+            },
+            onDismiss = { showTransitionSheet = false }
+        )
+    }
+}
+
+@Composable
+private fun LuminaPageTransition(
+    transition: PageTransition = LocalPageTransition.current,
+    content: @Composable () -> Unit
+) {
+    val motion = MaterialTheme.motionScheme
+    AnimatedContent(
+        targetState = transition,
+        transitionSpec = {
+            when (targetState) {
+                PageTransition.CrossAxis ->
+                    (fadeIn(animationSpec = motion.defaultEffectsSpec()) +
+                        scaleIn(initialScale = 0.96f, animationSpec = motion.defaultSpatialSpec())) togetherWith
+                        (fadeOut(animationSpec = motion.defaultEffectsSpec()) +
+                            scaleOut(targetScale = 0.96f, animationSpec = motion.defaultSpatialSpec()))
+                PageTransition.Horizontal ->
+                    (fadeIn(animationSpec = motion.defaultEffectsSpec()) +
+                        slideInHorizontally(animationSpec = motion.defaultSpatialSpec()) { it / 8 }) togetherWith
+                        (fadeOut(animationSpec = motion.defaultEffectsSpec()) +
+                            slideOutHorizontally(animationSpec = motion.defaultSpatialSpec()) { -it / 8 })
+                PageTransition.Vertical ->
+                    (fadeIn(animationSpec = motion.defaultEffectsSpec()) +
+                        slideInVertically(animationSpec = motion.defaultSpatialSpec()) { it / 8 }) togetherWith
+                        (fadeOut(animationSpec = motion.defaultEffectsSpec()) +
+                            slideOutVertically(animationSpec = motion.defaultSpatialSpec()) { -it / 8 })
+            }
+        },
+        label = "luminaPageTransition"
+    ) { _ ->
+        content()
+    }
+}
+
+@Composable
+private fun PersonalizationContent(
+    innerPadding: PaddingValues,
+    previewColorScheme: ColorScheme,
+    currentColorMode: ColorMode,
+    currentKeyColor: Int,
+    currentColorSpec: ColorEngine,
+    currentIntensity: AccentIntensity,
+    currentCornerRadius: Int,
+    isFloatingNavBar: Boolean,
+    currentColorStyle: ColorStyle,
+    currentScrollAnimation: Boolean,
+    currentEdgeSwipeBack: Boolean,
+    currentPageTransition: PageTransition,
+    isDark: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+
+    fun updateTheme(
+        mode: ColorMode = currentColorMode,
+        key: Int = currentKeyColor,
+        spec: ColorEngine = currentColorSpec,
+        radius: Int = currentCornerRadius,
+        floating: Boolean = isFloatingNavBar,
+        style: ColorStyle = currentColorStyle
+    ) {
+        ThemeController.saveTheme(
+            context = context,
+            mode = mode,
+            key = key,
+            spec = spec,
+            intensity = currentIntensity,
+            cornerRadius = radius,
+            floatingNavBar = floating
+        )
+        ThemeController.saveColorStyle(context, style)
+    }
+
+    LazyColumn(
+        modifier = modifier,
+        state = rememberLazyListState(),
+        contentPadding = PaddingValues(
+            top = innerPadding.calculateTopPadding() + 12.dp,
+            bottom = 28.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
+            start = 16.dp,
+            end = 16.dp
+        ),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
             item(key = "preview") {
                 PhonePreviewCard(
                     colorScheme = previewColorScheme,
@@ -460,50 +602,6 @@ fun PersonalisasiScreen(
                 )
             }
         }
-    }
-
-    if (showPaletteSheet) {
-        OptionBottomSheet(
-            title = stringResource(R.string.personalization_dialog_pick_palette),
-            options = paletteStyleOptions.map { it.second },
-            selectedIndex = paletteStyleOptions.indexOfFirst { it.first == currentColorStyle },
-            onSelect = { index ->
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                updateTheme(style = paletteStyleOptions[index].first)
-                showPaletteSheet = false
-            },
-            onDismiss = { showPaletteSheet = false }
-        )
-    }
-
-    if (showSpecSheet) {
-        OptionBottomSheet(
-            title = stringResource(R.string.personalization_dialog_pick_spec),
-            options = colorSpecOptions.map { it.second },
-            selectedIndex = colorSpecOptions.indexOfFirst { it.first == currentColorSpec },
-            onSelect = { index ->
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                updateTheme(spec = colorSpecOptions[index].first)
-                showSpecSheet = false
-            },
-            onDismiss = { showSpecSheet = false }
-        )
-    }
-
-    if (showTransitionSheet) {
-        OptionBottomSheet(
-            title = stringResource(R.string.personalization_dialog_pick_transition),
-            options = pageTransitionOptions.map { it.second },
-            selectedIndex = pageTransitionOptions.indexOfFirst { it.first == currentPageTransition },
-            onSelect = { index ->
-                val transition = pageTransitionOptions[index].first
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                currentPageTransition = transition
-                ThemeController.savePageTransition(context, transition)
-                showTransitionSheet = false
-            },
-            onDismiss = { showTransitionSheet = false }
-        )
     }
 }
 
@@ -1362,45 +1460,48 @@ private fun MockLuminaScreen(
                 }
             }
 
-            AnimatedVisibility(
-                visible = !isFloatingNavBar,
-                enter = fadeIn(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) +
-                    expandHorizontally(animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec()),
-                exit = fadeOut(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) +
-                    shrinkHorizontally(animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec())
+            Box(
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(26.dp),
-                    shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest
+                AnimatedVisibility(
+                    visible = !isFloatingNavBar,
+                    enter = fadeIn(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) +
+                        expandHorizontally(animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec()),
+                    exit = fadeOut(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) +
+                        shrinkHorizontally(animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec())
                 ) {
-                    Row(
+                    Surface(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceAround,
-                        verticalAlignment = Alignment.CenterVertically
+                            .fillMaxWidth()
+                            .height(26.dp),
+                        shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest
                     ) {
-                        Box(
+                        Row(
                             modifier = Modifier
-                                .size(width = 18.dp, height = 10.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer)
-                        )
-                        repeat(3) {
+                                .fillMaxSize()
+                                .padding(horizontal = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceAround,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Box(
                                 modifier = Modifier
-                                    .size(8.dp)
+                                    .size(width = 18.dp, height = 10.dp)
                                     .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                                    .background(MaterialTheme.colorScheme.primaryContainer)
                             )
+                            repeat(3) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
     }
 }
 
