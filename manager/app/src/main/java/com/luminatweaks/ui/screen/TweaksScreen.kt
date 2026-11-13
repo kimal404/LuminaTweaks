@@ -542,9 +542,9 @@ private fun TweakSection(
 private fun TweakConnectedGroup(content: @Composable ColumnScope.() -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(LocalCornerRadius.current.coerceAtLeast(16.dp)),
+        shape = RoundedCornerShape(LocalCornerRadius.current.coerceAtLeast(24.dp)),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     ) {
         Column(content = content)
@@ -564,16 +564,16 @@ private fun TweakGridCard(
 ) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(LocalCornerRadius.current.coerceAtLeast(18.dp)),
+        shape = RoundedCornerShape(LocalCornerRadius.current.coerceAtLeast(24.dp)),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(enabled = enabled, onClick = onClick)
-                .alpha(if (enabled) 1f else 0.55f)
+                .alpha(if (enabled) 1f else 0.45f)
                 .padding(12.dp)
         ) {
             Box(
@@ -610,21 +610,17 @@ private fun TweakGridCard(
             Spacer(modifier = Modifier.height(10.dp))
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold
-                ),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(modifier = Modifier.height(3.dp))
+            Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = value,
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontSize = 12.5.sp,
-                    fontWeight = FontWeight.Medium
-                ),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -643,74 +639,66 @@ private fun TweakRow(
     onClick: () -> Unit,
     trailingText: String? = null,
     trailingActive: Boolean = false,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    shape: RoundedCornerShape = RoundedCornerShape(0.dp)
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
-            .alpha(if (enabled) 1f else 0.55f)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = shape,
+        color = Color.Transparent,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Box(
+        Row(
             modifier = Modifier
-                .size(42.dp)
-                .clip(RoundedCornerShape(13.dp))
-                .background(iconContainer),
-            contentAlignment = Alignment.Center
+                .fillMaxWidth()
+                .alpha(if (enabled) 1f else 0.45f)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(iconContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            if (trailingText != null) {
+                TweakValueChip(text = trailingText, active = trailingActive)
+                Spacer(modifier = Modifier.width(8.dp))
+            }
             Icon(
-                imageVector = icon,
+                imageVector = if (enabled) Icons.Rounded.ChevronRight else Icons.Rounded.Lock,
                 contentDescription = null,
-                tint = iconTint,
-                modifier = Modifier.size(21.dp)
-            )
-        }
-        Spacer(modifier = Modifier.width(14.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold
-                ),
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(3.dp))
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontSize = 12.5.sp,
-                    lineHeight = 16.sp
-                ),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        if (trailingText != null) {
-            Spacer(modifier = Modifier.width(10.dp))
-            TweakValueChip(text = trailingText, active = trailingActive)
-            Spacer(modifier = Modifier.width(4.dp))
-        } else {
-            Spacer(modifier = Modifier.width(6.dp))
-        }
-        if (enabled) {
-            Icon(
-                imageVector = Icons.Rounded.ChevronRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
-                modifier = Modifier.size(18.dp)
-            )
-        } else {
-            Icon(
-                imageVector = Icons.Rounded.Lock,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
-                modifier = Modifier.size(16.dp)
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.size(if (enabled) 20.dp else 17.dp)
             )
         }
     }
@@ -747,8 +735,8 @@ private fun TweakValueChip(text: String, active: Boolean = false) {
 @Composable
 private fun TweakRowDivider() {
     HorizontalDivider(
-        modifier = Modifier.padding(start = 72.dp, end = 16.dp),
-        thickness = 1.dp,
+        modifier = Modifier.padding(start = 70.dp, end = 16.dp),
+        thickness = 0.8.dp,
         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
     )
 }

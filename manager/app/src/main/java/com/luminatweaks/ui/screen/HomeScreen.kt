@@ -980,9 +980,9 @@ private fun DashboardMetricCard(
 ) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(LocalCornerRadius.current.coerceAtLeast(16.dp)),
+        shape = RoundedCornerShape(LocalCornerRadius.current.coerceAtLeast(22.dp)),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -1150,7 +1150,7 @@ private fun HomeSegmentedGroup(
         rows.forEachIndexed { index, row ->
             val shapes = ListItemDefaults.segmentedShapes(index = index, count = rows.size)
             val colors = ListItemDefaults.segmentedColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                 selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                 selectedContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 selectedLeadingContentColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -1158,9 +1158,11 @@ private fun HomeSegmentedGroup(
             val leading: @Composable () -> Unit = {
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(40.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                        .background(
+                            (row.accent ?: MaterialTheme.colorScheme.onSurfaceVariant).copy(alpha = 0.12f)
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -1176,14 +1178,16 @@ private fun HomeSegmentedGroup(
                     Icon(
                         imageVector = Icons.Rounded.ChevronRight,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
             val supporting: @Composable () -> Unit = {
                 Text(
                     text = row.subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1199,7 +1203,8 @@ private fun HomeSegmentedGroup(
                 ) {
                     Text(
                         text = row.title,
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
@@ -1213,7 +1218,8 @@ private fun HomeSegmentedGroup(
                 ) {
                     Text(
                         text = row.title,
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
@@ -1235,7 +1241,7 @@ fun ConnectedCardRow(
         modifier = modifier.fillMaxWidth(),
         shape = getConnectedContainerShape(position),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     ) {
         Row(
@@ -1246,7 +1252,7 @@ fun ConnectedCardRow(
         ) {
             Box(
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(40.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(iconContainer),
                 contentAlignment = Alignment.Center
@@ -1297,18 +1303,18 @@ fun ConnectedActionCardRow(
         modifier = modifier.fillMaxWidth(),
         shape = getConnectedContainerShape(position),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 13.dp),
+                .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(40.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(iconContainer),
                 contentAlignment = Alignment.Center
