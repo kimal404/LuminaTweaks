@@ -55,19 +55,18 @@ import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.MenuBook
-import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.Speed
-import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.AutoFixHigh
+import androidx.compose.material.icons.rounded.CleaningServices
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.graphics.shapes.Morph
 import androidx.graphics.shapes.toPath
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -77,7 +76,7 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MaterialShapes
@@ -99,7 +98,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -485,7 +483,6 @@ fun HomeDashboardContent(
     var isRestarting by remember { mutableStateOf(false) }
     var showPowerDialog by remember { mutableStateOf(false) }
     val isRunning = daemonPid != null
-    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
 
     val launchRestart: () -> Unit = {
         if (!isRestarting) {
@@ -583,19 +580,15 @@ fun HomeDashboardContent(
     }
 
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         contentWindowInsets = WindowInsets(0.dp),
         topBar = {
-            LargeFlexibleTopAppBar(
+            TopAppBar(
                 title = {
                     Text(
                         text = stringResource(R.string.app_name),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
-                },
-                subtitle = {
-                    Text(text = stringResource(R.string.home_subtitle))
                 },
                 actions = {
                     CoreStatusIndicator(
@@ -609,11 +602,9 @@ fun HomeDashboardContent(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                 },
-                scrollBehavior = scrollBehavior,
                 windowInsets = WindowInsets.statusBars,
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer
+                    containerColor = MaterialTheme.colorScheme.background
                 )
             )
         }
@@ -676,16 +667,12 @@ fun HomeDashboardContent(
 
             item(key = "quick") {
                 QuickActionRow(
-                    isRestarting = isRestarting,
-                    onRestart = launchRestart,
-                    onPower = { showPowerDialog = true },
                     onPersonalize = onNavigateToPersonalisasi
                 )
             }
 
             item(key = "device") {
                 HomeSegmentedGroup(
-                    sectionLabel = stringResource(R.string.home_section_device),
                     rows = listOf(
                         SegmentedRowData(
                             icon = Icons.Rounded.DeveloperBoard,
@@ -711,7 +698,6 @@ fun HomeDashboardContent(
 
             item(key = "security") {
                 HomeSegmentedGroup(
-                    sectionLabel = stringResource(R.string.home_section_security),
                     rows = listOf(
                         SegmentedRowData(
                             icon = Icons.Rounded.Security,
@@ -733,7 +719,6 @@ fun HomeDashboardContent(
             item(key = "support") {
                 val uriHandler = LocalUriHandler.current
                 HomeSegmentedGroup(
-                    sectionLabel = stringResource(R.string.home_section_support),
                     rows = listOf(
                         SegmentedRowData(
                             icon = Icons.Rounded.Favorite,
@@ -841,7 +826,6 @@ private fun CoreStatusCard(
         animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
         label = "coreContent"
     )
-    val canStart = !isChecking && !isRunning && !isRestarting && (isModuleInstalled || isRebootRequired)
     val title = when {
         isChecking -> stringResource(R.string.home_core_checking)
         isRestarting -> stringResource(R.string.home_core_starting)
@@ -893,11 +877,18 @@ private fun CoreStatusCard(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .height(56.dp)
+                        .height(32.dp)
                 )
             }
 
-            Column(modifier = Modifier.padding(22.dp)) {
+            Column(
+                modifier = Modifier.padding(
+                    start = 22.dp,
+                    top = 22.dp,
+                    end = 22.dp,
+                    bottom = if (isAlive) 34.dp else 22.dp
+                )
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val iconMorph = remember { Morph(MaterialShapes.Circle, MaterialShapes.Cookie9Sided) }
                     Box(
@@ -950,44 +941,6 @@ private fun CoreStatusCard(
                             color = contentColor.copy(alpha = 0.78f),
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(18.dp))
-
-                if (canStart || isAlive) {
-                    val label = when {
-                        isAlive -> stringResource(R.string.power_action_restart_service)
-                        isRebootRequired -> stringResource(R.string.action_reboot_now)
-                        else -> stringResource(R.string.action_start)
-                    }
-                    val leading: @Composable () -> Unit = {
-                        Icon(
-                            imageVector = when {
-                                isAlive -> Icons.Rounded.Refresh
-                                isRebootRequired -> Icons.Rounded.Refresh
-                                else -> Icons.Rounded.PlayArrow
-                            },
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    Button(
-                        onClick = onStart,
-                        shapes = ButtonDefaults.shapes(),
-                        modifier = Modifier.fillMaxWidth(),
-                        contentPadding = ButtonDefaults.MediumContentPadding,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = contentColor,
-                            contentColor = containerColor
-                        )
-                    ) {
-                        leading()
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.labelLargeEmphasized
                         )
                     }
                 }
@@ -1086,76 +1039,105 @@ private fun DashboardMetricCard(
 
 @Composable
 private fun QuickActionRow(
-    isRestarting: Boolean,
-    onRestart: () -> Unit,
-    onPower: () -> Unit,
     onPersonalize: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = stringResource(R.string.home_quick_actions),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+    val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+    var isTrimming by remember { mutableStateOf(false) }
+    var isClearing by remember { mutableStateOf(false) }
+
+    val runTrim: () -> Unit = {
+        if (!isTrimming) {
+            isTrimming = true
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            scope.launch {
+                val ok = RootUtil.runAsRoot("fstrim -v /data; fstrim -v /cache")
+                Toast.makeText(
+                    context,
+                    context.getString(if (ok) R.string.toast_trim_done else R.string.toast_trim_failed),
+                    Toast.LENGTH_SHORT
+                ).show()
+                isTrimming = false
+            }
+        }
+    }
+
+    val runCache: () -> Unit = {
+        if (!isClearing) {
+            isClearing = true
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            scope.launch {
+                val ok = RootUtil.runAsRoot("sync; echo 3 > /proc/sys/vm/drop_caches; pm trim-caches 999G")
+                Toast.makeText(
+                    context,
+                    context.getString(if (ok) R.string.toast_cache_done else R.string.toast_cache_failed),
+                    Toast.LENGTH_SHORT
+                ).show()
+                isClearing = false
+            }
+        }
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        ToggleButton(
+            checked = false,
+            onCheckedChange = { runTrim() },
+            shapes = ButtonGroupDefaults.connectedLeadingButtonShapes(),
+            enabled = !isTrimming,
+            modifier = Modifier.weight(1f)
         ) {
-            ToggleButton(
-                checked = false,
-                onCheckedChange = { onRestart() },
-                shapes = ButtonGroupDefaults.connectedLeadingButtonShapes(),
-                enabled = !isRestarting,
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Refresh,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = stringResource(R.string.home_quick_restart),
-                    style = MaterialTheme.typography.labelLarge,
-                    maxLines = 1
-                )
-            }
-            ToggleButton(
-                checked = false,
-                onCheckedChange = { onPower() },
-                shapes = ButtonGroupDefaults.connectedMiddleButtonShapes(),
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.PowerSettingsNew,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = stringResource(R.string.home_quick_power),
-                    style = MaterialTheme.typography.labelLarge,
-                    maxLines = 1
-                )
-            }
-            ToggleButton(
-                checked = false,
-                onCheckedChange = { onPersonalize() },
-                shapes = ButtonGroupDefaults.connectedTrailingButtonShapes(),
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Tune,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = stringResource(R.string.home_quick_personalize),
-                    style = MaterialTheme.typography.labelLarge,
-                    maxLines = 1
-                )
-            }
+            Icon(
+                imageVector = Icons.Rounded.AutoFixHigh,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = stringResource(R.string.home_quick_trim),
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1
+            )
+        }
+        ToggleButton(
+            checked = false,
+            onCheckedChange = { runCache() },
+            shapes = ButtonGroupDefaults.connectedMiddleButtonShapes(),
+            enabled = !isClearing,
+            modifier = Modifier.weight(1f)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.CleaningServices,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = stringResource(R.string.home_quick_cache),
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1
+            )
+        }
+        ToggleButton(
+            checked = false,
+            onCheckedChange = { onPersonalize() },
+            shapes = ButtonGroupDefaults.connectedTrailingButtonShapes(),
+            modifier = Modifier.weight(1f)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Palette,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = stringResource(R.string.home_quick_personalize),
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1
+            )
         }
     }
 }
@@ -1170,91 +1152,78 @@ private data class SegmentedRowData(
 
 @Composable
 private fun HomeSegmentedGroup(
-    sectionLabel: String,
     rows: List<SegmentedRowData>
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = sectionLabel,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
-            rows.forEachIndexed { index, row ->
-                val shapes = ListItemDefaults.segmentedShapes(index = index, count = rows.size)
-                val colors = ListItemDefaults.segmentedColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                    selectedContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    selectedLeadingContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                val leading: @Composable () -> Unit = {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = row.icon,
-                            contentDescription = null,
-                            tint = row.accent ?: MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+    Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
+        rows.forEachIndexed { index, row ->
+            val shapes = ListItemDefaults.segmentedShapes(index = index, count = rows.size)
+            val colors = ListItemDefaults.segmentedColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                selectedContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                selectedLeadingContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            val leading: @Composable () -> Unit = {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = row.icon,
+                        contentDescription = null,
+                        tint = row.accent ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
-                val trailing: @Composable () -> Unit = {
-                    if (row.onClick != null) {
-                        Icon(
-                            imageVector = Icons.Rounded.ChevronRight,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
+            }
+            val trailing: @Composable () -> Unit = {
                 if (row.onClick != null) {
-                    SegmentedListItem(
-                        onClick = row.onClick,
-                        shapes = shapes,
-                        colors = colors,
-                        leadingContent = leading,
-                        trailingContent = trailing,
-                        supportingContent = {
-                            Text(
-                                text = row.subtitle,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    ) {
-                        Text(
-                            text = row.title,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                } else {
-                    SegmentedListItem(
-                        shapes = shapes,
-                        colors = colors,
-                        leadingContent = leading,
-                        trailingContent = trailing,
-                        supportingContent = {
-                            Text(
-                                text = row.subtitle,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    ) {
-                        Text(
-                            text = row.title,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Rounded.ChevronRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            val supporting: @Composable () -> Unit = {
+                Text(
+                    text = row.subtitle,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            if (row.onClick != null) {
+                SegmentedListItem(
+                    onClick = row.onClick,
+                    shapes = shapes,
+                    colors = colors,
+                    leadingContent = leading,
+                    trailingContent = trailing,
+                    supportingContent = supporting
+                ) {
+                    Text(
+                        text = row.title,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            } else {
+                SegmentedListItem(
+                    shapes = shapes,
+                    colors = colors,
+                    leadingContent = leading,
+                    trailingContent = trailing,
+                    supportingContent = supporting
+                ) {
+                    Text(
+                        text = row.title,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
             }
         }

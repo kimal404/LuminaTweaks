@@ -30,6 +30,15 @@ object RootUtil {
         }
     }
 
+    suspend fun runAsRoot(command: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val process = ProcessBuilder("su", "-c", command).start()
+            process.waitFor() == 0
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     suspend fun rebootDevice(reason: String = ""): Boolean = withContext(Dispatchers.IO) {
         val cmd = when (reason) {
             "" -> "svc power reboot || reboot"
