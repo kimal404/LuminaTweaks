@@ -18,6 +18,8 @@
  * limitations under the License.
  */
 
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 package com.luminatweaks.ui.component
 
 import androidx.compose.animation.AnimatedVisibility
@@ -27,11 +29,10 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -43,6 +44,7 @@ import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ShortNavigationBar
@@ -54,7 +56,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -87,30 +88,31 @@ fun LuminaBottomBar(
     val isFloating = LocalFloatingNavBar.current
 
     if (isFloating) {
-        Surface(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp)
-                .padding(bottom = 12.dp)
-                .navigationBarsPadding(),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 3.dp,
-            shadowElevation = 4.dp
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                tonalElevation = 3.dp,
+                shadowElevation = 6.dp
             ) {
-                navTabs.forEachIndexed { index, tab ->
-                    FloatingNavItem(
-                        tab = tab,
-                        selected = selectedTab == index,
-                        onClick = { onTabSelected(index) }
-                    )
+                Row(
+                    modifier = Modifier.padding(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    navTabs.forEachIndexed { index, tab ->
+                        FloatingNavItem(
+                            tab = tab,
+                            selected = selectedTab == index,
+                            onClick = { onTabSelected(index) }
+                        )
+                    }
                 }
             }
         }
@@ -130,28 +132,34 @@ private fun FloatingNavItem(
     onClick: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
-    val containerColor by animateColorAsState(
-        targetValue = if (selected) {
-            MaterialTheme.colorScheme.primaryContainer
-        } else {
-            Color.Transparent
-        },
-        label = "floatingNavContainer"
-    )
-    val contentColor = if (selected) {
-        MaterialTheme.colorScheme.onPrimaryContainer
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    val label = stringResource(tab.labelRes)
     val motionScheme = MaterialTheme.motionScheme
     val widthSpec = motionScheme.defaultSpatialSpec<IntSize>()
     val fadeSpec = motionScheme.defaultEffectsSpec<Float>()
+
+    val containerColor by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            Color.Transparent
+        },
+        animationSpec = motionScheme.defaultEffectsSpec(),
+        label = "floatingNavContainer"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.onPrimary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        animationSpec = motionScheme.defaultEffectsSpec(),
+        label = "floatingNavContent"
+    )
     val horizontalPadding by animateDpAsState(
-        targetValue = if (selected) 20.dp else 16.dp,
+        targetValue = if (selected) 18.dp else 13.dp,
         animationSpec = motionScheme.defaultSpatialSpec(),
         label = "floatingNavPadding"
     )
+    val label = stringResource(tab.labelRes)
 
     Surface(
         onClick = {
@@ -163,16 +171,13 @@ private fun FloatingNavItem(
         contentColor = contentColor
     ) {
         Row(
-            modifier = Modifier
-                .clip(CircleShape)
-                .background(Color.Transparent)
-                .padding(horizontal = horizontalPadding, vertical = 13.dp),
+            modifier = Modifier.padding(horizontal = horizontalPadding, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = tab.icon,
                 contentDescription = label,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(22.dp),
                 tint = contentColor
             )
             AnimatedVisibility(
@@ -181,7 +186,7 @@ private fun FloatingNavItem(
                 exit = shrinkHorizontally(animationSpec = widthSpec) + fadeOut(animationSpec = fadeSpec)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = label,
                         style = MaterialTheme.typography.labelLarge,

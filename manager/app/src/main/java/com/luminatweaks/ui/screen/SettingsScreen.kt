@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
+
 package com.luminatweaks.ui.screen
 
 import android.app.Activity
@@ -20,9 +22,12 @@ import android.content.Context
 import android.os.Build
 import android.os.LocaleList
 import android.widget.Toast
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -32,11 +37,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
@@ -48,15 +55,18 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -72,24 +82,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.luminatweaks.R
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.LogUtil
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onNavigateToAbout: (() -> Unit)? = null,
@@ -105,14 +115,13 @@ fun SettingsScreen(
         mutableStateOf(if (lang.startsWith("en")) "en" else "id")
     }
 
-    var showLanguageDialog by remember { mutableStateOf(false) }
+    var showLanguageSheet by remember { mutableStateOf(false) }
     var showLogBottomSheet by remember { mutableStateOf(false) }
     var isGeneratingLog by remember { mutableStateOf(false) }
     var showAboutScreen by remember { mutableStateOf(false) }
     var showPersonalisasiScreen by remember { mutableStateOf(false) }
     var showUninstallDialog by remember { mutableStateOf(false) }
     var isUninstalling by remember { mutableStateOf(false) }
-    val sheetState = rememberModalBottomSheetState()
 
     if (showAboutScreen && onNavigateToAbout == null) {
         AboutScreen(onBackClick = { showAboutScreen = false })
@@ -124,6 +133,12 @@ fun SettingsScreen(
         return
     }
 
+    val bottomPadding = if (isFloating) {
+        108.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    } else {
+        20.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
         topBar = {
@@ -131,8 +146,8 @@ fun SettingsScreen(
                 title = {
                     Text(
                         text = stringResource(R.string.title_settings),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
                     )
                 },
                 windowInsets = WindowInsets.statusBars,
@@ -145,316 +160,94 @@ fun SettingsScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding() + 4.dp,
-                bottom = if (isFloating) 100.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() else 16.dp,
+                top = innerPadding.calculateTopPadding() + 6.dp,
+                bottom = bottomPadding,
                 start = 16.dp,
                 end = 16.dp
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = stringResource(R.string.section_personalization),
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.Medium
-                        ),
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 16.dp, bottom = 6.dp)
-                    )
-                    val singleShape = getConnectedContainerShape(ContainerPosition.Single)
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(singleShape)
-                            .clickable {
-                                if (onNavigateToPersonalisasi != null) {
-                                    onNavigateToPersonalisasi()
-                                } else {
-                                    showPersonalisasiScreen = true
-                                }
-                            },
-                        shape = singleShape,
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Palette,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(22.dp)
-                            )
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.personalization_title),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = stringResource(R.string.settings_personalization_desc),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
-                                )
-                            }
-                            Icon(
-                                imageVector = Icons.Rounded.ChevronRight,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            item {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+            item(key = "personalization") {
+                SettingsNestedGroup(
+                    headerIcon = Icons.Rounded.Palette,
+                    headerTitle = stringResource(R.string.section_personalization)
                 ) {
-                    Text(
-                        text = stringResource(R.string.section_others),
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.Medium
-                        ),
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 16.dp, bottom = 6.dp)
-                    )
-
-                    val topShape = getConnectedContainerShape(ContainerPosition.Top)
-                    val bottomShape = getConnectedContainerShape(ContainerPosition.Bottom)
-
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(topShape)
-                            .clickable(enabled = !isGeneratingLog) { showLogBottomSheet = true },
-                        shape = topShape,
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (isGeneratingLog) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(22.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
+                    SettingsNestedActionCard(
+                        icon = Icons.Rounded.Palette,
+                        title = stringResource(R.string.personalization_title),
+                        subtitle = stringResource(R.string.settings_personalization_desc),
+                        onClick = {
+                            if (onNavigateToPersonalisasi != null) {
+                                onNavigateToPersonalisasi()
                             } else {
-                                Icon(
-                                    imageVector = Icons.Rounded.Description,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.settings_save_log),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = if (isGeneratingLog) stringResource(R.string.settings_save_log_bundling) else stringResource(R.string.settings_save_log_desc),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
-                                )
+                                showPersonalisasiScreen = true
                             }
                         }
-                    }
-
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(bottomShape)
-                            .clickable { showLanguageDialog = true },
-                        shape = bottomShape,
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Language,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(22.dp)
-                            )
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.settings_language),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = if (currentLanguage == "en") stringResource(R.string.language_english) else stringResource(R.string.language_indonesian),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
-                                )
-                            }
-                            Icon(
-                                imageVector = Icons.Rounded.ChevronRight,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
+                    )
                 }
             }
 
-            item {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = stringResource(R.string.section_about),
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.Medium
-                        ),
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 16.dp, bottom = 6.dp)
+            item(key = "others") {
+                SettingsNestedGroup(
+                    headerIcon = Icons.Rounded.Tune,
+                    headerTitle = stringResource(R.string.section_others)
+                ) {
+                    SettingsNestedActionCard(
+                        icon = Icons.Rounded.Description,
+                        title = stringResource(R.string.settings_save_log),
+                        subtitle = if (isGeneratingLog) {
+                            stringResource(R.string.settings_save_log_bundling)
+                        } else {
+                            stringResource(R.string.settings_save_log_desc)
+                        },
+                        enabled = !isGeneratingLog,
+                        isLoading = isGeneratingLog,
+                        onClick = { showLogBottomSheet = true }
                     )
-                    val singleShape = getConnectedContainerShape(ContainerPosition.Single)
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(singleShape)
-                            .clickable {
-                                if (onNavigateToAbout != null) {
-                                    onNavigateToAbout()
-                                } else {
-                                    showAboutScreen = true
-                                }
-                            },
-                        shape = singleShape,
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Info,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(22.dp)
-                            )
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.settings_about),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = stringResource(R.string.settings_version_format, com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
-                                )
-                            }
-                            Icon(
-                                imageVector = Icons.Rounded.ChevronRight,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
+
+                    SettingsNestedActionCard(
+                        icon = Icons.Rounded.Language,
+                        title = stringResource(R.string.settings_language),
+                        subtitle = if (currentLanguage == "en") {
+                            stringResource(R.string.language_english)
+                        } else {
+                            stringResource(R.string.language_indonesian)
+                        },
+                        onClick = { showLanguageSheet = true }
+                    )
                 }
             }
 
-            item {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = stringResource(R.string.settings_module_management),
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.Medium
+            item(key = "about_and_module") {
+                SettingsNestedGroup(
+                    headerIcon = Icons.Rounded.Info,
+                    headerTitle = stringResource(R.string.section_about)
+                ) {
+                    SettingsNestedActionCard(
+                        icon = Icons.Rounded.Info,
+                        title = stringResource(R.string.settings_about),
+                        subtitle = stringResource(
+                            R.string.settings_version_format,
+                            com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")
                         ),
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(start = 16.dp, bottom = 6.dp)
-                    )
-                    val singleShape = getConnectedContainerShape(ContainerPosition.Single)
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(singleShape)
-                            .clickable(enabled = !isUninstalling) { showUninstallDialog = true },
-                        shape = singleShape,
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.DeleteForever,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(22.dp)
-                            )
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.settings_module_uninstall_title),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = stringResource(R.string.settings_module_uninstall_desc),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
-                                )
+                        onClick = {
+                            if (onNavigateToAbout != null) {
+                                onNavigateToAbout()
+                            } else {
+                                showAboutScreen = true
                             }
-                            Icon(
-                                imageVector = Icons.Rounded.ChevronRight,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(20.dp)
-                            )
                         }
-                    }
+                    )
+
+                    SettingsNestedActionCard(
+                        icon = Icons.Rounded.DeleteForever,
+                        title = stringResource(R.string.settings_module_uninstall_title),
+                        subtitle = stringResource(R.string.settings_module_uninstall_desc),
+                        enabled = !isUninstalling,
+                        containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.28f),
+                        accentColor = MaterialTheme.colorScheme.error,
+                        onClick = { showUninstallDialog = true }
+                    )
                 }
             }
         }
@@ -497,7 +290,11 @@ fun SettingsScreen(
                     enabled = !isUninstalling
                 ) {
                     Text(
-                        text = if (isUninstalling) stringResource(R.string.settings_module_uninstall_processing) else stringResource(R.string.settings_module_uninstall_confirm),
+                        text = if (isUninstalling) {
+                            stringResource(R.string.settings_module_uninstall_processing)
+                        } else {
+                            stringResource(R.string.settings_module_uninstall_confirm)
+                        },
                         color = MaterialTheme.colorScheme.error,
                         fontWeight = FontWeight.Bold
                     )
@@ -519,102 +316,151 @@ fun SettingsScreen(
         )
     }
 
-    if (showLanguageDialog) {
-        AlertDialog(
-            onDismissRequest = { showLanguageDialog = false },
-            icon = {
-                Icon(
-                    imageVector = Icons.Rounded.Language,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-            },
-            title = {
-                Text(
-                    text = stringResource(R.string.dialog_select_language),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center
-                )
-            },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    LanguageOptionItem(
-                        title = stringResource(R.string.language_indonesian),
-                        isSelected = currentLanguage == "id",
-                        cornerRadius = cornerRadius,
-                        onClick = {
-                            showLanguageDialog = false
-                            if (currentLanguage != "id") {
-                                currentLanguage = "id"
-                                coroutineScope.launch {
-                                    delay(120L)
-                                    setAppLanguage(context, "id")
-                                }
-                            }
-                        }
-                    )
-
-                    LanguageOptionItem(
-                        title = stringResource(R.string.language_english),
-                        isSelected = currentLanguage == "en",
-                        cornerRadius = cornerRadius,
-                        onClick = {
-                            showLanguageDialog = false
-                            if (currentLanguage != "en") {
-                                currentLanguage = "en"
-                                coroutineScope.launch {
-                                    delay(120L)
-                                    setAppLanguage(context, "en")
-                                }
-                            }
-                        }
-                    )
-                }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { showLanguageDialog = false }) {
-                    Text(
-                        text = stringResource(R.string.action_cancel),
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            },
-            shape = RoundedCornerShape(cornerRadius.coerceAtLeast(16.dp)),
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+    if (showLanguageSheet) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        val languages = listOf(
+            "id" to stringResource(R.string.language_indonesian),
+            "en" to stringResource(R.string.language_english)
         )
-    }
 
-    if (showLogBottomSheet) {
         ModalBottomSheet(
-            onDismissRequest = { showLogBottomSheet = false },
+            onDismissRequest = { showLanguageSheet = false },
             sheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentWindowInsets = { WindowInsets(0.dp) },
+            dragHandle = {
+                BottomSheetDefaults.DragHandle(
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                )
+            }
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 32.dp, start = 16.dp, end = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.dialog_select_language),
+                    style = MaterialTheme.typography.titleLargeEmphasized,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)
+                ) {
+                    languages.forEachIndexed { index, (tag, label) ->
+                        val isSelected = currentLanguage == tag
+                        SegmentedListItem(
+                            selected = isSelected,
+                            onClick = {
+                                showLanguageSheet = false
+                                if (currentLanguage != tag) {
+                                    currentLanguage = tag
+                                    coroutineScope.launch {
+                                        delay(120L)
+                                        setAppLanguage(context, tag)
+                                    }
+                                }
+                            },
+                            shapes = ListItemDefaults.segmentedShapes(
+                                index = index,
+                                count = languages.size
+                            ),
+                            colors = ListItemDefaults.segmentedColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                selectedLeadingContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            ),
+                            leadingContent = {
+                                Box(
+                                    modifier = Modifier.size(24.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (isSelected) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(22.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.primary),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Check,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onPrimary,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(20.dp)
+                                                .border(
+                                                    width = 1.5.dp,
+                                                    color = MaterialTheme.colorScheme.outlineVariant,
+                                                    shape = CircleShape
+                                                )
+                                        )
+                                    }
+                                }
+                            }
+                        ) {
+                            Text(
+                                text = label,
+                                style = if (isSelected) {
+                                    MaterialTheme.typography.titleSmallEmphasized
+                                } else {
+                                    MaterialTheme.typography.bodyLarge
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showLogBottomSheet) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { showLogBottomSheet = false },
+            sheetState = sheetState,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentWindowInsets = { WindowInsets(0.dp) },
+            dragHandle = {
+                BottomSheetDefaults.DragHandle(
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                )
+            }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
                     text = stringResource(R.string.dialog_log_subsystem),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleLargeEmphasized,
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
                 )
 
-                LogOptionCard(
+                SettingsNestedActionCard(
                     icon = Icons.Rounded.FileDownload,
                     title = stringResource(R.string.settings_save_log),
                     subtitle = stringResource(R.string.log_option_save_desc),
-                    cornerRadius = cornerRadius,
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                     onClick = {
                         showLogBottomSheet = false
                         isGeneratingLog = true
@@ -622,19 +468,27 @@ fun SettingsScreen(
                             val file = LogUtil.dumpDiagnosticLogs(context, saveToDownloads = true)
                             isGeneratingLog = false
                             if (file != null) {
-                                Toast.makeText(context, context.getString(R.string.toast_log_saved, file.name), Toast.LENGTH_LONG).show()
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.toast_log_saved, file.name),
+                                    Toast.LENGTH_LONG
+                                ).show()
                             } else {
-                                Toast.makeText(context, context.getString(R.string.toast_log_export_failed), Toast.LENGTH_SHORT).show()
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.toast_log_export_failed),
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
                         }
                     }
                 )
 
-                LogOptionCard(
+                SettingsNestedActionCard(
                     icon = Icons.Rounded.Share,
                     title = stringResource(R.string.log_option_share),
                     subtitle = stringResource(R.string.log_option_share_desc),
-                    cornerRadius = cornerRadius,
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                     onClick = {
                         showLogBottomSheet = false
                         isGeneratingLog = true
@@ -645,12 +499,145 @@ fun SettingsScreen(
                                 val intent = LogUtil.getShareLogIntent(context, file)
                                 context.startActivity(intent)
                             } else {
-                                Toast.makeText(context, context.getString(R.string.toast_log_share_failed), Toast.LENGTH_SHORT).show()
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.toast_log_share_failed),
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
                         }
                     }
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun SettingsNestedGroup(
+    headerIcon: ImageVector,
+    headerTitle: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val outerRadius = LocalCornerRadius.current.coerceAtLeast(26.dp)
+
+    Surface(
+        shape = RoundedCornerShape(outerRadius),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 2.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = headerIcon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = headerTitle,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            content()
+        }
+    }
+}
+
+@Composable
+private fun SettingsNestedActionCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    isLoading: Boolean = false,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    accentColor: Color = MaterialTheme.colorScheme.onSurface
+) {
+    val innerRadius = (LocalCornerRadius.current * 0.78f).coerceIn(16.dp, 24.dp)
+
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(innerRadius),
+        color = containerColor,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            } else {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = accentColor,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = accentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Icon(
+                imageVector = Icons.Rounded.ChevronRight,
+                contentDescription = null,
+                tint = if (accentColor == MaterialTheme.colorScheme.error) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+                },
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }
@@ -684,47 +671,6 @@ private suspend fun uninstallModule(context: Context) {
     }
 }
 
-@Composable
-private fun LanguageOptionItem(
-    title: String,
-    isSelected: Boolean,
-    cornerRadius: androidx.compose.ui.unit.Dp,
-    onClick: () -> Unit
-) {
-    val itemRadius = (cornerRadius * 0.75f).coerceIn(8.dp, 20.dp)
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(itemRadius))
-            .clickable(onClick = onClick),
-        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(itemRadius)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f)
-            )
-            if (isSelected) {
-                Icon(
-                    imageVector = Icons.Rounded.Check,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-        }
-    }
-}
-
 private fun getCurrentLanguage(context: Context): String {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         val locales = context.getSystemService(LocaleManager::class.java)?.applicationLocales
@@ -749,53 +695,5 @@ private fun setAppLanguage(context: Context, languageTag: String) {
         val config = context.resources.configuration
         config.setLocale(locale)
         context.resources.updateConfiguration(config, context.resources.displayMetrics)
-    }
-}
-
-@Composable
-private fun LogOptionCard(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    cornerRadius: androidx.compose.ui.unit.Dp,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape((cornerRadius * 0.75f).coerceIn(8.dp, 20.dp)),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(22.dp)
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
-                )
-            }
-        }
     }
 }

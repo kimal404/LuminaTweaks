@@ -12,15 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package com.luminatweaks.ui.screen
 
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,10 +47,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.BlurOn
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.GridOn
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -78,9 +84,12 @@ import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -88,7 +97,18 @@ import androidx.compose.ui.unit.sp
 import com.luminatweaks.R
 import com.luminatweaks.data.AppProfileConfig
 import com.luminatweaks.data.ConfigRepository
+import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
+import java.util.Locale
+
+@Composable
+private fun textureLocalizedLabel(id: String, en: String): String {
+    val isIndonesian = remember {
+        val lang = Locale.getDefault().language.lowercase(Locale.ROOT)
+        lang == "in" || lang == "id"
+    }
+    return if (isIndonesian) id else en
+}
 
 fun generateTextureBitmap(lod: Int): ImageBitmap {
     val scale = when (lod.coerceIn(0, 4)) {
@@ -151,12 +171,13 @@ fun TextureComparisonPreview(
     val handleHeight = 46.dp
     val primaryColor = MaterialTheme.colorScheme.primary
     val dividerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+    val cardRadius = LocalCornerRadius.current.coerceAtLeast(24.dp)
 
     Card(
         modifier = modifier
             .fillMaxWidth()
             .height(210.dp),
-        shape = RoundedCornerShape(26.dp),
+        shape = RoundedCornerShape(cardRadius),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF141416))
     ) {
@@ -299,7 +320,6 @@ fun TextureComparisonPreview(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TeksturRinganScreen(
     appName: String,
@@ -309,15 +329,17 @@ fun TeksturRinganScreen(
 ) {
     BackHandler(onBack = onBack)
 
+    val haptic = LocalHapticFeedback.current
     val primaryAccent = MaterialTheme.colorScheme.primary
     val currentLod = profile.textureLod.coerceIn(0, 4)
     val isTweakActive = currentLod > 0
     val isFloating = LocalFloatingNavBar.current
+    val outerRadius = LocalCornerRadius.current.coerceAtLeast(26.dp)
 
     val bottomPadding = if (isFloating) {
-        120.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        116.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     } else {
-        32.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        28.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     }
 
     Scaffold(
@@ -363,7 +385,7 @@ fun TeksturRinganScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            item {
+            item(key = "preview") {
                 TextureComparisonPreview(
                     isActive = isTweakActive,
                     lod = currentLod,
@@ -371,148 +393,217 @@ fun TeksturRinganScreen(
                 )
             }
 
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                    )
+            item(key = "level_config") {
+                val levelLabel = when (currentLod) {
+                    1 -> stringResource(R.string.texture_level_1)
+                    2 -> stringResource(R.string.texture_level_2)
+                    3 -> stringResource(R.string.texture_level_3)
+                    4 -> stringResource(R.string.texture_level_4)
+                    else -> stringResource(R.string.texture_level_default)
+                }
+
+                val tierCaptions = listOf(
+                    1 to textureLocalizedLabel("Ringan", "Light"),
+                    2 to textureLocalizedLabel("Sedang", "Medium"),
+                    3 to textureLocalizedLabel("Tinggi", "High"),
+                    4 to textureLocalizedLabel("Ekstrem", "Ultra")
+                )
+
+                Surface(
+                    shape = RoundedCornerShape(outerRadius),
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(18.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Tune,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
                             Text(
                                 text = stringResource(R.string.texture_level_title),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f)
                             )
-                            val levelLabel = when (currentLod) {
-                                1 -> stringResource(R.string.texture_level_1)
-                                2 -> stringResource(R.string.texture_level_2)
-                                3 -> stringResource(R.string.texture_level_3)
-                                4 -> stringResource(R.string.texture_level_4)
-                                else -> stringResource(R.string.texture_level_default)
+                            Surface(
+                                shape = CircleShape,
+                                color = if (isTweakActive) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainerHigh
+                                }
+                            ) {
+                                Text(
+                                    text = levelLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isTweakActive) {
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
                             }
-                            Text(
-                                text = levelLabel,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isTweakActive) primaryAccent else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
                         }
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            listOf(1, 2, 3, 4).forEach { level ->
+                            tierCaptions.forEach { (level, caption) ->
                                 val isSelected = currentLod == level
-                                Box(
+                                val tileBg by animateColorAsState(
+                                    targetValue = if (isSelected) {
+                                        primaryAccent
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceContainerHigh
+                                    },
+                                    label = "tierBg"
+                                )
+                                val tileContent by animateColorAsState(
+                                    targetValue = if (isSelected) {
+                                        MaterialTheme.colorScheme.onPrimary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    },
+                                    label = "tierText"
+                                )
+
+                                Surface(
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onProfileChanged(
+                                            profile.copy(
+                                                textureLod = level,
+                                                textureDriver = "angle",
+                                                textureEnabled = true,
+                                                textureDetail = level
+                                            )
+                                        )
+                                    },
+                                    shape = RoundedCornerShape(18.dp),
+                                    color = tileBg,
+                                    border = if (isSelected) {
+                                        null
+                                    } else {
+                                        BorderStroke(
+                                            1.dp,
+                                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                        )
+                                    },
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(46.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                            if (isSelected) primaryAccent
-                                             else MaterialTheme.colorScheme.surfaceContainerHigh
-                                        )
-                                        .clickable {
-                                            onProfileChanged(
-                                                profile.copy(
-                                                    textureLod = level,
-                                                    textureDriver = "angle",
-                                                    textureEnabled = true,
-                                                    textureDetail = level
-                                                )
-                                            )
-                                        },
-                                    contentAlignment = Alignment.Center
+                                        .height(68.dp)
                                 ) {
-                                    Text(
-                                        text = level.toString(),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimary
-                                        else MaterialTheme.colorScheme.onSurface
-                                    )
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(horizontal = 4.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Text(
+                                            text = level.toString(),
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = tileContent
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = caption,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = tileContent.copy(alpha = if (isSelected) 0.9f else 0.75f),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
                                 }
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            val isBlur = !profile.pixelSharp
-                            val isPixel = profile.pixelSharp
-
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(48.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        if (isBlur) primaryAccent
-                                        else MaterialTheme.colorScheme.surfaceContainerHigh
-                                    )
-                                    .clickable {
-                                        onProfileChanged(profile.copy(pixelSharp = false))
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.texture_mode_blur),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isBlur) MaterialTheme.colorScheme.onPrimary
-                                    else MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(48.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        if (isPixel) primaryAccent
-                                        else MaterialTheme.colorScheme.surfaceContainerHigh
-                                    )
-                                    .clickable {
-                                        onProfileChanged(profile.copy(pixelSharp = true))
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.texture_mode_pixel),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isPixel) MaterialTheme.colorScheme.onPrimary
-                                    else MaterialTheme.colorScheme.onSurface
-                                )
                             }
                         }
                     }
                 }
             }
 
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.65f)
-                    )
+            item(key = "filter_mode") {
+                val isBlur = !profile.pixelSharp
+                val isPixel = profile.pixelSharp
+
+                Surface(
+                    shape = RoundedCornerShape(outerRadius),
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Rounded.Visibility,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = textureLocalizedLabel("Mode Filter", "Filter Mode"),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            FilterPillTile(
+                                selected = isBlur,
+                                icon = Icons.Rounded.BlurOn,
+                                label = stringResource(R.string.texture_mode_blur),
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onProfileChanged(profile.copy(pixelSharp = false))
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            FilterPillTile(
+                                selected = isPixel,
+                                icon = Icons.Rounded.GridOn,
+                                label = stringResource(R.string.texture_mode_pixel),
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onProfileChanged(profile.copy(pixelSharp = true))
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+            }
+
+            item(key = "info_card") {
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
                         modifier = Modifier
@@ -545,7 +636,7 @@ fun TeksturRinganScreen(
                 }
             }
 
-            item {
+            item(key = "actions") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -568,7 +659,7 @@ fun TeksturRinganScreen(
                         modifier = Modifier
                             .weight(1f)
                             .height(50.dp),
-                        shape = RoundedCornerShape(16.dp)
+                        shape = CircleShape
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.RestartAlt,
@@ -589,7 +680,7 @@ fun TeksturRinganScreen(
                         modifier = Modifier
                             .weight(1f)
                             .height(50.dp),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = CircleShape,
                         colors = ButtonDefaults.buttonColors(containerColor = primaryAccent)
                     ) {
                         Icon(
@@ -602,6 +693,81 @@ fun TeksturRinganScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun FilterPillTile(
+    selected: Boolean,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val bgColor by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        },
+        label = "filterPillBg"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.onPrimary
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        },
+        label = "filterPillText"
+    )
+
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = bgColor,
+        border = if (selected) {
+            null
+        } else {
+            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+        },
+        modifier = modifier.height(54.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (selected) {
+                            MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainerHighest
+                        }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (selected) Icons.Rounded.Check else icon,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = contentColor,
+                maxLines = 1
+            )
         }
     }
 }
