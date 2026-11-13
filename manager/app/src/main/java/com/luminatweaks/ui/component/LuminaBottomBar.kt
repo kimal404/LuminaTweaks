@@ -31,9 +31,9 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.ShortNavigationBar
+import androidx.compose.material3.ShortNavigationBarItem
+import androidx.compose.material3.ShortNavigationBarItemDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -64,7 +64,7 @@ fun LuminaBottomBar(
             tonalElevation = 3.dp,
             shadowElevation = 4.dp
         ) {
-            NavigationBar(
+            ShortNavigationBar(
                 containerColor = Color.Transparent,
                 tonalElevation = 0.dp,
                 windowInsets = WindowInsets(0.dp)
@@ -73,7 +73,7 @@ fun LuminaBottomBar(
             }
         }
     } else {
-        NavigationBar(
+        ShortNavigationBar(
             containerColor = MaterialTheme.colorScheme.background,
             tonalElevation = 0.dp
         ) {
@@ -87,7 +87,7 @@ private fun RowScope.LuminaBottomBarItems(
     selectedTab: Int,
     onTabSelected: (Int) -> Unit
 ) {
-    NavigationBarItem(
+    ShortNavigationBarItem(
         selected = selectedTab == 0,
         onClick = { onTabSelected(0) },
         icon = {
@@ -97,7 +97,7 @@ private fun RowScope.LuminaBottomBarItems(
             )
         },
         label = { Text(stringResource(R.string.nav_home)) },
-        colors = NavigationBarItemDefaults.colors(
+        colors = ShortNavigationBarItemDefaults.colors(
             indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
             selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
             selectedTextColor = MaterialTheme.colorScheme.onSurface,
@@ -106,7 +106,7 @@ private fun RowScope.LuminaBottomBarItems(
         )
     )
 
-    NavigationBarItem(
+    ShortNavigationBarItem(
         selected = selectedTab == 1,
         onClick = { onTabSelected(1) },
         icon = {
@@ -116,7 +116,7 @@ private fun RowScope.LuminaBottomBarItems(
             )
         },
         label = { Text(stringResource(R.string.nav_apps)) },
-        colors = NavigationBarItemDefaults.colors(
+        colors = ShortNavigationBarItemDefaults.colors(
             indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
             selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
             selectedTextColor = MaterialTheme.colorScheme.onSurface,
@@ -125,7 +125,7 @@ private fun RowScope.LuminaBottomBarItems(
         )
     )
 
-    NavigationBarItem(
+    ShortNavigationBarItem(
         selected = selectedTab == 2,
         onClick = { onTabSelected(2) },
         icon = {
@@ -135,7 +135,7 @@ private fun RowScope.LuminaBottomBarItems(
             )
         },
         label = { Text(stringResource(R.string.nav_tweaks)) },
-        colors = NavigationBarItemDefaults.colors(
+        colors = ShortNavigationBarItemDefaults.colors(
             indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
             selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
             selectedTextColor = MaterialTheme.colorScheme.onSurface,
@@ -144,7 +144,7 @@ private fun RowScope.LuminaBottomBarItems(
         )
     )
 
-    NavigationBarItem(
+    ShortNavigationBarItem(
         selected = selectedTab == 3,
         onClick = { onTabSelected(3) },
         icon = {
@@ -154,7 +154,7 @@ private fun RowScope.LuminaBottomBarItems(
             )
         },
         label = { Text(stringResource(R.string.nav_settings)) },
-        colors = NavigationBarItemDefaults.colors(
+        colors = ShortNavigationBarItemDefaults.colors(
             indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
             selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
             selectedTextColor = MaterialTheme.colorScheme.onSurface,

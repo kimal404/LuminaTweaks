@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 package com.luminatweaks.ui.screen
 
 import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,7 +40,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -62,19 +61,31 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Thermostat
+import androidx.compose.ui.graphics.Morph
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -87,13 +98,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -103,7 +117,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -379,7 +395,8 @@ fun HomeScreen() {
                         isRootGranted = isRootGranted,
                         selinuxStatus = selinuxStatus,
                         onRequestRebootDialog = { showRebootDialog = true },
-                        onRestartDaemon = restartAction
+                        onRestartDaemon = restartAction,
+                        onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" }
                     )
                     1 -> AppsScreen()
                     2 -> TweaksScreen()
@@ -431,7 +448,8 @@ fun HomeScreen() {
                         isRootGranted = isRootGranted,
                         selinuxStatus = selinuxStatus,
                         onRequestRebootDialog = { showRebootDialog = true },
-                        onRestartDaemon = restartAction
+                        onRestartDaemon = restartAction,
+                        onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" }
                     )
                     1 -> AppsScreen()
                     2 -> TweaksScreen()
@@ -442,7 +460,7 @@ fun HomeScreen() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeDashboardContent(
     batteryTemp: String,
@@ -457,16 +475,117 @@ fun HomeDashboardContent(
     isRootGranted: Boolean,
     selinuxStatus: String,
     onRequestRebootDialog: () -> Unit,
-    onRestartDaemon: suspend () -> Unit
+    onRestartDaemon: suspend () -> Unit,
+    onNavigateToPersonalisasi: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     var isRestarting by remember { mutableStateOf(false) }
+    var showPowerDialog by remember { mutableStateOf(false) }
     val isRunning = daemonPid != null
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+
+    val launchRestart: () -> Unit = {
+        if (!isRestarting) {
+            isRestarting = true
+            Toast.makeText(context, context.getString(R.string.toast_restarting_service), Toast.LENGTH_SHORT).show()
+            coroutineScope.launch {
+                onRestartDaemon()
+                isRestarting = false
+            }
+        }
+    }
+
+    if (showPowerDialog) {
+        val currentRadius = LocalCornerRadius.current
+        AlertDialog(
+            onDismissRequest = { showPowerDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Rounded.PowerSettingsNew,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(28.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = stringResource(R.string.power_menu_title),
+                    style = MaterialTheme.typography.titleMediumEmphasized,
+                    textAlign = TextAlign.Center
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    PowerMenuItem(
+                        icon = Icons.Rounded.Refresh,
+                        iconBg = MaterialTheme.colorScheme.primaryContainer,
+                        iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        title = stringResource(R.string.power_action_reboot),
+                        cornerRadius = currentRadius,
+                        onClick = {
+                            showPowerDialog = false
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            Toast.makeText(context, context.getString(R.string.toast_rebooting_device), Toast.LENGTH_SHORT).show()
+                            coroutineScope.launch {
+                                RootUtil.rebootDevice("")
+                            }
+                        }
+                    )
+
+                    PowerMenuItem(
+                        icon = Icons.Rounded.Memory,
+                        iconBg = MaterialTheme.colorScheme.secondaryContainer,
+                        iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        title = stringResource(R.string.power_action_recovery),
+                        cornerRadius = currentRadius,
+                        onClick = {
+                            showPowerDialog = false
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            Toast.makeText(context, context.getString(R.string.toast_rebooting_recovery), Toast.LENGTH_SHORT).show()
+                            coroutineScope.launch {
+                                RootUtil.rebootDevice("recovery")
+                            }
+                        }
+                    )
+
+                    PowerMenuItem(
+                        icon = Icons.Rounded.PowerSettingsNew,
+                        iconBg = MaterialTheme.colorScheme.tertiaryContainer,
+                        iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
+                        title = stringResource(R.string.power_action_restart_service),
+                        cornerRadius = currentRadius,
+                        onClick = {
+                            showPowerDialog = false
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            launchRestart()
+                        }
+                    )
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showPowerDialog = false }) {
+                    Text(
+                        text = stringResource(R.string.action_cancel),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            },
+            shape = RoundedCornerShape(currentRadius.coerceAtLeast(16.dp)),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        )
+    }
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         contentWindowInsets = WindowInsets(0.dp),
         topBar = {
-            TopAppBar(
+            LargeFlexibleTopAppBar(
                 title = {
                     Text(
                         text = stringResource(R.string.app_name),
@@ -474,149 +593,26 @@ fun HomeDashboardContent(
                         fontWeight = FontWeight.Bold
                     )
                 },
-                actions = {
-                    val context = LocalContext.current
-                    val haptic = LocalHapticFeedback.current
-                    var showPowerDialog by remember { mutableStateOf(false) }
-
-                    Box(
-                        modifier = Modifier
-                            .padding(end = 8.dp)
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(
-                                when {
-                                    isChecking -> MaterialTheme.colorScheme.surfaceContainerHighest
-                                    isRunning -> MaterialTheme.colorScheme.primaryContainer
-                                    else -> MaterialTheme.colorScheme.errorContainer
-                                }
-                            )
-                            .combinedClickable(
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    showPowerDialog = true
-                                },
-                                onLongClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    if (!isRestarting) {
-                                        isRestarting = true
-                                        Toast.makeText(context, context.getString(R.string.toast_restarting_service), Toast.LENGTH_SHORT).show()
-                                        coroutineScope.launch {
-                                            onRestartDaemon()
-                                            isRestarting = false
-                                        }
-                                    }
-                                }
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.PowerSettingsNew,
-                            contentDescription = stringResource(R.string.power_menu_title),
-                            tint = when {
-                                isChecking -> MaterialTheme.colorScheme.onSurfaceVariant
-                                isRunning -> MaterialTheme.colorScheme.onPrimaryContainer
-                                else -> MaterialTheme.colorScheme.onErrorContainer
-                            },
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-
-                    if (showPowerDialog) {
-                        val currentRadius = LocalCornerRadius.current
-                        AlertDialog(
-                            onDismissRequest = { showPowerDialog = false },
-                            icon = {
-                                Icon(
-                                    imageVector = Icons.Rounded.PowerSettingsNew,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                            },
-                            title = {
-                                Text(
-                                    text = stringResource(R.string.power_menu_title),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    textAlign = TextAlign.Center
-                                )
-                            },
-                            text = {
-                                Column(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    PowerMenuItem(
-                                        icon = Icons.Rounded.Refresh,
-                                        iconBg = MaterialTheme.colorScheme.primaryContainer,
-                                        iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        title = stringResource(R.string.power_action_reboot),
-                                        cornerRadius = currentRadius,
-                                        onClick = {
-                                            showPowerDialog = false
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            Toast.makeText(context, context.getString(R.string.toast_rebooting_device), Toast.LENGTH_SHORT).show()
-                                            coroutineScope.launch {
-                                                RootUtil.rebootDevice("")
-                                            }
-                                        }
-                                    )
-
-                                    PowerMenuItem(
-                                        icon = Icons.Rounded.Memory,
-                                        iconBg = MaterialTheme.colorScheme.secondaryContainer,
-                                        iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                        title = stringResource(R.string.power_action_recovery),
-                                        cornerRadius = currentRadius,
-                                        onClick = {
-                                            showPowerDialog = false
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            Toast.makeText(context, context.getString(R.string.toast_rebooting_recovery), Toast.LENGTH_SHORT).show()
-                                            coroutineScope.launch {
-                                                RootUtil.rebootDevice("recovery")
-                                            }
-                                        }
-                                    )
-
-                                    PowerMenuItem(
-                                        icon = Icons.Rounded.PowerSettingsNew,
-                                        iconBg = MaterialTheme.colorScheme.tertiaryContainer,
-                                        iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
-                                        title = stringResource(R.string.power_action_restart_service),
-                                        cornerRadius = currentRadius,
-                                        onClick = {
-                                            showPowerDialog = false
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            if (!isRestarting) {
-                                                isRestarting = true
-                                                Toast.makeText(context, context.getString(R.string.toast_restarting_service), Toast.LENGTH_SHORT).show()
-                                                coroutineScope.launch {
-                                                    onRestartDaemon()
-                                                    isRestarting = false
-                                                }
-                                            }
-                                        }
-                                    )
-                                }
-                            },
-                            confirmButton = {},
-                            dismissButton = {
-                                TextButton(onClick = { showPowerDialog = false }) {
-                                    Text(
-                                        text = stringResource(R.string.action_cancel),
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
-                            },
-                            shape = RoundedCornerShape(currentRadius.coerceAtLeast(16.dp)),
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                        )
-                    }
+                subtitle = {
+                    Text(text = stringResource(R.string.home_subtitle))
                 },
+                actions = {
+                    CoreStatusIndicator(
+                        isChecking = isChecking,
+                        isRestarting = isRestarting,
+                        isRunning = isRunning,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            showPowerDialog = true
+                        }
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                },
+                scrollBehavior = scrollBehavior,
                 windowInsets = WindowInsets.statusBars,
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer
                 )
             )
         }
@@ -629,9 +625,9 @@ fun HomeDashboardContent(
                 start = 16.dp,
                 end = 16.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            item {
+            item(key = "hero") {
                 CoreStatusCard(
                     isChecking = isChecking,
                     isRestarting = isRestarting,
@@ -645,9 +641,7 @@ fun HomeDashboardContent(
                                 if (isRebootRequired || DaemonManager.isRebootRequired()) {
                                     onRequestRebootDialog()
                                 } else if (isModuleInstalled || DaemonManager.isModuleInstalled()) {
-                                    isRestarting = true
-                                    onRestartDaemon()
-                                    isRestarting = false
+                                    launchRestart()
                                 }
                             }
                         }
@@ -655,7 +649,7 @@ fun HomeDashboardContent(
                 )
             }
 
-            item {
+            item(key = "metrics") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -665,8 +659,7 @@ fun HomeDashboardContent(
                         label = stringResource(R.string.home_thermal),
                         value = batteryTemp,
                         supporting = null,
-                        iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
-                        iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
+                        iconTint = MaterialTheme.colorScheme.tertiary,
                         modifier = Modifier.weight(1f)
                     )
                     DashboardMetricCard(
@@ -674,110 +667,146 @@ fun HomeDashboardContent(
                         label = stringResource(R.string.home_profile),
                         value = currentProfile,
                         supporting = currentFps.takeIf { it != "-" }?.let { "$it FPS" },
-                        iconContainer = MaterialTheme.colorScheme.secondaryContainer,
-                        iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        iconTint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.weight(1f)
                     )
                 }
             }
 
-            item {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    ConnectedCardRow(
-                        icon = Icons.Rounded.DeveloperBoard,
-                        title = stringResource(R.string.home_manager_version),
-                        subtitle = stringResource(
-                            R.string.home_version_release_format,
-                            com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")
-                        ),
-                        position = ContainerPosition.Top
-                    )
-                    ConnectedCardRow(
-                        icon = Icons.Rounded.Memory,
-                        title = stringResource(R.string.home_kernel_version),
-                        subtitle = kernelVersion,
-                        position = ContainerPosition.Middle,
-                        iconContainer = MaterialTheme.colorScheme.secondaryContainer,
-                        iconTint = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                    ConnectedCardRow(
-                        icon = Icons.Rounded.Smartphone,
-                        title = stringResource(R.string.home_device_model),
-                        subtitle = deviceModel,
-                        position = ContainerPosition.Bottom,
-                        iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
-                        iconTint = MaterialTheme.colorScheme.onTertiaryContainer
-                    )
-                }
+            item(key = "quick") {
+                QuickActionRow(
+                    isRestarting = isRestarting,
+                    onRestart = launchRestart,
+                    onPower = { showPowerDialog = true },
+                    onPersonalize = onNavigateToPersonalisasi
+                )
             }
 
-            item {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    ConnectedCardRow(
-                        icon = Icons.Rounded.Security,
-                        title = stringResource(R.string.home_root_access),
-                        subtitle = stringResource(
-                            if (isRootGranted) R.string.home_root_granted else R.string.home_root_denied
+            item(key = "device") {
+                HomeSegmentedGroup(
+                    sectionLabel = stringResource(R.string.home_section_device),
+                    rows = listOf(
+                        SegmentedRowData(
+                            icon = Icons.Rounded.DeveloperBoard,
+                            title = stringResource(R.string.home_manager_version),
+                            subtitle = stringResource(
+                                R.string.home_version_release_format,
+                                com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")
+                            )
                         ),
-                        position = ContainerPosition.Top,
-                        iconContainer = if (isRootGranted) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.errorContainer
-                        },
-                        iconTint = if (isRootGranted) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onErrorContainer
-                        }
+                        SegmentedRowData(
+                            icon = Icons.Rounded.Memory,
+                            title = stringResource(R.string.home_kernel_version),
+                            subtitle = kernelVersion
+                        ),
+                        SegmentedRowData(
+                            icon = Icons.Rounded.Smartphone,
+                            title = stringResource(R.string.home_device_model),
+                            subtitle = deviceModel
+                        )
                     )
-                    ConnectedCardRow(
-                        icon = Icons.Rounded.Security,
-                        title = stringResource(R.string.home_selinux_status),
-                        subtitle = selinuxStatus,
-                        position = ContainerPosition.Bottom,
-                        iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
-                        iconTint = MaterialTheme.colorScheme.onTertiaryContainer
-                    )
-                }
+                )
             }
 
-            item {
+            item(key = "security") {
+                HomeSegmentedGroup(
+                    sectionLabel = stringResource(R.string.home_section_security),
+                    rows = listOf(
+                        SegmentedRowData(
+                            icon = Icons.Rounded.Security,
+                            title = stringResource(R.string.home_root_access),
+                            subtitle = stringResource(
+                                if (isRootGranted) R.string.home_root_granted else R.string.home_root_denied
+                            ),
+                            accent = if (isRootGranted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                        ),
+                        SegmentedRowData(
+                            icon = Icons.Rounded.Security,
+                            title = stringResource(R.string.home_selinux_status),
+                            subtitle = selinuxStatus
+                        )
+                    )
+                )
+            }
+
+            item(key = "support") {
                 val uriHandler = LocalUriHandler.current
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    ConnectedActionCardRow(
-                        icon = Icons.Rounded.Favorite,
-                        title = stringResource(R.string.home_support_us),
-                        subtitle = stringResource(R.string.home_support_us_desc),
-                        position = ContainerPosition.Top,
-                        onClick = { uriHandler.openUri("https://sociabuzz.com/kimal404") },
-                        iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
-                        iconTint = MaterialTheme.colorScheme.onTertiaryContainer
+                HomeSegmentedGroup(
+                    sectionLabel = stringResource(R.string.home_section_support),
+                    rows = listOf(
+                        SegmentedRowData(
+                            icon = Icons.Rounded.Favorite,
+                            title = stringResource(R.string.home_support_us),
+                            subtitle = stringResource(R.string.home_support_us_desc),
+                            onClick = { uriHandler.openUri("https://sociabuzz.com/kimal404") }
+                        ),
+                        SegmentedRowData(
+                            icon = Icons.Rounded.MenuBook,
+                            title = stringResource(R.string.home_learn_more),
+                            subtitle = stringResource(R.string.home_learn_more_desc),
+                            onClick = { uriHandler.openUri("https://github.com/kimal404/LuminaTweaks") }
+                        )
                     )
-                    ConnectedActionCardRow(
-                        icon = Icons.Rounded.MenuBook,
-                        title = stringResource(R.string.home_learn_more),
-                        subtitle = stringResource(R.string.home_learn_more_desc),
-                        position = ContainerPosition.Bottom,
-                        onClick = { uriHandler.openUri("https://github.com/kimal404/LuminaTweaks") },
-                        iconContainer = MaterialTheme.colorScheme.secondaryContainer,
-                        iconTint = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                }
+                )
             }
 
-            item {
+            item(key = "footer") {
                 Spacer(modifier = Modifier.height(16.dp))
             }
+        }
+    }
+}
+
+@Composable
+private fun CoreStatusIndicator(
+    isChecking: Boolean,
+    isRestarting: Boolean,
+    isRunning: Boolean,
+    onClick: () -> Unit
+) {
+    val container by animateColorAsState(
+        targetValue = when {
+            isChecking || isRestarting -> MaterialTheme.colorScheme.surfaceContainerHighest
+            isRunning -> MaterialTheme.colorScheme.primaryContainer
+            else -> MaterialTheme.colorScheme.errorContainer
+        },
+        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+        label = "indicatorContainer"
+    )
+    val content by animateColorAsState(
+        targetValue = when {
+            isChecking || isRestarting -> MaterialTheme.colorScheme.onSurfaceVariant
+            isRunning -> MaterialTheme.colorScheme.onPrimaryContainer
+            else -> MaterialTheme.colorScheme.onErrorContainer
+        },
+        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+        label = "indicatorContent"
+    )
+
+    FilledIconButton(
+        onClick = onClick,
+        shapes = IconButtonDefaults.shapes(),
+        colors = IconButtonDefaults.filledIconButtonColors(
+            containerColor = container,
+            contentColor = content
+        ),
+        modifier = Modifier
+            .padding(end = 8.dp)
+            .size(IconButtonDefaults.mediumContainerSize())
+    ) {
+        if (isChecking || isRestarting) {
+            CircularWavyProgressIndicator(
+                modifier = Modifier.size(20.dp),
+                color = content,
+                trackColor = content.copy(alpha = 0.24f),
+                stroke = Stroke(width = 2.dp)
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Rounded.PowerSettingsNew,
+                contentDescription = stringResource(R.string.power_menu_title),
+                modifier = Modifier.size(IconButtonDefaults.mediumIconSize)
+            )
         }
     }
 }
@@ -794,20 +823,22 @@ private fun CoreStatusCard(
 ) {
     val containerColor by animateColorAsState(
         targetValue = when {
-            isChecking || isRestarting -> MaterialTheme.colorScheme.surfaceContainerHighest
+            isChecking || isRestarting -> MaterialTheme.colorScheme.surfaceContainerHigh
             isRunning -> MaterialTheme.colorScheme.primaryContainer
             isRebootRequired -> MaterialTheme.colorScheme.tertiaryContainer
             else -> MaterialTheme.colorScheme.errorContainer
         },
+        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
         label = "coreContainer"
     )
     val contentColor by animateColorAsState(
         targetValue = when {
-            isChecking || isRestarting -> MaterialTheme.colorScheme.onSurfaceVariant
+            isChecking || isRestarting -> MaterialTheme.colorScheme.onSurface
             isRunning -> MaterialTheme.colorScheme.onPrimaryContainer
             isRebootRequired -> MaterialTheme.colorScheme.onTertiaryContainer
             else -> MaterialTheme.colorScheme.onErrorContainer
         },
+        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
         label = "coreContent"
     )
     val canStart = !isChecking && !isRunning && !isRestarting && (isModuleInstalled || isRebootRequired)
@@ -829,121 +860,85 @@ private fun CoreStatusCard(
     val isAlive = isRunning && !isRestarting
 
     val aliveTransition = rememberInfiniteTransition(label = "coreAlive")
-    val pulse by aliveTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1500, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "corePulse"
-    )
     val wavePhase by aliveTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 3000, easing = LinearEasing),
+            animation = tween(durationMillis = 2600, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "coreWave"
     )
+    val morphProgress by animateFloatAsState(
+        targetValue = if (isAlive) 1f else 0f,
+        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
+        label = "coreMorph"
+    )
+
+    val innerRadius = LocalCornerRadius.current
+    val innerShape = innerRadius.coerceIn(12.dp, 32.dp)
 
     Card(
         onClick = onStart,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(LocalCornerRadius.current),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.Transparent,
-            contentColor = contentColor
-        )
+        shape = RoundedCornerShape((innerShape * 1.5f).coerceAtLeast(20.dp)),
+        colors = CardDefaults.cardColors(containerColor = containerColor, contentColor = contentColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(containerColor, containerColor.copy(alpha = 0.74f))
-                    )
+        Box(modifier = Modifier.fillMaxWidth()) {
+            if (isAlive) {
+                LiveWave(
+                    phase = wavePhase,
+                    color = contentColor,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(56.dp)
                 )
-        ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(x = 30.dp, y = (-38).dp)
-                    .size(140.dp)
-                    .background(contentColor.copy(alpha = 0.06f), CircleShape)
-            )
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .offset(x = (-44).dp, y = 40.dp)
-                    .size(104.dp)
-                    .background(contentColor.copy(alpha = 0.04f), CircleShape)
-            )
+            }
 
-            Column(modifier = Modifier.padding(20.dp)) {
+            Column(modifier = Modifier.padding(22.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    val iconMorph = remember { Morph(MaterialShapes.Circle, MaterialShapes.Cookie9Sided) }
                     Box(
-                        modifier = Modifier.size(64.dp),
+                        modifier = Modifier
+                            .size(56.dp)
+                            .background(contentColor.copy(alpha = 0.14f), MorphShape(iconMorph, morphProgress)),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (isAlive) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .graphicsLayer {
-                                        alpha = 0.08f + pulse * 0.12f
-                                        scaleX = 0.82f + pulse * 0.18f
-                                        scaleY = 0.82f + pulse * 0.18f
-                                    }
-                                    .background(contentColor, CircleShape)
+                        when {
+                            isChecking || isRestarting -> CircularWavyProgressIndicator(
+                                modifier = Modifier.size(26.dp),
+                                color = contentColor,
+                                trackColor = contentColor.copy(alpha = 0.24f)
                             )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(54.dp)
-                                .clip(CircleShape)
-                                .background(contentColor.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            when {
-                                isChecking || isRestarting -> CircularProgressIndicator(
-                                    modifier = Modifier.size(26.dp),
-                                    color = contentColor,
-                                    strokeWidth = 2.5.dp
-                                )
-                                isRunning -> Icon(
-                                    imageVector = Icons.Rounded.Check,
-                                    contentDescription = null,
-                                    tint = contentColor,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                                isRebootRequired -> Icon(
-                                    imageVector = Icons.Rounded.Refresh,
-                                    contentDescription = null,
-                                    tint = contentColor,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                                else -> Icon(
-                                    imageVector = Icons.Rounded.ErrorOutline,
-                                    contentDescription = null,
-                                    tint = contentColor,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                            }
+                            isAlive -> Icon(
+                                imageVector = Icons.Rounded.Check,
+                                contentDescription = null,
+                                tint = contentColor,
+                                modifier = Modifier.size(28.dp)
+                            )
+                            isRebootRequired -> Icon(
+                                imageVector = Icons.Rounded.Refresh,
+                                contentDescription = null,
+                                tint = contentColor,
+                                modifier = Modifier.size(28.dp)
+                            )
+                            else -> Icon(
+                                imageVector = Icons.Rounded.ErrorOutline,
+                                contentDescription = null,
+                                tint = contentColor,
+                                modifier = Modifier.size(28.dp)
+                            )
                         }
                     }
 
                     Spacer(modifier = Modifier.width(16.dp))
 
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.Center
-                    ) {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = title,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.headlineSmallEmphasized,
                             color = contentColor,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -957,38 +952,44 @@ private fun CoreStatusCard(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-
-                    if (canStart) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(shape = CircleShape, color = contentColor) {
-                            Box(
-                                modifier = Modifier.size(44.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = if (isRebootRequired) {
-                                        Icons.Rounded.Refresh
-                                    } else {
-                                        Icons.Rounded.PlayArrow
-                                    },
-                                    contentDescription = stringResource(R.string.action_start),
-                                    tint = containerColor,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                        }
-                    }
                 }
 
-                if (isAlive) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    LiveWave(
-                        phase = wavePhase,
-                        color = contentColor,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(24.dp)
-                    )
+                Spacer(modifier = Modifier.height(18.dp))
+
+                if (canStart || isAlive) {
+                    val label = when {
+                        isAlive -> stringResource(R.string.power_action_restart_service)
+                        isRebootRequired -> stringResource(R.string.action_reboot_now)
+                        else -> stringResource(R.string.action_start)
+                    }
+                    val leading: @Composable () -> Unit = {
+                        Icon(
+                            imageVector = when {
+                                isAlive -> Icons.Rounded.Refresh
+                                isRebootRequired -> Icons.Rounded.Refresh
+                                else -> Icons.Rounded.PlayArrow
+                            },
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Button(
+                        onClick = onStart,
+                        shapes = ButtonDefaults.shapes(),
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = ButtonDefaults.MediumContentPadding,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = contentColor,
+                            contentColor = containerColor
+                        )
+                    ) {
+                        leading()
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelLargeEmphasized
+                        )
+                    }
                 }
             }
         }
@@ -1005,23 +1006,24 @@ private fun LiveWave(
         if (size.width <= 0f || size.height <= 0f) return@Canvas
 
         val path = Path()
-        val amplitude = size.height * 0.34f
+        val amplitude = size.height * 0.22f
         val cycles = 2.2f
         val step = size.width / 72f
+        val baseline = size.height * 0.74f
         var x = 0f
 
         while (x <= size.width) {
             val envelope = sin((x / size.width) * PI.toFloat())
             val angle = (x / size.width) * cycles * 2f * PI.toFloat() +
                 phase * 2f * PI.toFloat()
-            val y = size.height / 2f + sin(angle) * amplitude * envelope
+            val y = baseline + sin(angle) * amplitude * envelope
             if (x == 0f) path.moveTo(x, y) else path.lineTo(x, y)
             x += step
         }
 
         drawPath(
             path = path,
-            color = color.copy(alpha = 0.45f),
+            color = color.copy(alpha = 0.35f),
             style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
         )
     }
@@ -1033,33 +1035,24 @@ private fun DashboardMetricCard(
     label: String,
     value: String,
     supporting: String?,
-    iconContainer: Color,
     iconTint: Color,
     modifier: Modifier = Modifier
 ) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(LocalCornerRadius.current),
+        shape = RoundedCornerShape(LocalCornerRadius.current.coerceAtLeast(16.dp)),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(RoundedCornerShape(9.dp))
-                        .background(iconContainer),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = iconTint,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(18.dp)
+                )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = label,
@@ -1069,11 +1062,10 @@ private fun DashboardMetricCard(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = value,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.headlineSmallEmphasized,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -1092,6 +1084,182 @@ private fun DashboardMetricCard(
     }
 }
 
+@Composable
+private fun QuickActionRow(
+    isRestarting: Boolean,
+    onRestart: () -> Unit,
+    onPower: () -> Unit,
+    onPersonalize: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = stringResource(R.string.home_quick_actions),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            ToggleButton(
+                checked = false,
+                onCheckedChange = { onRestart() },
+                shapes = ButtonGroupDefaults.connectedLeadingButtonShapes(),
+                enabled = !isRestarting,
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Refresh,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = stringResource(R.string.home_quick_restart),
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1
+                )
+            }
+            ToggleButton(
+                checked = false,
+                onCheckedChange = { onPower() },
+                shapes = ButtonGroupDefaults.connectedMiddleButtonShapes(),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.PowerSettingsNew,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = stringResource(R.string.home_quick_power),
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1
+                )
+            }
+            ToggleButton(
+                checked = false,
+                onCheckedChange = { onPersonalize() },
+                shapes = ButtonGroupDefaults.connectedTrailingButtonShapes(),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Tune,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = stringResource(R.string.home_quick_personalize),
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+private data class SegmentedRowData(
+    val icon: ImageVector,
+    val title: String,
+    val subtitle: String,
+    val onClick: (() -> Unit)? = null,
+    val accent: Color? = null
+)
+
+@Composable
+private fun HomeSegmentedGroup(
+    sectionLabel: String,
+    rows: List<SegmentedRowData>
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = sectionLabel,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
+            rows.forEachIndexed { index, row ->
+                val shapes = ListItemDefaults.segmentedShapes(index = index, count = rows.size)
+                val colors = ListItemDefaults.segmentedColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    selectedContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    selectedLeadingContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                val leading: @Composable () -> Unit = {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = row.icon,
+                            contentDescription = null,
+                            tint = row.accent ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                val trailing: @Composable () -> Unit = {
+                    if (row.onClick != null) {
+                        Icon(
+                            imageVector = Icons.Rounded.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+                if (row.onClick != null) {
+                    SegmentedListItem(
+                        onClick = row.onClick,
+                        shapes = shapes,
+                        colors = colors,
+                        leadingContent = leading,
+                        trailingContent = trailing,
+                        supportingContent = {
+                            Text(
+                                text = row.subtitle,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    ) {
+                        Text(
+                            text = row.title,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                } else {
+                    SegmentedListItem(
+                        shapes = shapes,
+                        colors = colors,
+                        leadingContent = leading,
+                        trailingContent = trailing,
+                        supportingContent = {
+                            Text(
+                                text = row.subtitle,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    ) {
+                        Text(
+                            text = row.title,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 @Composable
 fun ConnectedCardRow(
     icon: ImageVector,
@@ -1282,5 +1450,23 @@ private fun PowerMenuItem(
                 modifier = Modifier.size(18.dp)
             )
         }
+    }
+}
+
+private class MorphShape(
+    private val morph: Morph,
+    private val progress: Float
+) : Shape {
+    override fun createOutline(
+        size: Size,
+        layoutDirection: LayoutDirection,
+        density: Density
+    ): Outline {
+        val path = morph.toPath(progress = progress, path = Path())
+        val matrix = Matrix().apply {
+            scale(size.width, size.height)
+        }
+        path.transform(matrix)
+        return Outline.Generic(path)
     }
 }

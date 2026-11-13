@@ -211,6 +211,14 @@ Fitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. P
     <string name="home_core_reboot_hint">Reboot perangkat untuk mengaktifkan modul</string>
     <string name="home_core_install_hint">Pasang atau aktifkan modul LuminaTweaks terlebih dahulu</string>
     <string name="home_version_release_format">v%1$s (Release)</string>
+    <string name="home_subtitle">Kontrol performa perangkat</string>
+    <string name="home_quick_actions">Aksi Cepat</string>
+    <string name="home_quick_restart">Restart</string>
+    <string name="home_quick_power">Daya</string>
+    <string name="home_quick_personalize">Tema</string>
+    <string name="home_section_device">Perangkat</string>
+    <string name="home_section_security">Keamanan</string>
+    <string name="home_section_support">Dukungan</string>
     <string name="tweaks_section_display_graphics">Layar &amp; Grafis</string>
     <string name="tweaks_refresh_rate_desc">Atur kecepatan penyegaran layar</string>
     <string name="tweaks_renderer_desc">Pilih backend grafis untuk rendering</string>
