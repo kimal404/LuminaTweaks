@@ -14,11 +14,14 @@
  * limitations under the License.
  */
 
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 package com.luminatweaks.ui.screen
 
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,7 +35,9 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -40,11 +45,13 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.DataSaverOn
@@ -52,24 +59,27 @@ import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -87,7 +97,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -97,10 +106,10 @@ import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.DeviceUtil
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.roundToInt
 
 private data class MemoryZramInit(
     val physicalRamGb: Int,
@@ -128,7 +137,7 @@ fun MemoryZramScreen(
     var algorithms by remember { mutableStateOf(listOf("zstd", "lz4", "lzo-rle", "lzo")) }
     var swappinessValue by remember { mutableFloatStateOf(100f) }
 
-    var showAlgorithmDialog by remember { mutableStateOf(false) }
+    var showAlgorithmSheet by remember { mutableStateOf(false) }
     var isLoaded by remember { mutableStateOf(false) }
 
     val maxZramLimit = remember(physicalRamGb) {
@@ -252,7 +261,7 @@ fun MemoryZramScreen(
                             title = stringResource(R.string.memory_zram_compression),
                             subtitle = stringResource(R.string.memory_zram_compression_desc),
                             valueText = selectedAlgorithm,
-                            onClick = { showAlgorithmDialog = true }
+                            onClick = { showAlgorithmSheet = true }
                         )
                         MemoryDivider()
                         MemorySliderBlock(
@@ -344,18 +353,18 @@ fun MemoryZramScreen(
         }
     }
 
-    if (showAlgorithmDialog) {
-        CompressionDialog(
+    if (showAlgorithmSheet) {
+        CompressionBottomSheet(
             algorithms = algorithms,
             selected = selectedAlgorithm,
             onSelect = { algo ->
                 selectedAlgorithm = algo
-                showAlgorithmDialog = false
+                showAlgorithmSheet = false
                 coroutineScope.launch {
                     ConfigRepository.setZramConfig(algorithm = algo)
                 }
             },
-            onDismiss = { showAlgorithmDialog = false }
+            onDismiss = { showAlgorithmSheet = false }
         )
     }
 }
@@ -784,59 +793,105 @@ private fun MemoryDivider() {
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CompressionDialog(
+private fun CompressionBottomSheet(
     algorithms: List<String>,
     selected: String,
     onSelect: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = {
+        sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentWindowInsets = { WindowInsets(0.dp) },
+        dragHandle = {
+            BottomSheetDefaults.DragHandle(
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+            )
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
             Text(
                 text = stringResource(R.string.dialog_select_compression),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
+                style = MaterialTheme.typography.titleLargeEmphasized,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(horizontal = 4.dp)
             )
-        },
-        text = {
+
             Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)
             ) {
-                algorithms.forEach { algo ->
+                algorithms.forEachIndexed { index, algo ->
                     val isSelected = algo.equals(selected, ignoreCase = true)
-                    val shape = RoundedCornerShape(14.dp)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(shape)
-                            .background(
+                    SegmentedListItem(
+                        selected = isSelected,
+                        onClick = { onSelect(algo) },
+                        shapes = ListItemDefaults.segmentedShapes(
+                            index = index,
+                            count = algorithms.size
+                        ),
+                        colors = ListItemDefaults.segmentedColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            selectedLeadingContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ),
+                        leadingContent = {
+                            Box(
+                                modifier = Modifier.size(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 if (isSelected) {
-                                    MaterialTheme.colorScheme.primaryContainer
+                                    Box(
+                                        modifier = Modifier
+                                            .size(22.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.primary),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onPrimary,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
                                 } else {
-                                    MaterialTheme.colorScheme.surfaceContainerHigh
+                                    Box(
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .border(
+                                                width = 1.5.dp,
+                                                color = MaterialTheme.colorScheme.outlineVariant,
+                                                shape = CircleShape
+                                            )
+                                    )
                                 }
-                            )
-                            .selectable(
-                                selected = isSelected,
-                                role = Role.RadioButton,
-                                onClick = { onSelect(algo) }
-                            )
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            }
+                        }
                     ) {
-                        RadioButton(selected = isSelected, onClick = null)
-                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = algo,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (isSelected) {
-                                MaterialTheme.colorScheme.onPrimaryContainer
+                            style = if (isSelected) {
+                                MaterialTheme.typography.titleSmallEmphasized
                             } else {
-                                MaterialTheme.colorScheme.onSurface
+                                MaterialTheme.typography.bodyLarge
                             },
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -844,11 +899,6 @@ private fun CompressionDialog(
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.action_cancel))
-            }
         }
-    )
+    }
 }
