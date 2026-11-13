@@ -111,6 +111,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -133,7 +134,7 @@ import com.materialkolor.PaletteStyle
 import com.materialkolor.rememberDynamicColorScheme
 import kotlin.math.roundToInt
 
-private enum class SoftPosition { Top, Middle, Bottom, Single }
+private enum class PreviewSoftPosition { Top, Middle, Bottom, Single }
 
 private val paletteStyleOptions = listOf(
     ColorStyle.TonalSpot to R.string.color_style_tonal_spot,
@@ -157,15 +158,15 @@ private val pageTransitionOptions = listOf(
     PageTransition.Vertical to R.string.page_transition_vertical
 )
 
-private fun ColorStyle.toPaletteStyle(): PaletteStyle = when (this) {
-    ColorStyle.TonalSpot -> PaletteStyle.TonalSpot
-    ColorStyle.Vibrant -> PaletteStyle.Vibrant
-    ColorStyle.Expressive -> PaletteStyle.Expressive
-    ColorStyle.Spritz -> PaletteStyle.Spritz
-    ColorStyle.Rainbow -> PaletteStyle.Rainbow
-    ColorStyle.FruitSalad -> PaletteStyle.FruitSalad
-    ColorStyle.Content -> PaletteStyle.Content
-    ColorStyle.Monochrome -> PaletteStyle.Monochrome
+private fun ColorStyle.toPaletteStyle(): PaletteStyle = when (this.name) {
+    "TonalSpot" -> PaletteStyle.TonalSpot
+    "Vibrant" -> PaletteStyle.Vibrant
+    "Expressive" -> PaletteStyle.Expressive
+    "Spritz" -> PaletteStyle.Spritz
+    "Rainbow" -> PaletteStyle.Rainbow
+    "FruitSalad" -> PaletteStyle.FruitSalad
+    "Content" -> PaletteStyle.Content
+    else -> PaletteStyle.Monochrome
 }
 
 private fun ColorStyle.labelRes(): Int =
@@ -324,7 +325,7 @@ fun PersonalisasiScreen(
                         }
                         items(keyColorOptions) { colorInt ->
                             SwatchButton(
-                                color = Color(Color(colorInt)),
+                                color = Color(colorInt),
                                 isSelected = currentKeyColor == colorInt,
                                 isDark = isDark,
                                 colorSpec = currentColorSpec,
@@ -355,7 +356,7 @@ fun PersonalisasiScreen(
                 Spacer(modifier = Modifier.height(10.dp))
                 ConnectedGroup {
                     SoftRow(
-                        position = SoftPosition.Top,
+                        position = PreviewSoftPosition.Top,
                         icon = Icons.Rounded.Palette,
                         title = stringResource(R.string.personalization_palette_style),
                         subtitle = stringResource(
@@ -365,7 +366,7 @@ fun PersonalisasiScreen(
                         onClick = { showPaletteSheet = true }
                     )
                     SoftRow(
-                        position = SoftPosition.Bottom,
+                        position = PreviewSoftPosition.Bottom,
                         icon = Icons.Rounded.WaterDrop,
                         title = stringResource(R.string.personalization_color_spec),
                         subtitle = stringResource(
@@ -391,7 +392,7 @@ fun PersonalisasiScreen(
                 Spacer(modifier = Modifier.height(10.dp))
                 ConnectedGroup {
                     SoftToggleRow(
-                        position = SoftPosition.Top,
+                        position = PreviewSoftPosition.Top,
                         icon = Icons.Rounded.Waves,
                         title = stringResource(R.string.personalization_floating_navbar_short),
                         subtitle = stringResource(R.string.personalization_floating_navbar_desc),
@@ -402,7 +403,7 @@ fun PersonalisasiScreen(
                         }
                     )
                     SoftToggleRow(
-                        position = SoftPosition.Middle,
+                        position = PreviewSoftPosition.Middle,
                         icon = Icons.Rounded.MotionPhotosOn,
                         title = stringResource(R.string.personalization_scroll_animation),
                         subtitle = stringResource(R.string.personalization_scroll_animation_desc),
@@ -414,7 +415,7 @@ fun PersonalisasiScreen(
                         }
                     )
                     SoftToggleRow(
-                        position = SoftPosition.Middle,
+                        position = PreviewSoftPosition.Middle,
                         icon = Icons.Rounded.SwipeRight,
                         title = stringResource(R.string.personalization_edge_swipe_back),
                         subtitle = stringResource(R.string.personalization_edge_swipe_back_desc),
@@ -426,7 +427,7 @@ fun PersonalisasiScreen(
                         }
                     )
                     SoftRow(
-                        position = SoftPosition.Bottom,
+                        position = PreviewSoftPosition.Bottom,
                         icon = Icons.Rounded.SwipeRight,
                         title = stringResource(R.string.personalization_page_transition),
                         subtitle = stringResource(
@@ -464,13 +465,11 @@ fun PersonalisasiScreen(
     if (showPaletteSheet) {
         OptionBottomSheet(
             title = stringResource(R.string.personalization_dialog_pick_palette),
-            options = paletteStyleOptions.map { (style, labelRes) ->
-                style to stringResource(labelRes)
-            },
-            selected = { it == currentColorStyle },
-            onSelect = { style ->
+            options = paletteStyleOptions.map { it.second },
+            selectedIndex = paletteStyleOptions.indexOfFirst { it.first == currentColorStyle },
+            onSelect = { index ->
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                updateTheme(style = style)
+                updateTheme(style = paletteStyleOptions[index].first)
                 showPaletteSheet = false
             },
             onDismiss = { showPaletteSheet = false }
@@ -480,13 +479,11 @@ fun PersonalisasiScreen(
     if (showSpecSheet) {
         OptionBottomSheet(
             title = stringResource(R.string.personalization_dialog_pick_spec),
-            options = colorSpecOptions.map { (engine, labelRes) ->
-                engine to stringResource(labelRes)
-            },
-            selected = { it == currentColorSpec },
-            onSelect = { engine ->
+            options = colorSpecOptions.map { it.second },
+            selectedIndex = colorSpecOptions.indexOfFirst { it.first == currentColorSpec },
+            onSelect = { index ->
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                updateTheme(spec = engine)
+                updateTheme(spec = colorSpecOptions[index].first)
                 showSpecSheet = false
             },
             onDismiss = { showSpecSheet = false }
@@ -496,11 +493,10 @@ fun PersonalisasiScreen(
     if (showTransitionSheet) {
         OptionBottomSheet(
             title = stringResource(R.string.personalization_dialog_pick_transition),
-            options = pageTransitionOptions.map { (transition, labelRes) ->
-                transition to stringResource(labelRes)
-            },
-            selected = { it == currentPageTransition },
-            onSelect = { transition ->
+            options = pageTransitionOptions.map { it.second },
+            selectedIndex = pageTransitionOptions.indexOfFirst { it.first == currentPageTransition },
+            onSelect = { index ->
+                val transition = pageTransitionOptions[index].first
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 currentPageTransition = transition
                 ThemeController.savePageTransition(context, transition)
@@ -543,28 +539,28 @@ private fun ConnectedGroup(content: @Composable () -> Unit) {
     }
 }
 
-private fun softShape(position: SoftPosition, outerRadius: Int) = RoundedCornerShape(
+private fun softShape(position: PreviewSoftPosition, outerRadius: Int) = RoundedCornerShape(
     topStart = when (position) {
-        SoftPosition.Top, SoftPosition.Single -> outerRadius
+        PreviewSoftPosition.Top, PreviewSoftPosition.Single -> outerRadius
         else -> (outerRadius - 7).coerceAtLeast(7)
     }.dp,
     topEnd = when (position) {
-        SoftPosition.Top, SoftPosition.Single -> outerRadius
+        PreviewSoftPosition.Top, PreviewSoftPosition.Single -> outerRadius
         else -> (outerRadius - 7).coerceAtLeast(7)
     }.dp,
     bottomStart = when (position) {
-        SoftPosition.Bottom, SoftPosition.Single -> outerRadius
+        PreviewSoftPosition.Bottom, PreviewSoftPosition.Single -> outerRadius
         else -> (outerRadius - 7).coerceAtLeast(7)
     }.dp,
     bottomEnd = when (position) {
-        SoftPosition.Bottom, SoftPosition.Single -> outerRadius
+        PreviewSoftPosition.Bottom, PreviewSoftPosition.Single -> outerRadius
         else -> (outerRadius - 7).coerceAtLeast(7)
     }.dp
 )
 
 @Composable
 private fun SoftRow(
-    position: SoftPosition,
+    position: PreviewSoftPosition,
     icon: ImageVector,
     title: String,
     subtitle: String,
@@ -659,7 +655,7 @@ private fun SoftRow(
 
 @Composable
 private fun SoftToggleRow(
-    position: SoftPosition,
+    position: PreviewSoftPosition,
     icon: ImageVector,
     title: String,
     subtitle: String,
@@ -874,65 +870,62 @@ private fun ExpressiveRadiusSlider(
     value: Float,
     onValueChange: (Float) -> Unit
 ) {
-    val dottedTrackColor = MaterialTheme.colorScheme.secondaryContainer
+    val primary = MaterialTheme.colorScheme.primary
+    val activeTick = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f)
+    val inactiveTick = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.45f)
+    val trackColor = MaterialTheme.colorScheme.secondaryContainer
+    val tickRadius = with(LocalDensity.current) { 1.6.dp.toPx() }
+    val tickHeight = with(LocalDensity.current) { 10.dp.toPx() }
+    val minValue = ThemeController.MIN_CORNER_RADIUS.toFloat()
+    val maxValue = ThemeController.MAX_CORNER_RADIUS.toFloat()
+    val tickCount = ((ThemeController.MAX_CORNER_RADIUS - ThemeController.MIN_CORNER_RADIUS) / 2)
+    val fraction = ((value - minValue) / (maxValue - minValue)).coerceIn(0f, 1f)
 
     Slider(
         value = value,
         onValueChange = onValueChange,
-        valueRange = ThemeController.MIN_CORNER_RADIUS.toFloat()..ThemeController.MAX_CORNER_RADIUS.toFloat(),
+        valueRange = minValue..maxValue,
         modifier = Modifier.fillMaxWidth(),
-        track = { sliderState ->
-            val range = sliderState.valueRange.upperBound - sliderState.valueRange.lowerBound
-            val fraction = if (range == 0f) {
-                0f
-            } else {
-                (sliderState.value - sliderState.valueRange.lowerBound) / range
-            }
-            val ticks = (ThemeController.MAX_CORNER_RADIUS - ThemeController.MIN_CORNER_RADIUS) / 2
-            Box(
+        track = {
+            Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(14.dp)
+                    .height(24.dp)
             ) {
-                Surface(
-                    shape = CircleShape,
-                    color = dottedTrackColor,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(10.dp)
-                        .align(Alignment.Center)
-                ) {}
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .fillMaxWidth(fraction)
-                        .height(10.dp)
-                        .align(Alignment.CenterStart)
-                ) {}
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val step = size.width / (ticks + 1)
-                    val activeWidth = size.width * fraction
-                    for (i in 0..ticks) {
-                        val x = step * (i + 1)
-                        val color = if (x <= activeWidth) {
-                            MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f)
-                        } else {
-                            MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.45f)
-                        }
-                        drawCircle(color = color, radius = 1.6.dp.toPx(), center = center.copy(x = x))
-                    }
+                val centerY = size.height / 2f
+                val activeWidth = size.width * fraction
+                drawRoundRect(
+                    color = trackColor,
+                    topLeft = Offset(0f, centerY - tickHeight / 2f),
+                    size = androidx.compose.ui.geometry.Size(size.width, tickHeight),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(tickHeight / 2f)
+                )
+                if (activeWidth > 0f) {
+                    drawRoundRect(
+                        color = primary,
+                        topLeft = Offset(0f, centerY - tickHeight / 2f),
+                        size = androidx.compose.ui.geometry.Size(activeWidth, tickHeight),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(tickHeight / 2f)
+                    )
+                }
+                val step = if (tickCount > 0) size.width / (tickCount + 1) else size.width
+                for (index in 0..tickCount) {
+                    val x = step * (index + 1)
+                    drawCircle(
+                        color = if (x <= activeWidth) activeTick else inactiveTick,
+                        radius = tickRadius,
+                        center = Offset(x, centerY)
+                    )
                 }
             }
         },
-        thumb = { sliderState ->
+        thumb = {
             Box(
                 modifier = Modifier
                     .size(width = 6.dp, height = 22.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary),
-                contentAlignment = Alignment.Center
-            ) {}
+                    .background(MaterialTheme.colorScheme.primary)
+            )
         },
         colors = SliderDefaults.colors(
             thumbColor = Color.Transparent,
@@ -1048,9 +1041,9 @@ private fun ModePillSelector(
 @Composable
 private fun OptionBottomSheet(
     title: String,
-    options: List<Pair<Any, String>>,
-    selected: (Any) -> Boolean,
-    onSelect: (Any) -> Unit,
+    options: List<Int>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -1075,11 +1068,11 @@ private fun OptionBottomSheet(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(bottom = 6.dp)
             )
-            options.forEachIndexed { index, (value, label) ->
-                val isSelected = selected(value)
+            options.forEachIndexed { index, labelRes ->
+                val isSelected = index == selectedIndex
                 SegmentedListItem(
                     selected = isSelected,
-                    onClick = { onSelect(value) },
+                    onClick = { onSelect(index) },
                     shapes = ListItemDefaults.segmentedShapes(
                         index = index,
                         count = options.size
@@ -1115,7 +1108,7 @@ private fun OptionBottomSheet(
                     },
                     headlineContent = {
                         Text(
-                            text = label,
+                            text = stringResource(labelRes),
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                         )
