@@ -19,8 +19,8 @@
 package com.luminatweaks.ui.component
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateColorAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
@@ -62,6 +62,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.luminatweaks.R
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
@@ -146,7 +147,7 @@ private fun FloatingNavItem(
         MaterialTheme.colorScheme.onSurfaceVariant
     }
     val label = stringResource(tab.labelRes)
-    val springSpec = spring<Int>(
+    val springSpec = spring<IntSize>(
         dampingRatio = Spring.DampingRatioNoBouncy,
         stiffness = Spring.StiffnessMedium
     )
