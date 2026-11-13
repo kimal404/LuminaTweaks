@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 
 package com.luminatweaks.ui.screen
 
@@ -20,7 +20,6 @@ import android.content.Context
 import android.os.Build
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -32,13 +31,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -49,7 +46,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -59,11 +55,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Storage
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -78,6 +76,8 @@ import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -95,10 +95,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -172,42 +173,7 @@ private data class TweakOption<T>(
 )
 
 // ---------------------------------------------------------------------------
-// Soft connected-group geometry (MD3 Expressive, self-contained)
-// ---------------------------------------------------------------------------
-
-private enum class SoftPosition {
-    Top,
-    Middle,
-    Bottom,
-    BottomLeft,
-    BottomRight,
-    Single
-}
-
-@Composable
-private fun softContainerShape(position: SoftPosition): RoundedCornerShape {
-    val outer = LocalCornerRadius.current.coerceAtLeast(24.dp)
-    val inner = 7.dp
-    return when (position) {
-        SoftPosition.Top -> RoundedCornerShape(
-            topStart = outer, topEnd = outer, bottomStart = inner, bottomEnd = inner
-        )
-        SoftPosition.Middle -> RoundedCornerShape(inner)
-        SoftPosition.Bottom -> RoundedCornerShape(
-            topStart = inner, topEnd = inner, bottomStart = outer, bottomEnd = outer
-        )
-        SoftPosition.BottomLeft -> RoundedCornerShape(
-            topStart = inner, topEnd = inner, bottomStart = outer, bottomEnd = inner
-        )
-        SoftPosition.BottomRight -> RoundedCornerShape(
-            topStart = inner, topEnd = inner, bottomStart = inner, bottomEnd = outer
-        )
-        SoftPosition.Single -> RoundedCornerShape(outer)
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Small helpers
+// Helpers
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -247,10 +213,10 @@ private suspend fun applyTweakChange(
 // Screen
 // ---------------------------------------------------------------------------
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TweaksScreen() {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val cached = ConfigRepository.cachedTweaksState
@@ -267,7 +233,6 @@ fun TweaksScreen() {
     var showRefreshRateSheet by rememberSaveable { mutableStateOf(false) }
     var showRenderSheet by rememberSaveable { mutableStateOf(false) }
     var showIoSchedulerSheet by rememberSaveable { mutableStateOf(false) }
-    var inLiteModeSubpage by rememberSaveable { mutableStateOf(false) }
     var inMemoryZramSubpage by rememberSaveable { mutableStateOf(false) }
     var inHardwareDiagnosticSubpage by rememberSaveable { mutableStateOf(false) }
     var inUtilitySubpage by rememberSaveable { mutableStateOf(false) }
@@ -278,9 +243,6 @@ fun TweaksScreen() {
         "Gagal menerapkan perubahan",
         "Failed to apply change"
     )
-
-    val uniformIconBg = MaterialTheme.colorScheme.primaryContainer
-    val uniformIconTint = MaterialTheme.colorScheme.onPrimaryContainer
 
     LaunchedEffect(Unit) {
         val state = ConfigRepository.getTweaksState(forceRefresh = true)
@@ -316,12 +278,15 @@ fun TweaksScreen() {
         }
     }
 
-    val currentRrText = remember(liveRefreshRate, currentRrId, rrModes) {
+    val currentRrText = remember(liveRefreshRate, currentRrId, rrModes, defaultDynamicLabel) {
         val targetMode = rrModes.find { it.id == currentRrId }
-        if (targetMode != null && targetMode.hz != liveRefreshRate) {
-            "${liveRefreshRate} Hz (${targetMode.hz} Hz)"
-        } else {
-            "${liveRefreshRate} Hz"
+        when {
+            targetMode != null && targetMode.hz != liveRefreshRate ->
+                "${liveRefreshRate} Hz (${targetMode.hz} Hz)"
+            currentRrId == null ->
+                "${liveRefreshRate} Hz · $defaultDynamicLabel"
+            else ->
+                "${liveRefreshRate} Hz"
         }
     }
 
@@ -330,7 +295,7 @@ fun TweaksScreen() {
     }
 
     val effectiveRendererText = if (isGlobalTextureEnabled) {
-        stringResource(R.string.profile_renderer_angle_badge)
+        stringResource(R.string.tweaks_renderer_locked_note)
     } else {
         currentRendererShortText
     }
@@ -348,26 +313,6 @@ fun TweaksScreen() {
     }
 
     // ---- Subpages ----------------------------------------------------------
-
-    if (inLiteModeSubpage) {
-        BackHandler { inLiteModeSubpage = false }
-        LiteModeScreen(
-            onBack = { inLiteModeSubpage = false },
-            isLiteMode = isGlobalLiteMode,
-            onLiteModeChange = { newState ->
-                val previous = isGlobalLiteMode
-                isGlobalLiteMode = newState
-                coroutineScope.launch {
-                    applyTweakChange(
-                        snackbarHostState = snackbarHostState,
-                        errorMessage = applyFailedText,
-                        revert = { isGlobalLiteMode = previous }
-                    ) { ConfigRepository.setGlobalLiteMode(newState) }
-                }
-            }
-        )
-        return
-    }
 
     if (inHardwareDiagnosticSubpage) {
         BackHandler { inHardwareDiagnosticSubpage = false }
@@ -509,132 +454,91 @@ fun TweaksScreen() {
                 start = 16.dp,
                 end = 16.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item(key = "display_performance") {
-                TweakSection(
-                    title = localizedLabel("Performa & Layar", "Performance & Display")
+                NestedTweakCardGroup(
+                    headerIcon = Icons.Rounded.Tune,
+                    headerTitle = localizedLabel("Perf & Layar", "Perf & Display")
                 ) {
-                    TweakConnectedGroup {
-                        TweakRow(
-                            icon = Icons.Rounded.BatterySaver,
-                            iconContainer = uniformIconBg,
-                            iconTint = uniformIconTint,
-                            title = stringResource(R.string.tweaks_lite_mode),
-                            subtitle = localizedLabel(
-                                "Batasi clock CPU untuk performa ringan",
-                                "Limit CPU clock for lightweight performance"
-                            ),
-                            trailingText = if (isGlobalLiteMode) {
-                                stringResource(R.string.status_on)
-                            } else {
-                                stringResource(R.string.status_off)
-                            },
-                            trailingActive = isGlobalLiteMode,
-                            position = SoftPosition.Top,
-                            onClick = { inLiteModeSubpage = true }
-                        )
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(IntrinsicSize.Max),
-                            horizontalArrangement = Arrangement.spacedBy(3.dp)
-                        ) {
-                            TweakBentoTile(
-                                icon = Icons.Rounded.Speed,
-                                iconContainer = uniformIconBg,
-                                iconTint = uniformIconTint,
-                                title = stringResource(R.string.tweaks_refresh_rate),
-                                value = currentRrText,
-                                valueHighlighted = currentRrId != null,
-                                position = SoftPosition.BottomLeft,
-                                onClick = { showRefreshRateSheet = true },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                            )
-                            TweakBentoTile(
-                                icon = if (isGlobalTextureEnabled) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
-                                iconContainer = uniformIconBg,
-                                iconTint = uniformIconTint,
-                                title = stringResource(R.string.tweaks_renderer),
-                                value = effectiveRendererText,
-                                valueHighlighted = isGlobalTextureEnabled ||
-                                    !currentRendererId.equals("default", ignoreCase = true),
-                                enabled = !isGlobalTextureEnabled,
-                                position = SoftPosition.BottomRight,
-                                onClick = { showRenderSheet = true },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                            )
+                    NestedTweakSwitchItem(
+                        icon = Icons.Rounded.BatterySaver,
+                        title = stringResource(R.string.tweaks_lite_mode),
+                        subtitle = localizedLabel(
+                            "Batasi clock CPU untuk suhu lebih adem dan hemat daya",
+                            "Limit CPU clock for cooler thermals and power saving"
+                        ),
+                        checked = isGlobalLiteMode,
+                        onCheckedChange = { newState ->
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            val previous = isGlobalLiteMode
+                            isGlobalLiteMode = newState
+                            coroutineScope.launch {
+                                applyTweakChange(
+                                    snackbarHostState = snackbarHostState,
+                                    errorMessage = applyFailedText,
+                                    revert = { isGlobalLiteMode = previous }
+                                ) { ConfigRepository.setGlobalLiteMode(newState) }
+                            }
                         }
-                    }
+                    )
 
-                    if (isGlobalTextureEnabled) {
-                        Text(
-                            text = stringResource(R.string.tweaks_renderer_locked_note),
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 6.dp, top = 2.dp)
-                        )
-                    }
+                    NestedTweakActionItem(
+                        icon = Icons.Rounded.Speed,
+                        title = stringResource(R.string.tweaks_refresh_rate),
+                        subtitle = currentRrText,
+                        onClick = { showRefreshRateSheet = true }
+                    )
+
+                    NestedTweakActionItem(
+                        icon = if (isGlobalTextureEnabled) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
+                        title = stringResource(R.string.tweaks_renderer),
+                        subtitle = effectiveRendererText,
+                        enabled = !isGlobalTextureEnabled,
+                        onClick = { showRenderSheet = true }
+                    )
                 }
             }
 
             item(key = "additional") {
-                TweakSection(
-                    title = stringResource(R.string.section_additional_tweaks)
+                NestedTweakCardGroup(
+                    headerIcon = Icons.Rounded.Memory,
+                    headerTitle = stringResource(R.string.section_additional_tweaks)
                 ) {
-                    TweakConnectedGroup {
-                        TweakRow(
-                            icon = Icons.Rounded.Memory,
-                            iconContainer = uniformIconBg,
-                            iconTint = uniformIconTint,
-                            title = stringResource(R.string.tweak_memory_zram),
-                            subtitle = stringResource(R.string.tweak_memory_zram_desc),
-                            position = SoftPosition.Top,
-                            onClick = { inMemoryZramSubpage = true }
-                        )
-                        TweakRow(
-                            icon = Icons.Rounded.Storage,
-                            iconContainer = uniformIconBg,
-                            iconTint = uniformIconTint,
-                            title = stringResource(R.string.tweak_io_scheduler),
-                            subtitle = stringResource(R.string.tweak_io_scheduler_desc),
-                            trailingText = currentIoScheduler,
-                            position = SoftPosition.Bottom,
-                            onClick = { showIoSchedulerSheet = true }
-                        )
-                    }
+                    NestedTweakActionItem(
+                        icon = Icons.Rounded.Memory,
+                        title = stringResource(R.string.tweak_memory_zram),
+                        subtitle = stringResource(R.string.tweak_memory_zram_desc),
+                        onClick = { inMemoryZramSubpage = true }
+                    )
+
+                    NestedTweakActionItem(
+                        icon = Icons.Rounded.Storage,
+                        title = stringResource(R.string.tweak_io_scheduler),
+                        subtitle = currentIoScheduler,
+                        onClick = { showIoSchedulerSheet = true }
+                    )
                 }
             }
 
             item(key = "utility") {
-                TweakSection(
-                    title = stringResource(R.string.section_utility_diagnostics)
+                NestedTweakCardGroup(
+                    headerIcon = Icons.Rounded.Widgets,
+                    headerTitle = stringResource(R.string.section_utility_diagnostics)
                 ) {
-                    TweakConnectedGroup {
-                        TweakRow(
-                            icon = Icons.Rounded.DeveloperBoard,
-                            iconContainer = uniformIconBg,
-                            iconTint = uniformIconTint,
-                            title = stringResource(R.string.hardware_diag_title),
-                            subtitle = stringResource(R.string.hardware_diag_desc),
-                            position = SoftPosition.Top,
-                            onClick = { inHardwareDiagnosticSubpage = true }
-                        )
-                        TweakRow(
-                            icon = Icons.Rounded.Widgets,
-                            iconContainer = uniformIconBg,
-                            iconTint = uniformIconTint,
-                            title = stringResource(R.string.utility_screen_title),
-                            subtitle = stringResource(R.string.utility_screen_desc),
-                            position = SoftPosition.Bottom,
-                            onClick = { inUtilitySubpage = true }
-                        )
-                    }
+                    NestedTweakActionItem(
+                        icon = Icons.Rounded.DeveloperBoard,
+                        title = stringResource(R.string.hardware_diag_title),
+                        subtitle = stringResource(R.string.hardware_diag_desc),
+                        onClick = { inHardwareDiagnosticSubpage = true }
+                    )
+
+                    NestedTweakActionItem(
+                        icon = Icons.Rounded.Widgets,
+                        title = stringResource(R.string.utility_screen_title),
+                        subtitle = stringResource(R.string.utility_screen_desc),
+                        onClick = { inUtilitySubpage = true }
+                    )
                 }
             }
         }
@@ -642,106 +546,95 @@ fun TweaksScreen() {
 }
 
 // ---------------------------------------------------------------------------
-// Section + connected rows & bento tiles
+// Nested Bento Card Container & Inner Items (MD3E)
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun TweakSection(
-    title: String,
-    content: @Composable () -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelLargeEmphasized.copy(letterSpacing = 0.3.sp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
-        content()
-    }
-}
-
-@Composable
-private fun TweakConnectedGroup(content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(3.dp),
-        content = content
-    )
-}
-
-@Composable
-private fun TweakBentoTile(
-    icon: ImageVector,
-    iconContainer: Color,
-    iconTint: Color,
-    title: String,
-    value: String,
-    onClick: () -> Unit,
-    position: SoftPosition,
+private fun NestedTweakCardGroup(
+    headerIcon: ImageVector,
+    headerTitle: String,
     modifier: Modifier = Modifier,
-    valueHighlighted: Boolean = false,
-    enabled: Boolean = true
+    content: @Composable ColumnScope.() -> Unit
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed && enabled) 0.98f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
-        label = "bentoScale"
-    )
+    val outerRadius = LocalCornerRadius.current.coerceAtLeast(26.dp)
 
     Surface(
-        onClick = onClick,
-        enabled = enabled,
-        shape = softContainerShape(position),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        interactionSource = interactionSource,
-        modifier = modifier.graphicsLayer {
-            scaleX = scale
-            scaleY = scale
-        }
+        shape = RoundedCornerShape(outerRadius),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .alpha(if (enabled) 1f else 0.55f)
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 2.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(13.dp))
-                        .background(iconContainer),
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = icon,
+                        imageVector = headerIcon,
                         contentDescription = null,
-                        tint = iconTint,
+                        tint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(20.dp)
                     )
                 }
-                Spacer(modifier = Modifier.weight(1f))
-                Icon(
-                    imageVector = if (enabled) Icons.Rounded.ChevronRight else Icons.Rounded.Lock,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    modifier = Modifier.size(if (enabled) 20.dp else 17.dp)
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = headerTitle,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            content()
+        }
+    }
+}
 
-            Column {
+@Composable
+private fun NestedTweakSwitchItem(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    val innerRadius = (LocalCornerRadius.current * 0.78f).coerceIn(16.dp, 24.dp)
+
+    Surface(
+        onClick = { onCheckedChange(!checked) },
+        shape = RoundedCornerShape(innerRadius),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
@@ -752,35 +645,38 @@ private fun TweakBentoTile(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = value,
+                    text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (valueHighlighted) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    maxLines = 1,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
             }
+            Spacer(modifier = Modifier.width(12.dp))
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                thumbContent = {
+                    Icon(
+                        imageVector = if (checked) Icons.Rounded.Check else Icons.Rounded.Close,
+                        contentDescription = null,
+                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                    )
+                }
+            )
         }
     }
 }
 
 @Composable
-private fun TweakRow(
+private fun NestedTweakActionItem(
     icon: ImageVector,
-    iconContainer: Color,
-    iconTint: Color,
     title: String,
     subtitle: String,
     onClick: () -> Unit,
-    position: SoftPosition = SoftPosition.Single,
-    trailingText: String? = null,
-    trailingActive: Boolean = false,
     enabled: Boolean = true
 ) {
+    val haptic = LocalHapticFeedback.current
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -789,13 +685,17 @@ private fun TweakRow(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessMediumLow
         ),
-        label = "rowScale"
+        label = "nestedItemScale"
     )
+    val innerRadius = (LocalCornerRadius.current * 0.78f).coerceIn(16.dp, 24.dp)
 
     Surface(
-        onClick = onClick,
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onClick()
+        },
         enabled = enabled,
-        shape = softContainerShape(position),
+        shape = RoundedCornerShape(innerRadius),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         interactionSource = interactionSource,
         modifier = Modifier
@@ -812,20 +712,12 @@ private fun TweakRow(
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(iconContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = iconTint,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(22.dp)
+            )
             Spacer(modifier = Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -840,52 +732,19 @@ private fun TweakRow(
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            Spacer(modifier = Modifier.width(8.dp))
-            if (trailingText != null) {
-                TweakValueChip(text = trailingText, active = trailingActive)
-                Spacer(modifier = Modifier.width(8.dp))
-            }
+            Spacer(modifier = Modifier.width(12.dp))
             Icon(
                 imageVector = if (enabled) Icons.Rounded.ChevronRight else Icons.Rounded.Lock,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                modifier = Modifier.size(if (enabled) 20.dp else 17.dp)
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                modifier = Modifier.size(if (enabled) 20.dp else 18.dp)
             )
         }
-    }
-}
-
-@Composable
-private fun TweakValueChip(text: String, active: Boolean = false) {
-    val container by animateColorAsState(
-        targetValue = if (active) {
-            MaterialTheme.colorScheme.primaryContainer
-        } else {
-            MaterialTheme.colorScheme.surfaceContainerHighest
-        },
-        label = "chipContainer"
-    )
-    Surface(shape = CircleShape, color = container) {
-        Text(
-            text = text,
-            modifier = Modifier
-                .widthIn(max = 110.dp)
-                .padding(horizontal = 10.dp, vertical = 4.dp),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = if (active) {
-                MaterialTheme.colorScheme.onPrimaryContainer
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
     }
 }
 
@@ -893,7 +752,6 @@ private fun TweakValueChip(text: String, active: Boolean = false) {
 // Option bottom sheet (MD3E segmented list)
 // ---------------------------------------------------------------------------
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun <T> TweakOptionBottomSheet(
     title: String,
