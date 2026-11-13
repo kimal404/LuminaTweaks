@@ -16,11 +16,13 @@
 
 package com.luminatweaks.ui.screen
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas as AndroidCanvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RadialGradient
+import android.graphics.RectF
 import android.graphics.Shader
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
@@ -36,7 +38,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -87,6 +88,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -95,6 +97,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.drawable.toBitmap
 import com.luminatweaks.R
 import com.luminatweaks.data.AppProfileConfig
 import com.luminatweaks.data.ConfigRepository
@@ -111,7 +114,7 @@ private fun textureLocalizedLabel(id: String, en: String): String {
     return if (isIndonesian) id else en
 }
 
-private fun renderHighResSceneBitmap(): Bitmap {
+private fun renderFallbackSceneBitmap(): Bitmap {
     val w = 360
     val h = 216
     val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
@@ -119,7 +122,6 @@ private fun renderHighResSceneBitmap(): Bitmap {
     val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     val horizonY = h * 0.56f
 
-    // 1. Atmospheric sky gradient
     paint.shader = LinearGradient(
         0f, 0f, 0f, horizonY,
         intArrayOf(
@@ -132,7 +134,6 @@ private fun renderHighResSceneBitmap(): Bitmap {
     )
     canvas.drawRect(0f, 0f, w.toFloat(), horizonY, paint)
 
-    // 2. Ground terrain gradient
     paint.shader = LinearGradient(
         0f, horizonY, 0f, h.toFloat(),
         intArrayOf(
@@ -145,49 +146,9 @@ private fun renderHighResSceneBitmap(): Bitmap {
     canvas.drawRect(0f, horizonY, w.toFloat(), h.toFloat(), paint)
     paint.shader = null
 
-    // 3. Horizon glow line
-    paint.color = android.graphics.Color.argb(170, 110, 210, 255)
-    paint.strokeWidth = 2f
-    canvas.drawLine(0f, horizonY, w.toFloat(), horizonY, paint)
-
-    // 4. Perspective 3D grid lines on floor
-    val vanishX = w * 0.5f
-    paint.strokeWidth = 1.3f
-    for (i in -8..8) {
-        val bottomX = vanishX + i * 38f
-        paint.color = android.graphics.Color.argb(75, 120, 215, 255)
-        canvas.drawLine(vanishX + i * 6f, horizonY, bottomX, h.toFloat(), paint)
-    }
-    var rowOffset = 4f
-    var step = 5f
-    while (horizonY + rowOffset < h) {
-        val y = horizonY + rowOffset
-        val alpha = ((rowOffset / (h - horizonY)) * 110f).toInt().coerceIn(20, 110)
-        paint.color = android.graphics.Color.argb(alpha, 120, 215, 255)
-        canvas.drawLine(0f, y, w.toFloat(), y, paint)
-        rowOffset += step
-        step *= 1.28f
-    }
-
-    // 5. Soft contact shadow under 3D sphere
     val sphereCx = w * 0.5f
     val sphereCy = h * 0.48f
     val sphereR = 52f
-    paint.shader = RadialGradient(
-        sphereCx, horizonY + 26f, 68f,
-        intArrayOf(
-            android.graphics.Color.argb(165, 4, 8, 16),
-            android.graphics.Color.TRANSPARENT
-        ),
-        null,
-        Shader.TileMode.CLAMP
-    )
-    canvas.save()
-    canvas.scale(1.35f, 0.35f, sphereCx, horizonY + 26f)
-    canvas.drawCircle(sphereCx, horizonY + 26f, 68f, paint)
-    canvas.restore()
-
-    // 6. 3D Shaded metallic/glass orb with specular highlight
     paint.shader = RadialGradient(
         sphereCx - sphereR * 0.32f,
         sphereCy - sphereR * 0.34f,
@@ -202,58 +163,105 @@ private fun renderHighResSceneBitmap(): Bitmap {
         Shader.TileMode.CLAMP
     )
     canvas.drawCircle(sphereCx, sphereCy, sphereR, paint)
+    return bmp
+}
+
+private fun renderAppIconPreviewBitmap(context: Context, packageName: String): Bitmap {
+    if (packageName.isBlank()) return renderFallbackSceneBitmap()
+    val iconBitmap = runCatching {
+        context.packageManager.getApplicationIcon(packageName).toBitmap(width = 256, height = 256)
+    }.getOrNull() ?: return renderFallbackSceneBitmap()
+
+    val w = 360
+    val h = 216
+    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+    val canvas = AndroidCanvas(bmp)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+
+    // Soft studio backdrop gradient
+    paint.shader = LinearGradient(
+        0f, 0f, w.toFloat(), h.toFloat(),
+        intArrayOf(
+            android.graphics.Color.rgb(14, 24, 38),
+            android.graphics.Color.rgb(22, 36, 54),
+            android.graphics.Color.rgb(12, 20, 32)
+        ),
+        floatArrayOf(0f, 0.5f, 1f),
+        Shader.TileMode.CLAMP
+    )
+    canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), paint)
     paint.shader = null
 
-    // 7. Fine surface latitude/longitude detail rings on orb (shows texture sharpness clearly)
-    paint.style = Paint.Style.STROKE
-    paint.strokeWidth = 1.4f
-    paint.color = android.graphics.Color.argb(95, 220, 248, 255)
-    canvas.drawCircle(sphereCx, sphereCy, sphereR * 0.72f, paint)
-    canvas.drawCircle(sphereCx, sphereCy, sphereR * 0.42f, paint)
-    canvas.drawLine(sphereCx - sphereR * 0.85f, sphereCy, sphereCx + sphereR * 0.85f, sphereCy, paint)
-    canvas.drawLine(sphereCx, sphereCy - sphereR * 0.85f, sphereCx, sphereCy + sphereR * 0.85f, paint)
+    // Subtle radial spotlight behind app logo
+    val cx = w * 0.5f
+    val cy = h * 0.5f
+    paint.shader = RadialGradient(
+        cx, cy, 118f,
+        intArrayOf(
+            android.graphics.Color.argb(75, 130, 210, 255),
+            android.graphics.Color.TRANSPARENT
+        ),
+        null,
+        Shader.TileMode.CLAMP
+    )
+    canvas.drawCircle(cx, cy, 118f, paint)
+    paint.shader = null
 
-    // 8. Crisp HUD micro-bars on left & right to demonstrate UI/texel clarity
-    paint.style = Paint.Style.FILL
-    for (idx in 0 until 4) {
-        val barY = h * 0.68f + idx * 11f
-        val barW = 54f - idx * 8f
-        paint.color = android.graphics.Color.argb(180, 140, 225, 255)
-        canvas.drawRoundRect(22f, barY, 22f + barW, barY + 5f, 2.5f, 2.5f, paint)
-        canvas.drawRoundRect(w - 22f - barW, barY, w - 22f, barY + 5f, 2.5f, 2.5f, paint)
+    // Subtle reference grid lines behind icon to make compression changes obvious
+    paint.color = android.graphics.Color.argb(26, 200, 230, 255)
+    paint.strokeWidth = 1f
+    val gridStep = 18f
+    var gx = gridStep
+    while (gx < w) {
+        canvas.drawLine(gx, 0f, gx, h.toFloat(), paint)
+        gx += gridStep
+    }
+    var gy = gridStep
+    while (gy < h) {
+        canvas.drawLine(0f, gy, w.toFloat(), gy, paint)
+        gy += gridStep
     }
 
+    // Center the high-res app logo
+    val iconSize = 116f
+    val dstRect = RectF(
+        cx - iconSize / 2f,
+        cy - iconSize / 2f,
+        cx + iconSize / 2f,
+        cy + iconSize / 2f
+    )
+    canvas.drawBitmap(iconBitmap, null, dstRect, paint)
     return bmp
 }
 
 fun generateTextureBitmap(lod: Int): ImageBitmap {
-    val base = renderHighResSceneBitmap()
+    val base = renderFallbackSceneBitmap()
     val clampedLod = lod.coerceIn(0, 4)
-    if (clampedLod == 0) {
-        return base.asImageBitmap()
-    }
+    if (clampedLod == 0) return base.asImageBitmap()
     val scale = 1 shl clampedLod
-    val targetW = (base.width / scale).coerceAtLeast(8)
-    val targetH = (base.height / scale).coerceAtLeast(6)
+    val targetW = (base.width / scale).coerceAtLeast(12)
+    val targetH = (base.height / scale).coerceAtLeast(8)
     return Bitmap.createScaledBitmap(base, targetW, targetH, true).asImageBitmap()
 }
 
 @Composable
 fun TextureComparisonPreview(
+    packageName: String,
     isActive: Boolean,
     lod: Int,
     pixelSharp: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val baseScene = remember { renderHighResSceneBitmap() }
+    val context = LocalContext.current
+    val baseScene = remember(packageName) { renderAppIconPreviewBitmap(context, packageName) }
     val beforeBitmap = remember(baseScene) { baseScene.asImageBitmap() }
     val afterBitmap = remember(baseScene, lod, isActive) {
         if (!isActive || lod <= 0) {
             beforeBitmap
         } else {
             val scale = 1 shl lod.coerceIn(1, 4)
-            val targetW = (baseScene.width / scale).coerceAtLeast(8)
-            val targetH = (baseScene.height / scale).coerceAtLeast(6)
+            val targetW = (baseScene.width / scale).coerceAtLeast(14)
+            val targetH = (baseScene.height / scale).coerceAtLeast(9)
             Bitmap.createScaledBitmap(baseScene, targetW, targetH, true).asImageBitmap()
         }
     }
@@ -479,6 +487,7 @@ fun TeksturRinganScreen(
         ) {
             item(key = "preview") {
                 TextureComparisonPreview(
+                    packageName = profile.pkg,
                     isActive = isTweakActive,
                     lod = currentLod,
                     pixelSharp = profile.pixelSharp
