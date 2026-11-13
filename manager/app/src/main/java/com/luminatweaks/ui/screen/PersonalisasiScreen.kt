@@ -217,29 +217,28 @@ fun PersonalisasiScreen(
     val isDark = currentColorMode.getDarkThemeValue(isSystemInDarkTheme())
     val isAmoled = currentColorMode == ColorMode.DARKAMOLED
 
-    fun buildScheme(seed: Int): ColorScheme {
-        val seedColor = if (seed == 0) {
-            val base = when {
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
-                    if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-                else ->
-                    if (isDark) darkColorScheme() else lightColorScheme()
-            }
-            base.primary
-        } else {
-            Color(seed)
+    val seedColor = if (currentKeyColor == 0) {
+        val base = when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+                if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            else ->
+                if (isDark) darkColorScheme() else lightColorScheme()
         }
-        return rememberDynamicColorScheme(
-            seedColor = seedColor,
-            isDark = isDark,
-            isAmoled = isAmoled,
-            specVersion = currentColorSpec.librarySpec,
-            style = currentColorStyle.toPaletteStyle()
-        ).withAccentIntensity(currentIntensity)
+        base.primary
+    } else {
+        Color(currentKeyColor)
     }
 
+    val previewBaseScheme = rememberDynamicColorScheme(
+        seedColor = seedColor,
+        isDark = isDark,
+        isAmoled = isAmoled,
+        specVersion = currentColorSpec.librarySpec,
+        style = currentColorStyle.toPaletteStyle()
+    ).withAccentIntensity(currentIntensity)
+
     val previewColorScheme = animateColorSchemeAsState(
-        targetColorScheme = buildScheme(currentKeyColor)
+        targetColorScheme = previewBaseScheme
     )
 
     fun updateTheme(
