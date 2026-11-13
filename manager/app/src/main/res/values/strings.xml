@@ -215,6 +215,7 @@ Fitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. P
     <string name="home_quick_cache">Cache</string>
     <string name="home_quick_personalize">Tema</string>
     <string name="toast_trim_done">Trim partisi selesai</string>
+    <string name="toast_trim_no_space">Penyimpanan tidak mendukung TRIM (mis. ext4/F2FS tidak terpasang atau tipe file system tidak didukung)</string>
     <string name="toast_trim_failed">Trim gagal, periksa akses root</string>
     <string name="toast_cache_done">Cache berhasil dibersihkan</string>
     <string name="toast_cache_failed">Gagal membersihkan cache, periksa akses root</string>

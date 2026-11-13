@@ -1039,15 +1039,26 @@ private fun QuickActionRow(
             isTrimming = true
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             scope.launch {
-                val ok = RootUtil.runAsRoot(
-                    "sm fstrim 2>/dev/null; " +
-                        "su -mm -c 'fstrim -v /data 2>/dev/null; " +
-                        "[ -d /cache ] && fstrim -v /cache 2>/dev/null' " +
-                        "|| fstrim -v /data 2>/dev/null"
-                )
+                val command =
+                    "if command -v fstrim >/dev/null 2>&1; then " +
+                        "fstrim /data || command fstrim /data; " +
+                        "[ -d /cache ] && { fstrim /cache || true; }; " +
+                        "fi; " +
+                        "sm fstrim >/dev/null 2>&1; " +
+                        "pm trim-caches 999G >/dev/null 2>&1; " +
+                        "echo TRIM_EXIT:$?"
+                val (exitOk, output) = RootUtil.runAsRootWithOutput(command)
+                val trimmed = output.contains("TRIM_EXIT:0")
                 Toast.makeText(
                     context,
-                    context.getString(if (ok) R.string.toast_trim_done else R.string.toast_trim_failed),
+                    context.getString(
+                        when {
+                            !exitOk && output.contains("Permission denied") ->
+                                R.string.toast_trim_failed
+                            trimmed -> R.string.toast_trim_done
+                            else -> R.string.toast_trim_no_space
+                        }
+                    ),
                     Toast.LENGTH_SHORT
                 ).show()
                 isTrimming = false

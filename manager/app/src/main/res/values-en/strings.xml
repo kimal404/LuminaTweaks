@@ -214,6 +214,7 @@ Features on this page are only active when the system is in the Performance prof
     <string name="home_quick_cache">Cache</string>
     <string name="home_quick_personalize">Theme</string>
     <string name="toast_trim_done">Partition trim finished</string>
+    <string name="toast_trim_no_space">Storage does not support TRIM (unsupported filesystem type)</string>
     <string name="toast_trim_failed">Trim failed, check root access</string>
     <string name="toast_cache_done">Cache cleared successfully</string>
     <string name="toast_cache_failed">Failed to clear cache, check root access</string>

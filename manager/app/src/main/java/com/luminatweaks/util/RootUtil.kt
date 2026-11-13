@@ -32,12 +32,30 @@ object RootUtil {
 
     suspend fun runAsRoot(command: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val process = ProcessBuilder("su", "-c", command).start()
-            process.waitFor() == 0
+            val process = ProcessBuilder("su", "-c", command)
+                .redirectErrorStream(true)
+                .start()
+            val output = process.inputStream.bufferedReader().use { it.readText() }
+            val exitCode = process.waitFor()
+            exitCode == 0 && !output.contains("Permission denied")
         } catch (_: Exception) {
             false
         }
     }
+
+    suspend fun runAsRootWithOutput(command: String): Pair<Boolean, String> =
+        withContext(Dispatchers.IO) {
+            try {
+                val process = ProcessBuilder("su", "-c", command)
+                    .redirectErrorStream(true)
+                    .start()
+                val output = process.inputStream.bufferedReader().use { it.readText() }
+                val exitCode = process.waitFor()
+                (exitCode == 0) to output.trim()
+            } catch (e: Exception) {
+                false to (e.message ?: "")
+            }
+        }
 
     suspend fun rebootDevice(reason: String = ""): Boolean = withContext(Dispatchers.IO) {
         val cmd = when (reason) {
