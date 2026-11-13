@@ -285,6 +285,21 @@ fun PersonalisasiScreen(
     ) { innerPadding ->
         PersonalizationContent(
             innerPadding = innerPadding,
+            onScrollAnimationChange = { checked ->
+                currentScrollAnimation = checked
+                ThemeController.saveScrollAnimation(context, checked)
+            },
+            onEdgeSwipeBackChange = { checked ->
+                currentEdgeSwipeBack = checked
+                ThemeController.saveEdgeSwipeBack(context, checked)
+            },
+            onRequestSheet = { key ->
+                when (key) {
+                    "palette" -> showPaletteSheet = true
+                    "spec" -> showSpecSheet = true
+                    else -> showTransitionSheet = true
+                }
+            },
             previewColorScheme = previewColorScheme,
             currentColorMode = currentColorMode,
             currentKeyColor = currentKeyColor,
@@ -297,21 +312,6 @@ fun PersonalisasiScreen(
             currentEdgeSwipeBack = currentEdgeSwipeBack,
             currentPageTransition = currentPageTransition,
             isDark = isDark,
-            onRequestSheet = { sheet ->
-                when (sheet) {
-                    "palette" -> showPaletteSheet = true
-                    "spec" -> showSpecSheet = true
-                    else -> showTransitionSheet = true
-                }
-            },
-            onScrollAnimationChange = { checked ->
-                currentScrollAnimation = checked
-                ThemeController.saveScrollAnimation(context, checked)
-            },
-            onEdgeSwipeBackChange = { checked ->
-                currentEdgeSwipeBack = checked
-                ThemeController.saveEdgeSwipeBack(context, checked)
-            },
             modifier = Modifier.fillMaxSize()
         )
     }
@@ -398,6 +398,8 @@ private fun LuminaPageTransition(
 @Composable
 private fun PersonalizationContent(
     innerPadding: PaddingValues,
+    onScrollAnimationChange: (Boolean) -> Unit,
+    onEdgeSwipeBackChange: (Boolean) -> Unit,
     onRequestSheet: (String) -> Unit,
     previewColorScheme: ColorScheme,
     currentColorMode: ColorMode,
