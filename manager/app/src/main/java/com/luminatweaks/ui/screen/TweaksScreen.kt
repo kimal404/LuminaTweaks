@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -63,14 +64,14 @@ import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Storage
-import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Widgets
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Snackbar
@@ -78,9 +79,9 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -263,9 +264,9 @@ fun TweaksScreen() {
     var currentIoScheduler by remember { mutableStateOf(cached?.currentIoScheduler ?: "mq-deadline") }
     var availableIoSchedulers by remember { mutableStateOf(emptyList<String>()) }
 
-    var showRefreshRateDialog by rememberSaveable { mutableStateOf(false) }
-    var showRenderDialog by rememberSaveable { mutableStateOf(false) }
-    var showIoSchedulerDialog by rememberSaveable { mutableStateOf(false) }
+    var showRefreshRateSheet by rememberSaveable { mutableStateOf(false) }
+    var showRenderSheet by rememberSaveable { mutableStateOf(false) }
+    var showIoSchedulerSheet by rememberSaveable { mutableStateOf(false) }
     var inLiteModeSubpage by rememberSaveable { mutableStateOf(false) }
     var inMemoryZramSubpage by rememberSaveable { mutableStateOf(false) }
     var inHardwareDiagnosticSubpage by rememberSaveable { mutableStateOf(false) }
@@ -277,6 +278,9 @@ fun TweaksScreen() {
         "Gagal menerapkan perubahan",
         "Failed to apply change"
     )
+
+    val uniformIconBg = MaterialTheme.colorScheme.primaryContainer
+    val uniformIconTint = MaterialTheme.colorScheme.onPrimaryContainer
 
     LaunchedEffect(Unit) {
         val state = ConfigRepository.getTweaksState(forceRefresh = true)
@@ -383,9 +387,9 @@ fun TweaksScreen() {
         return
     }
 
-    // ---- Dialogs -----------------------------------------------------------
+    // ---- Bottom Sheets -----------------------------------------------------
 
-    if (showRefreshRateDialog) {
+    if (showRefreshRateSheet) {
         val rrSubtitle = if (currentRrId == null) {
             "$liveRefreshRate Hz · $defaultDynamicLabel"
         } else {
@@ -394,7 +398,7 @@ fun TweaksScreen() {
                 "Current display: $liveRefreshRate Hz"
             )
         }
-        TweakOptionDialog(
+        TweakOptionBottomSheet(
             title = stringResource(R.string.tweaks_dialog_select_rr),
             subtitle = rrSubtitle,
             options = rrModes.map { TweakOption(it.id, "${it.hz} Hz") },
@@ -402,7 +406,7 @@ fun TweaksScreen() {
             onSelect = { id ->
                 val previous = currentRrId
                 currentRrId = id
-                showRefreshRateDialog = false
+                showRefreshRateSheet = false
                 coroutineScope.launch {
                     applyTweakChange(
                         snackbarHostState = snackbarHostState,
@@ -411,19 +415,19 @@ fun TweaksScreen() {
                     ) { ConfigRepository.setRefreshRate(id) }
                 }
             },
-            onDismiss = { showRefreshRateDialog = false }
+            onDismiss = { showRefreshRateSheet = false }
         )
     }
 
-    if (showRenderDialog) {
-        TweakOptionDialog(
+    if (showRenderSheet) {
+        TweakOptionBottomSheet(
             title = stringResource(R.string.tweaks_dialog_select_renderer),
             options = rendererOptions,
             isSelected = { it.equals(currentRendererId, ignoreCase = true) },
             onSelect = { rawId ->
                 val previous = currentRendererId
                 currentRendererId = rawId
-                showRenderDialog = false
+                showRenderSheet = false
                 coroutineScope.launch {
                     applyTweakChange(
                         snackbarHostState = snackbarHostState,
@@ -432,19 +436,19 @@ fun TweaksScreen() {
                     ) { ConfigRepository.setRenderer(rawId) }
                 }
             },
-            onDismiss = { showRenderDialog = false }
+            onDismiss = { showRenderSheet = false }
         )
     }
 
-    if (showIoSchedulerDialog) {
-        TweakOptionDialog(
+    if (showIoSchedulerSheet) {
+        TweakOptionBottomSheet(
             title = stringResource(R.string.dialog_select_io_scheduler),
             options = ioSchedulerOptions.map { TweakOption(it, it) },
             isSelected = { it.equals(currentIoScheduler, ignoreCase = true) },
             onSelect = { scheduler ->
                 val previous = currentIoScheduler
                 currentIoScheduler = scheduler
-                showIoSchedulerDialog = false
+                showIoSchedulerSheet = false
                 coroutineScope.launch {
                     applyTweakChange(
                         snackbarHostState = snackbarHostState,
@@ -453,7 +457,7 @@ fun TweaksScreen() {
                     ) { ConfigRepository.setIoScheduler(scheduler) }
                 }
             },
-            onDismiss = { showIoSchedulerDialog = false }
+            onDismiss = { showIoSchedulerSheet = false }
         )
     }
 
@@ -509,21 +513,18 @@ fun TweaksScreen() {
         ) {
             item(key = "display_performance") {
                 TweakSection(
-                    title = stringResource(R.string.tweaks_section_performance),
-                    icon = Icons.Rounded.Speed,
-                    accent = MaterialTheme.colorScheme.primary
+                    title = localizedLabel("Performa & Layar", "Performance & Display")
                 ) {
                     TweakConnectedGroup {
                         TweakRow(
                             icon = Icons.Rounded.BatterySaver,
-                            iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
-                            iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
+                            iconContainer = uniformIconBg,
+                            iconTint = uniformIconTint,
                             title = stringResource(R.string.tweaks_lite_mode),
-                            subtitle = if (isGlobalLiteMode) {
-                                stringResource(R.string.tweaks_lite_on_desc)
-                            } else {
-                                stringResource(R.string.tweaks_lite_off_desc)
-                            },
+                            subtitle = localizedLabel(
+                                "Batasi clock CPU untuk performa ringan",
+                                "Limit CPU clock for lightweight performance"
+                            ),
                             trailingText = if (isGlobalLiteMode) {
                                 stringResource(R.string.status_on)
                             } else {
@@ -542,28 +543,28 @@ fun TweaksScreen() {
                         ) {
                             TweakBentoTile(
                                 icon = Icons.Rounded.Speed,
-                                iconContainer = MaterialTheme.colorScheme.primaryContainer,
-                                iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                iconContainer = uniformIconBg,
+                                iconTint = uniformIconTint,
                                 title = stringResource(R.string.tweaks_refresh_rate),
                                 value = currentRrText,
                                 valueHighlighted = currentRrId != null,
                                 position = SoftPosition.BottomLeft,
-                                onClick = { showRefreshRateDialog = true },
+                                onClick = { showRefreshRateSheet = true },
                                 modifier = Modifier
                                     .weight(1f)
                                     .fillMaxHeight()
                             )
                             TweakBentoTile(
                                 icon = if (isGlobalTextureEnabled) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
-                                iconContainer = MaterialTheme.colorScheme.secondaryContainer,
-                                iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                iconContainer = uniformIconBg,
+                                iconTint = uniformIconTint,
                                 title = stringResource(R.string.tweaks_renderer),
                                 value = effectiveRendererText,
                                 valueHighlighted = isGlobalTextureEnabled ||
                                     !currentRendererId.equals("default", ignoreCase = true),
                                 enabled = !isGlobalTextureEnabled,
                                 position = SoftPosition.BottomRight,
-                                onClick = { showRenderDialog = true },
+                                onClick = { showRenderSheet = true },
                                 modifier = Modifier
                                     .weight(1f)
                                     .fillMaxHeight()
@@ -584,15 +585,13 @@ fun TweaksScreen() {
 
             item(key = "additional") {
                 TweakSection(
-                    title = stringResource(R.string.section_additional_tweaks),
-                    icon = Icons.Rounded.Tune,
-                    accent = MaterialTheme.colorScheme.secondary
+                    title = stringResource(R.string.section_additional_tweaks)
                 ) {
                     TweakConnectedGroup {
                         TweakRow(
                             icon = Icons.Rounded.Memory,
-                            iconContainer = MaterialTheme.colorScheme.secondaryContainer,
-                            iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            iconContainer = uniformIconBg,
+                            iconTint = uniformIconTint,
                             title = stringResource(R.string.tweak_memory_zram),
                             subtitle = stringResource(R.string.tweak_memory_zram_desc),
                             position = SoftPosition.Top,
@@ -600,13 +599,13 @@ fun TweaksScreen() {
                         )
                         TweakRow(
                             icon = Icons.Rounded.Storage,
-                            iconContainer = MaterialTheme.colorScheme.secondaryContainer,
-                            iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            iconContainer = uniformIconBg,
+                            iconTint = uniformIconTint,
                             title = stringResource(R.string.tweak_io_scheduler),
                             subtitle = stringResource(R.string.tweak_io_scheduler_desc),
                             trailingText = currentIoScheduler,
                             position = SoftPosition.Bottom,
-                            onClick = { showIoSchedulerDialog = true }
+                            onClick = { showIoSchedulerSheet = true }
                         )
                     }
                 }
@@ -614,15 +613,13 @@ fun TweaksScreen() {
 
             item(key = "utility") {
                 TweakSection(
-                    title = stringResource(R.string.section_utility_diagnostics),
-                    icon = Icons.Rounded.Widgets,
-                    accent = MaterialTheme.colorScheme.tertiary
+                    title = stringResource(R.string.section_utility_diagnostics)
                 ) {
                     TweakConnectedGroup {
                         TweakRow(
                             icon = Icons.Rounded.DeveloperBoard,
-                            iconContainer = MaterialTheme.colorScheme.primaryContainer,
-                            iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            iconContainer = uniformIconBg,
+                            iconTint = uniformIconTint,
                             title = stringResource(R.string.hardware_diag_title),
                             subtitle = stringResource(R.string.hardware_diag_desc),
                             position = SoftPosition.Top,
@@ -630,8 +627,8 @@ fun TweaksScreen() {
                         )
                         TweakRow(
                             icon = Icons.Rounded.Widgets,
-                            iconContainer = MaterialTheme.colorScheme.primaryContainer,
-                            iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            iconContainer = uniformIconBg,
+                            iconTint = uniformIconTint,
                             title = stringResource(R.string.utility_screen_title),
                             subtitle = stringResource(R.string.utility_screen_desc),
                             position = SoftPosition.Bottom,
@@ -651,36 +648,15 @@ fun TweaksScreen() {
 @Composable
 private fun TweakSection(
     title: String,
-    icon: ImageVector,
-    accent: Color,
     content: @Composable () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            modifier = Modifier.padding(horizontal = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(accent.copy(alpha = 0.14f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = accent,
-                    modifier = Modifier.size(15.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelLargeEmphasized.copy(letterSpacing = 0.3.sp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLargeEmphasized.copy(letterSpacing = 0.3.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
         content()
     }
 }
@@ -914,11 +890,12 @@ private fun TweakValueChip(text: String, active: Boolean = false) {
 }
 
 // ---------------------------------------------------------------------------
-// Option dialog (MD3E segmented list)
+// Option bottom sheet (MD3E segmented list)
 // ---------------------------------------------------------------------------
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun <T> TweakOptionDialog(
+private fun <T> TweakOptionBottomSheet(
     title: String,
     options: List<TweakOption<T>>,
     isSelected: (T) -> Boolean,
@@ -926,15 +903,36 @@ private fun <T> TweakOptionDialog(
     onDismiss: () -> Unit,
     subtitle: String? = null
 ) {
-    AlertDialog(
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(28.dp),
+        sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        title = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        contentWindowInsets = { WindowInsets(0.dp) },
+        dragHandle = {
+            BottomSheetDefaults.DragHandle(
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+            )
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleLargeEmphasized
+                    style = MaterialTheme.typography.titleLargeEmphasized,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 if (subtitle != null) {
                     Text(
@@ -944,8 +942,7 @@ private fun <T> TweakOptionDialog(
                     )
                 }
             }
-        },
-        text = {
+
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -980,7 +977,7 @@ private fun <T> TweakOptionDialog(
                                 count = options.size
                             ),
                             colors = ListItemDefaults.segmentedColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                                 selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                                 selectedContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                                 selectedLeadingContentColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -1033,11 +1030,6 @@ private fun <T> TweakOptionDialog(
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.action_cancel))
-            }
         }
-    )
+    }
 }
