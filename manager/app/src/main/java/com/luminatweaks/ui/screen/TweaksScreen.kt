@@ -25,18 +25,20 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -77,6 +79,8 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -170,7 +174,14 @@ private data class TweakOption<T>(
 // Soft connected-group geometry (MD3 Expressive, self-contained)
 // ---------------------------------------------------------------------------
 
-private enum class SoftPosition { Top, Middle, Bottom, Single }
+private enum class SoftPosition {
+    Top,
+    Middle,
+    Bottom,
+    BottomLeft,
+    BottomRight,
+    Single
+}
 
 @Composable
 private fun softContainerShape(position: SoftPosition): RoundedCornerShape {
@@ -183,6 +194,12 @@ private fun softContainerShape(position: SoftPosition): RoundedCornerShape {
         SoftPosition.Middle -> RoundedCornerShape(inner)
         SoftPosition.Bottom -> RoundedCornerShape(
             topStart = inner, topEnd = inner, bottomStart = outer, bottomEnd = outer
+        )
+        SoftPosition.BottomLeft -> RoundedCornerShape(
+            topStart = inner, topEnd = inner, bottomStart = outer, bottomEnd = inner
+        )
+        SoftPosition.BottomRight -> RoundedCornerShape(
+            topStart = inner, topEnd = inner, bottomStart = inner, bottomEnd = outer
         )
         SoftPosition.Single -> RoundedCornerShape(outer)
     }
@@ -211,11 +228,6 @@ private fun currentDisplayHz(context: Context, windowManager: WindowManager?): I
     return display?.refreshRate?.roundToInt()
 }
 
-/**
- * Applies a tweak optimistically. Supports repository functions returning
- * either Unit (throws on failure) or Boolean (false on failure); on failure
- * the UI state is reverted and a snackbar is shown.
- */
 private suspend fun applyTweakChange(
     snackbarHostState: SnackbarHostState,
     errorMessage: String,
@@ -456,6 +468,21 @@ fun TweaksScreen() {
 
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = stringResource(R.string.tweaks_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                windowInsets = WindowInsets.statusBars,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                )
+            )
+        },
         snackbarHost = {
             SnackbarHost(
                 hostState = snackbarHostState,
@@ -473,8 +500,7 @@ fun TweaksScreen() {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding() +
-                    WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 12.dp,
+                top = innerPadding.calculateTopPadding() + 6.dp,
                 bottom = bottomPadding,
                 start = 16.dp,
                 end = 16.dp
@@ -488,34 +514,6 @@ fun TweaksScreen() {
                     accent = MaterialTheme.colorScheme.primary
                 ) {
                     TweakConnectedGroup {
-                        TweakRow(
-                            icon = Icons.Rounded.Speed,
-                            iconContainer = MaterialTheme.colorScheme.primaryContainer,
-                            iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            title = stringResource(R.string.tweaks_refresh_rate),
-                            subtitle = stringResource(R.string.tweaks_dialog_select_rr),
-                            trailingText = currentRrText,
-                            trailingActive = currentRrId != null,
-                            position = SoftPosition.Top,
-                            onClick = { showRefreshRateDialog = true }
-                        )
-                        TweakRow(
-                            icon = if (isGlobalTextureEnabled) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
-                            iconContainer = MaterialTheme.colorScheme.secondaryContainer,
-                            iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
-                            title = stringResource(R.string.tweaks_renderer),
-                            subtitle = if (isGlobalTextureEnabled) {
-                                stringResource(R.string.tweaks_renderer_locked_note)
-                            } else {
-                                stringResource(R.string.tweaks_dialog_select_renderer)
-                            },
-                            trailingText = effectiveRendererText,
-                            trailingActive = isGlobalTextureEnabled ||
-                                !currentRendererId.equals("default", ignoreCase = true),
-                            enabled = !isGlobalTextureEnabled,
-                            position = SoftPosition.Middle,
-                            onClick = { showRenderDialog = true }
-                        )
                         TweakRow(
                             icon = Icons.Rounded.BatterySaver,
                             iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
@@ -532,8 +530,53 @@ fun TweaksScreen() {
                                 stringResource(R.string.status_off)
                             },
                             trailingActive = isGlobalLiteMode,
-                            position = SoftPosition.Bottom,
+                            position = SoftPosition.Top,
                             onClick = { inLiteModeSubpage = true }
+                        )
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(IntrinsicSize.Max),
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            TweakBentoTile(
+                                icon = Icons.Rounded.Speed,
+                                iconContainer = MaterialTheme.colorScheme.primaryContainer,
+                                iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                title = stringResource(R.string.tweaks_refresh_rate),
+                                value = currentRrText,
+                                valueHighlighted = currentRrId != null,
+                                position = SoftPosition.BottomLeft,
+                                onClick = { showRefreshRateDialog = true },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            )
+                            TweakBentoTile(
+                                icon = if (isGlobalTextureEnabled) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
+                                iconContainer = MaterialTheme.colorScheme.secondaryContainer,
+                                iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                title = stringResource(R.string.tweaks_renderer),
+                                value = effectiveRendererText,
+                                valueHighlighted = isGlobalTextureEnabled ||
+                                    !currentRendererId.equals("default", ignoreCase = true),
+                                enabled = !isGlobalTextureEnabled,
+                                position = SoftPosition.BottomRight,
+                                onClick = { showRenderDialog = true },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            )
+                        }
+                    }
+
+                    if (isGlobalTextureEnabled) {
+                        Text(
+                            text = stringResource(R.string.tweaks_renderer_locked_note),
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 6.dp, top = 2.dp)
                         )
                     }
                 }
@@ -597,13 +640,12 @@ fun TweaksScreen() {
                     }
                 }
             }
-
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// Section + connected rows
+// Section + connected rows & bento tiles
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -650,6 +692,104 @@ private fun TweakConnectedGroup(content: @Composable ColumnScope.() -> Unit) {
         verticalArrangement = Arrangement.spacedBy(3.dp),
         content = content
     )
+}
+
+@Composable
+private fun TweakBentoTile(
+    icon: ImageVector,
+    iconContainer: Color,
+    iconTint: Color,
+    title: String,
+    value: String,
+    onClick: () -> Unit,
+    position: SoftPosition,
+    modifier: Modifier = Modifier,
+    valueHighlighted: Boolean = false,
+    enabled: Boolean = true
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed && enabled) 0.98f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "bentoScale"
+    )
+
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = softContainerShape(position),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        interactionSource = interactionSource,
+        modifier = modifier.graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .alpha(if (enabled) 1f else 0.55f)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(13.dp))
+                        .background(iconContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = iconTint,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                Icon(
+                    imageVector = if (enabled) Icons.Rounded.ChevronRight else Icons.Rounded.Lock,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.size(if (enabled) 20.dp else 17.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Column {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (valueHighlighted) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
 }
 
 @Composable
