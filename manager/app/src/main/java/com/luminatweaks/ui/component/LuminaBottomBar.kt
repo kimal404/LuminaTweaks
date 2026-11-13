@@ -1,22 +1,16 @@
-/*
- * Copyright (C) 2026-2027 KowX
- * Copyright (C) 2026-2027 Zexshia
- * Copyright (C) 2026 kimal
- *
- * Adapted from KOWX712/KernelSU (KowSU) UI, Apache License 2.0.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright (C) 2026 kimal
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 @file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
 
@@ -25,10 +19,13 @@ package com.luminatweaks.ui.component
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -54,9 +51,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -96,14 +95,17 @@ fun LuminaBottomBar(
             contentAlignment = Alignment.Center
         ) {
             Surface(
+                modifier = Modifier.fillMaxWidth(),
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                tonalElevation = 3.dp,
-                shadowElevation = 6.dp
+                tonalElevation = 4.dp,
+                shadowElevation = 8.dp
             ) {
                 Row(
-                    modifier = Modifier.padding(6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     navTabs.forEachIndexed { index, tab ->
@@ -135,7 +137,14 @@ private fun FloatingNavItem(
     val motionScheme = MaterialTheme.motionScheme
     val widthSpec = motionScheme.defaultSpatialSpec<IntSize>()
     val fadeSpec = motionScheme.defaultEffectsSpec<Float>()
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
 
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed) 0.94f else 1f,
+        animationSpec = motionScheme.defaultSpatialSpec(),
+        label = "floatingNavPressScale"
+    )
     val containerColor by animateColorAsState(
         targetValue = if (selected) {
             MaterialTheme.colorScheme.primary
@@ -155,7 +164,7 @@ private fun FloatingNavItem(
         label = "floatingNavContent"
     )
     val horizontalPadding by animateDpAsState(
-        targetValue = if (selected) 18.dp else 13.dp,
+        targetValue = if (selected) 22.dp else 18.dp,
         animationSpec = motionScheme.defaultSpatialSpec(),
         label = "floatingNavPadding"
     )
@@ -168,16 +177,21 @@ private fun FloatingNavItem(
         },
         shape = CircleShape,
         color = containerColor,
-        contentColor = contentColor
+        contentColor = contentColor,
+        interactionSource = interactionSource,
+        modifier = Modifier.graphicsLayer {
+            scaleX = pressScale
+            scaleY = pressScale
+        }
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = horizontalPadding, vertical = 12.dp),
+            modifier = Modifier.padding(horizontal = horizontalPadding, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = tab.icon,
                 contentDescription = label,
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(26.dp),
                 tint = contentColor
             )
             AnimatedVisibility(
@@ -186,10 +200,10 @@ private fun FloatingNavItem(
                 exit = shrinkHorizontally(animationSpec = widthSpec) + fadeOut(animationSpec = fadeSpec)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = label,
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = contentColor,
                         maxLines = 1,
