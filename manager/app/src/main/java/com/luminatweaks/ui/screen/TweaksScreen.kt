@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 package com.luminatweaks.ui.screen
 
 import android.content.Context
@@ -42,8 +44,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.Check
@@ -59,7 +61,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -96,6 +98,7 @@ import com.luminatweaks.data.DisplayRrMode
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.DeviceUtil
+import java.util.Locale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -235,6 +238,12 @@ fun TweaksScreen() {
         getRendererShortLabel(currentRendererId, defaultRendererLabel)
     }
 
+    val effectiveRendererText = if (isGlobalTextureEnabled) {
+        stringResource(R.string.profile_renderer_angle_badge)
+    } else {
+        currentRendererShortText
+    }
+
     val rendererOptions = remember(defaultRendererLabel) {
         listOf(
             "default",
@@ -363,61 +372,70 @@ fun TweaksScreen() {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding() + 8.dp,
+                top = innerPadding.calculateTopPadding() + 6.dp,
                 bottom = bottomPadding,
                 start = 16.dp,
                 end = 16.dp
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item(key = "grid") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    TweakGridCard(
-                        icon = Icons.Rounded.Speed,
-                        highlight = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
-                        iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        title = stringResource(R.string.tweaks_refresh_rate),
-                        value = currentRrText,
-                        onClick = { showRefreshRateDialog = true },
-                        modifier = Modifier.weight(1f)
-                    )
-                    TweakGridCard(
-                        icon = if (isGlobalTextureEnabled) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
-                        highlight = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f),
-                        iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
-                        title = stringResource(R.string.tweaks_renderer),
-                        value = if (isGlobalTextureEnabled) {
-                            stringResource(R.string.profile_renderer_angle_badge)
-                        } else {
-                            currentRendererShortText
-                        },
-                        onClick = {
-                            if (!isGlobalTextureEnabled) showRenderDialog = true
-                        },
-                        enabled = !isGlobalTextureEnabled,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                if (isGlobalTextureEnabled) {
-                    Text(
-                        text = stringResource(R.string.tweaks_renderer_locked_note),
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 4.dp, top = 8.dp)
-                    )
-                }
+            item(key = "active_global_summary") {
+                ActiveGlobalSummaryCard(
+                    refreshRateText = currentRrText,
+                    rendererText = effectiveRendererText,
+                    isTextureActive = isGlobalTextureEnabled,
+                    isLiteModeActive = isGlobalLiteMode,
+                    liteModeText = if (isGlobalLiteMode) {
+                        stringResource(R.string.status_on)
+                    } else {
+                        stringResource(R.string.status_off)
+                    },
+                    ioSchedulerText = currentIoScheduler,
+                    isCustomRr = currentRrId != null,
+                    isCustomRenderer = isGlobalTextureEnabled || !currentRendererId.equals("default", ignoreCase = true),
+                    onRefreshRateClick = { showRefreshRateDialog = true },
+                    onRendererClick = {
+                        if (!isGlobalTextureEnabled) showRenderDialog = true
+                    },
+                    onLiteModeClick = { inLiteModeSubpage = true },
+                    onIoSchedulerClick = { showIoSchedulerDialog = true }
+                )
             }
 
-            item(key = "performance") {
+            item(key = "display_performance") {
                 TweakSection(
                     title = stringResource(R.string.tweaks_section_performance),
-                    icon = Icons.Rounded.BatterySaver,
-                    accent = MaterialTheme.colorScheme.tertiary
+                    icon = Icons.Rounded.Speed,
+                    accent = MaterialTheme.colorScheme.primary
                 ) {
                     TweakConnectedGroup {
+                        TweakRow(
+                            icon = Icons.Rounded.Speed,
+                            iconContainer = MaterialTheme.colorScheme.primaryContainer,
+                            iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            title = stringResource(R.string.tweaks_refresh_rate),
+                            subtitle = stringResource(R.string.tweaks_dialog_select_rr),
+                            trailingText = currentRrText,
+                            trailingActive = currentRrId != null,
+                            position = ContainerPosition.Top,
+                            onClick = { showRefreshRateDialog = true }
+                        )
+                        TweakRow(
+                            icon = if (isGlobalTextureEnabled) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
+                            iconContainer = MaterialTheme.colorScheme.secondaryContainer,
+                            iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            title = stringResource(R.string.tweaks_renderer),
+                            subtitle = if (isGlobalTextureEnabled) {
+                                stringResource(R.string.tweaks_renderer_locked_note)
+                            } else {
+                                stringResource(R.string.tweaks_dialog_select_renderer)
+                            },
+                            trailingText = effectiveRendererText,
+                            trailingActive = isGlobalTextureEnabled || !currentRendererId.equals("default", ignoreCase = true),
+                            enabled = !isGlobalTextureEnabled,
+                            position = ContainerPosition.Middle,
+                            onClick = { showRenderDialog = true }
+                        )
                         TweakRow(
                             icon = Icons.Rounded.BatterySaver,
                             iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
@@ -434,6 +452,7 @@ fun TweaksScreen() {
                                 stringResource(R.string.status_off)
                             },
                             trailingActive = isGlobalLiteMode,
+                            position = ContainerPosition.Bottom,
                             onClick = { inLiteModeSubpage = true }
                         )
                     }
@@ -453,9 +472,9 @@ fun TweaksScreen() {
                             iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
                             title = stringResource(R.string.tweak_memory_zram),
                             subtitle = stringResource(R.string.tweak_memory_zram_desc),
+                            position = ContainerPosition.Top,
                             onClick = { inMemoryZramSubpage = true }
                         )
-                        TweakRowDivider()
                         TweakRow(
                             icon = Icons.Rounded.Storage,
                             iconContainer = MaterialTheme.colorScheme.secondaryContainer,
@@ -463,6 +482,7 @@ fun TweaksScreen() {
                             title = stringResource(R.string.tweak_io_scheduler),
                             subtitle = stringResource(R.string.tweak_io_scheduler_desc),
                             trailingText = currentIoScheduler,
+                            position = ContainerPosition.Bottom,
                             onClick = { showIoSchedulerDialog = true }
                         )
                     }
@@ -473,7 +493,7 @@ fun TweaksScreen() {
                 TweakSection(
                     title = stringResource(R.string.section_utility_diagnostics),
                     icon = Icons.Rounded.Widgets,
-                    accent = MaterialTheme.colorScheme.primary
+                    accent = MaterialTheme.colorScheme.tertiary
                 ) {
                     TweakConnectedGroup {
                         TweakRow(
@@ -482,20 +502,221 @@ fun TweaksScreen() {
                             iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
                             title = stringResource(R.string.hardware_diag_title),
                             subtitle = stringResource(R.string.hardware_diag_desc),
+                            position = ContainerPosition.Top,
                             onClick = { inHardwareDiagnosticSubpage = true }
                         )
-                        TweakRowDivider()
                         TweakRow(
                             icon = Icons.Rounded.Widgets,
                             iconContainer = MaterialTheme.colorScheme.primaryContainer,
                             iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
                             title = stringResource(R.string.utility_screen_title),
                             subtitle = stringResource(R.string.utility_screen_desc),
+                            position = ContainerPosition.Bottom,
                             onClick = { inUtilitySubpage = true }
                         )
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ActiveGlobalSummaryCard(
+    refreshRateText: String,
+    rendererText: String,
+    isTextureActive: Boolean,
+    isLiteModeActive: Boolean,
+    liteModeText: String,
+    ioSchedulerText: String,
+    isCustomRr: Boolean,
+    isCustomRenderer: Boolean,
+    onRefreshRateClick: () -> Unit,
+    onRendererClick: () -> Unit,
+    onLiteModeClick: () -> Unit,
+    onIoSchedulerClick: () -> Unit
+) {
+    val isIndonesian = remember {
+        val lang = Locale.getDefault().language.lowercase()
+        lang == "in" || lang == "id"
+    }
+    val headerTitle = if (isIndonesian) "Pengaturan Global Aktif" else "Active Global Settings"
+    val activeCount = listOf(isCustomRr, isCustomRenderer, isLiteModeActive).count { it }
+    val statusBadgeText = when {
+        activeCount > 0 -> if (isIndonesian) "$activeCount Kustom" else "$activeCount Active"
+        else -> if (isIndonesian) "Standar" else "Default"
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(LocalCornerRadius.current.coerceAtLeast(22.dp)),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Tune,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = headerTitle,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Surface(
+                    shape = CircleShape,
+                    color = if (activeCount > 0) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerHighest
+                    }
+                ) {
+                    Text(
+                        text = statusBadgeText,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (activeCount > 0) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    GlobalStatusMiniTile(
+                        icon = Icons.Rounded.Speed,
+                        label = stringResource(R.string.tweaks_refresh_rate),
+                        value = refreshRateText,
+                        highlighted = isCustomRr,
+                        onClick = onRefreshRateClick,
+                        modifier = Modifier.weight(1f)
+                    )
+                    GlobalStatusMiniTile(
+                        icon = if (isTextureActive) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
+                        label = stringResource(R.string.tweaks_renderer),
+                        value = rendererText,
+                        highlighted = isCustomRenderer,
+                        enabled = !isTextureActive,
+                        onClick = onRendererClick,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    GlobalStatusMiniTile(
+                        icon = Icons.Rounded.BatterySaver,
+                        label = stringResource(R.string.tweaks_lite_mode),
+                        value = liteModeText,
+                        highlighted = isLiteModeActive,
+                        onClick = onLiteModeClick,
+                        modifier = Modifier.weight(1f)
+                    )
+                    GlobalStatusMiniTile(
+                        icon = Icons.Rounded.Storage,
+                        label = stringResource(R.string.tweak_io_scheduler),
+                        value = ioSchedulerText,
+                        highlighted = false,
+                        onClick = onIoSchedulerClick,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GlobalStatusMiniTile(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    highlighted: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
+    val containerColor = if (highlighted) {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerLow
+    }
+    val valueColor = if (highlighted) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(14.dp),
+        color = containerColor,
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (highlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = valueColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -507,7 +728,7 @@ private fun TweakSection(
     accent: Color,
     content: @Composable () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             modifier = Modifier.padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -540,93 +761,11 @@ private fun TweakSection(
 
 @Composable
 private fun TweakConnectedGroup(content: @Composable ColumnScope.() -> Unit) {
-    Card(
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(LocalCornerRadius.current.coerceAtLeast(24.dp)),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
-    ) {
-        Column(content = content)
-    }
-}
-
-@Composable
-private fun TweakGridCard(
-    icon: ImageVector,
-    highlight: Color,
-    iconTint: Color,
-    title: String,
-    value: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true
-) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(LocalCornerRadius.current.coerceAtLeast(24.dp)),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(enabled = enabled, onClick = onClick)
-                .alpha(if (enabled) 1f else 0.45f)
-                .padding(12.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(76.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(highlight),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = iconTint,
-                    modifier = Modifier.size(28.dp)
-                )
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(6.dp)
-                        .size(20.dp)
-                        .clip(CircleShape)
-                        .background(iconTint.copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.ChevronRight,
-                        contentDescription = null,
-                        tint = iconTint.copy(alpha = 0.75f),
-                        modifier = Modifier.size(13.dp)
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.primary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+        content = content
+    )
 }
 
 @Composable
@@ -637,22 +776,23 @@ private fun TweakRow(
     title: String,
     subtitle: String,
     onClick: () -> Unit,
+    position: ContainerPosition = ContainerPosition.Single,
     trailingText: String? = null,
     trailingActive: Boolean = false,
-    enabled: Boolean = true,
-    shape: RoundedCornerShape = RoundedCornerShape(0.dp)
+    enabled: Boolean = true
 ) {
+    val shape = getConnectedContainerShape(position)
     Surface(
         onClick = onClick,
         enabled = enabled,
         shape = shape,
-        color = Color.Transparent,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .alpha(if (enabled) 1f else 0.45f)
+                .alpha(if (enabled) 1f else 0.48f)
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -730,15 +870,6 @@ private fun TweakValueChip(text: String, active: Boolean = false) {
             overflow = TextOverflow.Ellipsis
         )
     }
-}
-
-@Composable
-private fun TweakRowDivider() {
-    HorizontalDivider(
-        modifier = Modifier.padding(start = 70.dp, end = 16.dp),
-        thickness = 0.8.dp,
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-    )
 }
 
 @Composable
