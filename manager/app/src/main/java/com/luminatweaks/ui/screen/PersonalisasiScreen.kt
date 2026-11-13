@@ -95,6 +95,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SliderState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -106,6 +107,7 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -939,10 +941,26 @@ private fun ExpressiveRadiusSlider(
     val tickCount = (ThemeController.MAX_CORNER_RADIUS - ThemeController.MIN_CORNER_RADIUS) / 2
     val fraction = ((value - minValue) / (maxValue - minValue)).coerceIn(0f, 1f)
 
+    val sliderState = remember(minValue, maxValue) {
+        SliderState(
+            value = value.coerceIn(minValue, maxValue),
+            valueRange = minValue..maxValue
+        )
+    }
+
+    LaunchedEffect(value) {
+        val coerced = value.coerceIn(minValue, maxValue)
+        if (sliderState.value != coerced) {
+            sliderState.value = coerced
+        }
+    }
+
     Slider(
-        value = value,
-        onValueChange = onValueChange,
-        valueRange = minValue..maxValue,
+        state = sliderState,
+        onValueChange = { newVal ->
+            sliderState.value = newVal
+            onValueChange(newVal)
+        },
         modifier = Modifier.fillMaxWidth(),
         track = {
             Canvas(
@@ -1178,18 +1196,17 @@ private fun OptionBottomSheet(
                                 )
                             }
                         }
-                    },
-                    headlineContent = {
-                        Text(
-                            text = stringResource(labelRes),
-                            style = if (isSelected) {
-                                MaterialTheme.typography.titleSmallEmphasized
-                            } else {
-                                MaterialTheme.typography.bodyLarge
-                            }
-                        )
                     }
-                )
+                ) {
+                    Text(
+                        text = stringResource(labelRes),
+                        style = if (isSelected) {
+                            MaterialTheme.typography.titleSmallEmphasized
+                        } else {
+                            MaterialTheme.typography.bodyLarge
+                        }
+                    )
+                }
             }
         }
     }
@@ -1216,6 +1233,7 @@ private fun PhonePreviewCard(
         animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
         label = "previewBorder"
     )
+    val effectsSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
 
     Box(
         modifier = Modifier
@@ -1235,8 +1253,8 @@ private fun PhonePreviewCard(
             AnimatedContent(
                 targetState = colorScheme,
                 transitionSpec = {
-                    fadeIn(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) togetherWith
-                        fadeOut(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec())
+                    fadeIn(animationSpec = effectsSpec) togetherWith
+                        fadeOut(animationSpec = effectsSpec)
                 },
                 label = "previewContent"
             ) { scheme ->
@@ -1264,6 +1282,8 @@ private fun MockLuminaScreen(
         label = "mockCornerRadius"
     )
     val ratio = (animatedRadius.value / ratioDenominator).coerceIn(0.2f, 2f)
+    val effectsSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+    val spatialSpec = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
 
     MaterialTheme(colorScheme = colorScheme) {
         Column(
@@ -1385,12 +1405,12 @@ private fun MockLuminaScreen(
             AnimatedContent(
                 targetState = isFloatingNavBar,
                 transitionSpec = {
-                    (fadeIn(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) +
+                    (fadeIn(animationSpec = effectsSpec) +
                         scaleIn(
                             initialScale = 0.92f,
-                            animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec()
+                            animationSpec = spatialSpec
                         )) togetherWith
-                        (fadeOut(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) +
+                        (fadeOut(animationSpec = effectsSpec) +
                             scaleOut(targetScale = 0.92f))
                 },
                 label = "mockNavBar"
