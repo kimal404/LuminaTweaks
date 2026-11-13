@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 
 package com.luminatweaks.ui.screen
 
@@ -20,17 +20,22 @@ import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -48,24 +53,22 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.MenuBook
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.Speed
-import androidx.compose.material.icons.rounded.AutoFixHigh
-import androidx.compose.material.icons.rounded.CleaningServices
-import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Thermostat
-import androidx.graphics.shapes.Morph
-import androidx.graphics.shapes.toPath
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.Card
@@ -73,19 +76,17 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MaterialShapes
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -99,14 +100,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -120,6 +122,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.graphics.shapes.Morph
+import androidx.graphics.shapes.toPath
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
@@ -130,16 +134,26 @@ import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.DeviceUtil
 import com.luminatweaks.util.RootUtil
+import java.util.Locale
+import kotlin.math.PI
+import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.PI
-import kotlin.math.sin
 
 enum class ContainerPosition {
     Top, Middle, Bottom, Single
+}
+
+@Composable
+private fun homeLocalizedLabel(id: String, en: String): String {
+    val isIndonesian = remember {
+        val lang = Locale.getDefault().language.lowercase(Locale.ROOT)
+        lang == "in" || lang == "id"
+    }
+    return if (isIndonesian) id else en
 }
 
 private fun readSystemProperty(key: String): String? {
@@ -177,7 +191,6 @@ fun getConnectedContainerShape(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen() {
     val context = LocalContext.current
@@ -459,7 +472,6 @@ fun HomeScreen() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeDashboardContent(
     batteryTemp: String,
@@ -521,10 +533,9 @@ fun HomeDashboardContent(
                 ) {
                     PowerMenuItem(
                         icon = Icons.Rounded.Refresh,
-                        iconBg = MaterialTheme.colorScheme.primaryContainer,
-                        iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        iconBg = MaterialTheme.colorScheme.primary,
+                        iconTint = MaterialTheme.colorScheme.onPrimary,
                         title = stringResource(R.string.power_action_reboot),
-                        cornerRadius = currentRadius,
                         onClick = {
                             showPowerDialog = false
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -540,7 +551,6 @@ fun HomeDashboardContent(
                         iconBg = MaterialTheme.colorScheme.secondaryContainer,
                         iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
                         title = stringResource(R.string.power_action_recovery),
-                        cornerRadius = currentRadius,
                         onClick = {
                             showPowerDialog = false
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -556,7 +566,6 @@ fun HomeDashboardContent(
                         iconBg = MaterialTheme.colorScheme.tertiaryContainer,
                         iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
                         title = stringResource(R.string.power_action_restart_service),
-                        cornerRadius = currentRadius,
                         onClick = {
                             showPowerDialog = false
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -574,9 +583,16 @@ fun HomeDashboardContent(
                     )
                 }
             },
-            shape = RoundedCornerShape(currentRadius.coerceAtLeast(16.dp)),
+            shape = RoundedCornerShape(currentRadius.coerceAtLeast(22.dp)),
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
+    }
+
+    val isFloating = LocalFloatingNavBar.current
+    val bottomPadding = if (isFloating) {
+        108.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    } else {
+        20.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     }
 
     Scaffold(
@@ -586,7 +602,7 @@ fun HomeDashboardContent(
                 title = {
                     Text(
                         text = stringResource(R.string.app_name),
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -600,7 +616,7 @@ fun HomeDashboardContent(
                             showPowerDialog = true
                         }
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                 },
                 windowInsets = WindowInsets.statusBars,
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -612,12 +628,12 @@ fun HomeDashboardContent(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding() + 4.dp,
-                bottom = if (LocalFloatingNavBar.current) 100.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() else 16.dp,
+                top = innerPadding.calculateTopPadding() + 6.dp,
+                bottom = bottomPadding,
                 start = 16.dp,
                 end = 16.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item(key = "hero") {
                 CoreStatusCard(
@@ -644,14 +660,15 @@ fun HomeDashboardContent(
             item(key = "metrics") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     DashboardMetricCard(
                         icon = Icons.Rounded.Thermostat,
                         label = stringResource(R.string.home_thermal),
                         value = batteryTemp,
                         supporting = null,
-                        iconTint = MaterialTheme.colorScheme.tertiary,
+                        badgeBg = MaterialTheme.colorScheme.tertiaryContainer,
+                        badgeTint = MaterialTheme.colorScheme.onTertiaryContainer,
                         modifier = Modifier.weight(1f)
                     )
                     DashboardMetricCard(
@@ -659,7 +676,8 @@ fun HomeDashboardContent(
                         label = stringResource(R.string.home_profile),
                         value = currentProfile,
                         supporting = currentFps.takeIf { it != "-" }?.let { "$it FPS" },
-                        iconTint = MaterialTheme.colorScheme.primary,
+                        badgeBg = MaterialTheme.colorScheme.primary,
+                        badgeTint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -672,72 +690,79 @@ fun HomeDashboardContent(
             }
 
             item(key = "device") {
-                HomeSegmentedGroup(
-                    rows = listOf(
-                        SegmentedRowData(
-                            icon = Icons.Rounded.DeveloperBoard,
-                            title = stringResource(R.string.home_manager_version),
-                            subtitle = stringResource(
-                                R.string.home_version_release_format,
-                                com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")
-                            )
-                        ),
-                        SegmentedRowData(
-                            icon = Icons.Rounded.Memory,
-                            title = stringResource(R.string.home_kernel_version),
-                            subtitle = kernelVersion
-                        ),
-                        SegmentedRowData(
-                            icon = Icons.Rounded.Smartphone,
-                            title = stringResource(R.string.home_device_model),
-                            subtitle = deviceModel
+                HomeNestedCardGroup(
+                    headerIcon = Icons.Rounded.Smartphone,
+                    headerTitle = homeLocalizedLabel("Informasi Perangkat", "Device Information")
+                ) {
+                    HomeNestedItemCard(
+                        icon = Icons.Rounded.DeveloperBoard,
+                        title = stringResource(R.string.home_manager_version),
+                        subtitle = stringResource(
+                            R.string.home_version_release_format,
+                            com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")
                         )
                     )
-                )
+                    HomeNestedItemCard(
+                        icon = Icons.Rounded.Memory,
+                        title = stringResource(R.string.home_kernel_version),
+                        subtitle = kernelVersion
+                    )
+                    HomeNestedItemCard(
+                        icon = Icons.Rounded.Smartphone,
+                        title = stringResource(R.string.home_device_model),
+                        subtitle = deviceModel
+                    )
+                }
             }
 
             item(key = "security") {
-                HomeSegmentedGroup(
-                    rows = listOf(
-                        SegmentedRowData(
-                            icon = Icons.Rounded.Security,
-                            title = stringResource(R.string.home_root_access),
-                            subtitle = stringResource(
-                                if (isRootGranted) R.string.home_root_granted else R.string.home_root_denied
-                            ),
-                            accent = if (isRootGranted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                HomeNestedCardGroup(
+                    headerIcon = Icons.Rounded.Security,
+                    headerTitle = homeLocalizedLabel("Status Sistem", "System Status")
+                ) {
+                    HomeNestedItemCard(
+                        icon = Icons.Rounded.Security,
+                        title = stringResource(R.string.home_root_access),
+                        subtitle = stringResource(
+                            if (isRootGranted) R.string.home_root_granted else R.string.home_root_denied
                         ),
-                        SegmentedRowData(
-                            icon = Icons.Rounded.Security,
-                            title = stringResource(R.string.home_selinux_status),
-                            subtitle = selinuxStatus
-                        )
+                        subtitleColor = if (isRootGranted) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        }
                     )
-                )
+                    HomeNestedItemCard(
+                        icon = Icons.Rounded.Security,
+                        title = stringResource(R.string.home_selinux_status),
+                        subtitle = selinuxStatus
+                    )
+                }
             }
 
             item(key = "support") {
                 val uriHandler = LocalUriHandler.current
-                HomeSegmentedGroup(
-                    rows = listOf(
-                        SegmentedRowData(
-                            icon = Icons.Rounded.Favorite,
-                            title = stringResource(R.string.home_support_us),
-                            subtitle = stringResource(R.string.home_support_us_desc),
-                            onClick = { uriHandler.openUri("https://sociabuzz.com/kimal404") }
-                        ),
-                        SegmentedRowData(
-                            icon = Icons.Rounded.MenuBook,
-                            title = stringResource(R.string.home_learn_more),
-                            subtitle = stringResource(R.string.home_learn_more_desc),
-                            onClick = { uriHandler.openUri("https://github.com/kimal404/LuminaTweaks") }
-                        )
+                HomeNestedCardGroup(
+                    headerIcon = Icons.Rounded.Favorite,
+                    headerTitle = homeLocalizedLabel("Dukungan", "Support")
+                ) {
+                    HomeNestedItemCard(
+                        icon = Icons.Rounded.Favorite,
+                        title = stringResource(R.string.home_support_us),
+                        subtitle = stringResource(R.string.home_support_us_desc),
+                        onClick = { uriHandler.openUri("https://sociabuzz.com/kimal404") }
                     )
-                )
+                    HomeNestedItemCard(
+                        icon = Icons.Rounded.MenuBook,
+                        title = stringResource(R.string.home_learn_more),
+                        subtitle = stringResource(R.string.home_learn_more_desc),
+                        onClick = { uriHandler.openUri("https://github.com/kimal404/LuminaTweaks") }
+                    )
+                }
             }
 
             item(key = "footer") {
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
             }
         }
     }
@@ -760,25 +785,29 @@ private fun CoreStatusIndicator(
         label = "indicatorTint"
     )
 
-    IconButton(
+    Surface(
         onClick = onClick,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = Modifier
-            .padding(end = 8.dp)
-            .size(IconButtonDefaults.mediumContainerSize())
+            .padding(end = 6.dp)
+            .size(40.dp)
     ) {
-        if (isChecking || isRestarting) {
-            CircularWavyProgressIndicator(
-                modifier = Modifier.size(20.dp),
-                color = iconTint,
-                trackColor = iconTint.copy(alpha = 0.24f)
-            )
-        } else {
-            Icon(
-                imageVector = Icons.Rounded.PowerSettingsNew,
-                contentDescription = stringResource(R.string.power_menu_title),
-                tint = iconTint,
-                modifier = Modifier.size(IconButtonDefaults.mediumIconSize)
-            )
+        Box(contentAlignment = Alignment.Center) {
+            if (isChecking || isRestarting) {
+                CircularWavyProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = iconTint,
+                    trackColor = iconTint.copy(alpha = 0.24f)
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Rounded.PowerSettingsNew,
+                    contentDescription = stringResource(R.string.power_menu_title),
+                    tint = iconTint,
+                    modifier = Modifier.size(IconButtonDefaults.mediumIconSize)
+                )
+            }
         }
     }
 }
@@ -846,13 +875,12 @@ private fun CoreStatusCard(
         label = "coreMorph"
     )
 
-    val innerRadius = LocalCornerRadius.current
-    val innerShape = innerRadius.coerceIn(12.dp, 32.dp)
+    val outerRadius = LocalCornerRadius.current.coerceAtLeast(26.dp)
 
     Card(
         onClick = onStart,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape((innerShape * 1.5f).coerceAtLeast(20.dp)),
+        shape = RoundedCornerShape(outerRadius),
         colors = CardDefaults.cardColors(containerColor = containerColor, contentColor = contentColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
@@ -975,34 +1003,43 @@ private fun DashboardMetricCard(
     label: String,
     value: String,
     supporting: String?,
-    iconTint: Color,
+    badgeBg: Color,
+    badgeTint: Color,
     modifier: Modifier = Modifier
 ) {
-    Card(
+    val cardRadius = LocalCornerRadius.current.coerceAtLeast(24.dp)
+
+    Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(LocalCornerRadius.current.coerceAtLeast(22.dp)),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
+        shape = RoundedCornerShape(cardRadius),
+        color = MaterialTheme.colorScheme.surfaceContainer
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = iconTint,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(CircleShape)
+                        .background(badgeBg),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = badgeTint,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
             Text(
                 text = value,
                 style = MaterialTheme.typography.headlineSmallEmphasized,
@@ -1015,7 +1052,7 @@ private fun DashboardMetricCard(
                 Text(
                     text = supporting,
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.primary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1084,7 +1121,7 @@ private fun QuickActionRow(
 
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         ToggleButton(
             checked = false,
@@ -1145,99 +1182,158 @@ private fun QuickActionRow(
     }
 }
 
-private data class SegmentedRowData(
-    val icon: ImageVector,
-    val title: String,
-    val subtitle: String,
-    val onClick: (() -> Unit)? = null,
-    val accent: Color? = null
-)
+// ---------------------------------------------------------------------------
+// Nested Bento Card Container & Inner Items (MD3E)
+// ---------------------------------------------------------------------------
 
 @Composable
-private fun HomeSegmentedGroup(
-    rows: List<SegmentedRowData>
+private fun HomeNestedCardGroup(
+    headerIcon: ImageVector,
+    headerTitle: String,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
-        rows.forEachIndexed { index, row ->
-            val shapes = ListItemDefaults.segmentedShapes(index = index, count = rows.size)
-            val colors = ListItemDefaults.segmentedColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                selectedContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                selectedLeadingContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-            val leading: @Composable () -> Unit = {
+    val outerRadius = LocalCornerRadius.current.coerceAtLeast(26.dp)
+
+    Surface(
+        shape = RoundedCornerShape(outerRadius),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 2.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            (row.accent ?: MaterialTheme.colorScheme.onSurfaceVariant).copy(alpha = 0.12f)
-                        ),
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = row.icon,
+                        imageVector = headerIcon,
                         contentDescription = null,
-                        tint = row.accent ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(20.dp)
                     )
                 }
-            }
-            val trailing: @Composable () -> Unit = {
-                if (row.onClick != null) {
-                    Icon(
-                        imageVector = Icons.Rounded.ChevronRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-            val supporting: @Composable () -> Unit = {
+                Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = row.subtitle,
+                    text = headerTitle,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            content()
+        }
+    }
+}
+
+@Composable
+private fun HomeNestedItemCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    subtitleColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    onClick: (() -> Unit)? = null
+) {
+    val haptic = LocalHapticFeedback.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed && onClick != null) 0.98f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "homeNestedItemScale"
+    )
+    val innerRadius = (LocalCornerRadius.current * 0.78f).coerceIn(16.dp, 24.dp)
+
+    val rowContent: @Composable () -> Unit = {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                    color = subtitleColor,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            if (row.onClick != null) {
-                SegmentedListItem(
-                    onClick = row.onClick,
-                    shapes = shapes,
-                    colors = colors,
-                    leadingContent = leading,
-                    trailingContent = trailing,
-                    supportingContent = supporting
-                ) {
-                    Text(
-                        text = row.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            } else {
-                SegmentedListItem(
-                    shapes = shapes,
-                    colors = colors,
-                    leadingContent = leading,
-                    trailingContent = trailing,
-                    supportingContent = supporting
-                ) {
-                    Text(
-                        text = row.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
+            if (onClick != null) {
+                Spacer(modifier = Modifier.width(12.dp))
+                Icon(
+                    imageVector = Icons.Rounded.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
     }
+
+    if (onClick != null) {
+        Surface(
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClick()
+            },
+            shape = RoundedCornerShape(innerRadius),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            interactionSource = interactionSource,
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                },
+            content = rowContent
+        )
+    } else {
+        Surface(
+            shape = RoundedCornerShape(innerRadius),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.fillMaxWidth(),
+            content = rowContent
+        )
+    }
 }
+
 @Composable
 fun ConnectedCardRow(
     icon: ImageVector,
@@ -1377,21 +1473,19 @@ fun ConnectedActionCardRow(
 
 @Composable
 private fun PowerMenuItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    iconBg: androidx.compose.ui.graphics.Color,
-    iconTint: androidx.compose.ui.graphics.Color,
+    icon: ImageVector,
+    iconBg: Color,
+    iconTint: Color,
     title: String,
-    cornerRadius: androidx.compose.ui.unit.Dp,
     onClick: () -> Unit
 ) {
-    val itemRadius = (cornerRadius * 0.75f).coerceIn(8.dp, 20.dp)
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(itemRadius))
+            .clip(RoundedCornerShape(18.dp))
             .clickable(onClick = onClick),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(itemRadius)
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = RoundedCornerShape(18.dp)
     ) {
         Row(
             modifier = Modifier
@@ -1401,8 +1495,8 @@ private fun PowerMenuItem(
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(13.dp))
+                    .size(38.dp)
+                    .clip(CircleShape)
                     .background(iconBg),
                 contentAlignment = Alignment.Center
             ) {
@@ -1410,7 +1504,7 @@ private fun PowerMenuItem(
                     imageVector = icon,
                     contentDescription = null,
                     tint = iconTint,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(19.dp)
                 )
             }
             Spacer(modifier = Modifier.width(14.dp))
@@ -1424,7 +1518,7 @@ private fun PowerMenuItem(
             Icon(
                 imageVector = Icons.Rounded.ChevronRight,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
                 modifier = Modifier.size(20.dp)
             )
         }
