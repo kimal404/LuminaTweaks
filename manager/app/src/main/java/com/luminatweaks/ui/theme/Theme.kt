@@ -143,32 +143,35 @@ fun LuminaTheme(
         ColorStyle.Monochrome -> PaletteStyle.Monochrome
     }
 
-    val baseScheme: ColorScheme = if (isDynamic) {
-        val systemDerived = when {
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
-                if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-            else ->
-                if (isDark) FallbackDarkColorScheme else FallbackLightColorScheme
+    val resolvedSeedColor: Color = if (isDynamic) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            runCatching {
+                Color(context.getColor(android.R.color.system_accent1_500))
+            }.getOrElse {
+                val nativeDynamic = if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+                nativeDynamic.primary
+            }
+        } else {
+            if (isDark) PinkPrimary else LightPrimary
         }
-        rememberDynamicColorScheme(
-            seedColor = systemDerived.primary,
-            isDark = isDark,
-            isAmoled = amoledMode,
-            specVersion = colorSpec,
-            style = paletteStyle
-        )
     } else {
-        rememberDynamicColorScheme(
-            seedColor = Color(themeState.keyColor),
-            isDark = isDark,
-            isAmoled = amoledMode,
-            specVersion = colorSpec,
-            style = paletteStyle
-        )
+        Color(themeState.keyColor)
     }
 
+    val baseScheme: ColorScheme = rememberDynamicColorScheme(
+        seedColor = resolvedSeedColor,
+        isDark = isDark,
+        isAmoled = amoledMode,
+        specVersion = colorSpec,
+        style = paletteStyle
+    )
+
     val animatedColorScheme = animateColorSchemeAsState(
-        targetColorScheme = baseScheme.withAccentIntensity(themeState.accentIntensity)
+        targetColorScheme = baseScheme.withAccentIntensity(
+            intensity = themeState.accentIntensity,
+            isDark = isDark,
+            isAmoled = amoledMode
+        )
     )
 
     val dynamicShapes = remember(themeState.cornerRadius) {

@@ -544,29 +544,32 @@ private fun ExpressiveSwatchTile(
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
-    val targetScheme = if (color == Color.Unspecified) {
-        val base = when {
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
-                if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-            else ->
-                if (isDark) darkColorScheme() else lightColorScheme()
+    val swatchSeed = if (color == Color.Unspecified) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            runCatching {
+                Color(context.getColor(android.R.color.system_accent1_500))
+            }.getOrElse {
+                val base = if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+                base.primary
+            }
+        } else {
+            if (isDark) darkColorScheme().primary else lightColorScheme().primary
         }
-        rememberDynamicColorScheme(
-            seedColor = base.primary,
-            isDark = isDark,
-            isAmoled = isAmoled,
-            specVersion = colorSpec.librarySpec,
-            style = PaletteStyle.TonalSpot
-        )
     } else {
-        rememberDynamicColorScheme(
-            seedColor = color,
-            isDark = isDark,
-            isAmoled = isAmoled,
-            specVersion = colorSpec.librarySpec,
-            style = PaletteStyle.TonalSpot
-        )
-    }.withAccentIntensity(accentIntensity)
+        color
+    }
+
+    val targetScheme = rememberDynamicColorScheme(
+        seedColor = swatchSeed,
+        isDark = isDark,
+        isAmoled = isAmoled,
+        specVersion = colorSpec.librarySpec,
+        style = PaletteStyle.TonalSpot
+    ).withAccentIntensity(
+        intensity = accentIntensity,
+        isDark = isDark,
+        isAmoled = isAmoled
+    )
 
     val colorScheme = animateColorSchemeAsState(targetColorScheme = targetScheme)
     val scale by animateFloatAsState(

@@ -29,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.toArgb
 
 enum class ColorMode(val value: Int) {
@@ -231,10 +232,58 @@ val keyColorOptions = listOf(
     Color(0xFFFF9CA8).toArgb()
 )
 
-fun ColorScheme.withAccentIntensity(intensity: AccentIntensity): ColorScheme {
-    if (intensity == AccentIntensity.Balanced) return this
+fun ColorScheme.withAccentIntensity(
+    intensity: AccentIntensity,
+    isDark: Boolean = true,
+    isAmoled: Boolean = false
+): ColorScheme {
     val f = intensity.saturationFactor
-    return copy(
+    val tintedPrimary = if (intensity == AccentIntensity.Balanced) primary else primary.scaledSaturation(f)
+    val tintScale = when (intensity) {
+        AccentIntensity.Neutral -> 0.55f
+        AccentIntensity.Balanced -> 1.0f
+        AccentIntensity.Bright -> 1.25f
+        AccentIntensity.Vibrant -> 1.45f
+    }
+
+    val tintedScheme = if (isDark && isAmoled) {
+        copy(
+            background = Color.Black,
+            surface = Color.Black,
+            surfaceVariant = lerp(Color(0xFF181A1C), tintedPrimary, 0.10f * tintScale),
+            surfaceContainerLowest = Color.Black,
+            surfaceContainerLow = lerp(Color(0xFF0A0C0E), tintedPrimary, 0.05f * tintScale),
+            surfaceContainer = lerp(Color(0xFF101316), tintedPrimary, 0.075f * tintScale),
+            surfaceContainerHigh = lerp(Color(0xFF161A1E), tintedPrimary, 0.095f * tintScale),
+            surfaceContainerHighest = lerp(Color(0xFF1D2227), tintedPrimary, 0.115f * tintScale)
+        )
+    } else if (isDark) {
+        copy(
+            background = lerp(Color(0xFF0B0E11), tintedPrimary, 0.065f * tintScale),
+            surface = lerp(Color(0xFF0B0E11), tintedPrimary, 0.065f * tintScale),
+            surfaceVariant = lerp(Color(0xFF1B2024), tintedPrimary, 0.12f * tintScale),
+            surfaceContainerLowest = lerp(Color(0xFF080A0D), tintedPrimary, 0.05f * tintScale),
+            surfaceContainerLow = lerp(Color(0xFF0E1216), tintedPrimary, 0.075f * tintScale),
+            surfaceContainer = lerp(Color(0xFF11161B), tintedPrimary, 0.095f * tintScale),
+            surfaceContainerHigh = lerp(Color(0xFF161C22), tintedPrimary, 0.115f * tintScale),
+            surfaceContainerHighest = lerp(Color(0xFF1C232A), tintedPrimary, 0.135f * tintScale)
+        )
+    } else {
+        copy(
+            background = lerp(Color(0xFFF8FAFC), tintedPrimary, 0.04f * tintScale),
+            surface = lerp(Color(0xFFF8FAFC), tintedPrimary, 0.04f * tintScale),
+            surfaceVariant = lerp(Color(0xFFE6ECF0), tintedPrimary, 0.08f * tintScale),
+            surfaceContainerLowest = Color.White,
+            surfaceContainerLow = lerp(Color(0xFFF2F5F8), tintedPrimary, 0.05f * tintScale),
+            surfaceContainer = lerp(Color(0xFFECF1F5), tintedPrimary, 0.065f * tintScale),
+            surfaceContainerHigh = lerp(Color(0xFFE5ECF1), tintedPrimary, 0.08f * tintScale),
+            surfaceContainerHighest = lerp(Color(0xFFDEE6EC), tintedPrimary, 0.095f * tintScale)
+        )
+    }
+
+    if (intensity == AccentIntensity.Balanced) return tintedScheme
+
+    return tintedScheme.copy(
         primary = primary.scaledSaturation(f),
         onPrimary = onPrimary.scaledSaturation(f),
         primaryContainer = primaryContainer.scaledSaturation(f),
