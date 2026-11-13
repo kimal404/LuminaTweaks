@@ -34,7 +34,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -83,7 +82,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -370,27 +368,15 @@ fun TweaksScreen() {
                 start = 16.dp,
                 end = 16.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item {
-                TweaksHero(
-                    liveRefreshRate = liveRefreshRate,
-                    rendererLabel = if (isGlobalTextureEnabled) {
-                        stringResource(R.string.profile_renderer_angle_badge)
-                    } else {
-                        currentRendererShortText
-                    },
-                    isLiteMode = isGlobalLiteMode
-                )
-            }
-
             item {
                 TweakSection(
                     title = stringResource(R.string.tweaks_section_display_graphics),
                     icon = Icons.Rounded.Speed,
                     accent = MaterialTheme.colorScheme.primary
                 ) {
-                    TweakGroup {
+                    TweakConnectedGroup {
                         TweakRow(
                             icon = Icons.Rounded.Speed,
                             iconContainer = MaterialTheme.colorScheme.primaryContainer,
@@ -447,26 +433,24 @@ fun TweaksScreen() {
                     icon = Icons.Rounded.BatterySaver,
                     accent = MaterialTheme.colorScheme.tertiary
                 ) {
-                    TweakGroup {
-                        TweakRow(
-                            icon = Icons.Rounded.BatterySaver,
-                            iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
-                            iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
-                            title = stringResource(R.string.tweaks_lite_mode),
-                            subtitle = if (isGlobalLiteMode) {
-                                stringResource(R.string.tweaks_lite_on_desc)
-                            } else {
-                                stringResource(R.string.tweaks_lite_off_desc)
-                            },
-                            trailingText = if (isGlobalLiteMode) {
-                                stringResource(R.string.status_on)
-                            } else {
-                                stringResource(R.string.status_off)
-                            },
-                            trailingActive = isGlobalLiteMode,
-                            onClick = { inLiteModeSubpage = true }
-                        )
-                    }
+                    TweakStandaloneRow(
+                        icon = Icons.Rounded.BatterySaver,
+                        iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
+                        iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
+                        title = stringResource(R.string.tweaks_lite_mode),
+                        subtitle = if (isGlobalLiteMode) {
+                            stringResource(R.string.tweaks_lite_on_desc)
+                        } else {
+                            stringResource(R.string.tweaks_lite_off_desc)
+                        },
+                        trailingText = if (isGlobalLiteMode) {
+                            stringResource(R.string.status_on)
+                        } else {
+                            stringResource(R.string.status_off)
+                        },
+                        trailingActive = isGlobalLiteMode,
+                        onClick = { inLiteModeSubpage = true }
+                    )
                 }
             }
 
@@ -476,7 +460,7 @@ fun TweaksScreen() {
                     icon = Icons.Rounded.Tune,
                     accent = MaterialTheme.colorScheme.secondary
                 ) {
-                    TweakGroup {
+                    TweakConnectedGroup {
                         TweakRow(
                             icon = Icons.Rounded.Memory,
                             iconContainer = MaterialTheme.colorScheme.secondaryContainer,
@@ -505,7 +489,7 @@ fun TweaksScreen() {
                     icon = Icons.Rounded.Widgets,
                     accent = MaterialTheme.colorScheme.primary
                 ) {
-                    TweakGroup {
+                    TweakConnectedGroup {
                         TweakRow(
                             icon = Icons.Rounded.DeveloperBoard,
                             iconContainer = MaterialTheme.colorScheme.primaryContainer,
@@ -528,166 +512,6 @@ fun TweaksScreen() {
             }
         }
     }
-}
-
-@Composable
-private fun TweaksHero(
-    liveRefreshRate: Int,
-    rendererLabel: String,
-    isLiteMode: Boolean
-) {
-    val scheme = MaterialTheme.colorScheme
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(LocalCornerRadius.current),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.Transparent,
-            contentColor = scheme.onSurface
-        )
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(scheme.surfaceContainerHigh, scheme.surfaceContainerHighest)
-                    )
-                )
-        ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(x = 36.dp, y = (-48).dp)
-                    .size(150.dp)
-                    .background(scheme.primary.copy(alpha = 0.10f), CircleShape)
-            )
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .offset(x = (-40).dp, y = 36.dp)
-                    .size(120.dp)
-                    .background(scheme.tertiary.copy(alpha = 0.08f), CircleShape)
-            )
-
-            Column(modifier = Modifier.padding(20.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(46.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(scheme.primaryContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Tune,
-                            contentDescription = null,
-                            tint = scheme.onPrimaryContainer,
-                            modifier = Modifier.size(23.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(14.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = stringResource(R.string.tweaks_hero_title),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = scheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = stringResource(R.string.tweaks_hero_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = scheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(18.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    QuickStat(
-                        label = stringResource(R.string.tweaks_quick_refresh),
-                        value = "$liveRefreshRate Hz",
-                        live = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    QuickStatDivider()
-                    QuickStat(
-                        label = stringResource(R.string.tweaks_quick_renderer),
-                        value = rendererLabel,
-                        modifier = Modifier.weight(1f)
-                    )
-                    QuickStatDivider()
-                    QuickStat(
-                        label = stringResource(R.string.tweaks_quick_lite_mode),
-                        value = if (isLiteMode) {
-                            stringResource(R.string.status_on)
-                        } else {
-                            stringResource(R.string.status_off)
-                        },
-                        valueColor = if (isLiteMode) scheme.primary else scheme.onSurface,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun QuickStat(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier,
-    live: Boolean = false,
-    valueColor: Color = MaterialTheme.colorScheme.onSurface
-) {
-    Column(modifier = modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (live) {
-                Box(
-                    modifier = Modifier
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary)
-                )
-                Spacer(modifier = Modifier.width(5.dp))
-            }
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 10.sp,
-                    letterSpacing = 0.8.sp
-                ),
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1
-            )
-        }
-        Spacer(modifier = Modifier.height(3.dp))
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = valueColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
-private fun QuickStatDivider() {
-    Box(
-        modifier = Modifier
-            .padding(horizontal = 12.dp)
-            .width(1.dp)
-            .height(30.dp)
-            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-    )
 }
 
 @Composable
@@ -729,15 +553,48 @@ private fun TweakSection(
 }
 
 @Composable
-private fun TweakGroup(content: @Composable ColumnScope.() -> Unit) {
+private fun TweakConnectedGroup(content: @Composable ColumnScope.() -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(LocalCornerRadius.current),
+        shape = RoundedCornerShape(LocalCornerRadius.current.coerceAtLeast(16.dp)),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Column(content = content)
+    }
+}
+
+@Composable
+private fun TweakStandaloneRow(
+    icon: ImageVector,
+    iconContainer: Color,
+    iconTint: Color,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    trailingText: String? = null,
+    trailingActive: Boolean = false,
+    enabled: Boolean = true
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(LocalCornerRadius.current.coerceAtLeast(16.dp)),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        )
+    ) {
+        TweakRow(
+            icon = icon,
+            iconContainer = iconContainer,
+            iconTint = iconTint,
+            title = title,
+            subtitle = subtitle,
+            trailingText = trailingText,
+            trailingActive = trailingActive,
+            onClick = onClick,
+            enabled = enabled
+        )
     }
 }
 

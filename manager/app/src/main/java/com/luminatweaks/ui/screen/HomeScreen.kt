@@ -73,7 +73,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.TopAppBar
@@ -750,32 +750,18 @@ private fun CoreStatusIndicator(
     isRunning: Boolean,
     onClick: () -> Unit
 ) {
-    val container by animateColorAsState(
-        targetValue = when {
-            isChecking || isRestarting -> MaterialTheme.colorScheme.surfaceContainerHighest
-            isRunning -> MaterialTheme.colorScheme.primaryContainer
-            else -> MaterialTheme.colorScheme.errorContainer
-        },
-        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-        label = "indicatorContainer"
-    )
-    val content by animateColorAsState(
+    val iconTint by animateColorAsState(
         targetValue = when {
             isChecking || isRestarting -> MaterialTheme.colorScheme.onSurfaceVariant
-            isRunning -> MaterialTheme.colorScheme.onPrimaryContainer
-            else -> MaterialTheme.colorScheme.onErrorContainer
+            isRunning -> MaterialTheme.colorScheme.primary
+            else -> MaterialTheme.colorScheme.error
         },
         animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-        label = "indicatorContent"
+        label = "indicatorTint"
     )
 
-    FilledIconButton(
+    IconButton(
         onClick = onClick,
-        shapes = IconButtonDefaults.shapes(),
-        colors = IconButtonDefaults.filledIconButtonColors(
-            containerColor = container,
-            contentColor = content
-        ),
         modifier = Modifier
             .padding(end = 8.dp)
             .size(IconButtonDefaults.mediumContainerSize())
@@ -783,13 +769,14 @@ private fun CoreStatusIndicator(
         if (isChecking || isRestarting) {
             CircularWavyProgressIndicator(
                 modifier = Modifier.size(20.dp),
-                color = content,
-                trackColor = content.copy(alpha = 0.24f)
+                color = iconTint,
+                trackColor = iconTint.copy(alpha = 0.24f)
             )
         } else {
             Icon(
                 imageVector = Icons.Rounded.PowerSettingsNew,
                 contentDescription = stringResource(R.string.power_menu_title),
+                tint = iconTint,
                 modifier = Modifier.size(IconButtonDefaults.mediumIconSize)
             )
         }
@@ -1052,7 +1039,12 @@ private fun QuickActionRow(
             isTrimming = true
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             scope.launch {
-                val ok = RootUtil.runAsRoot("fstrim -v /data; fstrim -v /cache")
+                val ok = RootUtil.runAsRoot(
+                    "sm fstrim 2>/dev/null; " +
+                        "su -mm -c 'fstrim -v /data 2>/dev/null; " +
+                        "[ -d /cache ] && fstrim -v /cache 2>/dev/null' " +
+                        "|| fstrim -v /data 2>/dev/null"
+                )
                 Toast.makeText(
                     context,
                     context.getString(if (ok) R.string.toast_trim_done else R.string.toast_trim_failed),
