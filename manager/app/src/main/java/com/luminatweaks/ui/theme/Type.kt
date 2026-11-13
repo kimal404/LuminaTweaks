@@ -36,8 +36,7 @@ private fun nunito(weight: FontWeight): Font = Font(
     resId = R.font.nunito_variable,
     weight = weight,
     variationSettings = FontVariation.Settings(
-        FontVariation.weight(weight.weight),
-        FontVariation.Setting("wght", weight.weight.toFloat())
+        FontVariation.weight(weight.weight)
     )
 )
 
