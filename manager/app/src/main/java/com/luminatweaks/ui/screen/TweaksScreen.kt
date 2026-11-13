@@ -370,91 +370,77 @@ fun TweaksScreen() {
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item {
-                TweakSection(
-                    title = stringResource(R.string.tweaks_section_display_graphics),
-                    icon = Icons.Rounded.Speed,
-                    accent = MaterialTheme.colorScheme.primary
+            item(key = "grid") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    TweakConnectedGroup {
-                        TweakRow(
-                            icon = Icons.Rounded.Speed,
-                            iconContainer = MaterialTheme.colorScheme.primaryContainer,
-                            iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            title = stringResource(R.string.tweaks_refresh_rate),
-                            subtitle = stringResource(R.string.tweaks_refresh_rate_desc),
-                            trailingText = currentRrText,
-                            onClick = { showRefreshRateDialog = true }
-                        )
-                        TweakRowDivider()
-                        TweakRow(
-                            icon = if (isGlobalTextureEnabled) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
-                            iconContainer = if (isGlobalTextureEnabled) {
-                                MaterialTheme.colorScheme.surfaceContainerHighest
-                            } else {
-                                MaterialTheme.colorScheme.primaryContainer
-                            },
-                            iconTint = if (isGlobalTextureEnabled) {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            } else {
-                                MaterialTheme.colorScheme.onPrimaryContainer
-                            },
-                            title = stringResource(R.string.tweaks_renderer),
-                            subtitle = if (isGlobalTextureEnabled) {
-                                stringResource(R.string.profile_renderer_locked_desc)
-                            } else {
-                                stringResource(R.string.tweaks_renderer_desc)
-                            },
-                            trailingText = if (isGlobalTextureEnabled) {
-                                stringResource(R.string.profile_renderer_angle_badge)
-                            } else {
-                                currentRendererShortText
-                            },
-                            onClick = {
-                                if (!isGlobalTextureEnabled) showRenderDialog = true
-                            },
-                            enabled = !isGlobalTextureEnabled
-                        )
-                        if (isGlobalTextureEnabled) {
-                            Text(
-                                text = stringResource(R.string.tweaks_renderer_locked_note),
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
-                            )
-                        }
-                    }
+                    TweakGridCard(
+                        icon = Icons.Rounded.Speed,
+                        highlight = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                        iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        title = stringResource(R.string.tweaks_refresh_rate),
+                        value = currentRrText,
+                        onClick = { showRefreshRateDialog = true },
+                        modifier = Modifier.weight(1f)
+                    )
+                    TweakGridCard(
+                        icon = if (isGlobalTextureEnabled) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
+                        highlight = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f),
+                        iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        title = stringResource(R.string.tweaks_renderer),
+                        value = if (isGlobalTextureEnabled) {
+                            stringResource(R.string.profile_renderer_angle_badge)
+                        } else {
+                            currentRendererShortText
+                        },
+                        onClick = {
+                            if (!isGlobalTextureEnabled) showRenderDialog = true
+                        },
+                        enabled = !isGlobalTextureEnabled,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                if (isGlobalTextureEnabled) {
+                    Text(
+                        text = stringResource(R.string.tweaks_renderer_locked_note),
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 4.dp, top = 8.dp)
+                    )
                 }
             }
 
-            item {
+            item(key = "performance") {
                 TweakSection(
                     title = stringResource(R.string.tweaks_section_performance),
                     icon = Icons.Rounded.BatterySaver,
                     accent = MaterialTheme.colorScheme.tertiary
                 ) {
-                    TweakStandaloneRow(
-                        icon = Icons.Rounded.BatterySaver,
-                        iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
-                        iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
-                        title = stringResource(R.string.tweaks_lite_mode),
-                        subtitle = if (isGlobalLiteMode) {
-                            stringResource(R.string.tweaks_lite_on_desc)
-                        } else {
-                            stringResource(R.string.tweaks_lite_off_desc)
-                        },
-                        trailingText = if (isGlobalLiteMode) {
-                            stringResource(R.string.status_on)
-                        } else {
-                            stringResource(R.string.status_off)
-                        },
-                        trailingActive = isGlobalLiteMode,
-                        onClick = { inLiteModeSubpage = true }
-                    )
+                    TweakConnectedGroup {
+                        TweakRow(
+                            icon = Icons.Rounded.BatterySaver,
+                            iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
+                            iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
+                            title = stringResource(R.string.tweaks_lite_mode),
+                            subtitle = if (isGlobalLiteMode) {
+                                stringResource(R.string.tweaks_lite_on_desc)
+                            } else {
+                                stringResource(R.string.tweaks_lite_off_desc)
+                            },
+                            trailingText = if (isGlobalLiteMode) {
+                                stringResource(R.string.status_on)
+                            } else {
+                                stringResource(R.string.status_off)
+                            },
+                            trailingActive = isGlobalLiteMode,
+                            onClick = { inLiteModeSubpage = true }
+                        )
+                    }
                 }
             }
 
-            item {
+            item(key = "additional") {
                 TweakSection(
                     title = stringResource(R.string.section_additional_tweaks),
                     icon = Icons.Rounded.Tune,
@@ -483,7 +469,7 @@ fun TweaksScreen() {
                 }
             }
 
-            item {
+            item(key = "utility") {
                 TweakSection(
                     title = stringResource(R.string.section_utility_diagnostics),
                     icon = Icons.Rounded.Widgets,
@@ -566,35 +552,84 @@ private fun TweakConnectedGroup(content: @Composable ColumnScope.() -> Unit) {
 }
 
 @Composable
-private fun TweakStandaloneRow(
+private fun TweakGridCard(
     icon: ImageVector,
-    iconContainer: Color,
+    highlight: Color,
     iconTint: Color,
     title: String,
-    subtitle: String,
+    value: String,
     onClick: () -> Unit,
-    trailingText: String? = null,
-    trailingActive: Boolean = false,
+    modifier: Modifier = Modifier,
     enabled: Boolean = true
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(LocalCornerRadius.current.coerceAtLeast(16.dp)),
+        modifier = modifier,
+        shape = RoundedCornerShape(LocalCornerRadius.current.coerceAtLeast(18.dp)),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
-        TweakRow(
-            icon = icon,
-            iconContainer = iconContainer,
-            iconTint = iconTint,
-            title = title,
-            subtitle = subtitle,
-            trailingText = trailingText,
-            trailingActive = trailingActive,
-            onClick = onClick,
-            enabled = enabled
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = enabled, onClick = onClick)
+                .alpha(if (enabled) 1f else 0.55f)
+                .padding(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(76.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(highlight),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(28.dp)
+                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .size(20.dp)
+                        .clip(CircleShape)
+                        .background(iconTint.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.ChevronRight,
+                        contentDescription = null,
+                        tint = iconTint.copy(alpha = 0.75f),
+                        modifier = Modifier.size(13.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                ),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(3.dp))
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.Medium
+                ),
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
