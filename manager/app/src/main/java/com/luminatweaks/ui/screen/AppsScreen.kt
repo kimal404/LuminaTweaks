@@ -12,10 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
+
 package com.luminatweaks.ui.screen
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +43,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -41,16 +53,16 @@ import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -68,7 +80,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -79,15 +95,30 @@ import com.luminatweaks.R
 import com.luminatweaks.data.AppProfileConfig
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.model.AppItem
+import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
+import java.util.Locale
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+private enum class AppListFilter {
+    ALL, ACTIVE, GAMES
+}
+
+@Composable
+private fun appsLocalizedLabel(id: String, en: String): String {
+    val isIndonesian = remember {
+        val lang = Locale.getDefault().language.lowercase(Locale.ROOT)
+        lang == "in" || lang == "id"
+    }
+    return if (isIndonesian) id else en
+}
+
 @Composable
 fun AppsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val packageManager = remember { context.packageManager }
     val coroutineScope = rememberCoroutineScope()
 
@@ -96,6 +127,7 @@ fun AppsScreen(
     var isScanningGames by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var hideSystemApps by remember { mutableStateOf(true) }
+    var selectedFilter by remember { mutableStateOf(AppListFilter.ALL) }
     var showMoreMenu by remember { mutableStateOf(false) }
 
     val appConfigs = remember { mutableStateMapOf<String, AppProfileConfig>() }
@@ -137,34 +169,62 @@ fun AppsScreen(
         return
     }
 
-    val filteredApps = remember(rawApps, searchQuery, hideSystemApps, appConfigs.toMap()) {
-        val filtered = rawApps.filter { app ->
-            val matchesSystem = if (hideSystemApps) !app.isSystemApp else true
+    val visibleBaseApps = remember(rawApps, hideSystemApps) {
+        rawApps.filter { app -> if (hideSystemApps) !app.isSystemApp else true }
+    }
+
+    val activeCount = remember(visibleBaseApps, appConfigs.toMap()) {
+        visibleBaseApps.count { app ->
+            val cfg = appConfigs[app.packageName]
+            if (cfg != null) (!cfg.disabled && cfg.saklarUtama) else ConfigRepository.isAppActive(app.packageName)
+        }
+    }
+
+    val gameCount = remember(visibleBaseApps) {
+        visibleBaseApps.count { it.isGame }
+    }
+
+    val filteredApps = remember(visibleBaseApps, searchQuery, selectedFilter, appConfigs.toMap()) {
+        val filtered = visibleBaseApps.filter { app ->
+            val isEnabled = appConfigs[app.packageName]?.let { !it.disabled && it.saklarUtama }
+                ?: ConfigRepository.isAppActive(app.packageName)
+
+            val matchesFilter = when (selectedFilter) {
+                AppListFilter.ALL -> true
+                AppListFilter.ACTIVE -> isEnabled
+                AppListFilter.GAMES -> app.isGame
+            }
+
             val matchesSearch = if (searchQuery.isBlank()) true else {
                 app.name.contains(searchQuery, ignoreCase = true) ||
-                        app.packageName.contains(searchQuery, ignoreCase = true)
+                    app.packageName.contains(searchQuery, ignoreCase = true)
             }
-            matchesSystem && matchesSearch
+            matchesFilter && matchesSearch
         }
 
         filtered.sortedWith(
-            compareByDescending<AppItem> {
-                ConfigRepository.isAppActive(it.packageName)
+            compareByDescending<AppItem> { app ->
+                appConfigs[app.packageName]?.let { !it.disabled && it.saklarUtama }
+                    ?: ConfigRepository.isAppActive(app.packageName)
             }
                 .thenByDescending { it.isGame }
                 .thenBy { it.name.lowercase() }
         )
     }
 
+    val outerContainerRadius = LocalCornerRadius.current.coerceAtLeast(26.dp)
+    val outerContainerColor = MaterialTheme.colorScheme.surfaceContainer
+
     Scaffold(
+        modifier = modifier,
         contentWindowInsets = WindowInsets(0.dp),
         topBar = {
             TopAppBar(
                 title = {
                     Text(
                         text = stringResource(R.string.apps_title),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
                     )
                 },
                 actions = {
@@ -250,17 +310,30 @@ fun AppsScreen(
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
         } else {
+            val allLabel = appsLocalizedLabel("Semua", "All")
+            val activeLabel = appsLocalizedLabel("Aktif", "Active")
+            val gamesLabel = appsLocalizedLabel("Game", "Games")
+
+            val filterChips = listOf(
+                AppListFilter.ALL to "$allLabel (${visibleBaseApps.size})",
+                AppListFilter.ACTIVE to "$activeLabel ($activeCount)",
+                AppListFilter.GAMES to "$gamesLabel ($gameCount)"
+            )
+
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     top = innerPadding.calculateTopPadding() + 4.dp,
-                    bottom = if (LocalFloatingNavBar.current) 100.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() else 16.dp,
+                    bottom = if (LocalFloatingNavBar.current) {
+                        108.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                    } else {
+                        20.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                    },
                     start = 16.dp,
                     end = 16.dp
-                ),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
+                )
             ) {
-                item {
+                item(key = "search_bar") {
                     TextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
@@ -292,37 +365,176 @@ fun AppsScreen(
                         singleLine = true,
                         shape = CircleShape,
                         colors = TextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                             focusedIndicatorColor = Color.Transparent,
                             unfocusedIndicatorColor = Color.Transparent,
                             disabledIndicatorColor = Color.Transparent
                         ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                item(key = "filter_chips") {
+                    LazyRow(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 12.dp)
-                    )
+                            .padding(top = 12.dp, bottom = 14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(filterChips, key = { it.first }) { (filter, label) ->
+                            val isSelected = selectedFilter == filter
+                            val chipBg by animateColorAsState(
+                                targetValue = if (isSelected) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainerHigh
+                                },
+                                label = "filterChipBg"
+                            )
+                            val chipContent by animateColorAsState(
+                                targetValue = if (isSelected) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                label = "filterChipText"
+                            )
+
+                            Surface(
+                                onClick = {
+                                    if (!isSelected) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        selectedFilter = filter
+                                    }
+                                },
+                                shape = CircleShape,
+                                color = chipBg
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = chipContent,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                )
+                            }
+                        }
+                    }
                 }
 
-                itemsIndexed(filteredApps, key = { _, item -> item.packageName }) { index, appItem ->
-                    val position = when {
-                        filteredApps.size == 1 -> ContainerPosition.Single
-                        index == 0 -> ContainerPosition.Top
-                        index == filteredApps.lastIndex -> ContainerPosition.Bottom
-                        else -> ContainerPosition.Middle
+                if (filteredApps.isEmpty()) {
+                    item(key = "empty_state") {
+                        Surface(
+                            shape = RoundedCornerShape(outerContainerRadius),
+                            color = outerContainerColor,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 40.dp, horizontal = 20.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = appsLocalizedLabel(
+                                        "Tidak ada aplikasi yang cocok",
+                                        "No matching applications found"
+                                    ),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    item(key = "list_top_cap") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(10.dp)
+                                .clip(
+                                    RoundedCornerShape(
+                                        topStart = outerContainerRadius,
+                                        topEnd = outerContainerRadius
+                                    )
+                                )
+                                .background(outerContainerColor)
+                        )
                     }
 
-                    val isEnabled = ConfigRepository.isAppActive(appItem.packageName)
+                    itemsIndexed(filteredApps, key = { _, item -> item.packageName }) { index, appItem ->
+                        val currentCfg = appConfigs[appItem.packageName]
+                            ?: AppProfileConfig(pkg = appItem.packageName)
+                        val isEnabled = if (appConfigs.containsKey(appItem.packageName)) {
+                            !currentCfg.disabled && currentCfg.saklarUtama
+                        } else {
+                            ConfigRepository.isAppActive(appItem.packageName)
+                        }
 
-                    AppRowCard(
-                        app = appItem,
-                        isEnabled = isEnabled,
-                        position = position,
-                        onClick = { selectedPackageName = appItem.packageName }
-                    )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(outerContainerColor)
+                                .padding(
+                                    start = 12.dp,
+                                    end = 12.dp,
+                                    top = if (index == 0) 2.dp else 5.dp,
+                                    bottom = if (index == filteredApps.lastIndex) 2.dp else 5.dp
+                                )
+                        ) {
+                            AppRowCard(
+                                app = appItem,
+                                isEnabled = isEnabled,
+                                onClick = { selectedPackageName = appItem.packageName },
+                                onToggleActive = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    val updated = if (!isEnabled) {
+                                        currentCfg.copy(
+                                            saklarUtama = true,
+                                            disabled = false,
+                                            custom = currentCfg.custom || !ConfigRepository.defaultGames.contains(appItem.packageName)
+                                        )
+                                    } else {
+                                        currentCfg.copy(
+                                            saklarUtama = false,
+                                            disabled = true,
+                                            custom = false
+                                        )
+                                    }
+                                    appConfigs[appItem.packageName] = updated
+                                    coroutineScope.launch {
+                                        ConfigRepository.saveAppConfig(updated)
+                                    }
+                                },
+                                onOpenAppInfo = {
+                                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                        data = Uri.fromParts("package", appItem.packageName, null)
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    context.startActivity(intent)
+                                }
+                            )
+                        }
+                    }
+
+                    item(key = "list_bottom_cap") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(10.dp)
+                                .clip(
+                                    RoundedCornerShape(
+                                        bottomStart = outerContainerRadius,
+                                        bottomEnd = outerContainerRadius
+                                    )
+                                )
+                                .background(outerContainerColor)
+                        )
+                    }
                 }
 
-                item {
+                item(key = "bottom_spacer") {
                     Spacer(modifier = Modifier.height(16.dp))
                 }
             }
@@ -334,25 +546,41 @@ fun AppsScreen(
 fun AppRowCard(
     app: AppItem,
     isEnabled: Boolean,
-    position: ContainerPosition,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onToggleActive: () -> Unit = {},
+    onOpenAppInfo: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val packageManager = remember { context.packageManager }
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.985f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "appCardScale"
+    )
+    val cardRadius = (LocalCornerRadius.current * 0.78f).coerceIn(16.dp, 24.dp)
+    var showRowMenu by remember { mutableStateOf(false) }
 
-    Card(
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(cardRadius),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        interactionSource = interactionSource,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = getConnectedContainerShape(position, outerRadius = 18.dp, innerRadius = 4.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             AsyncImage(
@@ -367,33 +595,23 @@ fun AppRowCard(
                     .crossfade(true)
                     .build(),
                 contentDescription = null,
+                contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .size(46.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(CircleShape)
             )
 
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(14.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = app.name,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-
-                if (app.isGame) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = stringResource(R.string.apps_badge_recommended),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = app.packageName,
@@ -404,35 +622,80 @@ fun AppRowCard(
                 )
             }
 
-            Spacer(modifier = Modifier.width(10.dp))
-
-            val badgeContainer = if (isEnabled) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainer
-            }
-
-            val badgeContent = if (isEnabled) {
-                MaterialTheme.colorScheme.onPrimaryContainer
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-            }
-
-            Box(
-                modifier = Modifier
-                    .background(
-                        color = badgeContainer,
-                        shape = RoundedCornerShape(8.dp)
+            if (isEnabled) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Text(
+                        text = stringResource(R.string.status_active_upper),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        maxLines = 1,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                     )
-                    .padding(horizontal = 9.dp, vertical = 5.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = if (isEnabled) stringResource(R.string.status_active_upper) else stringResource(R.string.status_inactive_upper),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = badgeContent
-                )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Box {
+                Surface(
+                    onClick = { showRowMenu = true },
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Rounded.MoreVert,
+                            contentDescription = stringResource(R.string.action_more),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                DropdownMenu(
+                    expanded = showRowMenu,
+                    onDismissRequest = { showRowMenu = false }
+                ) {
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = if (isEnabled) {
+                                    appsLocalizedLabel("Nonaktifkan Profil", "Disable Profile")
+                                } else {
+                                    appsLocalizedLabel("Aktifkan Profil", "Enable Profile")
+                                }
+                            )
+                        },
+                        onClick = {
+                            showRowMenu = false
+                            onToggleActive()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(text = stringResource(R.string.profile_title))
+                        },
+                        onClick = {
+                            showRowMenu = false
+                            onClick()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(text = stringResource(R.string.profile_app_info))
+                        },
+                        onClick = {
+                            showRowMenu = false
+                            onOpenAppInfo()
+                        }
+                    )
+                }
             }
         }
     }
