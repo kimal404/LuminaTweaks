@@ -3,6 +3,8 @@
  * Copyright (C) 2026-2027 Zexshia
  * Copyright (C) 2026 kimal
  *
+ * Adapted from KOWX712/KernelSU (KowSU) UI, Apache License 2.0.
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -20,13 +22,11 @@ package com.luminatweaks.ui.component
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -95,16 +95,13 @@ fun LuminaBottomBar(
                 .navigationBarsPadding(),
             shape = CircleShape,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            border = BorderStroke(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
-            ),
-            shadowElevation = 6.dp
+            tonalElevation = 3.dp,
+            shadowElevation = 4.dp
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(6.dp),
+                    .padding(8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -147,9 +144,13 @@ private fun FloatingNavItem(
         MaterialTheme.colorScheme.onSurfaceVariant
     }
     val label = stringResource(tab.labelRes)
-    val springSpec = spring<IntSize>(
-        dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = Spring.StiffnessMedium
+    val motionScheme = MaterialTheme.motionScheme
+    val widthSpec = motionScheme.defaultSpatialSpec<IntSize>()
+    val fadeSpec = motionScheme.defaultEffectsSpec<Float>()
+    val horizontalPadding by animateDpAsState(
+        targetValue = if (selected) 20.dp else 16.dp,
+        animationSpec = motionScheme.defaultSpatialSpec(),
+        label = "floatingNavPadding"
     )
 
     Surface(
@@ -165,26 +166,26 @@ private fun FloatingNavItem(
             modifier = Modifier
                 .clip(CircleShape)
                 .background(Color.Transparent)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .padding(horizontal = horizontalPadding, vertical = 13.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = tab.icon,
                 contentDescription = label,
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(24.dp),
                 tint = contentColor
             )
             AnimatedVisibility(
                 visible = selected,
-                enter = expandHorizontally(animationSpec = springSpec) + fadeIn(),
-                exit = shrinkHorizontally(animationSpec = springSpec) + fadeOut()
+                enter = expandHorizontally(animationSpec = widthSpec) + fadeIn(animationSpec = fadeSpec),
+                exit = shrinkHorizontally(animationSpec = widthSpec) + fadeOut(animationSpec = fadeSpec)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = label,
                         style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Bold,
                         color = contentColor,
                         maxLines = 1,
                         softWrap = false,

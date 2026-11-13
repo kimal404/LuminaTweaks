@@ -3,6 +3,8 @@
  * Copyright (C) 2026-2027 Zexshia
  * Copyright (C) 2026 kimal
  *
+ * Adapted from KOWX712/KernelSU (KowSU) UI, Apache License 2.0.
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -26,6 +28,9 @@ import androidx.compose.ui.unit.dp
 
 val LocalCornerRadius = compositionLocalOf { 18.dp }
 val LocalFloatingNavBar = compositionLocalOf { false }
+val LocalScrollAnimation = compositionLocalOf { true }
+val LocalEdgeSwipeBack = compositionLocalOf { true }
+val LocalPageTransition = compositionLocalOf { PageTransition.CrossAxis }
 
 val LuminaShapes = Shapes(
     extraSmall = RoundedCornerShape(8.dp),

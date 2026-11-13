@@ -46,6 +46,35 @@ enum class ColorMode(val value: Int) {
     }
 }
 
+enum class ColorStyle(val persistedName: String) {
+    TonalSpot("tonal_spot"),
+    Vibrant("vibrant"),
+    Expressive("expressive"),
+    Spritz("spritz"),
+    Rainbow("rainbow"),
+    FruitSalad("fruit_salad"),
+    Content("content"),
+    Monochrome("monochrome");
+
+    companion object {
+        val Default = TonalSpot
+
+        fun fromPersisted(value: String?): ColorStyle =
+            entries.firstOrNull { it.persistedName == value } ?: Default
+    }
+}
+
+enum class PageTransition(val persistedName: String, val default: Boolean = false) {
+    CrossAxis("cross_axis", true),
+    Horizontal("horizontal"),
+    Vertical("vertical");
+
+    companion object {
+        fun fromPersisted(value: String?): PageTransition =
+            entries.firstOrNull { it.persistedName == value } ?: CrossAxis
+    }
+}
+
 enum class AccentIntensity(val label: String) {
     Neutral("Netral"),
     Balanced("Seimbang"),
@@ -71,7 +100,11 @@ data class AppThemeSettings(
     val colorSpec: ColorEngine,
     val accentIntensity: AccentIntensity,
     val cornerRadius: Int = ThemeController.DEFAULT_CORNER_RADIUS,
-    val floatingNavBar: Boolean = false
+    val floatingNavBar: Boolean = false,
+    val colorStyle: ColorStyle = ColorStyle.Default,
+    val scrollAnimation: Boolean = true,
+    val edgeSwipeBack: Boolean = true,
+    val pageTransition: PageTransition = PageTransition.CrossAxis
 )
 
 object ThemeController {
@@ -93,8 +126,23 @@ object ThemeController {
         val cornerRadius = prefs.getInt("ui_corner_radius", DEFAULT_CORNER_RADIUS)
             .coerceIn(MIN_CORNER_RADIUS, MAX_CORNER_RADIUS)
         val floatingNavBar = prefs.getBoolean("floating_nav_bar", false)
+        val colorStyle = ColorStyle.fromPersisted(prefs.getString("color_style", null))
+        val scrollAnimation = prefs.getBoolean("scroll_animation", true)
+        val edgeSwipeBack = prefs.getBoolean("edge_swipe_back", true)
+        val pageTransition = PageTransition.fromPersisted(prefs.getString("page_transition", null))
 
-        return AppThemeSettings(colorMode, keyColor, colorSpec, accentIntensity, cornerRadius, floatingNavBar)
+        return AppThemeSettings(
+            colorMode = colorMode,
+            keyColor = keyColor,
+            colorSpec = colorSpec,
+            accentIntensity = accentIntensity,
+            cornerRadius = cornerRadius,
+            floatingNavBar = floatingNavBar,
+            colorStyle = colorStyle,
+            scrollAnimation = scrollAnimation,
+            edgeSwipeBack = edgeSwipeBack,
+            pageTransition = pageTransition
+        )
     }
 
     fun saveTheme(
@@ -126,6 +174,34 @@ object ThemeController {
         val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
         prefs.edit()
             .putInt("ui_corner_radius", radius.coerceIn(MIN_CORNER_RADIUS, MAX_CORNER_RADIUS))
+            .apply()
+    }
+
+    fun saveColorStyle(context: Context, style: ColorStyle) {
+        val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString("color_style", style.persistedName)
+            .apply()
+    }
+
+    fun saveScrollAnimation(context: Context, enabled: Boolean) {
+        val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        prefs.edit()
+            .putBoolean("scroll_animation", enabled)
+            .apply()
+    }
+
+    fun saveEdgeSwipeBack(context: Context, enabled: Boolean) {
+        val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        prefs.edit()
+            .putBoolean("edge_swipe_back", enabled)
+            .apply()
+    }
+
+    fun savePageTransition(context: Context, transition: PageTransition) {
+        val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString("page_transition", transition.persistedName)
             .apply()
     }
 

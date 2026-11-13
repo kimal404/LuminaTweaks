@@ -3,6 +3,8 @@
  * Copyright (C) 2026-2027 Zexshia
  * Copyright (C) 2026 kimal
  *
+ * Adapted from KOWX712/KernelSU (KowSU) UI, Apache License 2.0.
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -42,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsControllerCompat
+import com.materialkolor.PaletteStyle
 import com.materialkolor.rememberDynamicColorScheme
 
 private val FallbackDarkColorScheme = darkColorScheme(
@@ -109,6 +112,16 @@ fun LuminaTheme(
     val amoledMode = themeState.colorMode == ColorMode.DARKAMOLED
     val isDynamic = themeState.keyColor == 0
     val colorSpec = themeState.colorSpec.librarySpec
+    val paletteStyle: PaletteStyle = when (themeState.colorStyle) {
+        ColorStyle.TonalSpot -> PaletteStyle.TonalSpot
+        ColorStyle.Vibrant -> PaletteStyle.Vibrant
+        ColorStyle.Expressive -> PaletteStyle.Expressive
+        ColorStyle.Spritz -> PaletteStyle.Spritz
+        ColorStyle.Rainbow -> PaletteStyle.Rainbow
+        ColorStyle.FruitSalad -> PaletteStyle.FruitSalad
+        ColorStyle.Content -> PaletteStyle.Content
+        ColorStyle.Monochrome -> PaletteStyle.Monochrome
+    }
 
     val baseScheme: ColorScheme = if (isDynamic) {
         val systemDerived = when {
@@ -122,19 +135,15 @@ fun LuminaTheme(
             isDark = isDark,
             isAmoled = amoledMode,
             specVersion = colorSpec,
-            primary = systemDerived.primary,
-            secondary = systemDerived.secondary,
-            tertiary = systemDerived.tertiary,
-            neutral = systemDerived.surface,
-            neutralVariant = systemDerived.surfaceVariant,
-            error = systemDerived.error
+            style = paletteStyle
         )
     } else {
         rememberDynamicColorScheme(
             seedColor = Color(themeState.keyColor),
             isDark = isDark,
             isAmoled = amoledMode,
-            specVersion = colorSpec
+            specVersion = colorSpec,
+            style = paletteStyle
         )
     }
 
@@ -163,6 +172,9 @@ fun LuminaTheme(
         CompositionLocalProvider(
             LocalCornerRadius provides themeState.cornerRadius.dp,
             LocalFloatingNavBar provides themeState.floatingNavBar,
+            LocalScrollAnimation provides themeState.scrollAnimation,
+            LocalEdgeSwipeBack provides themeState.edgeSwipeBack,
+            LocalPageTransition provides themeState.pageTransition,
             content = content
         )
     }
