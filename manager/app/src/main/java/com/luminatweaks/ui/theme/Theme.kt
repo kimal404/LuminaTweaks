@@ -116,7 +116,7 @@ fun LuminaTheme(
         ColorStyle.TonalSpot -> PaletteStyle.TonalSpot
         ColorStyle.Vibrant -> PaletteStyle.Vibrant
         ColorStyle.Expressive -> PaletteStyle.Expressive
-        ColorStyle.Spritz -> PaletteStyle.Spritz
+        ColorStyle.Spritz -> PaletteStyle.Neutral
         ColorStyle.Rainbow -> PaletteStyle.Rainbow
         ColorStyle.FruitSalad -> PaletteStyle.FruitSalad
         ColorStyle.Content -> PaletteStyle.Content

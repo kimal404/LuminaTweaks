@@ -18,6 +18,8 @@
  * limitations under the License.
  */
 
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
+
 package com.luminatweaks.ui.screen
 
 import android.os.Build
@@ -32,10 +34,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
@@ -57,6 +55,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
@@ -83,8 +82,10 @@ import androidx.compose.material.icons.rounded.RoundedCorner
 import androidx.compose.material.icons.rounded.SwipeRight
 import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material.icons.rounded.Waves
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItemDefaults
@@ -114,13 +115,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -131,7 +134,6 @@ import com.luminatweaks.ui.theme.AccentIntensity
 import com.luminatweaks.ui.theme.ColorEngine
 import com.luminatweaks.ui.theme.ColorMode
 import com.luminatweaks.ui.theme.ColorStyle
-import com.luminatweaks.ui.theme.LocalPageTransition
 import com.luminatweaks.ui.theme.PageTransition
 import com.luminatweaks.ui.theme.ThemeController
 import com.luminatweaks.ui.theme.animateColorSchemeAsState
@@ -169,6 +171,7 @@ private fun ColorStyle.toPaletteStyle(): PaletteStyle = when (this.name) {
     "TonalSpot" -> PaletteStyle.TonalSpot
     "Vibrant" -> PaletteStyle.Vibrant
     "Expressive" -> PaletteStyle.Expressive
+    "Spritz" -> PaletteStyle.Neutral
     "Rainbow" -> PaletteStyle.Rainbow
     "FruitSalad" -> PaletteStyle.FruitSalad
     "Content" -> PaletteStyle.Content
@@ -178,7 +181,6 @@ private fun ColorStyle.toPaletteStyle(): PaletteStyle = when (this.name) {
 private fun ColorStyle.labelRes(): Int =
     paletteStyleOptions.first { it.first == this }.second
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PersonalisasiScreen(
     onBackClick: () -> Unit
@@ -285,6 +287,22 @@ fun PersonalisasiScreen(
     ) { innerPadding ->
         PersonalizationContent(
             innerPadding = innerPadding,
+            previewColorScheme = previewColorScheme,
+            currentColorMode = currentColorMode,
+            currentKeyColor = currentKeyColor,
+            currentColorSpec = currentColorSpec,
+            currentIntensity = currentIntensity,
+            currentCornerRadius = currentCornerRadius,
+            isFloatingNavBar = isFloatingNavBar,
+            currentColorStyle = currentColorStyle,
+            currentScrollAnimation = currentScrollAnimation,
+            currentEdgeSwipeBack = currentEdgeSwipeBack,
+            currentPageTransition = currentPageTransition,
+            isDark = isDark,
+            onModeChange = { updateTheme(mode = it) },
+            onKeyColorChange = { updateTheme(key = it) },
+            onFloatingNavBarChange = { updateTheme(floating = it) },
+            onCornerRadiusChange = { updateTheme(radius = it) },
             onScrollAnimationChange = { checked ->
                 currentScrollAnimation = checked
                 ThemeController.saveScrollAnimation(context, checked)
@@ -300,22 +318,9 @@ fun PersonalisasiScreen(
                     else -> showTransitionSheet = true
                 }
             },
-            previewColorScheme = previewColorScheme,
-            currentColorMode = currentColorMode,
-            currentKeyColor = currentKeyColor,
-            currentColorSpec = currentColorSpec,
-            currentIntensity = currentIntensity,
-            currentCornerRadius = currentCornerRadius,
-            isFloatingNavBar = isFloatingNavBar,
-            currentColorStyle = currentColorStyle,
-            currentScrollAnimation = currentScrollAnimation,
-            currentEdgeSwipeBack = currentEdgeSwipeBack,
-            currentPageTransition = currentPageTransition,
-            isDark = isDark,
             modifier = Modifier.fillMaxSize()
         )
     }
-
 
     if (showPaletteSheet) {
         OptionBottomSheet(
@@ -363,44 +368,8 @@ fun PersonalisasiScreen(
 }
 
 @Composable
-private fun LuminaPageTransition(
-    transition: PageTransition = LocalPageTransition.current,
-    content: @Composable () -> Unit
-) {
-    val motion = MaterialTheme.motionScheme
-    AnimatedContent(
-        targetState = transition,
-        transitionSpec = {
-            when (targetState) {
-                PageTransition.CrossAxis ->
-                    (fadeIn(animationSpec = motion.defaultEffectsSpec()) +
-                        scaleIn(initialScale = 0.96f, animationSpec = motion.defaultSpatialSpec())) togetherWith
-                        (fadeOut(animationSpec = motion.defaultEffectsSpec()) +
-                            scaleOut(targetScale = 0.96f, animationSpec = motion.defaultSpatialSpec()))
-                PageTransition.Horizontal ->
-                    (fadeIn(animationSpec = motion.defaultEffectsSpec()) +
-                        slideInHorizontally(animationSpec = motion.defaultSpatialSpec()) { it / 8 }) togetherWith
-                        (fadeOut(animationSpec = motion.defaultEffectsSpec()) +
-                            slideOutHorizontally(animationSpec = motion.defaultSpatialSpec()) { -it / 8 })
-                PageTransition.Vertical ->
-                    (fadeIn(animationSpec = motion.defaultEffectsSpec()) +
-                        slideInVertically(animationSpec = motion.defaultSpatialSpec()) { it / 8 }) togetherWith
-                        (fadeOut(animationSpec = motion.defaultEffectsSpec()) +
-                            slideOutVertically(animationSpec = motion.defaultSpatialSpec()) { -it / 8 })
-            }
-        },
-        label = "luminaPageTransition"
-    ) { _ ->
-        content()
-    }
-}
-
-@Composable
 private fun PersonalizationContent(
     innerPadding: PaddingValues,
-    onScrollAnimationChange: (Boolean) -> Unit,
-    onEdgeSwipeBackChange: (Boolean) -> Unit,
-    onRequestSheet: (String) -> Unit,
     previewColorScheme: ColorScheme,
     currentColorMode: ColorMode,
     currentKeyColor: Int,
@@ -411,34 +380,18 @@ private fun PersonalizationContent(
     currentColorStyle: ColorStyle,
     currentScrollAnimation: Boolean,
     currentEdgeSwipeBack: Boolean,
-    onScrollAnimationChange: (Boolean) -> Unit,
-    onEdgeSwipeBackChange: (Boolean) -> Unit,
     currentPageTransition: PageTransition,
     isDark: Boolean,
+    onModeChange: (ColorMode) -> Unit,
+    onKeyColorChange: (Int) -> Unit,
+    onFloatingNavBarChange: (Boolean) -> Unit,
+    onCornerRadiusChange: (Int) -> Unit,
+    onScrollAnimationChange: (Boolean) -> Unit,
+    onEdgeSwipeBackChange: (Boolean) -> Unit,
+    onRequestSheet: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
-
-    fun updateTheme(
-        mode: ColorMode = currentColorMode,
-        key: Int = currentKeyColor,
-        spec: ColorEngine = currentColorSpec,
-        radius: Int = currentCornerRadius,
-        floating: Boolean = isFloatingNavBar,
-        style: ColorStyle = currentColorStyle
-    ) {
-        ThemeController.saveTheme(
-            context = context,
-            mode = mode,
-            key = key,
-            spec = spec,
-            intensity = currentIntensity,
-            cornerRadius = radius,
-            floatingNavBar = floating
-        )
-        ThemeController.saveColorStyle(context, style)
-    }
 
     LazyColumn(
         modifier = modifier,
@@ -451,174 +404,173 @@ private fun PersonalizationContent(
         ),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-            item(key = "preview") {
-                PhonePreviewCard(
-                    colorScheme = previewColorScheme,
-                    cornerRadius = currentCornerRadius,
-                    isFloatingNavBar = isFloatingNavBar,
-                    isDark = isDark
-                )
-            }
+        item(key = "preview") {
+            PhonePreviewCard(
+                colorScheme = previewColorScheme,
+                cornerRadius = currentCornerRadius,
+                isFloatingNavBar = isFloatingNavBar,
+                isDark = isDark
+            )
+        }
 
-            item(key = "palette") {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    SectionHeader(
-                        icon = Icons.Rounded.Palette,
-                        title = stringResource(R.string.personalization_color)
-                    )
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        contentPadding = PaddingValues(vertical = 2.dp)
-                    ) {
-                        item {
-                            SwatchButton(
-                                color = Color.Unspecified,
-                                isSelected = currentKeyColor == 0,
-                                isDark = isDark,
-                                colorSpec = currentColorSpec,
-                                colorStyle = currentColorStyle,
-                                accentIntensity = currentIntensity,
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    updateTheme(key = 0)
-                                }
-                            )
-                        }
-                        items(keyColorOptions) { colorInt ->
-                            SwatchButton(
-                                color = Color(colorInt),
-                                isSelected = currentKeyColor == colorInt,
-                                isDark = isDark,
-                                colorSpec = currentColorSpec,
-                                colorStyle = currentColorStyle,
-                                accentIntensity = currentIntensity,
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    updateTheme(key = colorInt)
-                                }
-                            )
-                        }
-                    }
-                    ModePillSelector(
-                        selected = currentColorMode,
-                        onSelect = { mode ->
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            updateTheme(mode = mode)
-                        }
-                    )
-                }
-            }
-
-            item(key = "engine") {
+        item(key = "palette") {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 SectionHeader(
-                    icon = Icons.Rounded.WaterDrop,
+                    icon = Icons.Rounded.Palette,
                     title = stringResource(R.string.personalization_color)
                 )
-                Spacer(modifier = Modifier.height(10.dp))
-                ConnectedGroup {
-                    SoftRow(
-                        position = PreviewSoftPosition.Top,
-                        icon = Icons.Rounded.Palette,
-                        title = stringResource(R.string.personalization_palette_style),
-                        subtitle = stringResource(
-                            R.string.personalization_palette_style_desc
-                        ).lowercase().replaceFirstChar { it.uppercase() },
-                        trailingText = stringResource(currentColorStyle.labelRes()),
-                        onClick = { onRequestSheet("palette") }
-                    )
-                    SoftRow(
-                        position = PreviewSoftPosition.Bottom,
-                        icon = Icons.Rounded.WaterDrop,
-                        title = stringResource(R.string.personalization_color_spec),
-                        subtitle = stringResource(
-                            R.string.personalization_color_spec_desc
-                        ).lowercase().replaceFirstChar { it.uppercase() },
-                        trailingText = stringResource(
-                            if (currentColorSpec == ColorEngine.MaterialExpressive) {
-                                R.string.color_spec_2025
-                            } else {
-                                R.string.color_spec_2021
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(vertical = 2.dp)
+                ) {
+                    item {
+                        SwatchButton(
+                            color = Color.Unspecified,
+                            isSelected = currentKeyColor == 0,
+                            isDark = isDark,
+                            colorSpec = currentColorSpec,
+                            colorStyle = currentColorStyle,
+                            accentIntensity = currentIntensity,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onKeyColorChange(0)
                             }
-                        ),
-                        onClick = { onRequestSheet("spec") }
-                    )
+                        )
+                    }
+                    items(keyColorOptions) { colorInt ->
+                        SwatchButton(
+                            color = Color(colorInt),
+                            isSelected = currentKeyColor == colorInt,
+                            isDark = isDark,
+                            colorSpec = currentColorSpec,
+                            colorStyle = currentColorStyle,
+                            accentIntensity = currentIntensity,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onKeyColorChange(colorInt)
+                            }
+                        )
+                    }
                 }
-            }
-
-            item(key = "nav_animation") {
-                SectionHeader(
-                    icon = Icons.Rounded.Waves,
-                    title = stringResource(R.string.personalization_nav_animation)
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                ConnectedGroup {
-                    SoftToggleRow(
-                        position = PreviewSoftPosition.Top,
-                        icon = Icons.Rounded.Waves,
-                        title = stringResource(R.string.personalization_floating_navbar_short),
-                        subtitle = stringResource(R.string.personalization_floating_navbar_desc),
-                        checked = isFloatingNavBar,
-                        onCheckedChange = { checked ->
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            updateTheme(floating = checked)
-                        }
-                    )
-                    SoftToggleRow(
-                        position = PreviewSoftPosition.Middle,
-                        icon = Icons.Rounded.MotionPhotosOn,
-                        title = stringResource(R.string.personalization_scroll_animation),
-                        subtitle = stringResource(R.string.personalization_scroll_animation_desc),
-                        checked = currentScrollAnimation,
-                        onCheckedChange = { checked ->
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onScrollAnimationChange(checked)
-                        }
-                    )
-                    SoftToggleRow(
-                        position = PreviewSoftPosition.Middle,
-                        icon = Icons.Rounded.SwipeRight,
-                        title = stringResource(R.string.personalization_edge_swipe_back),
-                        subtitle = stringResource(R.string.personalization_edge_swipe_back_desc),
-                        checked = currentEdgeSwipeBack,
-                        onCheckedChange = { checked ->
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onEdgeSwipeBackChange(checked)
-                        }
-                    )
-                    SoftRow(
-                        position = PreviewSoftPosition.Bottom,
-                        icon = Icons.Rounded.SwipeRight,
-                        title = stringResource(R.string.personalization_page_transition),
-                        subtitle = stringResource(
-                            when (currentPageTransition) {
-                                PageTransition.CrossAxis -> R.string.page_transition_cross_axis
-                                PageTransition.Horizontal -> R.string.page_transition_horizontal
-                                PageTransition.Vertical -> R.string.page_transition_vertical
-                            }
-                        ),
-                        trailingText = stringResource(
-                            when (currentPageTransition) {
-                                PageTransition.CrossAxis -> R.string.page_transition_cross_axis
-                                PageTransition.Horizontal -> R.string.page_transition_horizontal
-                                PageTransition.Vertical -> R.string.page_transition_vertical
-                            }
-                        ),
-                        onClick = { onRequestSheet("transition") }
-                    )
-                }
-            }
-
-            item(key = "corner_radius") {
-                CornerRadiusCard(
-                    radius = currentCornerRadius,
-                    onRadiusChange = { radius ->
-                        if (radius != currentCornerRadius) {
-                            updateTheme(radius = radius)
-                        }
+                ModePillSelector(
+                    selected = currentColorMode,
+                    onSelect = { mode ->
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onModeChange(mode)
                     }
                 )
             }
+        }
+
+        item(key = "engine") {
+            SectionHeader(
+                icon = Icons.Rounded.WaterDrop,
+                title = stringResource(R.string.personalization_color)
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            ConnectedGroup {
+                SoftRow(
+                    position = PreviewSoftPosition.Top,
+                    icon = Icons.Rounded.Palette,
+                    title = stringResource(R.string.personalization_palette_style),
+                    subtitle = stringResource(R.string.personalization_palette_style_desc)
+                        .lowercase()
+                        .replaceFirstChar { it.uppercase() },
+                    trailingText = stringResource(currentColorStyle.labelRes()),
+                    onClick = { onRequestSheet("palette") }
+                )
+                SoftRow(
+                    position = PreviewSoftPosition.Bottom,
+                    icon = Icons.Rounded.WaterDrop,
+                    title = stringResource(R.string.personalization_color_spec),
+                    subtitle = stringResource(R.string.personalization_color_spec_desc)
+                        .lowercase()
+                        .replaceFirstChar { it.uppercase() },
+                    trailingText = stringResource(
+                        if (currentColorSpec == ColorEngine.MaterialExpressive) {
+                            R.string.color_spec_2025
+                        } else {
+                            R.string.color_spec_2021
+                        }
+                    ),
+                    onClick = { onRequestSheet("spec") }
+                )
+            }
+        }
+
+        item(key = "nav_animation") {
+            SectionHeader(
+                icon = Icons.Rounded.Waves,
+                title = stringResource(R.string.personalization_nav_animation)
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            ConnectedGroup {
+                SoftToggleRow(
+                    position = PreviewSoftPosition.Top,
+                    icon = Icons.Rounded.Waves,
+                    title = stringResource(R.string.personalization_floating_navbar_short),
+                    subtitle = stringResource(R.string.personalization_floating_navbar_desc),
+                    checked = isFloatingNavBar,
+                    onCheckedChange = { checked ->
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onFloatingNavBarChange(checked)
+                    }
+                )
+                SoftToggleRow(
+                    position = PreviewSoftPosition.Middle,
+                    icon = Icons.Rounded.MotionPhotosOn,
+                    title = stringResource(R.string.personalization_scroll_animation),
+                    subtitle = stringResource(R.string.personalization_scroll_animation_desc),
+                    checked = currentScrollAnimation,
+                    onCheckedChange = { checked ->
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onScrollAnimationChange(checked)
+                    }
+                )
+                SoftToggleRow(
+                    position = PreviewSoftPosition.Middle,
+                    icon = Icons.Rounded.SwipeRight,
+                    title = stringResource(R.string.personalization_edge_swipe_back),
+                    subtitle = stringResource(R.string.personalization_edge_swipe_back_desc),
+                    checked = currentEdgeSwipeBack,
+                    onCheckedChange = { checked ->
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onEdgeSwipeBackChange(checked)
+                    }
+                )
+                SoftRow(
+                    position = PreviewSoftPosition.Bottom,
+                    icon = Icons.Rounded.SwipeRight,
+                    title = stringResource(R.string.personalization_page_transition),
+                    subtitle = stringResource(
+                        when (currentPageTransition) {
+                            PageTransition.CrossAxis -> R.string.page_transition_cross_axis
+                            PageTransition.Horizontal -> R.string.page_transition_horizontal
+                            PageTransition.Vertical -> R.string.page_transition_vertical
+                        }
+                    ),
+                    trailingText = stringResource(
+                        when (currentPageTransition) {
+                            PageTransition.CrossAxis -> R.string.page_transition_cross_axis
+                            PageTransition.Horizontal -> R.string.page_transition_horizontal
+                            PageTransition.Vertical -> R.string.page_transition_vertical
+                        }
+                    ),
+                    onClick = { onRequestSheet("transition") }
+                )
+            }
+        }
+
+        item(key = "corner_radius") {
+            CornerRadiusCard(
+                radius = currentCornerRadius,
+                onRadiusChange = { radius ->
+                    if (radius != currentCornerRadius) {
+                        onCornerRadiusChange(radius)
+                    }
+                }
+            )
         }
     }
 }
@@ -848,11 +800,6 @@ private fun CornerRadiusCard(
     val haptic = LocalHapticFeedback.current
     var sliderRadius by remember(radius) { mutableFloatStateOf(radius.toFloat()) }
     val displayedRadius = sliderRadius.roundToInt()
-    val valueBadge by animateDpAsState(
-        targetValue = (displayedRadius.coerceAtLeast(8)).dp,
-        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
-        label = "radiusBadge"
-    )
 
     Column(
         modifier = Modifier
@@ -973,11 +920,6 @@ private fun CornerRadiusCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Box(
-            modifier = Modifier
-                .padding(top = 4.dp)
-                .size(valueBadge)
-        )
     }
 }
 
@@ -994,7 +936,7 @@ private fun ExpressiveRadiusSlider(
     val tickHeight = with(LocalDensity.current) { 10.dp.toPx() }
     val minValue = ThemeController.MIN_CORNER_RADIUS.toFloat()
     val maxValue = ThemeController.MAX_CORNER_RADIUS.toFloat()
-    val tickCount = ((ThemeController.MAX_CORNER_RADIUS - ThemeController.MIN_CORNER_RADIUS) / 2)
+    val tickCount = (ThemeController.MAX_CORNER_RADIUS - ThemeController.MIN_CORNER_RADIUS) / 2
     val fraction = ((value - minValue) / (maxValue - minValue)).coerceIn(0f, 1f)
 
     Slider(
@@ -1013,15 +955,15 @@ private fun ExpressiveRadiusSlider(
                 drawRoundRect(
                     color = trackColor,
                     topLeft = Offset(0f, centerY - tickHeight / 2f),
-                    size = androidx.compose.ui.geometry.Size(size.width, tickHeight),
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(tickHeight / 2f)
+                    size = Size(size.width, tickHeight),
+                    cornerRadius = CornerRadius(tickHeight / 2f)
                 )
                 if (activeWidth > 0f) {
                     drawRoundRect(
                         color = primary,
                         topLeft = Offset(0f, centerY - tickHeight / 2f),
-                        size = androidx.compose.ui.geometry.Size(activeWidth, tickHeight),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(tickHeight / 2f)
+                        size = Size(activeWidth, tickHeight),
+                        cornerRadius = CornerRadius(tickHeight / 2f)
                     )
                 }
                 val step = if (tickCount > 0) size.width / (tickCount + 1) else size.width
@@ -1153,7 +1095,6 @@ private fun ModePillSelector(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun OptionBottomSheet(
     title: String,
@@ -1168,21 +1109,27 @@ private fun OptionBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentWindowInsets = { WindowInsets(0.dp) },
+        dragHandle = {
+            BottomSheetDefaults.DragHandle(
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+            )
+        }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 28.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()),
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLargeEmphasized,
                 color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(bottom = 6.dp)
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
             )
             options.forEachIndexed { index, labelRes ->
                 val isSelected = index == selectedIndex
@@ -1194,7 +1141,7 @@ private fun OptionBottomSheet(
                         count = options.size
                     ),
                     colors = ListItemDefaults.segmentedColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                         selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                         selectedContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                         selectedLeadingContentColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -1219,14 +1166,27 @@ private fun OptionBottomSheet(
                                         modifier = Modifier.size(14.dp)
                                     )
                                 }
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .border(
+                                            width = 1.5.dp,
+                                            color = MaterialTheme.colorScheme.outlineVariant,
+                                            shape = CircleShape
+                                        )
+                                )
                             }
                         }
                     },
                     headlineContent = {
                         Text(
                             text = stringResource(labelRes),
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            style = if (isSelected) {
+                                MaterialTheme.typography.titleSmallEmphasized
+                            } else {
+                                MaterialTheme.typography.bodyLarge
+                            }
                         )
                     }
                 )
@@ -1422,72 +1382,72 @@ private fun MockLuminaScreen(
                 }
             }
 
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                AnimatedVisibility(
-                    visible = isFloatingNavBar,
-                    enter = fadeIn(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) +
-                        scaleIn(initialScale = 0.9f),
-                    exit = fadeOut(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) +
-                        scaleOut(targetScale = 0.9f)
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        tonalElevation = 3.dp,
-                        shadowElevation = 4.dp
+            AnimatedContent(
+                targetState = isFloatingNavBar,
+                transitionSpec = {
+                    (fadeIn(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) +
+                        scaleIn(
+                            initialScale = 0.92f,
+                            animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec()
+                        )) togetherWith
+                        (fadeOut(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) +
+                            scaleOut(targetScale = 0.92f))
+                },
+                label = "mockNavBar"
+            ) { floating ->
+                if (floating) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            tonalElevation = 3.dp,
+                            shadowElevation = 4.dp
                         ) {
                             Row(
-                                modifier = Modifier
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer)
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Box(
+                                Row(
                                     modifier = Modifier
-                                        .size(8.dp)
                                         .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.onPrimaryContainer)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .size(width = 16.dp, height = 4.dp)
-                                        .clip(RoundedCornerShape(2.dp))
-                                        .background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f))
-                                )
-                            }
-                            repeat(3) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(9.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
-                                )
+                                        .background(MaterialTheme.colorScheme.primaryContainer)
+                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.onPrimaryContainer)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(width = 16.dp, height = 4.dp)
+                                            .clip(RoundedCornerShape(2.dp))
+                                            .background(
+                                                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                            )
+                                    )
+                                }
+                                repeat(3) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(9.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                            )
+                                    )
+                                }
                             }
                         }
                     }
-                }
-            }
-
-            Box(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                AnimatedVisibility(
-                    visible = !isFloatingNavBar,
-                    enter = fadeIn(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) +
-                        expandHorizontally(animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec()),
-                    exit = fadeOut(animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec()) +
-                        shrinkHorizontally(animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec())
-                ) {
+                } else {
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1513,13 +1473,16 @@ private fun MockLuminaScreen(
                                     modifier = Modifier
                                         .size(8.dp)
                                         .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                                        .background(
+                                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                        )
                                 )
                             }
                         }
                     }
                 }
             }
+        }
     }
 }
 
