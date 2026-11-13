@@ -63,7 +63,8 @@ import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Thermostat
-import androidx.compose.ui.graphics.Morph
+import androidx.graphics.shapes.Morph
+import androidx.graphics.shapes.toPath
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -101,8 +102,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
@@ -1462,11 +1463,12 @@ private class MorphShape(
         layoutDirection: LayoutDirection,
         density: Density
     ): Outline {
-        val path = morph.toPath(progress = progress, path = Path())
-        val matrix = Matrix().apply {
-            scale(size.width, size.height)
-        }
-        path.transform(matrix)
-        return Outline.Generic(path)
+        val path = morph.toPath(progress = progress, path = android.graphics.Path())
+        path.transform(
+            android.graphics.Matrix().apply {
+                setScale(size.width, size.height)
+            }
+        )
+        return Outline.Generic(path.asComposePath())
     }
 }

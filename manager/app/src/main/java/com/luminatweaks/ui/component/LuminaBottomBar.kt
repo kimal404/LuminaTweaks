@@ -18,7 +18,6 @@
 
 package com.luminatweaks.ui.component
 
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -66,7 +65,6 @@ fun LuminaBottomBar(
         ) {
             ShortNavigationBar(
                 containerColor = Color.Transparent,
-                tonalElevation = 0.dp,
                 windowInsets = WindowInsets(0.dp)
             ) {
                 LuminaBottomBarItems(selectedTab = selectedTab, onTabSelected = onTabSelected)
@@ -74,8 +72,7 @@ fun LuminaBottomBar(
         }
     } else {
         ShortNavigationBar(
-            containerColor = MaterialTheme.colorScheme.background,
-            tonalElevation = 0.dp
+            containerColor = MaterialTheme.colorScheme.background
         ) {
             LuminaBottomBarItems(selectedTab = selectedTab, onTabSelected = onTabSelected)
         }
@@ -83,7 +80,7 @@ fun LuminaBottomBar(
 }
 
 @Composable
-private fun RowScope.LuminaBottomBarItems(
+private fun LuminaBottomBarItems(
     selectedTab: Int,
     onTabSelected: (Int) -> Unit
 ) {
@@ -98,9 +95,9 @@ private fun RowScope.LuminaBottomBarItems(
         },
         label = { Text(stringResource(R.string.nav_home)) },
         colors = ShortNavigationBarItemDefaults.colors(
-            indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+            selectedIndicatorColor = MaterialTheme.colorScheme.secondaryContainer,
             selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-            selectedTextColor = MaterialTheme.colorScheme.onSurface,
+            selectedTextColorTopIconPosition = MaterialTheme.colorScheme.onSurface,
             unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
             unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -117,9 +114,9 @@ private fun RowScope.LuminaBottomBarItems(
         },
         label = { Text(stringResource(R.string.nav_apps)) },
         colors = ShortNavigationBarItemDefaults.colors(
-            indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+            selectedIndicatorColor = MaterialTheme.colorScheme.secondaryContainer,
             selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-            selectedTextColor = MaterialTheme.colorScheme.onSurface,
+            selectedTextColorTopIconPosition = MaterialTheme.colorScheme.onSurface,
             unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
             unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -136,9 +133,9 @@ private fun RowScope.LuminaBottomBarItems(
         },
         label = { Text(stringResource(R.string.nav_tweaks)) },
         colors = ShortNavigationBarItemDefaults.colors(
-            indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+            selectedIndicatorColor = MaterialTheme.colorScheme.secondaryContainer,
             selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-            selectedTextColor = MaterialTheme.colorScheme.onSurface,
+            selectedTextColorTopIconPosition = MaterialTheme.colorScheme.onSurface,
             unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
             unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -155,9 +152,9 @@ private fun RowScope.LuminaBottomBarItems(
         },
         label = { Text(stringResource(R.string.nav_settings)) },
         colors = ShortNavigationBarItemDefaults.colors(
-            indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+            selectedIndicatorColor = MaterialTheme.colorScheme.secondaryContainer,
             selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-            selectedTextColor = MaterialTheme.colorScheme.onSurface,
+            selectedTextColorTopIconPosition = MaterialTheme.colorScheme.onSurface,
             unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
             unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
         )
