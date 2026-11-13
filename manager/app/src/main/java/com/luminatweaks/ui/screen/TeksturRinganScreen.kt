@@ -17,12 +17,15 @@
 package com.luminatweaks.ui.screen
 
 import android.graphics.Bitmap
+import android.graphics.Canvas as AndroidCanvas
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.RadialGradient
+import android.graphics.Shader
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +36,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -57,13 +61,10 @@ import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -110,48 +111,131 @@ private fun textureLocalizedLabel(id: String, en: String): String {
     return if (isIndonesian) id else en
 }
 
+private fun renderHighResSceneBitmap(): Bitmap {
+    val w = 360
+    val h = 216
+    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+    val canvas = AndroidCanvas(bmp)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    val horizonY = h * 0.56f
+
+    // 1. Atmospheric sky gradient
+    paint.shader = LinearGradient(
+        0f, 0f, 0f, horizonY,
+        intArrayOf(
+            android.graphics.Color.rgb(12, 22, 38),
+            android.graphics.Color.rgb(22, 48, 78),
+            android.graphics.Color.rgb(38, 92, 128)
+        ),
+        floatArrayOf(0f, 0.55f, 1f),
+        Shader.TileMode.CLAMP
+    )
+    canvas.drawRect(0f, 0f, w.toFloat(), horizonY, paint)
+
+    // 2. Ground terrain gradient
+    paint.shader = LinearGradient(
+        0f, horizonY, 0f, h.toFloat(),
+        intArrayOf(
+            android.graphics.Color.rgb(16, 36, 52),
+            android.graphics.Color.rgb(11, 20, 32)
+        ),
+        null,
+        Shader.TileMode.CLAMP
+    )
+    canvas.drawRect(0f, horizonY, w.toFloat(), h.toFloat(), paint)
+    paint.shader = null
+
+    // 3. Horizon glow line
+    paint.color = android.graphics.Color.argb(170, 110, 210, 255)
+    paint.strokeWidth = 2f
+    canvas.drawLine(0f, horizonY, w.toFloat(), horizonY, paint)
+
+    // 4. Perspective 3D grid lines on floor
+    val vanishX = w * 0.5f
+    paint.strokeWidth = 1.3f
+    for (i in -8..8) {
+        val bottomX = vanishX + i * 38f
+        paint.color = android.graphics.Color.argb(75, 120, 215, 255)
+        canvas.drawLine(vanishX + i * 6f, horizonY, bottomX, h.toFloat(), paint)
+    }
+    var rowOffset = 4f
+    var step = 5f
+    while (horizonY + rowOffset < h) {
+        val y = horizonY + rowOffset
+        val alpha = ((rowOffset / (h - horizonY)) * 110f).toInt().coerceIn(20, 110)
+        paint.color = android.graphics.Color.argb(alpha, 120, 215, 255)
+        canvas.drawLine(0f, y, w.toFloat(), y, paint)
+        rowOffset += step
+        step *= 1.28f
+    }
+
+    // 5. Soft contact shadow under 3D sphere
+    val sphereCx = w * 0.5f
+    val sphereCy = h * 0.48f
+    val sphereR = 52f
+    paint.shader = RadialGradient(
+        sphereCx, horizonY + 26f, 68f,
+        intArrayOf(
+            android.graphics.Color.argb(165, 4, 8, 16),
+            android.graphics.Color.TRANSPARENT
+        ),
+        null,
+        Shader.TileMode.CLAMP
+    )
+    canvas.save()
+    canvas.scale(1.35f, 0.35f, sphereCx, horizonY + 26f)
+    canvas.drawCircle(sphereCx, horizonY + 26f, 68f, paint)
+    canvas.restore()
+
+    // 6. 3D Shaded metallic/glass orb with specular highlight
+    paint.shader = RadialGradient(
+        sphereCx - sphereR * 0.32f,
+        sphereCy - sphereR * 0.34f,
+        sphereR * 1.35f,
+        intArrayOf(
+            android.graphics.Color.rgb(235, 250, 255),
+            android.graphics.Color.rgb(92, 196, 248),
+            android.graphics.Color.rgb(28, 86, 138),
+            android.graphics.Color.rgb(12, 32, 58)
+        ),
+        floatArrayOf(0f, 0.22f, 0.68f, 1f),
+        Shader.TileMode.CLAMP
+    )
+    canvas.drawCircle(sphereCx, sphereCy, sphereR, paint)
+    paint.shader = null
+
+    // 7. Fine surface latitude/longitude detail rings on orb (shows texture sharpness clearly)
+    paint.style = Paint.Style.STROKE
+    paint.strokeWidth = 1.4f
+    paint.color = android.graphics.Color.argb(95, 220, 248, 255)
+    canvas.drawCircle(sphereCx, sphereCy, sphereR * 0.72f, paint)
+    canvas.drawCircle(sphereCx, sphereCy, sphereR * 0.42f, paint)
+    canvas.drawLine(sphereCx - sphereR * 0.85f, sphereCy, sphereCx + sphereR * 0.85f, sphereCy, paint)
+    canvas.drawLine(sphereCx, sphereCy - sphereR * 0.85f, sphereCx, sphereCy + sphereR * 0.85f, paint)
+
+    // 8. Crisp HUD micro-bars on left & right to demonstrate UI/texel clarity
+    paint.style = Paint.Style.FILL
+    for (idx in 0 until 4) {
+        val barY = h * 0.68f + idx * 11f
+        val barW = 54f - idx * 8f
+        paint.color = android.graphics.Color.argb(180, 140, 225, 255)
+        canvas.drawRoundRect(22f, barY, 22f + barW, barY + 5f, 2.5f, 2.5f, paint)
+        canvas.drawRoundRect(w - 22f - barW, barY, w - 22f, barY + 5f, 2.5f, 2.5f, paint)
+    }
+
+    return bmp
+}
+
 fun generateTextureBitmap(lod: Int): ImageBitmap {
-    val scale = when (lod.coerceIn(0, 4)) {
-        0 -> 1
-        1 -> 2
-        2 -> 4
-        3 -> 8
-        4 -> 16
-        else -> 1
+    val base = renderHighResSceneBitmap()
+    val clampedLod = lod.coerceIn(0, 4)
+    if (clampedLod == 0) {
+        return base.asImageBitmap()
     }
-
-    val width = (96 / scale).coerceAtLeast(2)
-    val height = (96 / scale).coerceAtLeast(2)
-
-    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-    val wallHeight = (height * 0.62f).toInt()
-
-    for (y in 0 until height) {
-        for (x in 0 until width) {
-            val pixelColor = if (y < wallHeight) {
-                val brickRow = (y / 4).coerceAtLeast(1)
-                val shift = if (brickRow % 2 == 0) 0 else 3
-                val isMortar = (y % 4 == 0) || ((x + shift) % 8 == 0)
-                if (isMortar) {
-                    android.graphics.Color.rgb(65, 65, 65)
-                } else {
-                    val noise = (x * 13 + y * 7) % 30
-                    android.graphics.Color.rgb(145 + noise, 95 + noise / 2, 70 + noise / 3)
-                }
-            } else {
-                val isGrassEdge = y <= wallHeight + 1
-                if (isGrassEdge) {
-                    val gNoise = (x * 19) % 35
-                    android.graphics.Color.rgb(45 + gNoise, 155 + gNoise, 35 + gNoise)
-                } else {
-                    val dNoise = (x * 11 + y * 13) % 25
-                    android.graphics.Color.rgb(85 + dNoise, 55 + dNoise, 35)
-                }
-            }
-            bitmap.setPixel(x, y, pixelColor)
-        }
-    }
-    return bitmap.asImageBitmap()
+    val scale = 1 shl clampedLod
+    val targetW = (base.width / scale).coerceAtLeast(8)
+    val targetH = (base.height / scale).coerceAtLeast(6)
+    return Bitmap.createScaledBitmap(base, targetW, targetH, true).asImageBitmap()
 }
 
 @Composable
@@ -161,25 +245,33 @@ fun TextureComparisonPreview(
     pixelSharp: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val beforeBitmap = remember { generateTextureBitmap(0) }
-    val afterBitmap = remember(lod, isActive) {
-        if (isActive) generateTextureBitmap(lod) else beforeBitmap
+    val baseScene = remember { renderHighResSceneBitmap() }
+    val beforeBitmap = remember(baseScene) { baseScene.asImageBitmap() }
+    val afterBitmap = remember(baseScene, lod, isActive) {
+        if (!isActive || lod <= 0) {
+            beforeBitmap
+        } else {
+            val scale = 1 shl lod.coerceIn(1, 4)
+            val targetW = (baseScene.width / scale).coerceAtLeast(8)
+            val targetH = (baseScene.height / scale).coerceAtLeast(6)
+            Bitmap.createScaledBitmap(baseScene, targetW, targetH, true).asImageBitmap()
+        }
     }
     var splitFraction by remember { mutableFloatStateOf(0.5f) }
 
-    val handleWidth = 32.dp
+    val handleWidth = 34.dp
     val handleHeight = 46.dp
     val primaryColor = MaterialTheme.colorScheme.primary
-    val dividerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
-    val cardRadius = LocalCornerRadius.current.coerceAtLeast(24.dp)
+    val onPrimaryColor = MaterialTheme.colorScheme.onPrimary
+    val dividerColor = primaryColor.copy(alpha = 0.92f)
+    val cardRadius = LocalCornerRadius.current.coerceAtLeast(26.dp)
 
-    Card(
+    Surface(
         modifier = modifier
             .fillMaxWidth()
-            .height(210.dp),
+            .height(216.dp),
         shape = RoundedCornerShape(cardRadius),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF141416))
+        color = MaterialTheme.colorScheme.surfaceContainer
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val totalWidth = constraints.maxWidth.toFloat()
@@ -192,7 +284,7 @@ fun TextureComparisonPreview(
                     .pointerInput(Unit) {
                         detectDragGestures { change, dragAmount ->
                             change.consume()
-                            splitFraction = (splitFraction + dragAmount.x / totalWidth).coerceIn(0.06f, 0.94f)
+                            splitFraction = (splitFraction + dragAmount.x / totalWidth).coerceIn(0.08f, 0.92f)
                         }
                     }
             ) {
@@ -200,7 +292,7 @@ fun TextureComparisonPreview(
                     drawImage(
                         image = beforeBitmap,
                         dstSize = IntSize(size.width.toInt(), size.height.toInt()),
-                        filterQuality = FilterQuality.Medium
+                        filterQuality = FilterQuality.High
                     )
                 }
 
@@ -229,30 +321,28 @@ fun TextureComparisonPreview(
                         )
                     }
                     .size(width = handleWidth, height = handleHeight)
-                    .shadow(8.dp, RoundedCornerShape(16.dp))
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .border(1.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(16.dp)),
+                    .shadow(6.dp, CircleShape)
+                    .clip(CircleShape)
+                    .background(primaryColor),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Rounded.SwapHoriz,
                     contentDescription = null,
-                    tint = primaryColor,
+                    tint = onPrimaryColor,
                     modifier = Modifier.size(20.dp)
                 )
             }
 
             Surface(
-                shape = RoundedCornerShape(12.dp),
+                shape = CircleShape,
                 color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.88f),
-                tonalElevation = 2.dp,
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(12.dp)
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
@@ -273,16 +363,18 @@ fun TextureComparisonPreview(
             }
 
             Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = if (isActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f)
-                else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
-                tonalElevation = 2.dp,
+                shape = CircleShape,
+                color = if (isActive) {
+                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.94f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.88f)
+                },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(12.dp)
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
@@ -303,17 +395,17 @@ fun TextureComparisonPreview(
             }
 
             Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.72f),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.74f),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 8.dp)
+                    .padding(bottom = 10.dp)
             ) {
                 Text(
                     text = stringResource(R.string.texture_drag_compare),
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                 )
             }
         }
@@ -497,14 +589,6 @@ fun TeksturRinganScreen(
                                     },
                                     shape = RoundedCornerShape(18.dp),
                                     color = tileBg,
-                                    border = if (isSelected) {
-                                        null
-                                    } else {
-                                        BorderStroke(
-                                            1.dp,
-                                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-                                        )
-                                    },
                                     modifier = Modifier
                                         .weight(1f)
                                         .height(68.dp)
@@ -641,8 +725,9 @@ fun TeksturRinganScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    OutlinedButton(
+                    Surface(
                         onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             val resetProfile = profile.copy(
                                 textureDriver = "native",
                                 textureLod = 0,
@@ -656,18 +741,31 @@ fun TeksturRinganScreen(
                                 ConfigRepository.killApp(profile.pkg)
                             }
                         },
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
                         modifier = Modifier
                             .weight(1f)
-                            .height(50.dp),
-                        shape = CircleShape
+                            .height(50.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.RestartAlt,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(stringResource(R.string.opt_default))
+                        Row(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.RestartAlt,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = stringResource(R.string.opt_default),
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
 
                     Button(
@@ -726,11 +824,6 @@ private fun FilterPillTile(
         onClick = onClick,
         shape = CircleShape,
         color = bgColor,
-        border = if (selected) {
-            null
-        } else {
-            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-        },
         modifier = modifier.height(54.dp)
     ) {
         Row(

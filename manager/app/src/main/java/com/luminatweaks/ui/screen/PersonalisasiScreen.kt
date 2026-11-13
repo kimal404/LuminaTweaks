@@ -18,20 +18,19 @@ package com.luminatweaks.ui.screen
 
 import android.os.Build
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -42,12 +41,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -64,38 +61,30 @@ import androidx.compose.material.icons.rounded.Brightness3
 import androidx.compose.material.icons.rounded.Brightness4
 import androidx.compose.material.icons.rounded.Brightness7
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.DesignServices
-import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.RoundedCorner
-import androidx.compose.material.icons.rounded.Style
-import androidx.compose.material.icons.rounded.Swipe
-import androidx.compose.material.icons.rounded.ViewCarousel
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Waves
-import androidx.compose.material3.BottomSheetDefaults
-import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeTopAppBar
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -110,82 +99,30 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.luminatweaks.R
-import com.luminatweaks.ui.theme.AccentIntensity
-import com.luminatweaks.ui.theme.ColorEngine
 import com.luminatweaks.ui.theme.ColorMode
-import com.luminatweaks.ui.theme.ColorStyle
-import com.luminatweaks.ui.theme.PageTransition
 import com.luminatweaks.ui.theme.ThemeController
 import com.luminatweaks.ui.theme.animateColorSchemeAsState
 import com.luminatweaks.ui.theme.keyColorOptions
 import com.luminatweaks.ui.theme.withAccentIntensity
 import com.materialkolor.PaletteStyle
-import com.materialkolor.dynamiccolor.ColorSpec
 import com.materialkolor.rememberDynamicColorScheme
+import java.util.Locale
 import kotlin.math.roundToInt
 
-private enum class ItemSegment { Top, Middle, Bottom, Single }
-
-private val paletteStyleOptions = listOf(
-    ColorStyle.TonalSpot to R.string.color_style_tonal_spot,
-    ColorStyle.Vibrant to R.string.color_style_vibrant,
-    ColorStyle.Expressive to R.string.color_style_expressive,
-    ColorStyle.Spritz to R.string.color_style_spritz,
-    ColorStyle.Rainbow to R.string.color_style_rainbow,
-    ColorStyle.FruitSalad to R.string.color_style_fruit_salad,
-    ColorStyle.Content to R.string.color_style_content,
-    ColorStyle.Monochrome to R.string.color_style_monochrome
-)
-
-private val colorSpecOptions = listOf(
-    ColorEngine.MaterialExpressive to R.string.color_spec_2025,
-    ColorEngine.MaterialYou to R.string.color_spec_2021
-)
-
-private val pageTransitionOptions = listOf(
-    PageTransition.CrossAxis to R.string.page_transition_cross_axis,
-    PageTransition.Horizontal to R.string.page_transition_horizontal,
-    PageTransition.Vertical to R.string.page_transition_vertical
-)
-
-private fun ColorStyle.toPaletteStyle(): PaletteStyle = when (this) {
-    ColorStyle.TonalSpot -> PaletteStyle.TonalSpot
-    ColorStyle.Vibrant -> PaletteStyle.Vibrant
-    ColorStyle.Expressive -> PaletteStyle.Expressive
-    ColorStyle.Spritz -> PaletteStyle.Neutral
-    ColorStyle.Rainbow -> PaletteStyle.Rainbow
-    ColorStyle.FruitSalad -> PaletteStyle.FruitSalad
-    ColorStyle.Content -> PaletteStyle.Content
-    ColorStyle.Monochrome -> PaletteStyle.Monochrome
-}
-
-private fun ColorStyle.labelRes(): Int =
-    paletteStyleOptions.first { it.first == this }.second
-
-private fun segmentShape(segment: ItemSegment): RoundedCornerShape {
-    val outer = 20.dp
-    val inner = 6.dp
-    return when (segment) {
-        ItemSegment.Top -> RoundedCornerShape(
-            topStart = outer, topEnd = outer, bottomStart = inner, bottomEnd = inner
-        )
-        ItemSegment.Middle -> RoundedCornerShape(inner)
-        ItemSegment.Bottom -> RoundedCornerShape(
-            topStart = inner, topEnd = inner, bottomStart = outer, bottomEnd = outer
-        )
-        ItemSegment.Single -> RoundedCornerShape(outer)
+@Composable
+private fun persLocalizedLabel(id: String, en: String): String {
+    val isIndonesian = remember {
+        val lang = Locale.getDefault().language.lowercase(Locale.ROOT)
+        lang == "in" || lang == "id"
     }
+    return if (isIndonesian) id else en
 }
 
 @Composable
@@ -196,522 +133,334 @@ fun PersonalisasiScreen(
 
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val savedSettings = remember { ThemeController.getAppSettings(context) }
 
     var currentColorMode by remember { mutableStateOf(savedSettings.colorMode) }
     var currentKeyColor by remember { mutableIntStateOf(savedSettings.keyColor) }
-    var currentColorSpec by remember { mutableStateOf(savedSettings.colorSpec) }
-    var currentIntensity by remember { mutableStateOf(savedSettings.accentIntensity) }
     var currentCornerRadius by remember { mutableIntStateOf(savedSettings.cornerRadius) }
     var isFloatingNavBar by remember { mutableStateOf(savedSettings.floatingNavBar) }
-    var currentColorStyle by remember { mutableStateOf(savedSettings.colorStyle) }
-    var currentScrollAnimation by remember { mutableStateOf(savedSettings.scrollAnimation) }
-    var currentEdgeSwipeBack by remember { mutableStateOf(savedSettings.edgeSwipeBack) }
-    var currentPageTransition by remember { mutableStateOf(savedSettings.pageTransition) }
-
-    var showPaletteSheet by remember { mutableStateOf(false) }
-    var showSpecSheet by remember { mutableStateOf(false) }
-    var showTransitionSheet by remember { mutableStateOf(false) }
 
     val isDark = currentColorMode.getDarkThemeValue(isSystemInDarkTheme())
     val isAmoled = currentColorMode == ColorMode.DARKAMOLED
+    val outerRadius = currentCornerRadius.coerceAtLeast(26).dp
 
-    val seedColor = if (currentKeyColor == 0) {
-        val base = when {
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
-                if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-            else ->
-                if (isDark) darkColorScheme() else lightColorScheme()
-        }
-        base.primary
-    } else {
-        Color(currentKeyColor)
-    }
-
-    val previewBaseScheme = rememberDynamicColorScheme(
-        seedColor = seedColor,
-        isDark = isDark,
-        isAmoled = isAmoled,
-        specVersion = currentColorSpec.librarySpec,
-        style = currentColorStyle.toPaletteStyle()
-    ).withAccentIntensity(currentIntensity)
-
-    val previewColorScheme = animateColorSchemeAsState(
-        targetColorScheme = previewBaseScheme
-    )
-
-    fun updateTheme(
+    fun saveSettings(
         mode: ColorMode = currentColorMode,
         key: Int = currentKeyColor,
-        spec: ColorEngine = currentColorSpec,
         radius: Int = currentCornerRadius,
-        floating: Boolean = isFloatingNavBar,
-        style: ColorStyle = currentColorStyle
+        floating: Boolean = isFloatingNavBar
     ) {
         currentColorMode = mode
         currentKeyColor = key
-        currentColorSpec = spec
         currentCornerRadius = radius
         isFloatingNavBar = floating
-        currentColorStyle = style
-        ThemeController.saveTheme(context, mode, key, spec, currentIntensity, radius, floating)
-        ThemeController.saveColorStyle(context, style)
+        ThemeController.saveTheme(
+            context = context,
+            mode = mode,
+            key = key,
+            spec = savedSettings.colorSpec,
+            intensity = savedSettings.accentIntensity,
+            cornerRadius = radius,
+            floatingNavBar = floating
+        )
     }
 
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomPadding = if (isFloatingNavBar) 108.dp + navBottom else 24.dp + navBottom
+
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         contentWindowInsets = WindowInsets(0.dp),
         topBar = {
-            LargeTopAppBar(
+            TopAppBar(
                 title = {
                     Text(
                         text = stringResource(R.string.personalization_title),
-                        fontWeight = FontWeight.Normal
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
                     )
                 },
                 navigationIcon = {
-                    FilledTonalIconButton(
-                        onClick = onBackClick,
-                        modifier = Modifier.padding(start = 8.dp)
-                    ) {
+                    IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                             contentDescription = stringResource(R.string.action_back)
                         )
                     }
                 },
-                scrollBehavior = scrollBehavior,
                 windowInsets = WindowInsets.statusBars,
-                colors = TopAppBarDefaults.largeTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
                 )
             )
         }
     ) { innerPadding ->
-        val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-        val extraBottom = if (isFloatingNavBar) 96.dp else 20.dp
-
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = 4.dp,
-                bottom = extraBottom + navBottom
+                top = innerPadding.calculateTopPadding() + 6.dp,
+                bottom = bottomPadding,
+                start = 16.dp,
+                end = 16.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(13.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item(key = "preview") {
-                ThemePreviewCard(
-                    colorScheme = previewColorScheme,
-                    cornerRadius = currentCornerRadius,
-                    isFloatingNavBar = isFloatingNavBar
-                )
-            }
-
-            item(key = "swatches") {
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    item(key = "dynamic") {
-                        ColorSwatchTile(
-                            color = Color.Unspecified,
-                            isSelected = currentKeyColor == 0,
-                            isDark = isDark,
-                            isAmoled = isAmoled,
-                            paletteStyle = currentColorStyle.toPaletteStyle(),
-                            colorSpec = currentColorSpec.librarySpec,
-                            accentIntensity = currentIntensity,
-                            onClick = { updateTheme(key = 0) }
-                        )
-                    }
-                    items(keyColorOptions, key = { it }) { colorInt ->
-                        ColorSwatchTile(
-                            color = Color(colorInt),
-                            isSelected = currentKeyColor == colorInt,
-                            isDark = isDark,
-                            isAmoled = isAmoled,
-                            paletteStyle = currentColorStyle.toPaletteStyle(),
-                            colorSpec = currentColorSpec.librarySpec,
-                            accentIntensity = currentIntensity,
-                            onClick = { updateTheme(key = colorInt) }
-                        )
-                    }
-                }
-            }
-
-            item(key = "modes") {
+            item(key = "theme_mode") {
                 val modes = listOf(
-                    ColorMode.SYSTEM to (Icons.Rounded.Brightness4 to stringResource(R.string.mode_system)),
-                    ColorMode.LIGHT to (Icons.Rounded.Brightness7 to stringResource(R.string.mode_light)),
-                    ColorMode.DARK to (Icons.Rounded.Brightness3 to stringResource(R.string.mode_dark)),
-                    ColorMode.DARKAMOLED to (Icons.Rounded.Brightness1 to stringResource(R.string.mode_amoled))
+                    Triple(
+                        ColorMode.SYSTEM,
+                        Icons.Rounded.Brightness4,
+                        persLocalizedLabel("Ikuti Sistem", "Follow System")
+                    ),
+                    Triple(
+                        ColorMode.LIGHT,
+                        Icons.Rounded.Brightness7,
+                        persLocalizedLabel("Terang", "Light")
+                    ),
+                    Triple(
+                        ColorMode.DARK,
+                        Icons.Rounded.Brightness3,
+                        persLocalizedLabel("Gelap", "Dark")
+                    ),
+                    Triple(
+                        ColorMode.DARKAMOLED,
+                        Icons.Rounded.Brightness1,
+                        persLocalizedLabel("Pure AMOLED", "Pure AMOLED")
+                    )
                 )
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                PersNestedCardGroup(
+                    headerIcon = Icons.Rounded.DarkMode,
+                    headerTitle = persLocalizedLabel("Mode Tema", "Theme Mode"),
+                    outerRadius = outerRadius
                 ) {
-                    modes.forEachIndexed { index, (mode, iconAndLabel) ->
-                        val (icon, contentDesc) = iconAndLabel
-                        val selected = currentColorMode == mode
-                        val shape = when (index) {
-                            0 -> RoundedCornerShape(
-                                topStart = 21.dp, bottomStart = 21.dp, topEnd = 8.dp, bottomEnd = 8.dp
-                            )
-                            modes.lastIndex -> RoundedCornerShape(
-                                topStart = 8.dp, bottomStart = 8.dp, topEnd = 21.dp, bottomEnd = 21.dp
-                            )
-                            else -> RoundedCornerShape(8.dp)
-                        }
-                        val bgColor by animateColorAsState(
-                            targetValue = if (selected) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.surfaceContainerHigh
-                            },
-                            animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-                            label = "modeTileBg"
-                        )
-                        val iconTint by animateColorAsState(
-                            targetValue = if (selected) {
-                                MaterialTheme.colorScheme.onPrimary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                            animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-                            label = "modeTileTint"
-                        )
-
-                        Surface(
-                            onClick = {
-                                if (!selected) {
-                                    haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
-                                    updateTheme(mode = mode)
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        modes.chunked(2).forEach { rowModes ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                rowModes.forEach { (mode, icon, label) ->
+                                    val isSelected = currentColorMode == mode
+                                    ThemeModeTile(
+                                        icon = icon,
+                                        label = label,
+                                        selected = isSelected,
+                                        onClick = {
+                                            if (!isSelected) {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                saveSettings(mode = mode)
+                                            }
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
                                 }
-                            },
-                            shape = shape,
-                            color = bgColor,
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(42.dp)
-                                .semantics { role = Role.RadioButton }
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = icon,
-                                    contentDescription = contentDesc,
-                                    tint = iconTint,
-                                    modifier = Modifier.size(21.dp)
-                                )
                             }
                         }
                     }
                 }
             }
 
-            item(key = "color_engine") {
-                SegmentedGroup(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    SegmentedValueItem(
-                        segment = ItemSegment.Top,
-                        icon = Icons.Rounded.Style,
-                        title = stringResource(R.string.personalization_palette_style),
-                        valueText = stringResource(currentColorStyle.labelRes()),
-                        onClick = { showPaletteSheet = true }
-                    )
-                    SegmentedValueItem(
-                        segment = ItemSegment.Bottom,
-                        icon = Icons.Rounded.DesignServices,
-                        title = stringResource(R.string.personalization_color_spec),
-                        valueText = stringResource(
-                            if (currentColorSpec == ColorEngine.MaterialExpressive) {
-                                R.string.color_spec_2025
-                            } else {
-                                R.string.color_spec_2021
-                            }
-                        ),
-                        onClick = { showSpecSheet = true }
-                    )
+            item(key = "accent_color") {
+                PersNestedCardGroup(
+                    headerIcon = Icons.Rounded.Palette,
+                    headerTitle = stringResource(R.string.personalization_color),
+                    outerRadius = outerRadius
+                ) {
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        item(key = "dynamic") {
+                            AccentSwatchCircle(
+                                color = Color.Unspecified,
+                                isSelected = currentKeyColor == 0,
+                                isDark = isDark,
+                                isAmoled = isAmoled,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    saveSettings(key = 0)
+                                }
+                            )
+                        }
+                        items(keyColorOptions, key = { it }) { colorInt ->
+                            AccentSwatchCircle(
+                                color = Color(colorInt),
+                                isSelected = currentKeyColor == colorInt,
+                                isDark = isDark,
+                                isAmoled = isAmoled,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    saveSettings(key = colorInt)
+                                }
+                            )
+                        }
+                    }
                 }
             }
 
-            item(key = "navigation_and_gesture") {
-                SegmentedGroup(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    SegmentedToggleItem(
-                        segment = ItemSegment.Top,
-                        icon = Icons.Rounded.Waves,
-                        title = stringResource(R.string.personalization_floating_navbar_short),
+            item(key = "appearance_and_nav") {
+                PersNestedCardGroup(
+                    headerIcon = Icons.Rounded.Tune,
+                    headerTitle = persLocalizedLabel("Tampilan & Navigasi", "Appearance & Navigation"),
+                    outerRadius = outerRadius
+                ) {
+                    PersFloatingNavSwitchCard(
                         checked = isFloatingNavBar,
                         onCheckedChange = { checked ->
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            updateTheme(floating = checked)
+                            saveSettings(floating = checked)
                         }
                     )
-                    SegmentedToggleItem(
-                        segment = ItemSegment.Middle,
-                        icon = Icons.Rounded.ViewCarousel,
-                        title = stringResource(R.string.personalization_scroll_animation),
-                        checked = currentScrollAnimation,
-                        onCheckedChange = { checked ->
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            currentScrollAnimation = checked
-                            ThemeController.saveScrollAnimation(context, checked)
-                        }
-                    )
-                    SegmentedToggleItem(
-                        segment = ItemSegment.Middle,
-                        icon = Icons.Rounded.Swipe,
-                        title = stringResource(R.string.personalization_edge_swipe_back),
-                        summary = stringResource(R.string.personalization_edge_swipe_back_desc),
-                        checked = currentEdgeSwipeBack,
-                        onCheckedChange = { checked ->
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            currentEdgeSwipeBack = checked
-                            ThemeController.saveEdgeSwipeBack(context, checked)
-                        }
-                    )
-                    SegmentedValueItem(
-                        segment = ItemSegment.Bottom,
-                        icon = Icons.Rounded.ViewCarousel,
-                        title = stringResource(R.string.personalization_page_transition),
-                        valueText = stringResource(
-                            when (currentPageTransition) {
-                                PageTransition.CrossAxis -> R.string.page_transition_cross_axis
-                                PageTransition.Horizontal -> R.string.page_transition_horizontal
-                                PageTransition.Vertical -> R.string.page_transition_vertical
+
+                    PersCornerRadiusCard(
+                        radius = currentCornerRadius,
+                        onRadiusChange = { radius ->
+                            if (radius != currentCornerRadius) {
+                                saveSettings(radius = radius)
                             }
-                        ),
-                        onClick = { showTransitionSheet = true }
+                        }
                     )
                 }
             }
-
-            item(key = "corner_radius") {
-                CornerRadiusCard(
-                    radius = currentCornerRadius,
-                    onRadiusChange = { radius ->
-                        if (radius != currentCornerRadius) {
-                            updateTheme(radius = radius)
-                        }
-                    },
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-            }
         }
-    }
-
-    if (showPaletteSheet) {
-        SelectionBottomSheet(
-            title = stringResource(R.string.personalization_dialog_pick_palette),
-            options = paletteStyleOptions.map { it.second },
-            selectedIndex = paletteStyleOptions.indexOfFirst { it.first == currentColorStyle },
-            onSelect = { index ->
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                updateTheme(style = paletteStyleOptions[index].first)
-                showPaletteSheet = false
-            },
-            onDismiss = { showPaletteSheet = false }
-        )
-    }
-
-    if (showSpecSheet) {
-        SelectionBottomSheet(
-            title = stringResource(R.string.personalization_dialog_pick_spec),
-            options = colorSpecOptions.map { it.second },
-            selectedIndex = colorSpecOptions.indexOfFirst { it.first == currentColorSpec },
-            onSelect = { index ->
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                updateTheme(spec = colorSpecOptions[index].first)
-                showSpecSheet = false
-            },
-            onDismiss = { showSpecSheet = false }
-        )
-    }
-
-    if (showTransitionSheet) {
-        SelectionBottomSheet(
-            title = stringResource(R.string.personalization_dialog_pick_transition),
-            options = pageTransitionOptions.map { it.second },
-            selectedIndex = pageTransitionOptions.indexOfFirst { it.first == currentPageTransition },
-            onSelect = { index ->
-                val chosen = pageTransitionOptions[index].first
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                currentPageTransition = chosen
-                ThemeController.savePageTransition(context, chosen)
-                showTransitionSheet = false
-            },
-            onDismiss = { showTransitionSheet = false }
-        )
     }
 }
 
 @Composable
-private fun ThemePreviewCard(
-    colorScheme: ColorScheme,
-    cornerRadius: Int,
-    isFloatingNavBar: Boolean
+private fun PersNestedCardGroup(
+    headerIcon: ImageVector,
+    headerTitle: String,
+    outerRadius: androidx.compose.ui.unit.Dp,
+    content: @Composable ColumnScope.() -> Unit
 ) {
-    val animatedCardRadius by animateDpAsState(
-        targetValue = (cornerRadius * 0.45f).coerceIn(4f, 16f).dp,
-        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
-        label = "previewCardRadius"
-    )
-    val effectsSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
-    val spatialSpec = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
-
-    Box(
-        modifier = Modifier.fillMaxWidth(),
-        contentAlignment = Alignment.TopCenter
+    Surface(
+        shape = RoundedCornerShape(outerRadius),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Surface(
+        Column(
             modifier = Modifier
-                .fillMaxWidth(0.42f)
-                .aspectRatio(0.48f),
-            color = colorScheme.surfaceContainer,
-            shape = RoundedCornerShape(22.dp),
-            border = BorderStroke(1.dp, colorScheme.outlineVariant)
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 2.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Box(
                     modifier = Modifier
-                        .height(44.dp)
-                        .fillMaxWidth(),
-                    contentAlignment = Alignment.TopStart
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(start = 12.dp, top = 14.dp, bottom = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = stringResource(R.string.app_name),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                    Icon(
+                        imageVector = headerIcon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
-
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Surface(
-                        color = colorScheme.secondaryContainer,
-                        shape = RoundedCornerShape(animatedCardRadius),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(40.dp)
-                    ) {}
-                    Surface(
-                        color = colorScheme.surfaceBright,
-                        shape = RoundedCornerShape(animatedCardRadius),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                    ) {}
-                }
-
-                AnimatedContent(
-                    targetState = isFloatingNavBar,
-                    transitionSpec = {
-                        (fadeIn(animationSpec = effectsSpec) +
-                            scaleIn(initialScale = 0.92f, animationSpec = spatialSpec)) togetherWith
-                            (fadeOut(animationSpec = effectsSpec) +
-                                scaleOut(targetScale = 0.92f))
-                    },
-                    label = "previewNavMode"
-                ) { floating ->
-                    if (floating) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(40.dp)
-                                .padding(horizontal = 12.dp, vertical = 6.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = colorScheme.surfaceContainerHighest,
-                                tonalElevation = 3.dp,
-                                shadowElevation = 3.dp
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(width = 22.dp, height = 10.dp)
-                                            .clip(CircleShape)
-                                            .background(colorScheme.primaryContainer)
-                                    )
-                                    repeat(3) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(8.dp)
-                                                .clip(CircleShape)
-                                                .background(colorScheme.onSurfaceVariant.copy(alpha = 0.55f))
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        Surface(
-                            color = colorScheme.surfaceContainer,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .height(40.dp)
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Home,
-                                    contentDescription = null,
-                                    tint = colorScheme.primary,
-                                    modifier = Modifier.size(21.dp)
-                                )
-                            }
-                        }
-                    }
-                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = headerTitle,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
+
+            content()
         }
     }
 }
 
 @Composable
-private fun ColorSwatchTile(
+private fun ThemeModeTile(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.97f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "themeModeScale"
+    )
+    val bgColor by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        },
+        label = "themeModeBg"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.onPrimary
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        },
+        label = "themeModeText"
+    )
+
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(18.dp),
+        color = bgColor,
+        interactionSource = interactionSource,
+        modifier = modifier
+            .height(56.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = if (selected) Icons.Rounded.Check else icon,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = contentColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun AccentSwatchCircle(
     color: Color,
     isSelected: Boolean,
     isDark: Boolean,
     isAmoled: Boolean,
-    paletteStyle: PaletteStyle,
-    colorSpec: ColorSpec.SpecVersion,
-    accentIntensity: AccentIntensity,
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
-    val haptic = LocalHapticFeedback.current
-
     val targetScheme = if (color == Color.Unspecified) {
         val base = when {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
@@ -723,39 +472,40 @@ private fun ColorSwatchTile(
             seedColor = base.primary,
             isDark = isDark,
             isAmoled = isAmoled,
-            specVersion = colorSpec,
-            style = paletteStyle
+            style = PaletteStyle.TonalSpot
         )
     } else {
         rememberDynamicColorScheme(
             seedColor = color,
             isDark = isDark,
             isAmoled = isAmoled,
-            specVersion = colorSpec,
-            style = paletteStyle
+            style = PaletteStyle.TonalSpot
         )
-    }.withAccentIntensity(accentIntensity)
+    }.withAccentIntensity(ThemeController.getAppSettings(context).accentIntensity)
 
     val colorScheme = animateColorSchemeAsState(targetColorScheme = targetScheme)
     val scale by animateFloatAsState(
-        targetValue = if (isSelected) 1.08f else 1.0f,
-        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
-        label = "swatchTileScale"
+        targetValue = if (isSelected) 1.08f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "swatchScale"
     )
-    val effectsSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
-    val spatialSpec = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
 
     Surface(
-        onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.VirtualKey)
-            onClick()
-        },
-        shape = RoundedCornerShape(20.dp),
-        color = colorScheme.surfaceContainer,
-        modifier = Modifier.size(72.dp)
+        onClick = onClick,
+        shape = CircleShape,
+        color = colorScheme.surfaceContainerHigh,
+        modifier = Modifier
+            .size(56.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Canvas(modifier = Modifier.size(48.dp)) {
+            Canvas(modifier = Modifier.size(40.dp)) {
                 drawArc(
                     color = colorScheme.primaryContainer,
                     startAngle = 180f,
@@ -770,89 +520,51 @@ private fun ColorSwatchTile(
                 )
             }
 
-            Box(
-                modifier = Modifier.graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                },
-                contentAlignment = Alignment.Center
+            AnimatedVisibility(
+                visible = isSelected,
+                enter = fadeIn() + scaleIn(initialScale = 0.75f),
+                exit = fadeOut() + scaleOut(targetScale = 0.75f)
             ) {
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = isSelected,
-                    enter = fadeIn(animationSpec = effectsSpec) +
-                        scaleIn(initialScale = 0.8f, animationSpec = spatialSpec),
-                    exit = fadeOut(animationSpec = effectsSpec) +
-                        scaleOut(targetScale = 0.8f)
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(colorScheme.primary),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .border(2.dp, colorScheme.primary, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .clip(CircleShape)
-                                .background(colorScheme.primary, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Check,
-                                contentDescription = null,
-                                tint = colorScheme.onPrimary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                }
-
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = !isSelected,
-                    enter = fadeIn(animationSpec = effectsSpec) +
-                        scaleIn(initialScale = 0.8f, animationSpec = spatialSpec),
-                    exit = fadeOut(animationSpec = effectsSpec) +
-                        scaleOut(targetScale = 0.8f)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(20.dp)
-                            .background(colorScheme.primary, CircleShape)
+                    Icon(
+                        imageVector = Icons.Rounded.Check,
+                        contentDescription = null,
+                        tint = colorScheme.onPrimary,
+                        modifier = Modifier.size(15.dp)
                     )
                 }
+            }
+
+            AnimatedVisibility(
+                visible = !isSelected,
+                enter = fadeIn() + scaleIn(initialScale = 0.75f),
+                exit = fadeOut() + scaleOut(targetScale = 0.75f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(colorScheme.primary)
+                )
             }
         }
     }
 }
 
 @Composable
-private fun SegmentedGroup(
-    modifier: Modifier = Modifier,
-    content: @Composable ColumnScope.() -> Unit
+private fun PersFloatingNavSwitchCard(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
 ) {
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-        content = content
-    )
-}
-
-@Composable
-private fun SegmentedValueItem(
-    segment: ItemSegment,
-    icon: ImageVector,
-    title: String,
-    valueText: String,
-    onClick: () -> Unit,
-    summary: String? = null
-) {
-    val haptic = LocalHapticFeedback.current
     Surface(
-        onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-            onClick()
-        },
-        shape = segmentShape(segment),
+        onClick = { onCheckedChange(!checked) },
+        shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -863,100 +575,50 @@ private fun SegmentedValueItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector = icon,
+                imageVector = Icons.Rounded.Waves,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.size(22.dp)
             )
             Spacer(modifier = Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = title,
+                    text = stringResource(R.string.personalization_floating_navbar_short),
                     style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (summary != null) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = summary,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(
-                text = valueText,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-private fun SegmentedToggleItem(
-    segment: ItemSegment,
-    icon: ImageVector,
-    title: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    summary: String? = null
-) {
-    Surface(
-        onClick = { onCheckedChange(!checked) },
-        shape = segmentShape(segment),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = if (summary != null) 13.dp else 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(22.dp)
-            )
-            Spacer(modifier = Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
+                    text = stringResource(R.string.personalization_floating_navbar_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (summary != null) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = summary,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
             }
             Spacer(modifier = Modifier.width(12.dp))
             Switch(
                 checked = checked,
-                onCheckedChange = onCheckedChange
+                onCheckedChange = onCheckedChange,
+                thumbContent = {
+                    Icon(
+                        imageVector = if (checked) Icons.Rounded.Check else Icons.Rounded.Close,
+                        contentDescription = null,
+                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                    )
+                }
             )
         }
     }
 }
 
 @Composable
-private fun CornerRadiusCard(
+private fun PersCornerRadiusCard(
     radius: Int,
-    onRadiusChange: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    onRadiusChange: (Int) -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
     var sliderValue by remember(radius) { mutableFloatStateOf(radius.toFloat()) }
@@ -967,9 +629,9 @@ private fun CornerRadiusCard(
         .coerceAtLeast(0)
 
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        modifier = modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier
@@ -983,8 +645,8 @@ private fun CornerRadiusCard(
             ) {
                 Icon(
                     imageVector = Icons.Rounded.RoundedCorner,
-                    contentDescription = stringResource(R.string.personalization_corner_radius),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(22.dp)
                 )
                 Spacer(modifier = Modifier.width(14.dp))
@@ -992,37 +654,29 @@ private fun CornerRadiusCard(
                     Text(
                         text = stringResource(R.string.personalization_corner_radius),
                         style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = stringResource(R.string.personalization_corner_radius_desc),
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                if (displayedRadius != ThemeController.DEFAULT_CORNER_RADIUS) {
-                    IconButton(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            sliderValue = ThemeController.DEFAULT_CORNER_RADIUS.toFloat()
-                            onRadiusChange(ThemeController.DEFAULT_CORNER_RADIUS)
-                        },
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Refresh,
-                            contentDescription = stringResource(R.string.action_reset),
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary
+                ) {
+                    Text(
+                        text = "$displayedRadius dp",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
                 }
-                Text(
-                    text = "$displayedRadius dp",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
 
             Slider(
@@ -1042,104 +696,53 @@ private fun CornerRadiusCard(
                 steps = stepCount,
                 modifier = Modifier.fillMaxWidth()
             )
-        }
-    }
-}
 
-@Composable
-private fun SelectionBottomSheet(
-    title: String,
-    options: List<Int>,
-    selectedIndex: Int,
-    onSelect: (Int) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentWindowInsets = { WindowInsets(0.dp) },
-        dragHandle = {
-            BottomSheetDefaults.DragHandle(
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-            )
-        }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLargeEmphasized,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
-            )
-            options.forEachIndexed { index, labelRes ->
-                val isSelected = index == selectedIndex
-                SegmentedListItem(
-                    selected = isSelected,
-                    onClick = { onSelect(index) },
-                    shapes = ListItemDefaults.segmentedShapes(
-                        index = index,
-                        count = options.size
-                    ),
-                    colors = ListItemDefaults.segmentedColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                        selectedContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        selectedLeadingContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    ),
-                    leadingContent = {
-                        Box(
-                            modifier = Modifier.size(24.dp),
-                            contentAlignment = Alignment.Center
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "${ThemeController.MIN_CORNER_RADIUS} dp",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                if (displayedRadius != ThemeController.DEFAULT_CORNER_RADIUS) {
+                    Surface(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            sliderValue = ThemeController.DEFAULT_CORNER_RADIUS.toFloat()
+                            onRadiusChange(ThemeController.DEFAULT_CORNER_RADIUS)
+                        },
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (isSelected) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(22.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primary),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Check,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onPrimary,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                }
-                            } else {
-                                Box(
-                                    modifier = Modifier
-                                        .size(20.dp)
-                                        .border(
-                                            width = 1.5.dp,
-                                            color = MaterialTheme.colorScheme.outlineVariant,
-                                            shape = CircleShape
-                                        )
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Rounded.Refresh,
+                                contentDescription = stringResource(R.string.action_reset),
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = stringResource(R.string.action_reset),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
                         }
                     }
-                ) {
-                    Text(
-                        text = stringResource(labelRes),
-                        style = if (isSelected) {
-                            MaterialTheme.typography.titleSmallEmphasized
-                        } else {
-                            MaterialTheme.typography.bodyLarge
-                        }
-                    )
+                    Spacer(modifier = Modifier.weight(1f))
                 }
+                Text(
+                    text = "${ThemeController.MAX_CORNER_RADIUS} dp",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
