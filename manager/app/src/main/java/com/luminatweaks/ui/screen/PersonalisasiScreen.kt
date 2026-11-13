@@ -45,6 +45,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -56,6 +57,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
@@ -95,7 +97,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.SliderState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -107,7 +108,6 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -941,74 +941,70 @@ private fun ExpressiveRadiusSlider(
     val tickCount = (ThemeController.MAX_CORNER_RADIUS - ThemeController.MIN_CORNER_RADIUS) / 2
     val fraction = ((value - minValue) / (maxValue - minValue)).coerceIn(0f, 1f)
 
-    val sliderState = remember(minValue, maxValue) {
-        SliderState(
-            value = value.coerceIn(minValue, maxValue),
-            valueRange = minValue..maxValue
-        )
-    }
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(36.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        val thumbWidth = 6.dp
+        val usableWidth = (maxWidth - thumbWidth).coerceAtLeast(0.dp)
+        val thumbOffset = usableWidth * fraction
 
-    LaunchedEffect(value) {
-        val coerced = value.coerceIn(minValue, maxValue)
-        if (sliderState.value != coerced) {
-            sliderState.value = coerced
-        }
-    }
-
-    Slider(
-        state = sliderState,
-        onValueChange = { newVal ->
-            sliderState.value = newVal
-            onValueChange(newVal)
-        },
-        modifier = Modifier.fillMaxWidth(),
-        track = {
-            Canvas(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(24.dp)
-            ) {
-                val centerY = size.height / 2f
-                val activeWidth = size.width * fraction
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(24.dp)
+        ) {
+            val centerY = size.height / 2f
+            val activeWidth = size.width * fraction
+            drawRoundRect(
+                color = trackColor,
+                topLeft = Offset(0f, centerY - tickHeight / 2f),
+                size = Size(size.width, tickHeight),
+                cornerRadius = CornerRadius(tickHeight / 2f)
+            )
+            if (activeWidth > 0f) {
                 drawRoundRect(
-                    color = trackColor,
+                    color = primary,
                     topLeft = Offset(0f, centerY - tickHeight / 2f),
-                    size = Size(size.width, tickHeight),
+                    size = Size(activeWidth, tickHeight),
                     cornerRadius = CornerRadius(tickHeight / 2f)
                 )
-                if (activeWidth > 0f) {
-                    drawRoundRect(
-                        color = primary,
-                        topLeft = Offset(0f, centerY - tickHeight / 2f),
-                        size = Size(activeWidth, tickHeight),
-                        cornerRadius = CornerRadius(tickHeight / 2f)
-                    )
-                }
-                val step = if (tickCount > 0) size.width / (tickCount + 1) else size.width
-                for (index in 0..tickCount) {
-                    val x = step * (index + 1)
-                    drawCircle(
-                        color = if (x <= activeWidth) activeTick else inactiveTick,
-                        radius = tickRadius,
-                        center = Offset(x, centerY)
-                    )
-                }
             }
-        },
-        thumb = {
-            Box(
-                modifier = Modifier
-                    .size(width = 6.dp, height = 22.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary)
-            )
-        },
-        colors = SliderDefaults.colors(
-            thumbColor = Color.Transparent,
-            activeTrackColor = Color.Transparent,
-            inactiveTrackColor = Color.Transparent
+            val step = if (tickCount > 0) size.width / (tickCount + 1) else size.width
+            for (index in 0..tickCount) {
+                val x = step * (index + 1)
+                drawCircle(
+                    color = if (x <= activeWidth) activeTick else inactiveTick,
+                    radius = tickRadius,
+                    center = Offset(x, centerY)
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .offset(x = thumbOffset)
+                .size(width = thumbWidth, height = 22.dp)
+                .clip(CircleShape)
+                .background(primary)
         )
-    )
+
+        Slider(
+            value = value.coerceIn(minValue, maxValue),
+            onValueChange = onValueChange,
+            valueRange = minValue..maxValue,
+            modifier = Modifier.fillMaxWidth(),
+            colors = SliderDefaults.colors(
+                thumbColor = Color.Transparent,
+                activeTrackColor = Color.Transparent,
+                inactiveTrackColor = Color.Transparent,
+                activeTickColor = Color.Transparent,
+                inactiveTickColor = Color.Transparent
+            )
+        )
+    }
 }
 
 @Composable
