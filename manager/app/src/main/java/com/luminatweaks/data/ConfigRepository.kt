@@ -38,6 +38,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 data class DisplayRrMode(val id: Int, val hz: Int)
 
+data class DetectedGame(val packageName: String, val label: String)
+
 data class TweaksUiState(
     val isGlobalLiteMode: Boolean = false,
     val isGlobalTextureEnabled: Boolean = false,
@@ -616,6 +618,31 @@ object ConfigRepository {
                 refreshGameSets(currentConfigs)
                 currentConfigs
             }
+        }
+
+    suspend fun detectInstalledGames(packageManager: PackageManager): List<DetectedGame> =
+        withContext(Dispatchers.IO) {
+            val whitelist = fileMutex.withLock { loadGameWhitelist() }
+            if (whitelist.isEmpty()) return@withContext emptyList()
+
+            val installed = runCatching {
+                packageManager.getInstalledPackages(0)
+            }.getOrElse { emptyList() }
+
+            installed.asSequence()
+                .filter { whitelist.containsKey(it.packageName) }
+                .map { info ->
+                    val label = runCatching {
+                        info.applicationInfo?.loadLabel(packageManager)?.toString()
+                    }.getOrNull()
+                    DetectedGame(
+                        packageName = info.packageName,
+                        label = label?.takeIf { it.isNotBlank() } ?: info.packageName
+                    )
+                }
+                .distinctBy { it.packageName }
+                .sortedBy { it.label.lowercase() }
+                .toList()
         }
 
     private fun refreshGameSets(configs: Map<String, AppProfileConfig>) {

@@ -30,6 +30,30 @@ object RootUtil {
         }
     }
 
+    suspend fun detectRootProvider(): String? = withContext(Dispatchers.IO) {
+        try {
+            val process = ProcessBuilder(
+                "su",
+                "-c",
+                "if [ -d /data/adb/ksu ] || command -v ksud >/dev/null 2>&1; then echo KernelSU; " +
+                    "elif [ -d /data/adb/ap ] || command -v apd >/dev/null 2>&1; then echo APatch; " +
+                    "elif [ -d /data/adb/magisk ] || command -v magisk >/dev/null 2>&1; then echo Magisk; " +
+                    "else echo Unknown; fi"
+            ).redirectErrorStream(true).start()
+            val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
+            val exitCode = process.waitFor()
+            if (exitCode != 0) return@withContext null
+            when {
+                output.contains("KernelSU") -> "KernelSU"
+                output.contains("APatch") -> "APatch"
+                output.contains("Magisk") -> "Magisk"
+                else -> null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     suspend fun runAsRoot(command: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val process = ProcessBuilder("su", "-c", command)
