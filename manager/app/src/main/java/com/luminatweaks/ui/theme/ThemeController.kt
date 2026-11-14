@@ -19,6 +19,9 @@
 package com.luminatweaks.ui.theme
 
 import android.content.Context
+import android.content.res.Configuration
+import android.graphics.Color as AndroidColor
+import android.os.Build
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.ColorScheme
@@ -292,6 +295,95 @@ fun ColorScheme.withAccentIntensity(
         onSecondaryContainer = onSecondaryContainer.scaledSaturation(f),
         tertiary = tertiary.scaledSaturation(f),
         tertiaryContainer = tertiaryContainer.scaledSaturation(f)
+    )
+}
+
+data class OverlayPalette(
+    val background: Int,
+    val onSurface: Int,
+    val onSurfaceVariant: Int,
+    val primary: Int,
+    val tertiary: Int,
+    val error: Int
+)
+
+private const val OVERLAY_FALLBACK_SEED = 0xFFE91E63.toInt()
+
+/**
+ * Framework-only palette for the floating FPS window. The overlay is a plain
+ * Android View, so it cannot read MaterialTheme; derive the same seed, dark
+ * mode, AMOLED and accent intensity rules here instead of duplicating colors.
+ */
+fun ThemeController.overlayPalette(context: Context): OverlayPalette {
+    val settings = getAppSettings(context)
+    val systemNight = (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+        Configuration.UI_MODE_NIGHT_YES
+    val dark = when (settings.colorMode) {
+        ColorMode.LIGHT -> false
+        ColorMode.DARK, ColorMode.DARKAMOLED -> true
+        ColorMode.SYSTEM -> systemNight
+    }
+    val amoled = settings.colorMode == ColorMode.DARKAMOLED
+    val seed = when {
+        settings.keyColor != 0 -> settings.keyColor
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+            runCatching { context.getColor(android.R.color.system_accent1_500) }
+                .getOrDefault(OVERLAY_FALLBACK_SEED)
+        else -> OVERLAY_FALLBACK_SEED
+    }
+
+    val primary = adjustOverlaySaturation(
+        seed,
+        settings.accentIntensity.saturationFactor,
+        if (dark) 1f else 0.92f
+    )
+    val tertiary = shiftOverlayHue(primary, 52f)
+    val background = if (amoled) {
+        AndroidColor.BLACK
+    } else {
+        blendOverlayColor(
+            if (dark) 0xFF101418.toInt() else 0xFFF5F7F9.toInt(),
+            seed,
+            if (dark) 0.10f else 0.05f
+        )
+    }
+    val onSurface = if (dark) 0xFFF2F4F7.toInt() else 0xFF11161B.toInt()
+    val onSurfaceVariant = blendOverlayColor(onSurface, background, if (dark) 0.42f else 0.52f)
+    val error = if (dark) 0xFFFFB4AB.toInt() else 0xFFB3261E.toInt()
+
+    return OverlayPalette(
+        background = background,
+        onSurface = onSurface,
+        onSurfaceVariant = onSurfaceVariant,
+        primary = primary,
+        tertiary = tertiary,
+        error = error
+    )
+}
+
+private fun adjustOverlaySaturation(color: Int, factor: Float, brightness: Float): Int {
+    val hsv = FloatArray(3)
+    AndroidColor.colorToHSV(color, hsv)
+    hsv[1] = (hsv[1] * factor).coerceIn(0f, 1f)
+    hsv[2] = (hsv[2] * brightness).coerceIn(0.18f, 1f)
+    return AndroidColor.HSVToColor(hsv)
+}
+
+private fun shiftOverlayHue(color: Int, degrees: Float): Int {
+    val hsv = FloatArray(3)
+    AndroidColor.colorToHSV(color, hsv)
+    hsv[0] = (hsv[0] + degrees) % 360f
+    return AndroidColor.HSVToColor(hsv)
+}
+
+private fun blendOverlayColor(base: Int, tint: Int, amount: Float): Int {
+    val t = amount.coerceIn(0f, 1f)
+    fun channel(b: Int, c: Int) = (b + (c - b) * t).toInt().coerceIn(0, 255)
+    return AndroidColor.argb(
+        255,
+        channel(AndroidColor.red(base), AndroidColor.red(tint)),
+        channel(AndroidColor.green(base), AndroidColor.green(tint)),
+        channel(AndroidColor.blue(base), AndroidColor.blue(tint))
     )
 }
 

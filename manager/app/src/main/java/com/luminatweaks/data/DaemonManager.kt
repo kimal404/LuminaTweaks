@@ -39,6 +39,7 @@ object DaemonManager {
     private const val IPC_SENTINEL_PID = "ipc"
     private const val PUBLIC_FPS_PATH = "/data/local/tmp/lumina.fps"
     private const val LEGACY_FPS_PATH = "/data/adb/.config/lumina/fps.txt"
+    private const val APP_FPS_PATH = "/data/data/com.luminatweaks/files/lumina.fps"
 
     data class DaemonStatus(
         val pid: String?,
@@ -74,7 +75,9 @@ object DaemonManager {
     }
 
     private fun readHeartbeatAgeMs(): Long? {
-        var freshest: Long? = null
+        var freshest: Long? = readSystemProperty("sys.lumina.alive")
+            ?.toLongOrNull()
+            ?.let { (System.currentTimeMillis() - it).coerceAtLeast(0L) }
         for (path in listOf(HEARTBEAT_FILE_PATH, LEGACY_HEARTBEAT_FILE_PATH)) {
             try {
                 val file = File(path)
@@ -164,16 +167,27 @@ object DaemonManager {
     }
 
     private fun readFpsFromFile(): String {
-        for (path in listOf(PUBLIC_FPS_PATH, LEGACY_FPS_PATH)) {
+        var best = ""
+        var bestTimestamp = -1L
+        fun consider(raw: String?) {
+            if (raw.isNullOrBlank()) return
+            val timestamp = raw.trim().split(Regex("\\s+"))
+                .getOrNull(1)
+                ?.toLongOrNull()
+                ?: return
+            if (timestamp > bestTimestamp) {
+                bestTimestamp = timestamp
+                best = raw.trim()
+            }
+        }
+        consider(readSystemProperty("sys.lumina.fps"))
+        for (path in listOf(APP_FPS_PATH, PUBLIC_FPS_PATH, LEGACY_FPS_PATH)) {
             try {
                 val file = File(path)
-                if (file.exists() && file.canRead()) {
-                    val value = file.readText().trim()
-                    if (value.isNotEmpty()) return value
-                }
+                if (file.exists() && file.canRead()) consider(file.readText())
             } catch (_: Exception) {}
         }
-        return ""
+        return best
     }
 
     suspend fun isRebootRequired(): Boolean = withContext(Dispatchers.IO) {
@@ -228,6 +242,21 @@ object DaemonManager {
             "[ -f $CONFIG_DIR/binder_codes.json ] && echo LUMINA_YES || echo LUMINA_NO",
             3
         ).contains("LUMINA_YES")
+    }
+
+    private fun ipcCommand(command: String): String =
+        "(printf '$command\\n' | nc -w 1 -U $IPC_SOCKET_PRIMARY 2>/dev/null || " +
+            "printf '$command\\n' | toybox nc -w 1 -U $IPC_SOCKET_PRIMARY 2>/dev/null || " +
+            "printf '$command\\n' | nc -w 1 -U $IPC_SOCKET_FALLBACK 2>/dev/null || " +
+            "printf '$command\\n' | toybox nc -w 1 -U $IPC_SOCKET_FALLBACK 2>/dev/null)"
+
+    suspend fun requestFpsPreview(seconds: Int): Boolean = withContext(Dispatchers.IO) {
+        val clamped = seconds.coerceIn(1, 3600)
+        runSuCmd(ipcCommand("FPS_PREVIEW $clamped"), 4).contains("OK")
+    }
+
+    suspend fun stopFpsPreview(): Boolean = withContext(Dispatchers.IO) {
+        runSuCmd(ipcCommand("FPS_PREVIEW_STOP"), 4).contains("OK")
     }
 
     suspend fun getDaemonPid(): String? = withContext(Dispatchers.IO) {

@@ -24,8 +24,16 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.content.pm.ServiceInfo
+import android.graphics.Canvas
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.PixelFormat
+import android.graphics.RectF
+import android.graphics.Shader
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -33,74 +41,30 @@ import android.os.IBinder
 import android.os.Looper
 import android.provider.Settings
 import android.view.Choreographer
+import android.view.GestureDetector
 import android.view.Gravity
+import android.view.MotionEvent
+import android.view.View
+import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.widget.Toast
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.LifecycleRegistry
-import androidx.lifecycle.ViewModelStore
-import androidx.lifecycle.ViewModelStoreOwner
-import androidx.lifecycle.setViewTreeLifecycleOwner
-import androidx.lifecycle.setViewTreeViewModelStoreOwner
-import androidx.savedstate.SavedStateRegistry
-import androidx.savedstate.SavedStateRegistryController
-import androidx.savedstate.SavedStateRegistryOwner
-import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.luminatweaks.MainActivity
 import com.luminatweaks.R
+import com.luminatweaks.data.DaemonManager
 import com.luminatweaks.ui.screen.FloatingFpsConfig
 import com.luminatweaks.ui.screen.FloatingFpsPrefs
 import com.luminatweaks.ui.screen.FpsOverlayCorner
 import com.luminatweaks.ui.screen.FpsOverlayStyle
-import com.luminatweaks.ui.theme.LuminaTheme
+import com.luminatweaks.ui.theme.OverlayPalette
+import com.luminatweaks.ui.theme.ThemeController
+import com.luminatweaks.ui.theme.overlayPalette
 import com.luminatweaks.util.DeviceUtil
 import com.luminatweaks.util.RootUtil
-import java.io.BufferedReader
-import java.io.BufferedWriter
 import java.io.File
-import java.io.InputStreamReader
-import java.io.OutputStreamWriter
 import java.util.Locale
+import kotlin.math.hypot
+import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -110,9 +74,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import org.json.JSONObject
 
 data class LiveFpsTelemetry(
     val fps: Int = 0,
@@ -120,14 +83,27 @@ data class LiveFpsTelemetry(
     val frametimeMs: Float = 8.3f,
     val tempLabel: String = "37.0°C",
     val profileLabel: String = "Balanced",
-    val history: List<Float> = List(18) { 8.3f }
+    val history: FloatArray = FloatArray(18) { 8.3f },
+    val gameActive: Boolean = false
 )
 
+/**
+ * Floating FPS overlay.
+ *
+ * Rendering is a single plain [View] (Paints + Canvas) and telemetry comes from
+ * the tiny file `luminad` writes, so the polling loop never starts `su`, never
+ * invokes `dumpsys`, and never constructs a Compose tree.
+ */
 class FloatingFpsService : Service() {
 
     companion object {
         private const val CHANNEL_ID = "lumina_floating_fps_channel"
         private const val NOTIFICATION_ID = 4041
+        private const val PUBLIC_FPS_PATH = "/data/local/tmp/lumina.fps"
+        private const val FEED_MAX_AGE_MS = 3_000L
+        private const val GAME_STALE_GRACE_MS = 12_000L
+        private const val ALWAYS_ON_PREVIEW_SECONDS = 3600
+        private const val PREVIEW_RENEW_MS = 30 * 60 * 1000L
 
         const val ACTION_SYNC = "com.luminatweaks.action.FPS_OVERLAY_SYNC"
         const val ACTION_PREVIEW_BURST = "com.luminatweaks.action.FPS_OVERLAY_PREVIEW_BURST"
@@ -193,23 +169,26 @@ class FloatingFpsService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var windowManager: WindowManager? = null
-    private var overlayView: ComposeView? = null
+    private var overlayView: FpsOverlayView? = null
     private var layoutParams: WindowManager.LayoutParams? = null
-    private var lifecycleOwner: OverlayLifecycleOwner? = null
 
-    private var activeConfig by mutableStateOf(FloatingFpsConfig())
-    private var liveTelemetry by mutableStateOf(LiveFpsTelemetry())
+    private var activeConfig = FloatingFpsConfig()
+    private var liveTelemetry = LiveFpsTelemetry()
 
     private var telemetryJob: Job? = null
     private var previewBurstJob: Job? = null
-    private var burstUntilMs: Long = 0L
+    private var burstUntilMs = 0L
     private var isOverlayAttached = false
     private var lastAppliedCorner: FpsOverlayCorner? = null
     private var hasCustomDragPosition = false
+    private var previewLease = false
+    private var lastLeaseRequestMs = 0L
 
-    private val rootShell = PersistentRootShell()
-    private val sfSampler = SurfaceFlingerSampler()
     private val fallbackChoreographer = ChoreographerFpsTracker()
+    private var cachedHz = 60
+    private var cachedTemp = "37.0°C"
+    private var cachedProfile = "Balanced"
+    private var cacheStampMs = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -232,6 +211,7 @@ class FloatingFpsService : Service() {
                 val updated = FloatingFpsPrefs.load(this).copy(touchLock = false)
                 FloatingFpsPrefs.save(this, updated)
                 activeConfig = updated
+                overlayView?.applyState(updated, liveTelemetry)
                 applyLayoutParamsUpdate(resetCorner = false)
                 updateNotification(isShowing = isOverlayAttached)
                 Toast.makeText(
@@ -246,6 +226,7 @@ class FloatingFpsService : Service() {
                 activeConfig = FloatingFpsPrefs.load(this)
                 burstUntilMs = System.currentTimeMillis() + 5_500L
                 startForegroundCompat()
+                requestDaemonPreview(8)
                 startTelemetryLoop()
                 previewBurstJob?.cancel()
                 previewBurstJob = serviceScope.launch {
@@ -253,6 +234,8 @@ class FloatingFpsService : Service() {
                     burstUntilMs = 0L
                     if (!activeConfig.enabled) {
                         stopSelf()
+                    } else {
+                        applyPreviewLease(force = true)
                     }
                 }
                 return START_STICKY
@@ -273,10 +256,24 @@ class FloatingFpsService : Service() {
 
         startForegroundCompat()
         if (isOverlayAttached) {
+            overlayView?.applyState(loaded, liveTelemetry)
             applyLayoutParamsUpdate(resetCorner = cornerChanged)
         }
         startTelemetryLoop()
+        applyPreviewLease()
         return START_STICKY
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        overlayView?.setPalette(ThemeController.overlayPalette(this))
+        val lp = layoutParams
+        if (lp != null) {
+            val metrics = resources.displayMetrics
+            lp.x = lp.x.coerceIn(0, (metrics.widthPixels - 60).coerceAtLeast(0))
+            lp.y = lp.y.coerceIn(0, (metrics.heightPixels - 60).coerceAtLeast(0))
+        }
+        overlayView?.post { applyLayoutParamsUpdate(resetCorner = !hasCustomDragPosition) }
     }
 
     override fun onDestroy() {
@@ -284,7 +281,12 @@ class FloatingFpsService : Service() {
         telemetryJob?.cancel()
         fallbackChoreographer.stop()
         detachOverlay()
-        rootShell.close()
+        if (previewLease || System.currentTimeMillis() < burstUntilMs) {
+            previewLease = false
+            Thread {
+                runBlocking { runCatching { DaemonManager.stopFpsPreview() } }
+            }.start()
+        }
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -305,13 +307,8 @@ class FloatingFpsService : Service() {
     private fun startTelemetryLoop() {
         if (telemetryJob?.isActive == true) return
         telemetryJob = serviceScope.launch {
-            var gamePackages: Set<String> = emptySet()
-            var lastGameListLoadMs = 0L
-            var hasRoot = false
-            var lastRootProbeMs = 0L
-            var cachedLayerPackage = ""
-            var cachedLayerName: String? = null
-            var history = List(18) { 8.3f }
+            val history = FloatArray(18) { 8.3f }
+            var lastGameSeenMs = 0L
 
             while (isActive) {
                 val cfg = activeConfig
@@ -323,218 +320,114 @@ class FloatingFpsService : Service() {
                     break
                 }
 
-                if (now - lastRootProbeMs > 10_000L) {
-                    lastRootProbeMs = now
-                    hasRoot = withContext(Dispatchers.IO) { RootUtil.checkRootAccess() }
-                    if (hasRoot && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this@FloatingFpsService)) {
-                        withContext(Dispatchers.IO) {
-                            RootUtil.runAsRoot("appops set $packageName SYSTEM_ALERT_WINDOW allow 2>/dev/null")
-                        }
+                val feed = withContext(Dispatchers.IO) { readFeed() }
+                val fresh = feed != null && now - feed.epochMs <= FEED_MAX_AGE_MS
+                if (fresh && feed != null && feed.gameActive) {
+                    lastGameSeenMs = now
+                }
+                val show = inBurst || (cfg.enabled && (
+                    !cfg.autoGame ||
+                        (fresh && feed?.gameActive == true) ||
+                        (lastGameSeenMs > 0L && now - lastGameSeenMs <= GAME_STALE_GRACE_MS)
+                    ))
+
+                if (!show) {
+                    fallbackChoreographer.stop()
+                    if (isOverlayAttached) {
+                        detachOverlay()
+                        updateNotification(isShowing = false)
                     }
+                    delay(cfg.intervalMs.toLong().coerceIn(250L, 2_000L))
+                    continue
                 }
 
-                if (cfg.autoGame && (now - lastGameListLoadMs > 8_000L || gamePackages.isEmpty())) {
-                    lastGameListLoadMs = now
-                    gamePackages = withContext(Dispatchers.IO) { loadGameListPackages(hasRoot) }
-                }
-
-                val targetHz = readDisplayHz().coerceAtLeast(60)
-                val tempStr = DeviceUtil.getBatteryTemperature(this@FloatingFpsService)
-                val profileStr = readSystemProperty("sys.lumina.profile") ?: "Balanced"
-
-                val sample = withContext(Dispatchers.IO) {
-                    val fgPkg = if (hasRoot) detectForegroundPackage() else null
-                    val shouldDisplay = when {
-                        inBurst -> true
-                        !cfg.enabled -> false
-                        !cfg.autoGame -> true
-                        fgPkg.isNullOrBlank() -> false
-                        gamePackages.isEmpty() -> false
-                        else -> fgPkg in gamePackages
-                    }
-
-                    if (!shouldDisplay) {
-                        return@withContext PollOutcome(show = false, fps = 0, frametimeMs = 1000f / targetHz)
-                    }
-
-                    // 1) Fast direct file feed from luminad (/data/local/tmp/lumina.fps)
-                    val daemonFps = readDaemonFpsDirect()
-                    if (daemonFps != null && daemonFps > 0f) {
-                        val ms = (1000f / daemonFps).coerceIn(1f, 250f)
-                        return@withContext PollOutcome(
-                            show = true,
-                            fps = daemonFps.roundToInt().coerceAtMost(targetHz),
-                            frametimeMs = ms
-                        )
-                    }
-
-                    // 2) Real-time SurfaceFlinger layer frame timestamps via persistent root shell
-                    if (hasRoot) {
-                        val topPkg = fgPkg ?: packageName
-                        if (topPkg != cachedLayerPackage || cachedLayerName == null) {
-                            cachedLayerPackage = topPkg
-                            cachedLayerName = resolveSurfaceLayerForPackage(topPkg)
-                        }
-                        val sfResult = cachedLayerName?.let { layer ->
-                            sfSampler.sampleLayer(rootShell, layer)
-                        }
-                        if (sfResult != null) {
-                            return@withContext PollOutcome(
-                                show = true,
-                                fps = sfResult.fps.coerceIn(0, targetHz),
-                                frametimeMs = sfResult.frametimeMs.coerceIn(1f, 250f)
-                            )
-                        } else {
-                            // Layer may have recreated (e.g., Unity/UE4 surface switch); re-resolve next tick
-                            cachedLayerName = null
-                        }
-                    }
-
-                    // 3) Fallback Choreographer frame tracker
+                val daemonReading = fresh && feed != null && feed.fps >= 0f
+                val fps: Float
+                val frametime: Float
+                if (daemonReading) {
+                    fps = (feed?.fps ?: 0f).coerceAtLeast(0f)
+                    frametime = (feed?.frametimeMs ?: 0f).takeIf { it > 0f }
+                        ?: if (fps > 0f) 1000f / fps else 1000f / cachedHz.coerceAtLeast(30)
+                    if (fps > 0f) fallbackChoreographer.stop()
+                } else {
                     fallbackChoreographer.start()
-                    val fallbackFps = fallbackChoreographer.consumeFps()
-                    val ms = if (fallbackFps > 0) (1000f / fallbackFps) else (1000f / targetHz)
-                    PollOutcome(
-                        show = true,
-                        fps = fallbackFps.coerceIn(0, targetHz),
-                        frametimeMs = ms
-                    )
+                    fps = fallbackChoreographer.consumeFps().toFloat().coerceAtLeast(0f)
+                    frametime = if (fps > 0f) 1000f / fps else 1000f / cachedHz.coerceAtLeast(30)
                 }
 
-                if (sample.show) {
-                    if (!isOverlayAttached) {
-                        attachOverlay()
-                        updateNotification(isShowing = true)
+                if (!cfg.autoGame && lastLeaseRequestMs > 0L && now - lastLeaseRequestMs >= PREVIEW_RENEW_MS) {
+                    lastLeaseRequestMs = now
+                    requestDaemonPreview(ALWAYS_ON_PREVIEW_SECONDS)
+                }
+
+                if (now - cacheStampMs >= 2_500L) {
+                    cacheStampMs = now
+                    cachedHz = readDisplayHz().coerceAtLeast(30)
+                    if (cfg.showTemp) cachedTemp = DeviceUtil.getBatteryTemperature(this@FloatingFpsService)
+                    if (cfg.showProfile) {
+                        cachedProfile = readSystemProperty("sys.lumina.profile") ?: "Balanced"
                     }
-                    history = (history.drop(1) + sample.frametimeMs)
-                    liveTelemetry = LiveFpsTelemetry(
-                        fps = sample.fps,
-                        targetHz = targetHz,
-                        frametimeMs = sample.frametimeMs,
-                        tempLabel = tempStr,
-                        profileLabel = profileStr,
-                        history = history
-                    )
-                } else if (isOverlayAttached) {
-                    detachOverlay()
-                    updateNotification(isShowing = false)
+                    overlayView?.setPalette(ThemeController.overlayPalette(this@FloatingFpsService))
                 }
 
-                delay(cfg.intervalMs.toLong().coerceIn(200L, 2000L))
+                System.arraycopy(history, 1, history, 0, history.size - 1)
+                history[history.size - 1] = frametime.coerceIn(0f, 250f)
+
+                liveTelemetry = LiveFpsTelemetry(
+                    fps = fps.roundToInt().coerceIn(0, max(cachedHz, 60)),
+                    targetHz = cachedHz,
+                    frametimeMs = frametime.coerceIn(0f, 250f),
+                    tempLabel = cachedTemp,
+                    profileLabel = cachedProfile,
+                    history = history,
+                    gameActive = feed?.gameActive == true || inBurst
+                )
+
+                if (!isOverlayAttached) {
+                    attachOverlay()
+                    updateNotification(isShowing = isOverlayAttached)
+                }
+                overlayView?.applyState(cfg, liveTelemetry)
+
+                delay(cfg.intervalMs.toLong().coerceIn(250L, 2_000L))
             }
         }
     }
 
-    private data class PollOutcome(
-        val show: Boolean,
-        val fps: Int,
-        val frametimeMs: Float
+    private data class Feed(
+        val fps: Float,
+        val frametimeMs: Float,
+        val epochMs: Long,
+        val gameActive: Boolean
     )
 
-    private fun readDaemonFpsDirect(): Float? {
-        for (path in listOf("/data/local/tmp/lumina.fps", "/data/adb/.config/lumina/fps.txt")) {
-            val value = runCatching {
+    private fun readFeed(): Feed? {
+        // The property survives the untrusted-app SELinux wall that often
+        // blocks /data/local/tmp; files remain as a second channel.
+        val candidates = ArrayList<Feed>(3)
+        parseFeed(readSystemProperty("sys.lumina.fps"))?.let { candidates.add(it) }
+        val appFile = File(filesDir, "lumina.fps").absolutePath
+        for (path in listOf(appFile, PUBLIC_FPS_PATH, "/data/adb/.config/lumina/fps.txt")) {
+            try {
                 val file = File(path)
-                if (!file.exists() || !file.canRead()) return@runCatching null
-                val parts = file.readText().trim().split(Regex("\\s+"))
-                val fps = parts.getOrNull(0)?.toFloatOrNull() ?: return@runCatching null
-                val ts = parts.getOrNull(1)?.toLongOrNull() ?: 0L
-                val age = System.currentTimeMillis() - ts
-                if (fps <= 0f || (ts > 0L && age > 2500L)) null else fps
-            }.getOrNull()
-            if (value != null) return value
+                if (!file.exists() || !file.canRead()) continue
+                parseFeed(file.readText())?.let { candidates.add(it) }
+            } catch (_: Exception) {}
         }
-        return null
+        return candidates.maxByOrNull { it.epochMs }
     }
 
-    private fun detectForegroundPackage(): String? {
-        val out = rootShell.exec(
-            "dumpsys activity activities 2>/dev/null | grep -m1 -E 'topResumedActivity=|mResumedActivity=' || " +
-                "dumpsys window 2>/dev/null | grep -m1 'mCurrentFocus='"
-        )
-        val match = Regex("""([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)+)/""").find(out)
-        return match?.groupValues?.getOrNull(1)
-    }
-
-    private fun resolveSurfaceLayerForPackage(pkg: String): String? {
-        val listOut = rootShell.exec("dumpsys SurfaceFlinger --list 2>/dev/null")
-        if (listOut.isBlank()) return null
-        val lines = listOut.lineSequence()
-            .map { it.trim() }
-            .filter { it.contains(pkg) }
-            .filterNot {
-                it.startsWith("Bounds for") ||
-                    it.startsWith("Background for") ||
-                    it.startsWith("DimLayer") ||
-                    it.startsWith("Screenshot")
-            }
-            .toList()
-        if (lines.isEmpty()) return null
-        return lines.lastOrNull { it.contains("SurfaceView") } ?: lines.last()
-    }
-
-    private fun loadGameListPackages(hasRoot: Boolean): Set<String> {
-        val raw = runCatching {
-            val file = File("/data/adb/.config/lumina/gamelist.json")
-            if (file.exists() && file.canRead()) {
-                file.readText()
-            } else if (hasRoot) {
-                rootShell.exec("cat /data/adb/.config/lumina/gamelist.json 2>/dev/null")
-            } else {
-                ""
-            }
-        }.getOrDefault("")
-
-        if (raw.isBlank()) return emptySet()
-        val result = LinkedHashSet<String>()
-        val trimmed = raw.trim()
-        runCatching {
-            when {
-                trimmed.startsWith("[") -> {
-                    val arr = JSONArray(trimmed)
-                    for (i in 0 until arr.length()) {
-                        val item = arr.opt(i)
-                        when (item) {
-                            is String -> item.trim().takeIf { it.contains('.') }?.let(result::add)
-                            is JSONObject -> {
-                                val pkg = item.optString("packageName")
-                                    .ifBlank { item.optString("package") }
-                                    .ifBlank { item.optString("pkg") }
-                                    .trim()
-                                if (pkg.contains('.')) result.add(pkg)
-                            }
-                        }
-                    }
-                }
-
-                trimmed.startsWith("{") -> {
-                    val obj = JSONObject(trimmed)
-                    val arr = obj.optJSONArray("games")
-                        ?: obj.optJSONArray("packages")
-                        ?: obj.optJSONArray("list")
-                    if (arr != null) {
-                        for (i in 0 until arr.length()) {
-                            val pkg = arr.optString(i).trim()
-                            if (pkg.contains('.')) result.add(pkg)
-                        }
-                    } else {
-                        val keys = obj.keys()
-                        while (keys.hasNext()) {
-                            val key = keys.next().trim()
-                            if (key.contains('.')) result.add(key)
-                        }
-                    }
-                }
-
-                else -> {
-                    trimmed.lineSequence()
-                        .map { it.trim() }
-                        .filter { it.isNotBlank() && !it.startsWith("#") && it.contains('.') }
-                        .forEach(result::add)
-                }
-            }
-        }
-        return result
+    private fun parseFeed(raw: String?): Feed? {
+        if (raw.isNullOrBlank()) return null
+        val parts = raw.trim().split(Regex("\\s+"))
+        if (parts.size < 2) return null
+        val fps = parts[0].toFloatOrNull() ?: return null
+        val epochMs = parts[1].toLongOrNull()?.takeIf { it > 0L } ?: return null
+        val frametime = parts.getOrNull(2)?.toFloatOrNull()
+            ?: if (fps > 0f) 1000f / fps else 0f
+        val gameActive = parts.getOrNull(3)?.let { it == "1" || it.equals("true", true) }
+            ?: (fps > 0f)
+        return Feed(fps, frametime, epochMs, gameActive)
     }
 
     @Suppress("DEPRECATION")
@@ -559,76 +452,86 @@ class FloatingFpsService : Service() {
         }
     }
 
+    private fun requestDaemonPreview(seconds: Int) {
+        serviceScope.launch(Dispatchers.IO) {
+            runCatching { DaemonManager.requestFpsPreview(seconds) }
+        }
+    }
+
+    /**
+     * Manual mode keeps the overlay visible outside games. Ask the daemon for a
+     * long preview once (and again when the service restarts) so sampling still
+     * runs while the Manager or another app is in front.
+     */
+    private fun applyPreviewLease(force: Boolean = false) {
+        if (!force && System.currentTimeMillis() < burstUntilMs) return
+        val need = activeConfig.enabled && !activeConfig.autoGame
+        if (!force && need == previewLease) return
+        previewLease = need
+        if (need) lastLeaseRequestMs = System.currentTimeMillis()
+        serviceScope.launch(Dispatchers.IO) {
+            runCatching {
+                if (need) {
+                    DaemonManager.requestFpsPreview(ALWAYS_ON_PREVIEW_SECONDS)
+                } else {
+                    DaemonManager.stopFpsPreview()
+                }
+            }
+        }
+    }
+
     private fun attachOverlay() {
         if (isOverlayAttached) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             return
         }
         val wm = windowManager ?: return
-
-        val owner = OverlayLifecycleOwner().also {
-            it.performRestore()
-            it.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
-            it.handleLifecycleEvent(Lifecycle.Event.ON_START)
-            it.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
-        }
-        lifecycleOwner = owner
-
-        val params = createLayoutParams(activeConfig)
-        layoutParams = params
-        lastAppliedCorner = activeConfig.corner
-
-        val view = ComposeView(this).apply {
-            setViewTreeLifecycleOwner(owner)
-            setViewTreeViewModelStoreOwner(owner)
-            setViewTreeSavedStateRegistryOwner(owner)
-            setContent {
-                LuminaTheme {
-                    LiveFpsOverlayContent(
-                        config = activeConfig,
-                        telemetry = liveTelemetry,
-                        onDragDelta = { dx, dy ->
-                            val lp = this@FloatingFpsService.layoutParams ?: return@LiveFpsOverlayContent
-                            val metrics = resources.displayMetrics
-                            hasCustomDragPosition = true
-                            lp.x = (lp.x + dx.roundToInt()).coerceIn(0, (metrics.widthPixels - 80).coerceAtLeast(0))
-                            lp.y = (lp.y + dy.roundToInt()).coerceIn(0, (metrics.heightPixels - 60).coerceAtLeast(0))
-                            runCatching { wm.updateViewLayout(this, lp) }
-                        },
-                        onDoubleTapToggleStyle = {
-                            val nextStyle = if (activeConfig.style == FpsOverlayStyle.PILL) {
-                                FpsOverlayStyle.GRAPH
-                            } else {
-                                FpsOverlayStyle.PILL
-                            }
-                            val updated = activeConfig.copy(style = nextStyle)
-                            activeConfig = updated
-                            FloatingFpsPrefs.save(this@FloatingFpsService, updated)
-                        },
-                        onLongPressLockTouch = {
-                            val updated = activeConfig.copy(touchLock = true)
-                            activeConfig = updated
-                            FloatingFpsPrefs.save(this@FloatingFpsService, updated)
-                            applyLayoutParamsUpdate(resetCorner = false)
-                            updateNotification(isShowing = true)
-                            Toast.makeText(
-                                this@FloatingFpsService,
-                                localizedText(
-                                    "Sentuhan overlay dikunci (buka lewat notifikasi)",
-                                    "Overlay touch locked (unlock from notification)"
-                                ),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    )
-                }
+        val cfg = activeConfig
+        val params = createLayoutParams(cfg)
+        val view = FpsOverlayView(this).apply {
+            setPalette(ThemeController.overlayPalette(this@FloatingFpsService))
+            applyState(cfg, liveTelemetry)
+            onDrag = drag@{ dx, dy ->
+                val lp = layoutParams
+                if (lp == null) return@drag
+                val metrics = resources.displayMetrics
+                hasCustomDragPosition = true
+                lp.x = (lp.x + dx.roundToInt()).coerceIn(0, (metrics.widthPixels - 80).coerceAtLeast(0))
+                lp.y = (lp.y + dy.roundToInt()).coerceIn(0, (metrics.heightPixels - 60).coerceAtLeast(0))
+                runCatching { wm.updateViewLayout(this, lp) }
+            }
+            onDoubleTapToggleStyle = toggle@{
+                val updated = activeConfig.copy(style = nextStyle(activeConfig.style))
+                activeConfig = updated
+                FloatingFpsPrefs.save(this@FloatingFpsService, updated)
+                applyState(updated, liveTelemetry)
+                post { applyLayoutParamsUpdate(resetCorner = !hasCustomDragPosition) }
+            }
+            onLongPressLockTouch = lock@{
+                val updated = activeConfig.copy(touchLock = true)
+                activeConfig = updated
+                FloatingFpsPrefs.save(this@FloatingFpsService, updated)
+                applyState(updated, liveTelemetry)
+                applyLayoutParamsUpdate(resetCorner = false)
+                updateNotification(isShowing = true)
+                Toast.makeText(
+                    this@FloatingFpsService,
+                    localizedText(
+                        "Sentuhan overlay dikunci (buka lewat notifikasi)",
+                        "Overlay touch locked (unlock from notification)"
+                    ),
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
 
         runCatching {
             wm.addView(view, params)
             overlayView = view
+            layoutParams = params
+            lastAppliedCorner = cfg.corner
             isOverlayAttached = true
+            view.post { applyLayoutParamsUpdate(resetCorner = !hasCustomDragPosition) }
         }
     }
 
@@ -639,15 +542,15 @@ class FloatingFpsService : Service() {
         if (wm != null && view != null) {
             runCatching { wm.removeViewImmediate(view) }
         }
-        lifecycleOwner?.apply {
-            handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
-            handleLifecycleEvent(Lifecycle.Event.ON_STOP)
-            handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
-        }
-        lifecycleOwner = null
         overlayView = null
         layoutParams = null
         isOverlayAttached = false
+    }
+
+    private fun nextStyle(current: FpsOverlayStyle): FpsOverlayStyle = when (current) {
+        FpsOverlayStyle.PILL -> FpsOverlayStyle.GRAPH
+        FpsOverlayStyle.GRAPH -> FpsOverlayStyle.MINIMAL
+        FpsOverlayStyle.MINIMAL -> FpsOverlayStyle.PILL
     }
 
     private fun createLayoutParams(config: FloatingFpsConfig): WindowManager.LayoutParams {
@@ -665,7 +568,7 @@ class FloatingFpsService : Service() {
             flags = flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
         }
 
-        val (initX, initY) = computeCornerCoordinates(config.corner)
+        val (initX, initY) = computeCornerCoordinates(config.corner, 0, 0)
         return WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -697,7 +600,11 @@ class FloatingFpsService : Service() {
         lp.flags = flags
 
         if (resetCorner || !hasCustomDragPosition) {
-            val (cx, cy) = computeCornerCoordinates(activeConfig.corner)
+            val (cx, cy) = computeCornerCoordinates(
+                activeConfig.corner,
+                view.measuredWidth,
+                view.measuredHeight
+            )
             lp.x = cx
             lp.y = cy
             lastAppliedCorner = activeConfig.corner
@@ -705,22 +612,26 @@ class FloatingFpsService : Service() {
         runCatching { wm.updateViewLayout(view, lp) }
     }
 
-    private fun computeCornerCoordinates(corner: FpsOverlayCorner): Pair<Int, Int> {
+    private fun computeCornerCoordinates(corner: FpsOverlayCorner, width: Int, height: Int): Pair<Int, Int> {
         val metrics = resources.displayMetrics
         val density = metrics.density
         val marginX = (14f * density).roundToInt()
         val topMargin = (38f * density).roundToInt()
         val bottomMargin = (72f * density).roundToInt()
-        val estWidth = (132f * density).roundToInt()
-        val estHeight = (44f * density).roundToInt()
+        val scale = activeConfig.scale.coerceIn(0.8f, 1.3f)
+        val viewWidth = width.takeIf { it > 0 }
+            ?: ((if (activeConfig.style == FpsOverlayStyle.GRAPH) 158f else 138f) * density * scale).roundToInt()
+        val viewHeight = height.takeIf { it > 0 } ?: (44f * density * scale).roundToInt()
 
         return when (corner) {
             FpsOverlayCorner.TOP_LEFT -> marginX to topMargin
-            FpsOverlayCorner.TOP_RIGHT -> (metrics.widthPixels - estWidth - marginX).coerceAtLeast(marginX) to topMargin
-            FpsOverlayCorner.BOTTOM_LEFT -> marginX to (metrics.heightPixels - estHeight - bottomMargin).coerceAtLeast(topMargin)
+            FpsOverlayCorner.TOP_RIGHT ->
+                (metrics.widthPixels - viewWidth - marginX).coerceAtLeast(marginX) to topMargin
+            FpsOverlayCorner.BOTTOM_LEFT ->
+                marginX to (metrics.heightPixels - viewHeight - bottomMargin).coerceAtLeast(topMargin)
             FpsOverlayCorner.BOTTOM_RIGHT ->
-                (metrics.widthPixels - estWidth - marginX).coerceAtLeast(marginX) to
-                    (metrics.heightPixels - estHeight - bottomMargin).coerceAtLeast(topMargin)
+                (metrics.widthPixels - viewWidth - marginX).coerceAtLeast(marginX) to
+                    (metrics.heightPixels - viewHeight - bottomMargin).coerceAtLeast(topMargin)
         }
     }
 
@@ -818,375 +729,340 @@ class FloatingFpsService : Service() {
 }
 
 // ---------------------------------------------------------------------------
-// Live Overlay Compose UI (MD3E)
+// Native overlay view: Canvas + Paint only (no Compose, no per-frame allocs)
 // ---------------------------------------------------------------------------
 
-@Composable
-private fun LiveFpsOverlayContent(
-    config: FloatingFpsConfig,
-    telemetry: LiveFpsTelemetry,
-    onDragDelta: (Float, Float) -> Unit,
-    onDoubleTapToggleStyle: () -> Unit,
-    onLongPressLockTouch: () -> Unit
-) {
-    val ratio = telemetry.fps.toFloat() / telemetry.targetHz.coerceAtLeast(1).toFloat()
-    val targetStatusColor = when {
-        telemetry.fps <= 0 -> MaterialTheme.colorScheme.onSurfaceVariant
-        ratio >= 0.90f -> MaterialTheme.colorScheme.primary
-        ratio >= 0.65f -> MaterialTheme.colorScheme.tertiary
-        else -> MaterialTheme.colorScheme.error
-    }
-    val statusColor by animateColorAsState(
-        targetValue = targetStatusColor,
-        label = "liveOverlayStatusColor"
+private class FpsOverlayView(context: Context) : View(context) {
+    private val density = resources.displayMetrics.density
+    private val scaledDensity = resources.displayMetrics.scaledDensity
+
+    private var config = FloatingFpsConfig()
+    private var telemetry = LiveFpsTelemetry()
+    private var palette = OverlayPalette(
+        background = 0xFF161C22.toInt(),
+        onSurface = 0xFFFFFFFF.toInt(),
+        onSurfaceVariant = 0xFFB8C0C8.toInt(),
+        primary = 0xFF80D8A8.toInt(),
+        tertiary = 0xFFFFD27F.toInt(),
+        error = 0xFFFFB4AB.toInt()
     )
-    val containerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = config.bgAlpha)
-    val textColor = MaterialTheme.colorScheme.onSurface
-    val subTextColor = MaterialTheme.colorScheme.onSurfaceVariant
 
-    val extraParts = buildList {
-        if (config.showFrametime) add(String.format(Locale.US, "%.1f ms", telemetry.frametimeMs))
-        if (config.showTemp) add(telemetry.tempLabel)
-        if (config.showProfile) add(telemetry.profileLabel)
+    private val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val fpsPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
-
-    val gestureModifier = if (config.touchLock) {
-        Modifier
-    } else {
-        Modifier
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onDoubleTap = { onDoubleTapToggleStyle() },
-                    onLongPress = { onLongPressLockTouch() }
-                )
-            }
-            .pointerInput(Unit) {
-                detectDragGestures { change, dragAmount ->
-                    change.consume()
-                    onDragDelta(dragAmount.x, dragAmount.y)
-                }
-            }
+    private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
+    private val extraPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val sparkPath = Path()
+    private val sparkFillPath = Path()
+    private val rect = RectF()
 
-    Box(
-        modifier = gestureModifier.graphicsLayer {
-            scaleX = config.scale
-            scaleY = config.scale
+    private val gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+        override fun onDown(e: MotionEvent): Boolean = true
+
+        override fun onDoubleTap(e: MotionEvent): Boolean {
+            onDoubleTapToggleStyle?.invoke()
+            return true
         }
-    ) {
+
+        override fun onLongPress(e: MotionEvent) {
+            onLongPressLockTouch?.invoke()
+        }
+    })
+    private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+
+    private var downX = 0f
+    private var downY = 0f
+    private var lastX = 0f
+    private var lastY = 0f
+    private var dragging = false
+
+    var onDrag: ((Float, Float) -> Unit)? = null
+    var onDoubleTapToggleStyle: (() -> Unit)? = null
+    var onLongPressLockTouch: (() -> Unit)? = null
+
+    fun setPalette(next: OverlayPalette) {
+        palette = next
+        invalidate()
+    }
+
+    fun applyState(config: FloatingFpsConfig, telemetry: LiveFpsTelemetry) {
+        val relayout = this.config != config
+        this.config = config
+        this.telemetry = telemetry
+        val scale = config.scale.coerceIn(0.8f, 1.3f)
+        fpsPaint.textSize = 15f * scale * scaledDensity
+        labelPaint.textSize = 10f * scale * scaledDensity
+        extraPaint.textSize = 10f * scale * scaledDensity
+        linePaint.strokeWidth = 2f * scale * density
+        contentDescription = "FPS ${telemetry.fps}, ${String.format(Locale.US, "%.1f", telemetry.frametimeMs)} ms"
+        if (relayout) requestLayout()
+        invalidate()
+    }
+
+    private fun scale(): Float = config.scale.coerceIn(0.8f, 1.3f)
+
+    private fun extraParts(): List<String> {
+        val parts = ArrayList<String>(3)
+        if (config.showFrametime) parts.add(String.format(Locale.US, "%.1f ms", telemetry.frametimeMs))
+        if (config.showTemp) parts.add(telemetry.tempLabel)
+        if (config.showProfile) parts.add(telemetry.profileLabel)
+        return parts
+    }
+
+    private fun textHeight(paint: Paint): Float {
+        val metrics = paint.fontMetrics
+        return metrics.descent - metrics.ascent
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val s = scale()
+        val dp = density * s
+        val dot = 8f * dp
+        val width: Float
+        val height: Float
+
         when (config.style) {
             FpsOverlayStyle.PILL -> {
-                Surface(
-                    shape = CircleShape,
-                    color = containerColor
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(statusColor)
-                        )
-                        Spacer(modifier = Modifier.width(7.dp))
-                        Text(
-                            text = "${telemetry.fps}",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = statusColor
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "FPS",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = textColor
-                        )
-                        if (extraParts.isNotEmpty()) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = extraParts.joinToString(" · "),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = subTextColor,
-                                maxLines = 1
-                            )
-                        }
-                    }
-                }
+                val extra = extraParts().joinToString(" · ")
+                var content = dot + 7f * dp + fpsPaint.measureText("120") + 4f * dp +
+                    labelPaint.measureText("FPS")
+                if (extra.isNotEmpty()) content += 8f * dp + extraPaint.measureText(extra)
+                width = content + 24f * dp
+                height = max(textHeight(fpsPaint), dot) + 12f * dp
             }
-
             FpsOverlayStyle.GRAPH -> {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = containerColor
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .width(158.dp)
-                            .padding(horizontal = 11.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(5.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(7.dp)
-                                        .clip(CircleShape)
-                                        .background(statusColor)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "${telemetry.fps} FPS",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = statusColor
-                                )
-                            }
-                            if (extraParts.isNotEmpty()) {
-                                Text(
-                                    text = extraParts.first(),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = subTextColor,
-                                    maxLines = 1
-                                )
-                            }
-                        }
-
-                        OverlaySparkline(
-                            samples = telemetry.history,
-                            lineColor = statusColor,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(22.dp)
-                        )
-                    }
-                }
+                width = 158f * dp
+                height = 8f * dp + max(textHeight(fpsPaint), extraPaint.textSize) + 5f * dp +
+                    22f * dp + 8f * dp
             }
-
             FpsOverlayStyle.MINIMAL -> {
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.background.copy(
-                        alpha = (config.bgAlpha * 0.65f).coerceIn(0.15f, 0.75f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "${telemetry.fps}",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = statusColor
-                        )
-                        if (extraParts.isNotEmpty()) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = extraParts.first(),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = textColor.copy(alpha = 0.85f)
-                            )
-                        }
-                    }
-                }
+                val extra = extraParts().firstOrNull().orEmpty()
+                var content = fpsPaint.measureText("120")
+                if (extra.isNotEmpty()) content += 6f * dp + extraPaint.measureText(extra)
+                width = content + 20f * dp
+                height = max(textHeight(fpsPaint), extraPaint.textSize) + 8f * dp
             }
         }
+
+        setMeasuredDimension(
+            resolveSize(width.roundToInt().coerceAtLeast(1), widthMeasureSpec),
+            resolveSize(height.roundToInt().coerceAtLeast(1), heightMeasureSpec)
+        )
     }
-}
 
-@Composable
-private fun OverlaySparkline(
-    samples: List<Float>,
-    lineColor: Color,
-    modifier: Modifier = Modifier
-) {
-    Canvas(modifier = modifier) {
-        if (samples.size < 2 || size.width <= 0f || size.height <= 0f) return@Canvas
-        val minVal = (samples.minOrNull() ?: 8f) - 1.5f
-        val maxVal = (samples.maxOrNull() ?: 16f) + 1.5f
-        val span = (maxVal - minVal).coerceAtLeast(1f)
-        val stepX = size.width / (samples.size - 1).toFloat()
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val s = scale()
+        val dp = density * s
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (w <= 0f || h <= 0f) return
 
-        val linePath = Path()
-        val fillPath = Path()
+        val status = statusColor()
+        val alpha = (config.bgAlpha * (if (config.style == FpsOverlayStyle.MINIMAL) 0.68f else 1f))
+            .coerceIn(0.15f, 1f)
+
+        backgroundPaint.color = palette.background
+        backgroundPaint.alpha = (alpha * 255f).roundToInt().coerceIn(0, 255)
+        val radius = if (config.style == FpsOverlayStyle.GRAPH) 16f * dp else h / 2f
+        rect.set(0f, 0f, w, h)
+        canvas.drawRoundRect(rect, radius, radius, backgroundPaint)
+
+        when (config.style) {
+            FpsOverlayStyle.PILL -> drawPill(canvas, s, dp, h, status)
+            FpsOverlayStyle.GRAPH -> drawGraph(canvas, s, dp, w, h, status)
+            FpsOverlayStyle.MINIMAL -> drawMinimal(canvas, s, dp, h, status)
+        }
+    }
+
+    private fun drawPill(canvas: Canvas, s: Float, dp: Float, h: Float, status: Int) {
+        val dot = 8f * dp
+        val cy = h / 2f
+        var x = 12f * dp
+        dotPaint.color = status
+        canvas.drawCircle(x + dot / 2f, cy, dot / 2f, dotPaint)
+        x += dot + 7f * dp
+
+        fpsPaint.color = status
+        drawCentered(canvas, telemetry.fps.toString(), fpsPaint, x, cy)
+        x += fpsPaint.measureText("120") + 4f * dp
+
+        labelPaint.color = palette.onSurface
+        drawCentered(canvas, "FPS", labelPaint, x, cy)
+        x += labelPaint.measureText("FPS")
+
+        val extra = extraParts().joinToString(" · ")
+        if (extra.isNotEmpty()) {
+            extraPaint.color = palette.onSurfaceVariant
+            drawCentered(canvas, extra, extraPaint, x + 8f * dp, cy)
+        }
+    }
+
+    private fun drawGraph(canvas: Canvas, s: Float, dp: Float, w: Float, h: Float, status: Int) {
+        val pad = 11f * dp
+        val top = 8f * dp
+        var x = pad
+        val headerCenter = top + max(textHeight(fpsPaint), extraPaint.textSize) / 2f
+        val dot = 7f * dp
+
+        dotPaint.color = status
+        canvas.drawCircle(x + dot / 2f, headerCenter, dot / 2f, dotPaint)
+        x += dot + 6f * dp
+
+        fpsPaint.color = status
+        val fpsText = "${telemetry.fps} FPS"
+        drawCentered(canvas, fpsText, fpsPaint, x, headerCenter)
+
+        val firstExtra = extraParts().firstOrNull()
+        if (firstExtra != null) {
+            extraPaint.color = palette.onSurfaceVariant
+            val textWidth = extraPaint.measureText(firstExtra)
+            drawCentered(canvas, firstExtra, extraPaint, w - pad - textWidth, headerCenter)
+        }
+
+        val graphTop = top + max(textHeight(fpsPaint), extraPaint.textSize) + 5f * dp
+        val graphBottom = h - 8f * dp
+        val graphLeft = pad
+        val graphRight = w - pad
+        drawSparkline(canvas, graphLeft, graphTop, graphRight, graphBottom, status, dp)
+    }
+
+    private fun drawMinimal(canvas: Canvas, s: Float, dp: Float, h: Float, status: Int) {
+        val cy = h / 2f
+        var x = 10f * dp
+        fpsPaint.color = status
+        drawCentered(canvas, telemetry.fps.toString(), fpsPaint, x, cy)
+        x += fpsPaint.measureText("120")
+
+        val firstExtra = extraParts().firstOrNull()
+        if (firstExtra != null) {
+            extraPaint.color = palette.onSurfaceVariant
+            drawCentered(canvas, firstExtra, extraPaint, x + 6f * dp, cy)
+        }
+    }
+
+    private fun drawCentered(canvas: Canvas, text: String, paint: Paint, x: Float, centerY: Float) {
+        val metrics = paint.fontMetrics
+        val baseline = centerY - (metrics.ascent + metrics.descent) / 2f
+        canvas.drawText(text, x, baseline, paint)
+    }
+
+    private fun drawSparkline(
+        canvas: Canvas,
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+        color: Int,
+        dp: Float
+    ) {
+        val samples = telemetry.history
+        if (samples.size < 2 || right <= left || bottom <= top) return
+
+        var minValue = Float.MAX_VALUE
+        var maxValue = -Float.MAX_VALUE
+        for (value in samples) {
+            minValue = minOf(minValue, value)
+            maxValue = maxOf(maxValue, value)
+        }
+        if (!minValue.isFinite() || !maxValue.isFinite()) return
+        minValue -= 1.5f
+        maxValue += 1.5f
+        val span = (maxValue - minValue).coerceAtLeast(1f)
+        val stepX = (right - left) / (samples.size - 1)
+
+        sparkPath.reset()
+        sparkFillPath.reset()
+        val height = bottom - top
         samples.forEachIndexed { index, value ->
-            val x = index * stepX
-            val normalized = ((value - minVal) / span).coerceIn(0f, 1f)
-            val y = size.height * (1f - normalized * 0.82f - 0.09f)
+            val x = left + index * stepX
+            val normalized = ((value - minValue) / span).coerceIn(0f, 1f)
+            val y = top + height * (1f - normalized * 0.82f - 0.09f)
             if (index == 0) {
-                linePath.moveTo(x, y)
-                fillPath.moveTo(x, size.height)
-                fillPath.lineTo(x, y)
+                sparkPath.moveTo(x, y)
+                sparkFillPath.moveTo(x, bottom)
+                sparkFillPath.lineTo(x, y)
             } else {
-                linePath.lineTo(x, y)
-                fillPath.lineTo(x, y)
+                sparkPath.lineTo(x, y)
+                sparkFillPath.lineTo(x, y)
             }
         }
-        fillPath.lineTo(size.width, size.height)
-        fillPath.close()
+        sparkFillPath.lineTo(right, bottom)
+        sparkFillPath.close()
 
-        drawPath(
-            path = fillPath,
-            brush = Brush.verticalGradient(
-                colors = listOf(lineColor.copy(alpha = 0.28f), Color.Transparent)
-            )
+        fillPaint.shader = LinearGradient(
+            0f, top, 0f, bottom,
+            (color and 0x00FFFFFF) or 0x47000000,
+            0x00000000,
+            Shader.TileMode.CLAMP
         )
-        drawPath(
-            path = linePath,
-            color = lineColor,
-            style = Stroke(
-                width = 2.dp.toPx(),
-                cap = StrokeCap.Round,
-                join = StrokeJoin.Round
-            )
-        )
+        canvas.drawPath(sparkFillPath, fillPaint)
+
+        linePaint.color = color
+        canvas.drawPath(sparkPath, linePaint)
     }
-}
 
-// ---------------------------------------------------------------------------
-// Real-Time SurfaceFlinger Frame Sampler & Persistent Root Shell
-// ---------------------------------------------------------------------------
+    private fun statusColor(): Int {
+        if (telemetry.fps <= 0) return palette.onSurfaceVariant
+        val ratio = telemetry.fps.toFloat() / telemetry.targetHz.coerceAtLeast(1)
+        return when {
+            ratio >= 0.90f -> palette.primary
+            ratio >= 0.65f -> palette.tertiary
+            else -> palette.error
+        }
+    }
 
-private class PersistentRootShell {
-    private var process: Process? = null
-    private var writer: BufferedWriter? = null
-    private var reader: BufferedReader? = null
-    private var counter = 0
-
-    @Synchronized
-    fun exec(command: String): String {
-        ensureStarted()
-        val w = writer ?: return ""
-        val r = reader ?: return ""
-        counter += 1
-        val marker = "__LUMINA_END_${counter}__"
-        return try {
-            w.write(command)
-            w.newLine()
-            w.write("echo $marker")
-            w.newLine()
-            w.flush()
-
-            val sb = StringBuilder()
-            while (true) {
-                val line = r.readLine() ?: break
-                if (line == marker) break
-                sb.append(line).append('\n')
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (config.touchLock) return false
+        gestureDetector.onTouchEvent(event)
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                downX = event.x
+                downY = event.y
+                lastX = event.x
+                lastY = event.y
+                dragging = false
+                return true
             }
-            sb.toString().trim()
-        } catch (_: Exception) {
-            close()
-            ""
-        }
-    }
-
-    private fun ensureStarted() {
-        val current = process
-        if (current != null) {
-            val alive = runCatching {
-                current.exitValue()
-                false
-            }.getOrDefault(true)
-            if (alive) return
-        }
-        close()
-        runCatching {
-            val p = ProcessBuilder("su")
-                .redirectErrorStream(true)
-                .start()
-            process = p
-            writer = BufferedWriter(OutputStreamWriter(p.outputStream))
-            reader = BufferedReader(InputStreamReader(p.inputStream))
-        }
-    }
-
-    @Synchronized
-    fun close() {
-        runCatching { writer?.close() }
-        runCatching { reader?.close() }
-        runCatching { process?.destroy() }
-        writer = null
-        reader = null
-        process = null
-    }
-}
-
-private class SurfaceFlingerSampler {
-    data class Sample(val fps: Int, val frametimeMs: Float)
-
-    private var lastLayer: String = ""
-    private var lastMaxPresentNs: Long = 0L
-    private var lastWallNs: Long = 0L
-
-    fun sampleLayer(shell: PersistentRootShell, layerName: String): Sample? {
-        if (layerName != lastLayer) {
-            lastLayer = layerName
-            lastMaxPresentNs = 0L
-            lastWallNs = 0L
-        }
-        val escaped = layerName.replace("\"", "\\\"")
-        val raw = shell.exec("dumpsys SurfaceFlinger --latency \"$escaped\" 2>/dev/null")
-        if (raw.isBlank()) return null
-
-        val lines = raw.lines()
-        if (lines.size < 2) return null
-
-        val validPresentNs = ArrayList<Long>(lines.size)
-        for (i in 1 until lines.size) {
-            val line = lines[i].trim()
-            if (line.isEmpty()) continue
-            val parts = line.split(Regex("\\s+"))
-            val present = parts.getOrNull(1)?.toLongOrNull() ?: continue
-            if (present <= 0L || present == Long.MAX_VALUE) continue
-            validPresentNs.add(present)
-        }
-        if (validPresentNs.isEmpty()) return null
-        validPresentNs.sort()
-
-        val nowWall = System.nanoTime()
-        val newest = validPresentNs.last()
-
-        if (lastMaxPresentNs == 0L) {
-            lastMaxPresentNs = newest
-            lastWallNs = nowWall
-            val cutoff = newest - 1_000_000_000L
-            val windowFrames = validPresentNs.filter { it >= cutoff }
-            if (windowFrames.size < 2) return Sample(fps = 0, frametimeMs = 16.6f)
-            val spanNs = (windowFrames.last() - windowFrames.first()).coerceAtLeast(1_000_000L)
-            val fps = ((windowFrames.size - 1) * 1_000_000_000.0 / spanNs).roundToInt()
-            val lastDeltaMs = ((windowFrames.last() - windowFrames[windowFrames.size - 2]) / 1_000_000.0).toFloat()
-            return Sample(fps = fps, frametimeMs = lastDeltaMs)
-        }
-
-        val newFrames = validPresentNs.filter { it > lastMaxPresentNs }
-        if (newFrames.isEmpty()) {
-            val idleNs = (nowWall - lastWallNs).coerceAtLeast(0L)
-            return if (idleNs > 1_200_000_000L) {
-                Sample(fps = 0, frametimeMs = 16.6f)
-            } else {
-                null
+            MotionEvent.ACTION_MOVE -> {
+                val dx = event.x - lastX
+                val dy = event.y - lastY
+                if (!dragging && hypot(event.x - downX, event.y - downY) > touchSlop) {
+                    dragging = true
+                }
+                if (dragging) {
+                    onDrag?.invoke(dx, dy)
+                    lastX = event.x
+                    lastY = event.y
+                }
+                return true
+            }
+            MotionEvent.ACTION_UP -> {
+                if (!dragging) performClick()
+                dragging = false
+                return true
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                dragging = false
+                return true
             }
         }
+        return super.onTouchEvent(event)
+    }
 
-        val spanNs = (newFrames.last() - lastMaxPresentNs).coerceAtLeast(1_000_000L)
-        val fps = (newFrames.size * 1_000_000_000.0 / spanNs).roundToInt()
-        val frametimeMs = if (newFrames.size >= 2) {
-            ((newFrames.last() - newFrames[newFrames.size - 2]) / 1_000_000.0).toFloat()
-        } else {
-            ((newFrames.last() - lastMaxPresentNs) / 1_000_000.0).toFloat()
-        }
-
-        lastMaxPresentNs = newFrames.last()
-        lastWallNs = nowWall
-        return Sample(fps = fps, frametimeMs = frametimeMs)
+    override fun performClick(): Boolean {
+        super.performClick()
+        return true
     }
 }
 
@@ -1223,32 +1099,5 @@ private class ChoreographerFpsTracker : Choreographer.FrameCallback {
         if (!running) return
         frameCount += 1
         Choreographer.getInstance().postFrameCallback(this)
-    }
-}
-
-private class OverlayLifecycleOwner :
-    LifecycleOwner,
-    ViewModelStoreOwner,
-    SavedStateRegistryOwner {
-
-    private val lifecycleRegistry = LifecycleRegistry(this)
-    private val store = ViewModelStore()
-    private val savedStateController = SavedStateRegistryController.create(this)
-
-    override val lifecycle: Lifecycle
-        get() = lifecycleRegistry
-
-    override val viewModelStore: ViewModelStore
-        get() = store
-
-    override val savedStateRegistry: SavedStateRegistry
-        get() = savedStateController.savedStateRegistry
-
-    fun performRestore() {
-        savedStateController.performRestore(null)
-    }
-
-    fun handleLifecycleEvent(event: Lifecycle.Event) {
-        lifecycleRegistry.handleLifecycleEvent(event)
     }
 }

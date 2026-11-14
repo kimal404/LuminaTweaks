@@ -18,7 +18,7 @@ use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -40,6 +40,9 @@ pub struct SharedState {
     pub current_profile: std::sync::Mutex<String>,
     pub active_package: std::sync::Mutex<Option<String>>,
     pub reload_flag: AtomicBool,
+    /// Epoch milliseconds until which the FPS sampler keeps running even
+    /// without a whitelisted game (Manager preview / always-on overlay).
+    pub fps_preview_until_ms: AtomicU64,
 }
 
 impl SharedState {
@@ -48,8 +51,30 @@ impl SharedState {
             current_profile: std::sync::Mutex::new("Balanced".to_string()),
             active_package: std::sync::Mutex::new(None),
             reload_flag: AtomicBool::new(false),
+            fps_preview_until_ms: AtomicU64::new(0),
         }
     }
+
+    pub fn request_fps_preview(&self, seconds: u64) {
+        let seconds = seconds.clamp(1, 3600);
+        let until = now_ms().saturating_add(seconds.saturating_mul(1000));
+        self.fps_preview_until_ms.store(until, Ordering::Relaxed);
+    }
+
+    pub fn stop_fps_preview(&self) {
+        self.fps_preview_until_ms.store(0, Ordering::Relaxed);
+    }
+
+    pub fn fps_preview_active(&self) -> bool {
+        self.fps_preview_until_ms.load(Ordering::Relaxed) > now_ms()
+    }
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 pub struct IpcServer;
@@ -148,6 +173,21 @@ fn handle_client(stream: UnixStream, shared_state: Arc<SharedState>) {
                     let resp = format!("PROFILE {}\n", current);
                     let writer = reader.get_mut();
                     let _ = writer.write_all(resp.as_bytes());
+                    let _ = writer.flush();
+                } else if trimmed == "FPS_PREVIEW_STOP" {
+                    shared_state.stop_fps_preview();
+                    let writer = reader.get_mut();
+                    let _ = writer.write_all(b"OK\n");
+                    let _ = writer.flush();
+                } else if let Some(rest) = trimmed.strip_prefix("FPS_PREVIEW") {
+                    let seconds = rest.trim().parse::<u64>().unwrap_or(0);
+                    if seconds == 0 {
+                        shared_state.stop_fps_preview();
+                    } else {
+                        shared_state.request_fps_preview(seconds);
+                    }
+                    let writer = reader.get_mut();
+                    let _ = writer.write_all(b"OK\n");
                     let _ = writer.flush();
                 } else if trimmed == "RELOAD" || trimmed == "RELOAD_CONFIG" {
                     shared_state.reload_flag.store(true, Ordering::Relaxed);

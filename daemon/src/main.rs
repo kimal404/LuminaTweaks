@@ -178,6 +178,12 @@ fn publish_heartbeat() {
         .to_string();
     let _ = write_runtime_file(HEARTBEAT_FILE_PATH, &timestamp);
     let _ = write_runtime_file(LEGACY_HEARTBEAT_FILE_PATH, &timestamp);
+    let _ = std::process::Command::new("setprop")
+        .args(["sys.lumina.alive", &timestamp])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
 }
 
 fn cleanup_runtime_files() {
@@ -186,6 +192,9 @@ fn cleanup_runtime_files() {
         HEARTBEAT_FILE_PATH,
         LEGACY_PID_FILE_PATH,
         LEGACY_HEARTBEAT_FILE_PATH,
+        "/data/adb/.config/lumina/fps.txt",
+        "/data/local/tmp/lumina.fps",
+        "/data/data/com.luminatweaks/files/lumina.fps",
     ] {
         let _ = std::fs::remove_file(path);
         let _ = std::fs::remove_file(format!("{}.tmp", path));
@@ -564,7 +573,7 @@ fn main() {
                 }
             } else {
                 log!("[POWER]  Screen OFF \u{2794} Background workers paused");
-                fps_monitor.observe(None);
+                fps_monitor.observe(None, false, 0);
             }
             last_screen_state = Some(screen_awake);
         }
@@ -631,7 +640,7 @@ fn main() {
                 runtime.left_foreground_at = None;
                 runtime.target_game_pid = 0;
                 runtime.reset_to_balance_triggered("Died 0ms", &mut binder_client);
-                fps_monitor.observe(None);
+                fps_monitor.observe(None, false, 0);
                 TextureController::sync_config(None);
                 last_pkg_for_texture = None;
                 suppress_fallback = true;
@@ -738,7 +747,28 @@ fn main() {
             None
         };
 
-        fps_monitor.observe(current_target.as_deref());
+        // Sampling follows the whitelisted game only. A preview deadline from
+        // the Manager keeps it alive for the overlay test window, using the
+        // currently focused app even when it is not in gamelist.json.
+        let preview_active = screen_awake && shared_state.fps_preview_active();
+        let fps_package = if screen_awake {
+            current_target.clone().or_else(|| {
+                if preview_active {
+                    focused.clone()
+                } else {
+                    None
+                }
+            })
+        } else {
+            None
+        };
+        let fps_game_active = screen_awake && current_target.is_some();
+        let fps_pid = if fps_game_active {
+            runtime.target_game_pid.max(active_pid)
+        } else {
+            active_pid
+        };
+        fps_monitor.observe(fps_package.as_deref(), fps_game_active, fps_pid);
 
         let sleep_ms = if binder_client.is_push() {
             250
