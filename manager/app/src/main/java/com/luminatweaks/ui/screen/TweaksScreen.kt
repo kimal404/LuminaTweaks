@@ -47,6 +47,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -91,6 +92,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -115,6 +117,7 @@ import java.util.Locale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -213,8 +216,13 @@ private suspend fun applyTweakChange(
 // Screen
 // ---------------------------------------------------------------------------
 
+private suspend fun awaitPagerSettled(pagerState: PagerState?) {
+    pagerState ?: return
+    snapshotFlow { pagerState.isScrollInProgress }.first { !it }
+}
+
 @Composable
-fun TweaksScreen() {
+fun TweaksScreen(pagerState: PagerState? = null) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
@@ -245,6 +253,7 @@ fun TweaksScreen() {
     )
 
     LaunchedEffect(Unit) {
+        awaitPagerSettled(pagerState)
         val state = ConfigRepository.getTweaksState(forceRefresh = true)
         isGlobalLiteMode = state.isGlobalLiteMode
         isGlobalTextureEnabled = state.isGlobalTextureEnabled
@@ -260,9 +269,11 @@ fun TweaksScreen() {
     LaunchedEffect(Unit) {
         val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
         while (isActive) {
-            val hz = currentDisplayHz(context, windowManager)
-            if (hz != null && hz > 0) {
-                liveRefreshRate = hz
+            if (pagerState?.isScrollInProgress != true) {
+                val hz = currentDisplayHz(context, windowManager)
+                if (hz != null && hz > 0) {
+                    liveRefreshRate = hz
+                }
             }
             delay(1200L)
         }
@@ -271,6 +282,7 @@ fun TweaksScreen() {
     LaunchedEffect(Unit) {
         while (isActive) {
             delay(3000L)
+            if (pagerState?.isScrollInProgress == true) continue
             val fresh = withContext(Dispatchers.IO) {
                 ConfigRepository.getTweaksState(forceRefresh = true)
             }

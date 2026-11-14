@@ -45,6 +45,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -75,6 +76,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -97,6 +99,7 @@ import com.luminatweaks.model.AppItem
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import java.util.Locale
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 private enum class AppListFilter {
@@ -112,9 +115,15 @@ private fun appsLocalizedLabel(id: String, en: String): String {
     return if (isIndonesian) id else en
 }
 
+private suspend fun awaitPagerSettled(pagerState: PagerState?) {
+    pagerState ?: return
+    snapshotFlow { pagerState.isScrollInProgress }.first { !it }
+}
+
 @Composable
 fun AppsScreen(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    pagerState: PagerState? = null
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
@@ -122,8 +131,10 @@ fun AppsScreen(
     val coroutineScope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
-    var rawApps by remember { mutableStateOf(ConfigRepository.cachedApps ?: emptyList()) }
-    var isLoading by remember { mutableStateOf(ConfigRepository.cachedApps == null) }
+    // Start empty so a page that is pre-composed during a swipe does not
+    // decode dozens of icons until the pager has settled.
+    var rawApps by remember { mutableStateOf(emptyList<AppItem>()) }
+    var isLoading by remember { mutableStateOf(true) }
     var isScanningGames by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var hideSystemApps by remember { mutableStateOf(true) }
@@ -134,6 +145,7 @@ fun AppsScreen(
     var selectedPackageName by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
+        awaitPagerSettled(pagerState)
         val loadedConfigs = ConfigRepository.getAppConfigs()
         appConfigs.clear()
         appConfigs.putAll(loadedConfigs)

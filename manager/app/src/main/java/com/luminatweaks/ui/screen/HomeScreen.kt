@@ -36,6 +36,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -247,7 +248,10 @@ fun HomeScreen() {
                     }
                     pagerState.animateScrollToPage(
                         page = index,
-                        animationSpec = spring(dampingRatio = 0.88f, stiffness = 380f)
+                        animationSpec = tween(
+                            durationMillis = 260,
+                            easing = FastOutSlowInEasing
+                        )
                     )
                 } finally {
                     if (navigationToken == token) isNavigating = false
@@ -333,6 +337,11 @@ fun HomeScreen() {
         }
 
         withContext(Dispatchers.IO) {
+            // Never start root/su checks while a page transition is in
+            // flight; the pager may have just re-entered the dashboard.
+            while (pagerState.isScrollInProgress && isActive) {
+                delay(100L)
+            }
             val refreshedRoot = RootUtil.checkRootAccess()
             val refreshedSelinux = DeviceUtil.getSelinuxStatus()
             withContext(Dispatchers.Main) {
@@ -342,6 +351,10 @@ fun HomeScreen() {
 
             var fallbackChecks = 0
             while (isActive) {
+                if (pagerState.isScrollInProgress) {
+                    delay(200L)
+                    continue
+                }
                 val currentTemp = DeviceUtil.getBatteryTemperature(context)
                 val propProfile = readSystemProperty("sys.lumina.profile")
                 val status = DaemonManager.getStatus()
@@ -488,8 +501,8 @@ fun HomeScreen() {
                             onRestartDaemon = restartAction,
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" }
                         )
-                        1 -> AppsScreen()
-                        2 -> TweaksScreen()
+                        1 -> AppsScreen(pagerState = pagerState)
+                        2 -> TweaksScreen(pagerState = pagerState)
                         3 -> SettingsScreen(onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" })
                     }
                 }
@@ -551,8 +564,8 @@ fun HomeScreen() {
                             onRestartDaemon = restartAction,
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" }
                         )
-                        1 -> AppsScreen()
-                        2 -> TweaksScreen()
+                        1 -> AppsScreen(pagerState = pagerState)
+                        2 -> TweaksScreen(pagerState = pagerState)
                         3 -> SettingsScreen(onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" })
                     }
                 }
@@ -574,19 +587,7 @@ internal fun LuminaTabPager(
         pageSpacing = 12.dp,
         key = { it }
     ) { page ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    // Read the scroll offset inside the layer block so the
-                    // fade updates in the draw phase without recomposing
-                    // every page during a swipe. No scale here: transforming
-                    // the apps list hurt scroll performance.
-                    val distance = abs(pagerState.getOffsetDistanceInPages(page))
-                        .coerceIn(0f, 1f)
-                    alpha = 0.85f + 0.15f * (1f - distance)
-                }
-        ) {
+        Box(modifier = Modifier.fillMaxSize()) {
             pageContent(page)
         }
     }
