@@ -275,7 +275,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
     var currentProfile by remember {
         mutableStateOf(readSystemProperty("sys.lumina.profile") ?: "Balanced")
     }
-    var currentFps by remember { mutableStateOf("-") }
     var isRootGranted by remember { mutableStateOf(false) }
     var selinuxStatus by remember { mutableStateOf("Unknown") }
     var showRebootDialog by remember { mutableStateOf(false) }
@@ -327,7 +326,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                 batteryTemp = initialTemp
                 daemonPid = initialStatus.pid
                 currentProfile = propProfile ?: initialStatus.profile
-                currentFps = initialStatus.fps
                 isRootGranted = initialRoot
                 selinuxStatus = initialSelinux
                 isChecking = false
@@ -383,7 +381,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                     isRebootRequired = rebootNeeded
                     isModuleInstalled = installed
                     currentProfile = propProfile ?: status.profile
-                    currentFps = status.fps
                 }
                 delay(2500L)
             }
@@ -465,7 +462,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
         val updated = DaemonManager.getStatus()
         daemonPid = updated.pid
         currentProfile = readSystemProperty("sys.lumina.profile") ?: updated.profile
-        currentFps = updated.fps
         if (updated.pid == null) {
             isRebootRequired = DaemonManager.isRebootRequired()
             isModuleInstalled = DaemonManager.isModuleInstalled()
@@ -496,7 +492,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             isModuleInstalled = isModuleInstalled,
                             isRebootRequired = isRebootRequired,
                             currentProfile = currentProfile,
-                            currentFps = currentFps,
                             kernelVersion = kernelVersion,
                             deviceModel = deviceModel,
                             isRootGranted = isRootGranted,
@@ -562,7 +557,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             isModuleInstalled = isModuleInstalled,
                             isRebootRequired = isRebootRequired,
                             currentProfile = currentProfile,
-                            currentFps = currentFps,
                             kernelVersion = kernelVersion,
                             deviceModel = deviceModel,
                             isRootGranted = isRootGranted,
@@ -708,7 +702,6 @@ fun HomeDashboardContent(
     isModuleInstalled: Boolean = true,
     isRebootRequired: Boolean = false,
     currentProfile: String,
-    currentFps: String,
     kernelVersion: String,
     deviceModel: String,
     isRootGranted: Boolean,
@@ -903,7 +896,7 @@ fun HomeDashboardContent(
                         icon = Icons.Rounded.Speed,
                         label = stringResource(R.string.home_profile),
                         value = currentProfile,
-                        supporting = currentFps.takeIf { it != "-" }?.let { "$it FPS" },
+                        supporting = null,
                         badgeBg = MaterialTheme.colorScheme.primary,
                         badgeTint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.weight(1f)

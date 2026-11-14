@@ -487,14 +487,28 @@ class FloatingFpsService : Service() {
         val view = FpsOverlayView(this).apply {
             setPalette(ThemeController.overlayPalette(this@FloatingFpsService))
             applyState(cfg, liveTelemetry)
-            onDrag = drag@{ dx, dy ->
+            var dragStartX = 0
+            var dragStartY = 0
+            onDragStart = {
                 val lp = (layoutParams as? WindowManager.LayoutParams)
-                if (lp == null) return@drag
+                if (lp != null) {
+                    dragStartX = lp.x
+                    dragStartY = lp.y
+                }
+            }
+            onDrag = drag@{ totalDx, totalDy ->
+                val lp = (layoutParams as? WindowManager.LayoutParams) ?: return@drag
                 val metrics = resources.displayMetrics
+                val maxX = (metrics.widthPixels - width.coerceAtLeast(80)).coerceAtLeast(0)
+                val maxY = (metrics.heightPixels - height.coerceAtLeast(44)).coerceAtLeast(0)
+                val targetX = (dragStartX + totalDx.roundToInt()).coerceIn(0, maxX)
+                val targetY = (dragStartY + totalDy.roundToInt()).coerceIn(0, maxY)
                 hasCustomDragPosition = true
-                lp.x = (lp.x + dx.roundToInt()).coerceIn(0, (metrics.widthPixels - 80).coerceAtLeast(0))
-                lp.y = (lp.y + dy.roundToInt()).coerceIn(0, (metrics.heightPixels - 60).coerceAtLeast(0))
-                runCatching { wm.updateViewLayout(this, lp) }
+                if (targetX != lp.x || targetY != lp.y) {
+                    lp.x = targetX
+                    lp.y = targetY
+                    runCatching { wm.updateViewLayout(this, lp) }
+                }
             }
             onDoubleTapToggleStyle = toggle@{
                 val updated = activeConfig.copy(style = nextStyle(activeConfig.style))
@@ -780,12 +794,9 @@ private class FpsOverlayView(context: Context) : View(context) {
     })
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
 
-    private var downX = 0f
-    private var downY = 0f
-    private var lastX = 0f
-    private var lastY = 0f
     private var dragging = false
 
+    var onDragStart: (() -> Unit)? = null
     var onDrag: ((Float, Float) -> Unit)? = null
     var onDoubleTapToggleStyle: (() -> Unit)? = null
     var onLongPressLockTouch: (() -> Unit)? = null
@@ -1032,28 +1043,32 @@ private class FpsOverlayView(context: Context) : View(context) {
         }
     }
 
+    private var downRawX = 0f
+    private var downRawY = 0f
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (config.touchLock) return false
-        gestureDetector.onTouchEvent(event)
+        val screenEvent = MotionEvent.obtain(event).apply {
+            setLocation(event.rawX, event.rawY)
+        }
+        gestureDetector.onTouchEvent(screenEvent)
+        screenEvent.recycle()
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                downX = event.x
-                downY = event.y
-                lastX = event.x
-                lastY = event.y
+                downRawX = event.rawX
+                downRawY = event.rawY
                 dragging = false
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
-                val dx = event.x - lastX
-                val dy = event.y - lastY
-                if (!dragging && hypot(event.x - downX, event.y - downY) > touchSlop) {
+                val totalDx = event.rawX - downRawX
+                val totalDy = event.rawY - downRawY
+                if (!dragging && hypot(totalDx, totalDy) > touchSlop) {
                     dragging = true
+                    onDragStart?.invoke()
                 }
                 if (dragging) {
-                    onDrag?.invoke(dx, dy)
-                    lastX = event.x
-                    lastY = event.y
+                    onDrag?.invoke(totalDx, totalDy)
                 }
                 return true
             }
