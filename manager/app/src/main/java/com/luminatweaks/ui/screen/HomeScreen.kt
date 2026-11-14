@@ -17,12 +17,21 @@
 package com.luminatweaks.ui.screen
 
 import android.widget.Toast
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -127,6 +136,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.graphics.shapes.Morph
@@ -139,6 +149,8 @@ import com.luminatweaks.data.DaemonManager
 import com.luminatweaks.ui.component.LuminaBottomBar
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
+import com.luminatweaks.ui.theme.LocalPageTransition
+import com.luminatweaks.ui.theme.PageTransition
 import com.luminatweaks.util.DeviceUtil
 import com.luminatweaks.util.RootUtil
 import java.util.Locale
@@ -372,11 +384,6 @@ fun HomeScreen() {
 
     val isFloating = LocalFloatingNavBar.current
 
-    if (currentSubscreen == "personalisasi") {
-        PersonalisasiScreen(onBackClick = { currentSubscreen = null })
-        return
-    }
-
     val restartAction: suspend () -> Unit = {
         daemonPid = null
         currentProfile = "-"
@@ -391,40 +398,51 @@ fun HomeScreen() {
         }
     }
 
-    if (isFloating) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-        ) {
+    LuminaDrillTransition(
+        targetState = currentSubscreen,
+        isForward = { _, target -> target != null }
+    ) { subscreen ->
+        if (subscreen == "personalisasi") {
+            PersonalisasiScreen(onBackClick = { currentSubscreen = null })
+        } else if (isFloating) {
             Box(
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
             ) {
-                when (selectedTab) {
-                    0 -> HomeDashboardContent(
-                        batteryTemp = batteryTemp,
-                        daemonPid = daemonPid,
-                        isChecking = isChecking,
-                        isModuleInstalled = isModuleInstalled,
-                        isRebootRequired = isRebootRequired,
-                        currentProfile = currentProfile,
-                        currentFps = currentFps,
-                        kernelVersion = kernelVersion,
-                        deviceModel = deviceModel,
-                        isRootGranted = isRootGranted,
-                        selinuxStatus = selinuxStatus,
-                        onRequestRebootDialog = { showRebootDialog = true },
-                        onRestartDaemon = restartAction,
-                        onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" }
-                    )
-                    1 -> AppsScreen()
-                    2 -> TweaksScreen()
-                    3 -> SettingsScreen(onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" })
+                LuminaTabTransition(
+                    selectedTab = selectedTab,
+                    modifier = Modifier.fillMaxSize()
+                ) { tab ->
+                    when (tab) {
+                        0 -> HomeDashboardContent(
+                            batteryTemp = batteryTemp,
+                            daemonPid = daemonPid,
+                            isChecking = isChecking,
+                            isModuleInstalled = isModuleInstalled,
+                            isRebootRequired = isRebootRequired,
+                            currentProfile = currentProfile,
+                            currentFps = currentFps,
+                            kernelVersion = kernelVersion,
+                            deviceModel = deviceModel,
+                            isRootGranted = isRootGranted,
+                            selinuxStatus = selinuxStatus,
+                            onRequestRebootDialog = { showRebootDialog = true },
+                            onRestartDaemon = restartAction,
+                            onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" }
+                        )
+                        1 -> AppsScreen()
+                        2 -> TweaksScreen()
+                        3 -> SettingsScreen(onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" })
+                    }
                 }
-            }
 
-            if (currentSubscreen == null) {
-                Box(
+                val barSpatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
+                val barEffects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+                AnimatedVisibility(
+                    visible = currentSubscreen == null,
+                    enter = slideInVertically(animationSpec = barSpatial) { it } + fadeIn(animationSpec = barEffects),
+                    exit = slideOutVertically(animationSpec = barSpatial) { it } + fadeOut(animationSpec = barEffects),
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.BottomCenter)
@@ -435,47 +453,151 @@ fun HomeScreen() {
                     )
                 }
             }
-        }
-    } else {
-        Scaffold(
-            contentWindowInsets = WindowInsets(0.dp),
-            bottomBar = {
-                if (currentSubscreen == null) {
-                    LuminaBottomBar(
-                        selectedTab = selectedTab,
-                        onTabSelected = { selectedTab = it }
-                    )
+        } else {
+            Scaffold(
+                contentWindowInsets = WindowInsets(0.dp),
+                bottomBar = {
+                    val barSpatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
+                    val barEffects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+                    AnimatedVisibility(
+                        visible = currentSubscreen == null,
+                        enter = slideInVertically(animationSpec = barSpatial) { it } + fadeIn(animationSpec = barEffects),
+                        exit = slideOutVertically(animationSpec = barSpatial) { it } + fadeOut(animationSpec = barEffects)
+                    ) {
+                        LuminaBottomBar(
+                            selectedTab = selectedTab,
+                            onTabSelected = { selectedTab = it }
+                        )
+                    }
+                }
+            ) { innerPadding ->
+                LuminaTabTransition(
+                    selectedTab = selectedTab,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = innerPadding.calculateBottomPadding())
+                ) { tab ->
+                    when (tab) {
+                        0 -> HomeDashboardContent(
+                            batteryTemp = batteryTemp,
+                            daemonPid = daemonPid,
+                            isChecking = isChecking,
+                            isModuleInstalled = isModuleInstalled,
+                            isRebootRequired = isRebootRequired,
+                            currentProfile = currentProfile,
+                            currentFps = currentFps,
+                            kernelVersion = kernelVersion,
+                            deviceModel = deviceModel,
+                            isRootGranted = isRootGranted,
+                            selinuxStatus = selinuxStatus,
+                            onRequestRebootDialog = { showRebootDialog = true },
+                            onRestartDaemon = restartAction,
+                            onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" }
+                        )
+                        1 -> AppsScreen()
+                        2 -> TweaksScreen()
+                        3 -> SettingsScreen(onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" })
+                    }
                 }
             }
-        ) { innerPadding ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(bottom = innerPadding.calculateBottomPadding())
-            ) {
-                when (selectedTab) {
-                    0 -> HomeDashboardContent(
-                        batteryTemp = batteryTemp,
-                        daemonPid = daemonPid,
-                        isChecking = isChecking,
-                        isModuleInstalled = isModuleInstalled,
-                        isRebootRequired = isRebootRequired,
-                        currentProfile = currentProfile,
-                        currentFps = currentFps,
-                        kernelVersion = kernelVersion,
-                        deviceModel = deviceModel,
-                        isRootGranted = isRootGranted,
-                        selinuxStatus = selinuxStatus,
-                        onRequestRebootDialog = { showRebootDialog = true },
-                        onRestartDaemon = restartAction,
-                        onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" }
-                    )
-                    1 -> AppsScreen()
-                    2 -> TweaksScreen()
-                    3 -> SettingsScreen(onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" })
+        }
+    }
+}
+
+@Composable
+internal fun LuminaTabTransition(
+    selectedTab: Int,
+    modifier: Modifier = Modifier,
+    content: @Composable (Int) -> Unit
+) {
+    val pageTransition = LocalPageTransition.current
+    val spatialOffset = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
+    val spatialFloat = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
+    val effectsFloat = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+
+    AnimatedContent(
+        targetState = selectedTab,
+        modifier = modifier,
+        transitionSpec = {
+            val forward = targetState > initialState
+            val transform = when (pageTransition) {
+                PageTransition.Vertical -> {
+                    (slideInVertically(animationSpec = spatialOffset) { h ->
+                        if (forward) (h * 0.06f).toInt() else -(h * 0.06f).toInt()
+                    } + fadeIn(animationSpec = effectsFloat)) togetherWith
+                        (slideOutVertically(animationSpec = spatialOffset) { h ->
+                            if (forward) -(h * 0.06f).toInt() else (h * 0.06f).toInt()
+                        } + fadeOut(animationSpec = effectsFloat))
+                }
+                PageTransition.Horizontal -> {
+                    (slideInHorizontally(animationSpec = spatialOffset) { w ->
+                        if (forward) (w * 0.14f).toInt() else -(w * 0.14f).toInt()
+                    } + fadeIn(animationSpec = effectsFloat)) togetherWith
+                        (slideOutHorizontally(animationSpec = spatialOffset) { w ->
+                            if (forward) -(w * 0.14f).toInt() else (w * 0.14f).toInt()
+                        } + fadeOut(animationSpec = effectsFloat))
+                }
+                PageTransition.CrossAxis -> {
+                    (slideInHorizontally(animationSpec = spatialOffset) { w ->
+                        if (forward) (w * 0.08f).toInt() else -(w * 0.08f).toInt()
+                    } + fadeIn(animationSpec = effectsFloat) + scaleIn(
+                        initialScale = 0.975f,
+                        animationSpec = spatialFloat
+                    )) togetherWith
+                        (slideOutHorizontally(animationSpec = spatialOffset) { w ->
+                            if (forward) -(w * 0.08f).toInt() else (w * 0.08f).toInt()
+                        } + fadeOut(animationSpec = effectsFloat) + scaleOut(
+                            targetScale = 0.975f,
+                            animationSpec = spatialFloat
+                        ))
                 }
             }
-        }
+            transform.using(SizeTransform(clip = false))
+        },
+        label = "mainTabTransition"
+    ) { tab ->
+        content(tab)
+    }
+}
+
+@Composable
+internal fun <T> LuminaDrillTransition(
+    targetState: T,
+    isForward: (initial: T, target: T) -> Boolean,
+    modifier: Modifier = Modifier,
+    contentKey: (T) -> Any = { it ?: "root_state" },
+    content: @Composable (T) -> Unit
+) {
+    val spatialOffset = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
+    val spatialFloat = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
+    val effectsFloat = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+
+    AnimatedContent(
+        targetState = targetState,
+        modifier = modifier,
+        contentKey = contentKey,
+        transitionSpec = {
+            val forward = isForward(initialState, targetState)
+            val transform = if (forward) {
+                (slideInHorizontally(animationSpec = spatialOffset) { w -> (w * 0.16f).toInt() } +
+                    fadeIn(animationSpec = effectsFloat) +
+                    scaleIn(initialScale = 0.96f, animationSpec = spatialFloat)) togetherWith
+                    (slideOutHorizontally(animationSpec = spatialOffset) { w -> -(w * 0.08f).toInt() } +
+                        fadeOut(animationSpec = effectsFloat) +
+                        scaleOut(targetScale = 0.98f, animationSpec = spatialFloat))
+            } else {
+                (slideInHorizontally(animationSpec = spatialOffset) { w -> -(w * 0.08f).toInt() } +
+                    fadeIn(animationSpec = effectsFloat) +
+                    scaleIn(initialScale = 0.98f, animationSpec = spatialFloat)) togetherWith
+                    (slideOutHorizontally(animationSpec = spatialOffset) { w -> (w * 0.16f).toInt() } +
+                        fadeOut(animationSpec = effectsFloat) +
+                        scaleOut(targetScale = 0.96f, animationSpec = spatialFloat))
+            }
+            transform.using(SizeTransform(clip = false))
+        },
+        label = "subscreenDrillTransition"
+    ) { state ->
+        content(state)
     }
 }
 
