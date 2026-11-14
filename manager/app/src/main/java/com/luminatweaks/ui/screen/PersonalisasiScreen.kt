@@ -21,7 +21,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
@@ -32,7 +31,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -77,7 +75,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -89,7 +86,6 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -99,7 +95,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -109,6 +104,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.luminatweaks.R
 import com.luminatweaks.ui.theme.AccentIntensity
@@ -633,154 +629,6 @@ private fun ExpressiveSwatchTile(
 }
 
 @Composable
-private fun M3ExpressiveSlider(
-    value: Float,
-    onValueChange: (Float) -> Unit,
-    valueRange: ClosedFloatingPointRange<Float>,
-    steps: Int = 0,
-    modifier: Modifier = Modifier
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isDragged by interactionSource.collectIsDraggedAsState()
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val isInteracting = isDragged || isPressed
-
-    val thumbHeight by animateDpAsState(
-        targetValue = if (isInteracting) 32.dp else 28.dp,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "m3eThumbHeight"
-    )
-    val thumbWidth by animateDpAsState(
-        targetValue = if (isInteracting) 3.dp else 4.dp,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "m3eThumbWidth"
-    )
-
-    val activeColor = MaterialTheme.colorScheme.primary
-    val inactiveColor = MaterialTheme.colorScheme.surfaceContainerHighest
-    val dotColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
-
-    val sliderState = remember(steps, valueRange) {
-        SliderState(
-            value = value.coerceIn(valueRange.start, valueRange.endInclusive),
-            steps = steps,
-            valueRange = valueRange
-        )
-    }
-
-    LaunchedEffect(value) {
-        sliderState.value = value.coerceIn(valueRange.start, valueRange.endInclusive)
-    }
-
-    Slider(
-        state = sliderState,
-        onValueChange = { newVal ->
-            sliderState.value = newVal
-            onValueChange(newVal)
-        },
-        interactionSource = interactionSource,
-        modifier = modifier.fillMaxWidth(),
-        thumb = {
-            Box(
-                modifier = Modifier
-                    .height(34.dp)
-                    .width(14.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .width(thumbWidth)
-                        .height(thumbHeight)
-                        .clip(CircleShape)
-                        .background(activeColor)
-                )
-            }
-        },
-        track = { sliderState: SliderState ->
-            val span = (sliderState.valueRange.endInclusive - sliderState.valueRange.start)
-                .takeIf { it > 0f } ?: 1f
-            val fraction = ((sliderState.value - sliderState.valueRange.start) / span)
-                .coerceIn(0f, 1f)
-
-            Canvas(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(16.dp)
-            ) {
-                val trackH = size.height
-                val outerR = trackH / 2f
-                val innerR = 4.dp.toPx().coerceAtMost(outerR)
-                val gapPx = 5.dp.toPx()
-                val thumbCenterX = size.width * fraction
-
-                val activeRight = (thumbCenterX - gapPx).coerceAtLeast(0f)
-                val inactiveLeft = (thumbCenterX + gapPx).coerceAtMost(size.width)
-
-                if (activeRight > 1f) {
-                    val path = androidx.compose.ui.graphics.Path().apply {
-                        addRoundRect(
-                            androidx.compose.ui.geometry.RoundRect(
-                                left = 0f,
-                                top = 0f,
-                                right = activeRight,
-                                bottom = trackH,
-                                topLeftCornerRadius = androidx.compose.ui.geometry.CornerRadius(outerR),
-                                bottomLeftCornerRadius = androidx.compose.ui.geometry.CornerRadius(outerR),
-                                topRightCornerRadius = androidx.compose.ui.geometry.CornerRadius(innerR),
-                                bottomRightCornerRadius = androidx.compose.ui.geometry.CornerRadius(innerR)
-                            )
-                        )
-                    }
-                    drawPath(path = path, color = activeColor)
-                }
-
-                if (inactiveLeft < size.width - 1f) {
-                    val path = androidx.compose.ui.graphics.Path().apply {
-                        addRoundRect(
-                            androidx.compose.ui.geometry.RoundRect(
-                                left = inactiveLeft,
-                                top = 0f,
-                                right = size.width,
-                                bottom = trackH,
-                                topLeftCornerRadius = androidx.compose.ui.geometry.CornerRadius(innerR),
-                                bottomLeftCornerRadius = androidx.compose.ui.geometry.CornerRadius(innerR),
-                                topRightCornerRadius = androidx.compose.ui.geometry.CornerRadius(outerR),
-                                bottomRightCornerRadius = androidx.compose.ui.geometry.CornerRadius(outerR)
-                            )
-                        )
-                    }
-                    drawPath(path = path, color = inactiveColor)
-                }
-
-                if (steps > 0) {
-                    val totalTicks = steps + 2
-                    val dotRadius = 2.dp.toPx()
-                    val pad = outerR
-                    val usableW = (size.width - pad * 2f).coerceAtLeast(0f)
-                    for (i in 0 until totalTicks) {
-                        val tickFrac = i.toFloat() / (totalTicks - 1).toFloat()
-                        val tickX = pad + usableW * tickFrac
-                        if (tickX > inactiveLeft + dotRadius * 2f) {
-                            drawCircle(
-                                color = dotColor,
-                                radius = dotRadius,
-                                center = Offset(tickX, trackH / 2f)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    )
-}
-
-@Composable
 private fun AccentIntensityCard(
     currentIntensity: AccentIntensity,
     onIntensityChange: (AccentIntensity) -> Unit
@@ -859,7 +707,7 @@ private fun AccentIntensityCard(
                 }
             }
 
-            M3ExpressiveSlider(
+            Slider(
                 value = sliderPos.coerceIn(0f, maxIdx.toFloat()),
                 onValueChange = { raw ->
                     val nextIdx = raw.roundToInt().coerceIn(0, entries.lastIndex)
@@ -872,7 +720,8 @@ private fun AccentIntensityCard(
                     }
                 },
                 valueRange = 0f..maxIdx.toFloat(),
-                steps = (entries.size - 2).coerceAtLeast(0)
+                steps = (entries.size - 2).coerceAtLeast(0),
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }
@@ -882,7 +731,7 @@ private fun AccentIntensityCard(
 private fun PersNestedCardGroup(
     headerIcon: ImageVector,
     headerTitle: String,
-    outerRadius: androidx.compose.ui.unit.Dp,
+    outerRadius: Dp,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Surface(
@@ -1076,7 +925,7 @@ private fun PersCornerRadiusCard(
                 }
             }
 
-            M3ExpressiveSlider(
+            Slider(
                 value = sliderValue.coerceIn(minRadius, maxRadius),
                 onValueChange = { newVal ->
                     if (newVal.roundToInt() != sliderValue.roundToInt()) {
@@ -1090,7 +939,8 @@ private fun PersCornerRadiusCard(
                     onRadiusChange(rounded)
                 },
                 valueRange = minRadius..maxRadius,
-                steps = stepCount
+                steps = stepCount,
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }
