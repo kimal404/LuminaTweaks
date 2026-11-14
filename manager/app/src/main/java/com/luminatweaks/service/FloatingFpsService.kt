@@ -36,11 +36,8 @@ import android.graphics.Shader
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
-import android.os.Handler
 import android.os.IBinder
-import android.os.Looper
 import android.provider.Settings
-import android.view.Choreographer
 import android.view.GestureDetector
 import android.view.Gravity
 import android.view.MotionEvent
@@ -100,7 +97,7 @@ class FloatingFpsService : Service() {
         private const val CHANNEL_ID = "lumina_floating_fps_channel"
         private const val NOTIFICATION_ID = 4041
         private const val PUBLIC_FPS_PATH = "/data/local/tmp/lumina.fps"
-        private const val FEED_MAX_AGE_MS = 3_000L
+        private const val FEED_MAX_AGE_MS = 1_500L
         private const val GAME_STALE_GRACE_MS = 12_000L
         private const val ALWAYS_ON_PREVIEW_SECONDS = 3600
         private const val PREVIEW_RENEW_MS = 30 * 60 * 1000L
@@ -184,7 +181,6 @@ class FloatingFpsService : Service() {
     private var previewLease = false
     private var lastLeaseRequestMs = 0L
 
-    private val fallbackChoreographer = ChoreographerFpsTracker()
     private var cachedHz = 60
     private var cachedTemp = "37.0°C"
     private var cachedProfile = "Balanced"
@@ -279,7 +275,6 @@ class FloatingFpsService : Service() {
     override fun onDestroy() {
         previewBurstJob?.cancel()
         telemetryJob?.cancel()
-        fallbackChoreographer.stop()
         detachOverlay()
         if (previewLease || System.currentTimeMillis() < burstUntilMs) {
             previewLease = false
@@ -332,7 +327,6 @@ class FloatingFpsService : Service() {
                     ))
 
                 if (!show) {
-                    fallbackChoreographer.stop()
                     if (isOverlayAttached) {
                         detachOverlay()
                         updateNotification(isShowing = false)
@@ -341,18 +335,18 @@ class FloatingFpsService : Service() {
                     continue
                 }
 
-                val daemonReading = fresh && feed != null && feed.fps >= 0f
+                val daemonReading = fresh && feed != null && feed.fps > 0f
                 val fps: Float
                 val frametime: Float
                 if (daemonReading) {
                     fps = (feed?.fps ?: 0f).coerceAtLeast(0f)
                     frametime = (feed?.frametimeMs ?: 0f).takeIf { it > 0f }
-                        ?: if (fps > 0f) 1000f / fps else 1000f / cachedHz.coerceAtLeast(30)
-                    if (fps > 0f) fallbackChoreographer.stop()
+                        ?: if (fps > 0f) 1000f / fps else 0f
                 } else {
-                    fallbackChoreographer.start()
-                    fps = fallbackChoreographer.consumeFps().toFloat().coerceAtLeast(0f)
-                    frametime = if (fps > 0f) 1000f / fps else 1000f / cachedHz.coerceAtLeast(30)
+                    // No real game frame is available. Never fall back to the
+                    // display refresh rate; the view renders `--` instead.
+                    fps = 0f
+                    frametime = 0f
                 }
 
                 if (!cfg.autoGame && lastLeaseRequestMs > 0L && now - lastLeaseRequestMs >= PREVIEW_RENEW_MS) {
@@ -370,13 +364,15 @@ class FloatingFpsService : Service() {
                     overlayView?.setPalette(ThemeController.overlayPalette(this@FloatingFpsService))
                 }
 
-                System.arraycopy(history, 1, history, 0, history.size - 1)
-                history[history.size - 1] = frametime.coerceIn(0f, 250f)
+                if (fps > 0f) {
+                    System.arraycopy(history, 1, history, 0, history.size - 1)
+                    history[history.size - 1] = frametime.coerceIn(0f, 250f)
+                }
 
                 liveTelemetry = LiveFpsTelemetry(
-                    fps = fps.roundToInt().coerceIn(0, max(cachedHz, 60)),
+                    fps = if (fps > 0f) fps.roundToInt().coerceIn(1, max(cachedHz, 60)) else 0,
                     targetHz = cachedHz,
-                    frametimeMs = frametime.coerceIn(0f, 250f),
+                    frametimeMs = if (fps > 0f) frametime.coerceIn(0f, 250f) else 0f,
                     tempLabel = cachedTemp,
                     profileLabel = cachedProfile,
                     history = history,
@@ -680,6 +676,10 @@ class FloatingFpsService : Service() {
                 "Overlay aktif (sentuhan dikunci)",
                 "Overlay active (touch locked)"
             )
+            isShowing && liveTelemetry.fps <= 0 -> localizedText(
+                "Menunggu frame game...",
+                "Waiting for game frames..."
+            )
             isShowing -> localizedText(
                 "Menampilkan FPS real-time di layar",
                 "Showing real-time FPS on screen"
@@ -804,7 +804,11 @@ private class FpsOverlayView(context: Context) : View(context) {
         labelPaint.textSize = 10f * scale * scaledDensity
         extraPaint.textSize = 10f * scale * scaledDensity
         linePaint.strokeWidth = 2f * scale * density
-        contentDescription = "FPS ${telemetry.fps}, ${String.format(Locale.US, "%.1f", telemetry.frametimeMs)} ms"
+        contentDescription = if (telemetry.fps > 0) {
+            "FPS ${telemetry.fps}, ${String.format(Locale.US, "%.1f", telemetry.frametimeMs)} ms"
+        } else {
+            "FPS --, waiting for game frames"
+        }
         if (relayout) requestLayout()
         invalidate()
     }
@@ -813,7 +817,9 @@ private class FpsOverlayView(context: Context) : View(context) {
 
     private fun extraParts(): List<String> {
         val parts = ArrayList<String>(3)
-        if (config.showFrametime) parts.add(String.format(Locale.US, "%.1f ms", telemetry.frametimeMs))
+        if (config.showFrametime && telemetry.fps > 0) {
+            parts.add(String.format(Locale.US, "%.1f ms", telemetry.frametimeMs))
+        }
         if (config.showTemp) parts.add(telemetry.tempLabel)
         if (config.showProfile) parts.add(telemetry.profileLabel)
         return parts
@@ -885,6 +891,8 @@ private class FpsOverlayView(context: Context) : View(context) {
         }
     }
 
+    private fun fpsLabel(): String = if (telemetry.fps > 0) telemetry.fps.toString() else "--"
+
     private fun drawPill(canvas: Canvas, s: Float, dp: Float, h: Float, status: Int) {
         val dot = 8f * dp
         val cy = h / 2f
@@ -894,7 +902,7 @@ private class FpsOverlayView(context: Context) : View(context) {
         x += dot + 7f * dp
 
         fpsPaint.color = status
-        drawCentered(canvas, telemetry.fps.toString(), fpsPaint, x, cy)
+        drawCentered(canvas, fpsLabel(), fpsPaint, x, cy)
         x += fpsPaint.measureText("120") + 4f * dp
 
         labelPaint.color = palette.onSurface
@@ -920,7 +928,7 @@ private class FpsOverlayView(context: Context) : View(context) {
         x += dot + 6f * dp
 
         fpsPaint.color = status
-        val fpsText = "${telemetry.fps} FPS"
+        val fpsText = if (telemetry.fps > 0) "${telemetry.fps} FPS" else "-- FPS"
         drawCentered(canvas, fpsText, fpsPaint, x, headerCenter)
 
         val firstExtra = extraParts().firstOrNull()
@@ -934,14 +942,16 @@ private class FpsOverlayView(context: Context) : View(context) {
         val graphBottom = h - 8f * dp
         val graphLeft = pad
         val graphRight = w - pad
-        drawSparkline(canvas, graphLeft, graphTop, graphRight, graphBottom, status, dp)
+        if (telemetry.fps > 0) {
+            drawSparkline(canvas, graphLeft, graphTop, graphRight, graphBottom, status, dp)
+        }
     }
 
     private fun drawMinimal(canvas: Canvas, s: Float, dp: Float, h: Float, status: Int) {
         val cy = h / 2f
         var x = 10f * dp
         fpsPaint.color = status
-        drawCentered(canvas, telemetry.fps.toString(), fpsPaint, x, cy)
+        drawCentered(canvas, fpsLabel(), fpsPaint, x, cy)
         x += fpsPaint.measureText("120")
 
         val firstExtra = extraParts().firstOrNull()
@@ -1063,41 +1073,5 @@ private class FpsOverlayView(context: Context) : View(context) {
     override fun performClick(): Boolean {
         super.performClick()
         return true
-    }
-}
-
-private class ChoreographerFpsTracker : Choreographer.FrameCallback {
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private var running = false
-    private var frameCount = 0
-    private var lastSampleNs = 0L
-
-    fun start() {
-        if (running) return
-        running = true
-        frameCount = 0
-        lastSampleNs = System.nanoTime()
-        mainHandler.post {
-            if (running) Choreographer.getInstance().postFrameCallback(this)
-        }
-    }
-
-    fun stop() {
-        running = false
-    }
-
-    fun consumeFps(): Int {
-        val now = System.nanoTime()
-        val elapsedNs = (now - lastSampleNs).coerceAtLeast(1L)
-        val count = frameCount
-        frameCount = 0
-        lastSampleNs = now
-        return (count * 1_000_000_000.0 / elapsedNs).roundToInt()
-    }
-
-    override fun doFrame(frameTimeNanos: Long) {
-        if (!running) return
-        frameCount += 1
-        Choreographer.getInstance().postFrameCallback(this)
     }
 }

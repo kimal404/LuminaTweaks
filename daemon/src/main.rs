@@ -763,8 +763,8 @@ fn main() {
             None
         };
         let fps_game_active = screen_awake && current_target.is_some();
-        let fps_pid = if fps_game_active {
-            runtime.target_game_pid.max(active_pid)
+        let fps_pid = if fps_game_active && runtime.target_game_pid > 0 {
+            runtime.target_game_pid
         } else {
             active_pid
         };

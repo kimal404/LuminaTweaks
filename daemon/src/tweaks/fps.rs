@@ -14,16 +14,20 @@
 
 //! Presented-frame sampler.
 //!
-//! Primary source is SurfaceFlinger TimeStats, which still works on Android
-//! 14-16 (the legacy `--latency` queue was disabled there).  The sampler runs
-//! only while a whitelisted game is in front, or for a short preview requested
-//! through the IPC socket, so idle cost is zero.
+//! Primary source is an eBPF uprobe on `libgui`'s
+//! `android::Surface::queueBuffer`.  It measures the game's own buffer
+//! submission cadence per PID, independent of GPU vendor or display refresh
+//! rate, and works while the game is drawing even when SurfaceFlinger's
+//! TimeStats window is empty.
 //!
-//! Fallback order: TimeStats -> legacy `--latency` -> `gfxinfo framestats` ->
-//! MediaTek `fpsgo_status`.  Every source is queried with a single command per
-//! sample; the public file carries the exact monotonic delta and is written
-//! atomically so the overlay never reads a partial line.
+//! Fallback order: SurfaceFlinger TimeStats -> legacy `--latency` ->
+//! `gfxinfo framestats` -> MediaTek `fpsgo_status`.  Every fallback reading is
+//! rejected when its newest timestamp is already stale, so the overlay never
+//! shows a frozen refresh rate as if it were a live game frame.  The sampler
+//! runs only while a whitelisted game is in front, or for a short preview
+//! requested through the IPC socket, so idle cost is zero.
 
+use std::collections::VecDeque;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
@@ -32,6 +36,8 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+use kala_ebpf::FrameProbe;
 
 const STATUS_PATH: &str = "/data/adb/.config/lumina/fps.txt";
 pub const PUBLIC_STATUS_PATH: &str = "/data/local/tmp/lumina.fps";
@@ -46,6 +52,11 @@ const IDLE_INTERVAL: Duration = Duration::from_secs(20);
 const RETRY_SOURCE_AFTER: Duration = Duration::from_secs(10);
 const MAX_CONSECUTIVE_MISSES: u32 = 3;
 const WINDOW_NS: u64 = 1_000_000_000;
+const EBPF_WINDOW: Duration = Duration::from_secs(1);
+const EBPF_STALE_AFTER: Duration = Duration::from_millis(1500);
+const EBPF_RETRY_AFTER: Duration = Duration::from_secs(30);
+const EBPF_MAX_HISTORY: usize = 144;
+const EBPF_MAX_FRAME_TIME: Duration = Duration::from_secs(2);
 const IDLE_MARKER: f32 = -1.0;
 const FPSGO_STATUS_PATHS: &[&str] = &[
     "/sys/kernel/debug/fpsgo/fstb/fpsgo_status",
@@ -300,6 +311,10 @@ fn query_latency(package: &str) -> Option<(f32, f32)> {
     timestamps.sort_unstable();
     timestamps.dedup();
     let newest = *timestamps.last()?;
+    let now = monotonic_ns();
+    if now > 0 && now.saturating_sub(newest) > WINDOW_NS {
+        return None;
+    }
     let cutoff = newest.saturating_sub(WINDOW_NS);
     let window: Vec<u64> = timestamps.into_iter().filter(|ts| *ts >= cutoff).collect();
     if window.len() < 2 {
@@ -349,6 +364,10 @@ fn query_gfxinfo(package: &str) -> Option<(f32, f32)> {
     }
     timestamps.sort_unstable();
     let newest = *timestamps.last()?;
+    let now = monotonic_ns();
+    if now > 0 && now.saturating_sub(newest) > WINDOW_NS {
+        return None;
+    }
     let cutoff = newest.saturating_sub(WINDOW_NS);
     let window: Vec<u64> = timestamps.into_iter().filter(|ts| *ts >= cutoff).collect();
     if window.len() < 2 {
@@ -405,6 +424,133 @@ impl Source {
             Source::Latency => Source::GfxInfo,
             Source::GfxInfo => Source::Vendor,
             Source::Vendor | Source::Unavailable => Source::Unavailable,
+        }
+    }
+}
+
+struct EbpfSource {
+    probe: FrameProbe,
+    pid: i32,
+    attached_at: Instant,
+    frames: VecDeque<(Instant, Duration)>,
+    last_frame: Option<Instant>,
+}
+
+impl EbpfSource {
+    fn attach(pid: i32) -> Option<Self> {
+        let mut probe = FrameProbe::new().ok()?;
+        probe.attach(pid).ok()?;
+        Some(Self {
+            probe,
+            pid,
+            attached_at: Instant::now(),
+            frames: VecDeque::new(),
+            last_frame: None,
+        })
+    }
+
+    fn drain(&mut self) {
+        while let Some((pid, frametime)) = self.probe.recv_with_deadline(Duration::ZERO) {
+            if pid != self.pid || frametime.is_zero() || frametime > EBPF_MAX_FRAME_TIME {
+                continue;
+            }
+            let now = Instant::now();
+            self.frames.push_back((now, frametime));
+            self.last_frame = Some(now);
+        }
+
+        let now = Instant::now();
+        while self
+            .frames
+            .front()
+            .map(|(at, _)| now.saturating_duration_since(*at) > EBPF_MAX_FRAME_TIME)
+            .unwrap_or(false)
+        {
+            self.frames.pop_front();
+        }
+        while self.frames.len() > EBPF_MAX_HISTORY {
+            self.frames.pop_front();
+        }
+    }
+
+    fn reading(&self) -> Option<(f32, f32)> {
+        let last = self.last_frame?;
+        if last.elapsed() > EBPF_STALE_AFTER {
+            return None;
+        }
+
+        let now = Instant::now();
+        let mut count = 0usize;
+        let mut total = Duration::ZERO;
+        for (at, frametime) in self.frames.iter().rev() {
+            if now.saturating_duration_since(*at) > EBPF_WINDOW {
+                break;
+            }
+            total = total.saturating_add(*frametime);
+            count += 1;
+        }
+        if count < 2 {
+            return None;
+        }
+
+        let total_ns = total.as_nanos().max(1) as f64;
+        let fps = count as f64 * 1_000_000_000.0 / total_ns;
+        if !fps.is_finite() || !(0.1..=360.0).contains(&fps) {
+            return None;
+        }
+        let frametime_ms = (total_ns / count as f64 / 1_000_000.0) as f32;
+        Some((fps as f32, frametime_ms))
+    }
+
+    fn has_recent_frames(&self) -> bool {
+        self.last_frame
+            .map(|at| at.elapsed() <= EBPF_STALE_AFTER)
+            .unwrap_or(false)
+    }
+
+    fn warming_up(&self) -> bool {
+        self.last_frame.is_none() && self.attached_at.elapsed() < EBPF_STALE_AFTER
+    }
+}
+
+fn maintain_ebpf(
+    ebpf: &mut Option<EbpfSource>,
+    failed_at: &mut Option<Instant>,
+    want_pid: Option<i32>,
+) {
+    let want_pid = want_pid.filter(|pid| *pid > 0);
+
+    if ebpf
+        .as_ref()
+        .map(|source| Some(source.pid) != want_pid)
+        .unwrap_or(false)
+    {
+        // Dropping FrameProbe unloads its uprobe automatically.
+        *ebpf = None;
+    }
+
+    let Some(pid) = want_pid else {
+        return;
+    };
+    if ebpf.is_some() {
+        return;
+    }
+    if failed_at
+        .map(|at| at.elapsed() < EBPF_RETRY_AFTER)
+        .unwrap_or(false)
+    {
+        return;
+    }
+
+    match EbpfSource::attach(pid) {
+        Some(source) => {
+            *ebpf = Some(source);
+            *failed_at = None;
+            log!("[FPS] eBPF uprobe attached to pid {}", pid);
+        }
+        None => {
+            *failed_at = Some(Instant::now());
+            log!("[FPS] eBPF unavailable; using SurfaceFlinger fallback");
         }
     }
 }
@@ -480,12 +626,15 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>) {
     let mut last_window_start = 0u64;
     let mut last_layer: Option<String> = None;
     let mut slow = false;
+    let mut ebpf: Option<EbpfSource> = None;
+    let mut ebpf_failed_at: Option<Instant> = None;
 
     loop {
         if stopped.lock().map(|s| *s).unwrap_or(true) {
             if timestats_ready {
                 disable_timestats();
             }
+            drop(ebpf.take());
             write_idle(false);
             return;
         }
@@ -513,6 +662,11 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>) {
                     missing = 0;
                     source = Source::TimeStats;
                     unavailable_at = None;
+                    ebpf = None;
+                    ebpf_failed_at = None;
+                }
+                if next_pid != pid {
+                    ebpf_failed_at = None;
                 }
                 package = next;
                 game_active = next_game;
@@ -522,6 +676,8 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>) {
                         disable_timestats();
                         timestats_ready = false;
                     }
+                    drop(ebpf.take());
+                    ebpf_failed_at = None;
                     write_idle(false);
                     continue;
                 }
@@ -530,6 +686,7 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>) {
                 if timestats_ready {
                     disable_timestats();
                 }
+                drop(ebpf.take());
                 write_idle(false);
                 return;
             }
@@ -539,6 +696,39 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>) {
         let Some(ref target) = package else {
             continue;
         };
+
+        maintain_ebpf(&mut ebpf, &mut ebpf_failed_at, Some(pid));
+        if let Some(probe) = ebpf.as_mut() {
+            probe.drain();
+        }
+
+        let ebpf_reading = ebpf.as_ref().and_then(EbpfSource::reading);
+        let ebpf_fresh = ebpf
+            .as_ref()
+            .map(EbpfSource::has_recent_frames)
+            .unwrap_or(false);
+        let ebpf_warming = ebpf.as_ref().map(EbpfSource::warming_up).unwrap_or(false);
+
+        if let Some((fps, frametime)) = ebpf_reading {
+            missing = 0;
+            slow = fps < 1.0;
+            source = Source::TimeStats;
+            unavailable_at = None;
+            last_window_start = 0;
+            last_layer = None;
+            if timestats_ready {
+                disable_timestats();
+                timestats_ready = false;
+            }
+            write_status(fps, frametime, game_active);
+            continue;
+        }
+        if ebpf_fresh || ebpf_warming {
+            // Frames are still arriving but the one-second window is not full
+            // yet. Keep the last valid sample; the overlay ages it to `--` if
+            // the probe goes quiet for longer than 1.5 s.
+            continue;
+        }
 
         if source == Source::Unavailable {
             if unavailable_at
@@ -625,8 +815,11 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>) {
                     if source == Source::Unavailable {
                         unavailable_at = Some(Instant::now());
                     }
+                    // Only publish the idle marker once the old sample has had
+                    // its 1.5 s grace period; transient misses must not flash
+                    // `--` between two valid frame windows.
+                    write_idle(game_active);
                 }
-                write_idle(game_active);
             }
         }
     }

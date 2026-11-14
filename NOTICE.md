@@ -31,6 +31,12 @@ This project contains inspirations, logic architectures, and structural concepts
   Contribution: Bundled inside `binder_resolver.apk` for hidden API access.
   Licensed under the Apache License, Version 2.0.
 
+* **kala-ebpf**
+  Copyright (C) 2026 Pavelc4
+  Source: https://github.com/pavelc4/kala
+  Contribution: Per-PID eBPF uprobe on `Surface::queueBuffer` used by the FPS
+  sampler, including the prebuilt BPF object. Licensed under the MIT License.
+
 --------------------------------------------------------------------------------
 
 ### Disclaimer
