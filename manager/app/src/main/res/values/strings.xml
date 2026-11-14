@@ -160,7 +160,7 @@
     <string name="setup_back">Kembali</string>
     <string name="setup_applying">Menerapkan…</string>
     <string name="setup_title_welcome">Selamat Datang</string>
-    <string name="setup_desc_welcome">Mari siapkan LuminaTweaks dalam lima langkah singkat sebelum mulai mengoptimalkan perangkat.</string>
+    <string name="setup_desc_welcome">Mari siapkan LuminaTweaks dalam empat langkah singkat sebelum mulai mengoptimalkan perangkat.</string>
     <string name="setup_root_note">Akses root dipakai untuk menerapkan tweak kernel. Tanpa root Anda tetap bisa menjelajah dalam mode pratinjau.</string>
     <string name="setup_title_diagnostics">Diagnostik Sistem</string>
     <string name="setup_desc_diagnostics">Memeriksa komponen inti LuminaTweaks dan platform perangkat Anda secara real-time.</string>

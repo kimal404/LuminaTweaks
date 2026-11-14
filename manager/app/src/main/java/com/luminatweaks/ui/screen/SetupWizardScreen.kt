@@ -18,10 +18,16 @@
 
 package com.luminatweaks.ui.screen
 
+import android.content.Context
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -38,10 +44,12 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -54,6 +62,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.rounded.AdminPanelSettings
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.AutoAwesome
@@ -61,15 +70,21 @@ import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.DeveloperBoard
+import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SportsEsports
+import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.VerifiedUser
+import androidx.compose.material.icons.rounded.VideogameAsset
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -83,6 +98,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -92,7 +108,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.lerp
@@ -104,7 +122,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import com.luminatweaks.R
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DaemonManager
@@ -113,40 +135,28 @@ import com.luminatweaks.ui.theme.ColorEngine
 import com.luminatweaks.ui.theme.ColorMode
 import com.luminatweaks.ui.theme.ThemeController
 import com.luminatweaks.util.RootUtil
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
-private const val PAGE_COUNT = 5
+private const val PAGE_COUNT = 4
 private val CardShape = RoundedCornerShape(24.dp)
-private val CardInnerShape = RoundedCornerShape(14.dp)
 
 private enum class CheckState { CHECKING, READY, MISSING }
 
-private data class ProfileOption(
-    @StringRes val titleRes: Int,
-    @StringRes val descRes: Int,
+private data class DecorIconSpec(
     val icon: ImageVector,
-    val recommended: Boolean = false
-)
-
-private val profileOptions = listOf(
-    ProfileOption(
-        R.string.setup_profile_dynamic,
-        R.string.setup_profile_dynamic_desc,
-        Icons.Rounded.AutoAwesome,
-        recommended = true
-    ),
-    ProfileOption(
-        R.string.setup_profile_performance,
-        R.string.setup_profile_performance_desc,
-        Icons.Rounded.Bolt
-    ),
-    ProfileOption(
-        R.string.setup_profile_manual,
-        R.string.setup_profile_manual_desc,
-        Icons.Rounded.Tune
-    )
+    val size: Dp,
+    val alignment: Alignment,
+    val offsetX: Dp,
+    val offsetY: Dp,
+    val rotation: Float,
+    val alpha: Float,
+    val usePrimaryTint: Boolean = true,
+    val phaseOffset: Float = 0f
 )
 
 private val colorModeOptions = listOf(
@@ -166,7 +176,6 @@ fun SetupWizardScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val haptic = LocalHapticFeedback.current
     val savedTheme = remember { ThemeController.getAppSettings(context) }
 
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { PAGE_COUNT })
@@ -174,18 +183,20 @@ fun SetupWizardScreen(
     var isCheckingRoot by remember { mutableStateOf(true) }
     var isRootGranted by remember { mutableStateOf(false) }
     var rootProvider by remember { mutableStateOf<String?>(null) }
-
-    var selectedProfile by remember { mutableIntStateOf(0) }
-    var isApplyingPreset by remember { mutableStateOf(false) }
+    var resumeTrigger by remember { mutableIntStateOf(0) }
 
     var floatingNavBar by remember { mutableStateOf(savedTheme.floatingNavBar) }
     var colorMode by remember { mutableStateOf(savedTheme.colorMode) }
     var colorEngine by remember { mutableStateOf(savedTheme.colorSpec) }
 
-    suspend fun verifyRoot() {
-        isCheckingRoot = true
-        isRootGranted = RootUtil.checkRootAccess()
-        rootProvider = if (isRootGranted) RootUtil.detectRootProvider() else null
+    suspend fun verifyRoot(showSpinner: Boolean = false) {
+        if (showSpinner && !isRootGranted) {
+            isCheckingRoot = true
+        }
+        val granted = probeRootAccess()
+        val provider = if (granted) detectRootManagerName(context) else null
+        isRootGranted = granted
+        rootProvider = provider
         isCheckingRoot = false
     }
 
@@ -205,28 +216,50 @@ fun SetupWizardScreen(
         )
     }
 
+    DisposableEffect(context) {
+        val lifecycleOwner = context as? LifecycleOwner
+        if (lifecycleOwner == null) {
+            onDispose { }
+        } else {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) {
+                    resumeTrigger += 1
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose {
+                lifecycleOwner.lifecycle.removeObserver(observer)
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
-        verifyRoot()
+        verifyRoot(showSpinner = true)
+    }
+
+    LaunchedEffect(resumeTrigger) {
+        if (resumeTrigger > 0) {
+            verifyRoot(showSpinner = false)
+        }
     }
 
     val currentPage = pagerState.currentPage
 
-    val goNext: () -> Unit = {
-        if (!isApplyingPreset) {
-            if (currentPage == 2) {
-                scope.launch {
-                    isApplyingPreset = true
-                    if (isRootGranted) {
-                        runCatching { applyProfilePreset(selectedProfile) }
-                    }
-                    isApplyingPreset = false
-                    pagerState.animateScrollToPage(3)
-                }
-            } else if (currentPage < PAGE_COUNT - 1) {
-                scope.launch { pagerState.animateScrollToPage(currentPage + 1) }
-            } else {
-                onComplete()
+    // Auto-deteksi saat dialog Superuser overlay (KernelSU / Magisk / APatch) baru disetujui
+    LaunchedEffect(currentPage, isRootGranted) {
+        if (currentPage == 0 && !isRootGranted) {
+            while (isActive && !isRootGranted) {
+                delay(1200L)
+                verifyRoot(showSpinner = false)
             }
+        }
+    }
+
+    val goNext: () -> Unit = {
+        if (currentPage < PAGE_COUNT - 1) {
+            scope.launch { pagerState.animateScrollToPage(currentPage + 1) }
+        } else {
+            onComplete()
         }
     }
 
@@ -240,17 +273,16 @@ fun SetupWizardScreen(
                 pageOffsetFraction = pagerState.currentPageOffsetFraction,
                 canGoBack = currentPage > 0,
                 onBack = {
-                    if (currentPage > 0 && !isApplyingPreset) {
+                    if (currentPage > 0) {
                         scope.launch { pagerState.animateScrollToPage(currentPage - 1) }
                     }
                 },
-                onSkip = { if (!isApplyingPreset) onComplete() }
+                onSkip = onComplete
             )
         },
         bottomBar = {
             WizardFooter(
                 page = currentPage,
-                isApplyingPreset = isApplyingPreset,
                 onNext = goNext
             )
         }
@@ -261,7 +293,6 @@ fun SetupWizardScreen(
                 .fillMaxSize()
                 .padding(innerPadding),
             beyondViewportPageCount = 1,
-            userScrollEnabled = !isApplyingPreset,
             key = { it }
         ) { page ->
             when (page) {
@@ -269,20 +300,12 @@ fun SetupWizardScreen(
                     isCheckingRoot = isCheckingRoot,
                     isRootGranted = isRootGranted,
                     rootProvider = rootProvider,
-                    onRetry = { scope.launch { verifyRoot() } }
+                    onRetry = { scope.launch { verifyRoot(showSpinner = true) } }
                 )
 
                 1 -> DiagnosticsPage(isActive = currentPage == 1)
 
-                2 -> ProfilePage(
-                    selectedProfile = selectedProfile,
-                    onSelectProfile = { index ->
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        selectedProfile = index
-                    }
-                )
-
-                3 -> AppearancePage(
+                2 -> AppearancePage(
                     floatingNavBar = floatingNavBar,
                     onFloatingNavBarChange = { enabled ->
                         floatingNavBar = enabled
@@ -306,22 +329,6 @@ fun SetupWizardScreen(
     }
 }
 
-private suspend fun applyProfilePreset(index: Int) {
-    when (index) {
-        0 -> {
-            ConfigRepository.setGlobalLiteMode(true)
-            ConfigRepository.setAutoDnd(false)
-        }
-
-        1 -> {
-            ConfigRepository.setGlobalLiteMode(false)
-            ConfigRepository.setAutoDnd(true)
-        }
-
-        else -> Unit
-    }
-}
-
 @Composable
 private fun WizardTopBar(
     page: Int,
@@ -338,7 +345,7 @@ private fun WizardTopBar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
-            modifier = Modifier.width(56.dp),
+            modifier = Modifier.width(84.dp),
             contentAlignment = Alignment.CenterStart
         ) {
             WizardBackButton(visible = canGoBack, onClick = onBack)
@@ -357,7 +364,7 @@ private fun WizardTopBar(
                     modifier = Modifier
                         .padding(horizontal = 3.dp)
                         .height(6.dp)
-                        .width((14f + 18f * strength).dp)
+                        .width((16f + 20f * strength).dp)
                         .clip(CircleShape)
                         .background(
                             lerp(
@@ -371,7 +378,7 @@ private fun WizardTopBar(
         }
 
         Box(
-            modifier = Modifier.width(56.dp),
+            modifier = Modifier.width(84.dp),
             contentAlignment = Alignment.CenterEnd
         ) {
             WizardSkipButton(
@@ -422,12 +429,17 @@ private fun WizardSkipButton(
     ) {
         TextButton(
             onClick = onClick,
-            contentPadding = PaddingValues(horizontal = 4.dp)
+            modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 36.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
         ) {
             Text(
                 text = stringResource(R.string.setup_skip),
                 style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Visible
             )
         }
     }
@@ -436,7 +448,6 @@ private fun WizardSkipButton(
 @Composable
 private fun WizardFooter(
     page: Int,
-    isApplyingPreset: Boolean,
     onNext: () -> Unit
 ) {
     Column(
@@ -477,37 +488,23 @@ private fun WizardFooter(
                 .fillMaxWidth()
                 .height(54.dp)
         ) {
-            if (isApplyingPreset) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = stringResource(R.string.setup_applying),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            } else {
-                Text(
-                    text = stringResource(
-                        if (page == PAGE_COUNT - 1) R.string.setup_start else R.string.setup_next
-                    ),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Icon(
-                    imageVector = if (page == PAGE_COUNT - 1) {
-                        Icons.Rounded.RocketLaunch
-                    } else {
-                        Icons.Rounded.ArrowForward
-                    },
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+            Text(
+                text = stringResource(
+                    if (page == PAGE_COUNT - 1) R.string.setup_start else R.string.setup_next
+                ),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Icon(
+                imageVector = if (page == PAGE_COUNT - 1) {
+                    Icons.Rounded.RocketLaunch
+                } else {
+                    Icons.Rounded.ArrowForward
+                },
+                contentDescription = null,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }
@@ -516,38 +513,90 @@ private fun WizardFooter(
 private fun footerNoteForPage(page: Int): Int = when (page) {
     0 -> R.string.setup_root_note
     1 -> R.string.setup_diag_note
-    2 -> R.string.setup_profile_note
-    3 -> R.string.setup_appearance_note
+    2 -> R.string.setup_appearance_note
     else -> R.string.setup_games_note
+}
+
+@Composable
+private fun WizardBackgroundDecor(
+    specs: List<DecorIconSpec>,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "wizardBgDecor")
+    val drift by infiniteTransition.animateFloat(
+        initialValue = -1f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 3600, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "wizardBgDrift"
+    )
+
+    Box(modifier = modifier.fillMaxSize()) {
+        specs.forEach { spec ->
+            val bobY = (drift * 6f * (if (spec.phaseOffset >= 0f) 1f else -1f)).dp
+            val tint = if (spec.usePrimaryTint) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onBackground
+            }
+            Box(
+                modifier = Modifier
+                    .align(spec.alignment)
+                    .offset(x = spec.offsetX, y = spec.offsetY + bobY)
+                    .rotate(spec.rotation)
+                    .alpha(spec.alpha)
+                    .size(spec.size + 22.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(tint.copy(alpha = 0.25f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = spec.icon,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(spec.size)
+                )
+            }
+        }
+    }
 }
 
 @Composable
 private fun WizardPage(
     @StringRes titleRes: Int,
     @StringRes descriptionRes: Int,
+    decorSpecs: List<DecorIconSpec> = emptyList(),
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp)
-            .padding(top = 8.dp, bottom = 24.dp)
-    ) {
-        Text(
-            text = stringResource(titleRes),
-            style = MaterialTheme.typography.headlineLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = stringResource(descriptionRes),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-        content()
+    Box(modifier = Modifier.fillMaxSize()) {
+        if (decorSpecs.isNotEmpty()) {
+            WizardBackgroundDecor(specs = decorSpecs)
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+                .padding(top = 8.dp, bottom = 24.dp)
+        ) {
+            Text(
+                text = stringResource(titleRes),
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = stringResource(descriptionRes),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            content()
+        }
     }
 }
 
@@ -558,9 +607,70 @@ private fun WelcomePage(
     rootProvider: String?,
     onRetry: () -> Unit
 ) {
+    val rootDecor = remember {
+        listOf(
+            DecorIconSpec(
+                icon = Icons.Rounded.Security,
+                size = 64.dp,
+                alignment = Alignment.BottomEnd,
+                offsetX = (-18).dp,
+                offsetY = (-44).dp,
+                rotation = -14f,
+                alpha = 0.14f,
+                usePrimaryTint = true,
+                phaseOffset = 1f
+            ),
+            DecorIconSpec(
+                icon = Icons.Rounded.AdminPanelSettings,
+                size = 54.dp,
+                alignment = Alignment.BottomStart,
+                offsetX = 20.dp,
+                offsetY = (-84).dp,
+                rotation = 12f,
+                alpha = 0.12f,
+                usePrimaryTint = false,
+                phaseOffset = -1f
+            ),
+            DecorIconSpec(
+                icon = Icons.Rounded.Terminal,
+                size = 44.dp,
+                alignment = Alignment.BottomCenter,
+                offsetX = (-6).dp,
+                offsetY = (-20).dp,
+                rotation = -8f,
+                alpha = 0.11f,
+                usePrimaryTint = true,
+                phaseOffset = 1f
+            ),
+            DecorIconSpec(
+                icon = Icons.Rounded.Key,
+                size = 38.dp,
+                alignment = Alignment.CenterEnd,
+                offsetX = (-28).dp,
+                offsetY = 68.dp,
+                rotation = 22f,
+                alpha = 0.10f,
+                usePrimaryTint = false,
+                phaseOffset = -1f
+            ),
+            DecorIconSpec(
+                icon = Icons.Rounded.VerifiedUser,
+                size = 40.dp,
+                alignment = Alignment.CenterStart,
+                offsetX = 28.dp,
+                offsetY = 56.dp,
+                rotation = -16f,
+                alpha = 0.10f,
+                usePrimaryTint = true,
+                phaseOffset = 1f
+            )
+        )
+    }
+
     WizardPage(
         titleRes = R.string.setup_title_welcome,
-        descriptionRes = R.string.setup_desc_welcome
+        descriptionRes = R.string.setup_desc_welcome,
+        decorSpecs = rootDecor
     ) {
         val badgeColor = when {
             isCheckingRoot -> MaterialTheme.colorScheme.surfaceContainerHigh
@@ -646,6 +756,55 @@ private fun DiagnosticsPage(isActive: Boolean) {
     var binderChecked by remember { mutableStateOf(false) }
     var binderReady by remember { mutableStateOf(false) }
 
+    val gearRocketDecor = remember {
+        listOf(
+            DecorIconSpec(
+                icon = Icons.Rounded.RocketLaunch,
+                size = 64.dp,
+                alignment = Alignment.BottomEnd,
+                offsetX = (-20).dp,
+                offsetY = (-36).dp,
+                rotation = -12f,
+                alpha = 0.14f,
+                usePrimaryTint = true,
+                phaseOffset = 1f
+            ),
+            DecorIconSpec(
+                icon = Icons.Rounded.Settings,
+                size = 56.dp,
+                alignment = Alignment.BottomStart,
+                offsetX = 22.dp,
+                offsetY = (-68).dp,
+                rotation = 18f,
+                alpha = 0.12f,
+                usePrimaryTint = false,
+                phaseOffset = -1f
+            ),
+            DecorIconSpec(
+                icon = Icons.Rounded.Tune,
+                size = 42.dp,
+                alignment = Alignment.BottomCenter,
+                offsetX = (-4).dp,
+                offsetY = (-16).dp,
+                rotation = -10f,
+                alpha = 0.11f,
+                usePrimaryTint = true,
+                phaseOffset = 1f
+            ),
+            DecorIconSpec(
+                icon = Icons.Rounded.Speed,
+                size = 40.dp,
+                alignment = Alignment.BottomEnd,
+                offsetX = (-96).dp,
+                offsetY = (-96).dp,
+                rotation = 14f,
+                alpha = 0.09f,
+                usePrimaryTint = false,
+                phaseOffset = -1f
+            )
+        )
+    }
+
     LaunchedEffect(isActive) {
         if (!isActive || revealCount >= 3) return@LaunchedEffect
         delay(80)
@@ -675,7 +834,8 @@ private fun DiagnosticsPage(isActive: Boolean) {
 
     WizardPage(
         titleRes = R.string.setup_title_diagnostics,
-        descriptionRes = R.string.setup_desc_diagnostics
+        descriptionRes = R.string.setup_desc_diagnostics,
+        decorSpecs = gearRocketDecor
     ) {
         val coreState = when {
             !coreChecked -> CheckState.CHECKING
@@ -856,162 +1016,6 @@ private fun DiagnosticRow(
                     color = statusColor,
                     maxLines = 1
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ProfilePage(
-    selectedProfile: Int,
-    onSelectProfile: (Int) -> Unit
-) {
-    WizardPage(
-        titleRes = R.string.setup_title_profile,
-        descriptionRes = R.string.setup_desc_profile
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            profileOptions.forEachIndexed { index, option ->
-                SelectionCard(
-                    icon = option.icon,
-                    title = stringResource(option.titleRes),
-                    description = stringResource(option.descRes),
-                    selected = selectedProfile == index,
-                    recommended = option.recommended,
-                    onClick = { onSelectProfile(index) }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SelectionCard(
-    icon: ImageVector,
-    title: String,
-    description: String,
-    selected: Boolean,
-    recommended: Boolean,
-    onClick: () -> Unit
-) {
-    val containerColor = if (selected) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.surfaceContainer
-    }
-    val contentColor = if (selected) {
-        MaterialTheme.colorScheme.onPrimary
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
-    val supportingColor = if (selected) {
-        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.78f)
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-
-    Surface(
-        onClick = onClick,
-        shape = CardShape,
-        color = containerColor,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CardInnerShape)
-                    .background(
-                        if (selected) {
-                            MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.16f)
-                        } else {
-                            MaterialTheme.colorScheme.surfaceContainerHigh
-                        }
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(22.dp),
-                    tint = if (selected) {
-                        MaterialTheme.colorScheme.onPrimary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                )
-            }
-
-            Spacer(modifier = Modifier.width(14.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = contentColor
-                    )
-                    if (recommended) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(
-                            shape = CircleShape,
-                            color = if (selected) {
-                                MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.16f)
-                            } else {
-                                MaterialTheme.colorScheme.primaryContainer
-                            }
-                        ) {
-                            Text(
-                                text = stringResource(R.string.setup_profile_recommended),
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = if (selected) {
-                                    MaterialTheme.colorScheme.onPrimary
-                                } else {
-                                    MaterialTheme.colorScheme.onPrimaryContainer
-                                }
-                            )
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = supportingColor
-                )
-            }
-
-            Spacer(modifier = Modifier.width(10.dp))
-
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (selected) {
-                            MaterialTheme.colorScheme.onPrimary
-                        } else {
-                            MaterialTheme.colorScheme.surfaceContainerHigh
-                        }
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                if (selected) {
-                    Icon(
-                        imageVector = Icons.Rounded.Check,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
             }
         }
     }
@@ -1216,9 +1220,59 @@ private fun GamesPage(isRootGranted: Boolean) {
     var isScanning by remember { mutableStateOf(true) }
     var scanToken by remember { mutableIntStateOf(0) }
 
+    val gamingDecor = remember {
+        listOf(
+            DecorIconSpec(
+                icon = Icons.Rounded.SportsEsports,
+                size = 64.dp,
+                alignment = Alignment.BottomEnd,
+                offsetX = (-20).dp,
+                offsetY = (-36).dp,
+                rotation = -14f,
+                alpha = 0.14f,
+                usePrimaryTint = true,
+                phaseOffset = 1f
+            ),
+            DecorIconSpec(
+                icon = Icons.Rounded.VideogameAsset,
+                size = 54.dp,
+                alignment = Alignment.BottomStart,
+                offsetX = 20.dp,
+                offsetY = (-74).dp,
+                rotation = 14f,
+                alpha = 0.12f,
+                usePrimaryTint = false,
+                phaseOffset = -1f
+            ),
+            DecorIconSpec(
+                icon = Icons.Rounded.EmojiEvents,
+                size = 44.dp,
+                alignment = Alignment.BottomCenter,
+                offsetX = (-4).dp,
+                offsetY = (-16).dp,
+                rotation = -8f,
+                alpha = 0.11f,
+                usePrimaryTint = true,
+                phaseOffset = 1f
+            ),
+            DecorIconSpec(
+                icon = Icons.Rounded.Bolt,
+                size = 40.dp,
+                alignment = Alignment.BottomEnd,
+                offsetX = (-96).dp,
+                offsetY = (-96).dp,
+                rotation = 18f,
+                alpha = 0.09f,
+                usePrimaryTint = false,
+                phaseOffset = -1f
+            )
+        )
+    }
+
     LaunchedEffect(scanToken, isRootGranted) {
         isScanning = true
-        games = if (isRootGranted) {
+        val canScan = isRootGranted || probeRootAccess()
+        games = if (canScan) {
             runCatching {
                 ConfigRepository.detectInstalledGames(context.packageManager)
             }.getOrElse { emptyList() }
@@ -1230,7 +1284,8 @@ private fun GamesPage(isRootGranted: Boolean) {
 
     WizardPage(
         titleRes = R.string.setup_title_games,
-        descriptionRes = R.string.setup_desc_games
+        descriptionRes = R.string.setup_desc_games,
+        decorSpecs = gamingDecor
     ) {
         Surface(
             shape = CardShape,
@@ -1455,6 +1510,56 @@ private fun StatusHeroCard(
             trailing()
         }
     }
+}
+
+private suspend fun probeRootAccess(): Boolean = withContext(Dispatchers.IO) {
+    if (runCatching { RootUtil.checkRootAccess() }.getOrDefault(false)) {
+        return@withContext true
+    }
+    runCatching {
+        val process = ProcessBuilder("su", "-c", "id")
+            .redirectErrorStream(true)
+            .start()
+        val output = process.inputStream.bufferedReader().use { it.readText() }
+        val exitCode = process.waitFor()
+        exitCode == 0 && output.contains("uid=0")
+    }.getOrDefault(false)
+}
+
+private suspend fun detectRootManagerName(context: Context): String? = withContext(Dispatchers.IO) {
+    val fromUtil = runCatching { RootUtil.detectRootProvider() }.getOrNull()
+        ?.takeIf { it.isNotBlank() }
+    if (fromUtil != null) return@withContext fromUtil
+
+    val knownPackages = listOf(
+        "com.rifsxd.ksunext" to "KernelSU Next",
+        "me.weishu.kernelsu" to "KernelSU",
+        "me.bmax.apatch" to "APatch",
+        "com.topjohnwu.magisk" to "Magisk"
+    )
+    val pm = context.packageManager
+    for ((pkg, label) in knownPackages) {
+        val installed = runCatching {
+            pm.getPackageInfo(pkg, 0)
+            true
+        }.getOrDefault(false)
+        if (installed) return@withContext label
+    }
+
+    runCatching {
+        val process = ProcessBuilder("su", "-v")
+            .redirectErrorStream(true)
+            .start()
+        val out = process.inputStream.bufferedReader().use { it.readText() }.trim()
+        process.waitFor()
+        when {
+            out.contains("kernelsu", ignoreCase = true) -> "KernelSU"
+            out.contains("apatch", ignoreCase = true) -> "APatch"
+            out.contains("magisk", ignoreCase = true) -> "Magisk"
+            out.isNotBlank() -> out.lineSequence().firstOrNull()?.take(24)
+            else -> null
+        }
+    }.getOrNull()
 }
 
 private fun groupedShape(index: Int, count: Int): Shape {
