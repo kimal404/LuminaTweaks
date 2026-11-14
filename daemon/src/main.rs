@@ -473,7 +473,9 @@ fn main() {
     publish_selinux_status();
 
     log!(
-        "[SYSTEM] Online | Kernel {} | Binder Socket pending",
+        "[SYSTEM] Online | v{} build {} | Kernel {} | Binder Socket pending",
+        env!("CARGO_PKG_VERSION"),
+        option_env!("LUMINA_BUILD_ID").unwrap_or("dev"),
         kernel_release()
     );
     sched::tune_daemon();
@@ -506,6 +508,8 @@ fn main() {
     let mut last_screen_state: Option<bool> = None;
     let mut fps_monitor = fps::FpsMonitor::new();
     let mut last_heartbeat = Instant::now();
+    let mut reload_pending_at: Option<Instant> = None;
+    let mut reload_force = false;
 
     loop {
         if SHUTDOWN.load(Ordering::Relaxed) {
@@ -548,14 +552,34 @@ fn main() {
 
         let reload_requested = shared_state.reload_flag.swap(false, Ordering::Relaxed);
         let files_changed = config_watcher.poll_changed();
+        if reload_requested || files_changed {
+            // Coalesce bursts of config writes (slider steps, atomic renames)
+            // into one reload after a short quiet window.
+            reload_pending_at = Some(Instant::now() + Duration::from_millis(300));
+            reload_force |= reload_requested;
+        }
 
-        if reload_requested
-            || files_changed
-            || runtime.last_config_poll.elapsed() >= Duration::from_secs(2)
+        let reload_due = reload_pending_at
+            .map(|deadline| Instant::now() >= deadline)
+            .unwrap_or(false);
+
+        if reload_due {
+            reload_pending_at = None;
+            runtime.last_config_poll = Instant::now();
+            let hash = config_hash();
+            if reload_force || runtime.last_config_hash != Some(hash) {
+                runtime.last_config_hash = Some(hash);
+                log!("[SYSTEM] Config reload applied");
+                detector::invalidate_config_cache();
+                engine::sync_global_tweaks();
+            }
+            reload_force = false;
+        } else if reload_pending_at.is_none()
+            && runtime.last_config_poll.elapsed() >= Duration::from_secs(2)
         {
             runtime.last_config_poll = Instant::now();
             let hash = config_hash();
-            if reload_requested || runtime.last_config_hash != Some(hash) {
+            if runtime.last_config_hash != Some(hash) {
                 runtime.last_config_hash = Some(hash);
                 log!("[SYSTEM] Config reload applied");
                 detector::invalidate_config_cache();

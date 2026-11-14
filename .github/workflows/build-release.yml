@@ -26,6 +26,7 @@ jobs:
 
       - name: Setup Rust & Compile luminad
         run: |
+          export LUMINA_BUILD_ID="ci${{ github.run_number }}-$(git rev-parse --short HEAD)"
           rustup target add aarch64-linux-android
           NDK_BIN=$(ls -d $ANDROID_HOME/ndk/* | tail -n 1)/toolchains/llvm/prebuilt/linux-x86_64/bin
           export PATH="$NDK_BIN:$PATH"

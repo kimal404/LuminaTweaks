@@ -21,14 +21,20 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Base64
 import com.luminatweaks.model.AppItem
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 data class DisplayRrMode(val id: Int, val hz: Int)
 
@@ -75,6 +81,12 @@ object ConfigRepository {
 
     private val fileMutex = Mutex()
 
+    // ZRAM sliders/steps can fire several times per second. Patches are queued
+    // and persisted once after a short quiet window instead of shelling out to
+    // su (read + write + reload) for every interaction.
+    private val zramPatches = Channel<JSONObject>(Channel.UNLIMITED)
+    private val zramWriterStarted = AtomicBoolean(false)
+
     @Volatile
     var cachedTweaksState: TweaksUiState? = null
 
@@ -108,25 +120,32 @@ object ConfigRepository {
         }
     }
 
-    private fun writeFileAtomically(targetPath: String, content: String) {
+    private fun reloadCommand(): String =
+        "(printf 'RELOAD\\n' | nc -U $IPC_SOCKET_PRIMARY 2>/dev/null || " +
+            "printf 'RELOAD\\n' | toybox nc -U $IPC_SOCKET_PRIMARY 2>/dev/null || " +
+            "printf 'RELOAD\\n' | nc -U $IPC_SOCKET_FALLBACK 2>/dev/null || " +
+            "printf 'RELOAD\\n' | toybox nc -U $IPC_SOCKET_FALLBACK 2>/dev/null) >/dev/null 2>&1 &"
+
+    private fun writeFileAtomically(
+        targetPath: String,
+        content: String,
+        reloadDaemon: Boolean = false
+    ) {
         val encoded = Base64.encodeToString(content.toByteArray(StandardCharsets.UTF_8), Base64.NO_WRAP)
         val tmpPath = "$targetPath.tmp"
+        // Wrap the backgrounded reload in a subshell so only the notification
+        // runs async; the atomic write itself must finish before su returns.
+        val notify = if (reloadDaemon) " && ( ${reloadCommand()} )" else ""
         runSuCmd(
             "mkdir -p $CONFIG_DIR && " +
                 "printf '%s' '$encoded' | base64 -d > '$tmpPath' && " +
-                "mv -f '$tmpPath' '$targetPath'",
+                "mv -f '$tmpPath' '$targetPath'$notify",
             5
         )
     }
 
     private fun notifyDaemonReload() {
-        runSuCmd(
-            "(printf 'RELOAD\\n' | nc -U $IPC_SOCKET_PRIMARY 2>/dev/null || " +
-                "printf 'RELOAD\\n' | toybox nc -U $IPC_SOCKET_PRIMARY 2>/dev/null || " +
-                "printf 'RELOAD\\n' | nc -U $IPC_SOCKET_FALLBACK 2>/dev/null || " +
-                "printf 'RELOAD\\n' | toybox nc -U $IPC_SOCKET_FALLBACK 2>/dev/null) >/dev/null 2>&1 &",
-            3
-        )
+        runSuCmd(reloadCommand(), 3)
     }
 
     fun killApp(packageName: String) {
@@ -141,7 +160,6 @@ object ConfigRepository {
     }
 
     private fun updateGlobalConfigInternal(updater: (JSONObject) -> Unit) {
-        ensureDir()
         val currentContent = runSuCmd("cat $GLOBAL_CONFIG_PATH 2>/dev/null", 4)
         val json = try {
             if (currentContent.isNotBlank()) JSONObject(currentContent) else JSONObject()
@@ -149,8 +167,7 @@ object ConfigRepository {
             JSONObject()
         }
         updater(json)
-        writeFileAtomically(GLOBAL_CONFIG_PATH, json.toString())
-        notifyDaemonReload()
+        writeFileAtomically(GLOBAL_CONFIG_PATH, json.toString(), reloadDaemon = true)
     }
 
     suspend fun reapplyGlobalTweaks() = withContext(Dispatchers.IO) {
@@ -310,6 +327,36 @@ object ConfigRepository {
         }
     }
 
+    private fun mergeJsonInto(target: JSONObject, source: JSONObject) {
+        val keys = source.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            target.put(key, source.get(key))
+        }
+    }
+
+    private fun enqueueZramPatch(patch: JSONObject) {
+        if (patch.length() == 0) return
+        if (zramWriterStarted.compareAndSet(false, true)) {
+            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+                var merged = JSONObject()
+                for (first in zramPatches) {
+                    mergeJsonInto(merged, first)
+                    while (true) {
+                        val next = withTimeoutOrNull(350L) { zramPatches.receive() } ?: break
+                        mergeJsonInto(merged, next)
+                    }
+                    val snapshot = merged
+                    merged = JSONObject()
+                    fileMutex.withLock {
+                        updateGlobalConfigInternal { json -> mergeJsonInto(json, snapshot) }
+                    }
+                }
+            }
+        }
+        zramPatches.trySend(patch)
+    }
+
     suspend fun setZramConfig(
         sizeGb: Int? = null,
         algorithm: String? = null,
@@ -328,13 +375,11 @@ object ConfigRepository {
             )
         }
 
-        fileMutex.withLock {
-            updateGlobalConfigInternal { json ->
-                sizeGb?.let { json.put("zram_size_gb", it) }
-                algorithm?.let { json.put("zram_algorithm", it) }
-                swappiness?.let { json.put("swappiness", it) }
-            }
-        }
+        val patch = JSONObject()
+        sizeGb?.let { patch.put("zram_size_gb", it) }
+        algorithm?.let { patch.put("zram_algorithm", it) }
+        swappiness?.let { patch.put("swappiness", it) }
+        enqueueZramPatch(patch)
     }
 
     private fun loadAppConfigsInternal(): Map<String, AppProfileConfig> {
@@ -399,7 +444,6 @@ object ConfigRepository {
     }
 
     private fun persistAppConfigsInternal(configs: Map<String, AppProfileConfig>) {
-        ensureDir()
         val arr = JSONArray()
         for (item in configs.values) {
             val normalizedLod = (if (item.textureLod > 0) item.textureLod else item.textureDetail).coerceIn(0, 4)
@@ -440,8 +484,7 @@ object ConfigRepository {
         val disabledSet = JSONArray()
         configs.values.filter { it.disabled }.forEach { disabledSet.put(it.pkg) }
         globalJson.put("disabled_games", disabledSet)
-        writeFileAtomically(GLOBAL_CONFIG_PATH, globalJson.toString())
-        notifyDaemonReload()
+        writeFileAtomically(GLOBAL_CONFIG_PATH, globalJson.toString(), reloadDaemon = true)
     }
 
     suspend fun saveAppConfig(profile: AppProfileConfig) = withContext(Dispatchers.IO) {

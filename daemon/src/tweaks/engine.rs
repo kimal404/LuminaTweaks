@@ -19,6 +19,9 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Command;
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::sync::OnceLock;
+use std::time::Duration;
 
 pub fn get_zen_mode() -> String {
     match Command::new("settings")
@@ -261,40 +264,168 @@ pub fn apply_boot_profile() {
     log!("[BOOT] Universal Boot Profile applied successfully");
 }
 
+/// Latest-wins mailbox for ZRAM reconfiguration. Reapplying ZRAM runs
+/// `swapoff`/`mkswap`/`swapon`, which can take seconds; doing it on the main
+/// event loop stalled the daemon for up to 14s in the field. Requests are
+/// coalesced with a short quiet window so dragging a slider only applies the
+/// final value once.
+static ZRAM_TX: OnceLock<mpsc::Sender<(u32, String)>> = OnceLock::new();
+
+fn zram_sender() -> &'static mpsc::Sender<(u32, String)> {
+    ZRAM_TX.get_or_init(|| {
+        let (tx, rx) = mpsc::channel::<(u32, String)>();
+        let _ = std::thread::Builder::new()
+            .name("zram-worker".to_string())
+            .spawn(move || zram_worker(rx));
+        tx
+    })
+}
+
+fn zram_worker(rx: mpsc::Receiver<(u32, String)>) {
+    while let Ok(first) = rx.recv() {
+        let mut latest = first;
+        loop {
+            match rx.recv_timeout(Duration::from_millis(250)) {
+                Ok(next) => latest = next,
+                Err(RecvTimeoutError::Timeout) => break,
+                Err(RecvTimeoutError::Disconnected) => {
+                    if latest.0 > 0 {
+                        apply_zram(latest.0, &latest.1);
+                    }
+                    return;
+                }
+            }
+        }
+        if latest.0 > 0 {
+            apply_zram(latest.0, &latest.1);
+        }
+    }
+}
+
+/// Queues a ZRAM configuration for the background worker.
+pub fn request_zram(size_gb: u32, algorithm: &str) {
+    if size_gb == 0 {
+        return;
+    }
+    let _ = zram_sender().send((size_gb, algorithm.to_string()));
+}
+
+fn read_swap_zram_device() -> Option<String> {
+    let content = fs::read_to_string("/proc/swaps").ok()?;
+    content.lines().skip(1).find_map(|line| {
+        let device = line.split_whitespace().next()?;
+        if device.contains("zram") {
+            Some(device.to_string())
+        } else {
+            None
+        }
+    })
+}
+
+/// Finds the ZRAM block device dynamically (zram0, zram1, ...). The active
+/// swap device wins; otherwise the lowest index is used.
+fn zram_device() -> Option<(String, String)> {
+    let mut candidates: Vec<(u32, String, String)> = Vec::new();
+    if let Ok(entries) = fs::read_dir("/sys/block") {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let Some(index) = name
+                .strip_prefix("zram")
+                .and_then(|value| value.parse::<u32>().ok())
+            else {
+                continue;
+            };
+            let block = if Path::new(&format!("/dev/block/{}", name)).exists() {
+                format!("/dev/block/{}", name)
+            } else if Path::new(&format!("/dev/{}", name)).exists() {
+                format!("/dev/{}", name)
+            } else {
+                continue;
+            };
+            candidates.push((index, format!("/sys/block/{}", name), block));
+        }
+    }
+    candidates.sort_by_key(|(index, _, _)| *index);
+
+    if let Some(active) = read_swap_zram_device() {
+        if let Some((_, sysfs, block)) = candidates.iter().find(|(_, _, block)| {
+            Path::new(block).file_name() == Path::new(&active).file_name()
+        }) {
+            return Some((sysfs.clone(), block.clone()));
+        }
+    }
+
+    candidates
+        .into_iter()
+        .next()
+        .map(|(_, sysfs, block)| (sysfs, block))
+}
+
+fn selected_algorithm(available: &str) -> Option<&str> {
+    available
+        .split_whitespace()
+        .find(|entry| entry.starts_with('['))
+        .map(|entry| entry.trim_matches(|c| c == '[' || c == ']'))
+}
+
+fn reset_with_retry(path: &str) -> bool {
+    for attempt in 0..3 {
+        if write_sysfs(path, "1", false) {
+            return true;
+        }
+        if attempt < 2 {
+            std::thread::sleep(Duration::from_millis(150));
+        }
+    }
+    false
+}
+
 pub fn apply_zram(size_gb: u32, algorithm: &str) {
     if size_gb == 0 {
         return;
     }
-    let zram_block = if Path::new("/dev/block/zram0").exists() {
-        "/dev/block/zram0"
-    } else if Path::new("/dev/zram0").exists() {
-        "/dev/zram0"
-    } else {
+    let Some((sysfs, zram_block)) = zram_device() else {
         log!("[ZRAM] No zram device found on system");
         return;
     };
 
-    let current_algo = fs::read_to_string("/sys/block/zram0/comp_algorithm").unwrap_or_default();
-    let current_disksize_bytes = fs::read_to_string("/sys/block/zram0/disksize")
+    let target_disksize_bytes = (size_gb as u64) * 1024 * 1024 * 1024;
+    let comp_path = format!("{}/comp_algorithm", sysfs);
+    let available = fs::read_to_string(&comp_path).unwrap_or_default();
+    let requested = algorithm.trim();
+
+    // Validate the compressor before touching the device so an unsupported
+    // algorithm cannot leave ZRAM reset without swap.
+    let wanted_algo = if requested.is_empty() {
+        None
+    } else if available
+        .split_whitespace()
+        .any(|entry| entry.trim_matches(|c| c == '[' || c == ']') == requested)
+    {
+        Some(requested)
+    } else {
+        log!(
+            "[ZRAM] Compression '{}' unavailable on {}; keeping device default",
+            requested,
+            sysfs
+        );
+        None
+    };
+
+    let current_algo_ok = wanted_algo
+        .map(|wanted| selected_algorithm(&available) == Some(wanted))
+        .unwrap_or(true);
+    let current_disksize_bytes = fs::read_to_string(format!("{}/disksize", sysfs))
         .unwrap_or_default()
         .trim()
         .parse::<u64>()
         .unwrap_or(0);
-    let target_disksize_bytes = (size_gb as u64) * 1024 * 1024 * 1024;
 
-    let algo_matches = if !algorithm.is_empty() {
-        current_algo.contains(&format!("[{}]", algorithm))
-    } else {
-        true
-    };
-
-    let size_matches = current_disksize_bytes == target_disksize_bytes;
-
-    if algo_matches && size_matches {
+    if current_algo_ok && current_disksize_bytes == target_disksize_bytes {
         log!(
             "[ZRAM] Target config already active ({}GB, {})",
             size_gb,
-            algorithm
+            wanted_algo.unwrap_or("device default")
         );
         return;
     }
@@ -302,26 +433,41 @@ pub fn apply_zram(size_gb: u32, algorithm: &str) {
     log!(
         "[ZRAM] Applying config: {}GB, compression: {}",
         size_gb,
-        algorithm
+        wanted_algo.unwrap_or("device default")
     );
 
-    let _ = Command::new("swapoff").arg(zram_block).status();
-    if !write_sysfs("/sys/block/zram0/reset", "1", false) {
-        log!("[ZRAM] Failed to reset {}; aborting", zram_block);
+    // reset returns EBUSY while the device is still an active swap device, so
+    // swapoff must succeed first (and it is only attempted when active).
+    if read_swap_zram_device()
+        .map(|active| {
+            Path::new(&active).file_name() == Path::new(&zram_block).file_name()
+        })
+        .unwrap_or(false)
+    {
+        let off = Command::new("swapoff")
+            .arg(&zram_block)
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false);
+        if !off {
+            log!("[ZRAM] swapoff failed for {}; aborting", zram_block);
+            return;
+        }
+    }
+
+    if !reset_with_retry(&format!("{}/reset", sysfs)) {
+        log!("[ZRAM] Failed to reset {}; aborting", sysfs);
         return;
     }
 
-    if !algorithm.is_empty()
-        && !write_sysfs("/sys/block/zram0/comp_algorithm", algorithm, false)
-    {
-        log!(
-            "[ZRAM] Compression '{}' unavailable; using device default",
-            algorithm
-        );
+    if let Some(algo) = wanted_algo {
+        if !write_sysfs(&comp_path, algo, false) {
+            log!("[ZRAM] Failed to set compression '{}'", algo);
+        }
     }
 
     let size_str = format!("{}", target_disksize_bytes);
-    if !write_sysfs("/sys/block/zram0/disksize", &size_str, false) {
+    if !write_sysfs(&format!("{}/disksize", sysfs), &size_str, false) {
         log!(
             "[ZRAM] Failed to set size to {} bytes; aborting",
             target_disksize_bytes
@@ -330,7 +476,7 @@ pub fn apply_zram(size_gb: u32, algorithm: &str) {
     }
 
     let formatted = Command::new("mkswap")
-        .arg(zram_block)
+        .arg(&zram_block)
         .status()
         .map(|status| status.success())
         .unwrap_or(false);
@@ -340,7 +486,7 @@ pub fn apply_zram(size_gb: u32, algorithm: &str) {
     }
 
     let swapon = Command::new("swapon")
-        .args([zram_block, "-p", "32767"])
+        .args([zram_block.as_str(), "-p", "32767"])
         .status()
         .map(|status| status.success())
         .unwrap_or(false);
@@ -352,12 +498,18 @@ pub fn apply_zram(size_gb: u32, algorithm: &str) {
     log!(
         "[ZRAM] Successfully applied {}GB with {}",
         size_gb,
-        algorithm
+        wanted_algo.unwrap_or("device default")
     );
 }
 
 pub fn apply_swappiness(val: u32) {
     let s = val.clamp(0, 200).to_string();
+    if fs::read_to_string("/proc/sys/vm/swappiness")
+        .map(|current| current.trim() == s)
+        .unwrap_or(false)
+    {
+        return;
+    }
     write_sysfs("/proc/sys/vm/swappiness", &s, false);
     log!("[VM] Swappiness set to {}", s);
 }
@@ -367,6 +519,7 @@ pub fn apply_io_scheduler(scheduler: &str) {
         return;
     }
     let mut applied_count = 0;
+    let mut already_set = 0;
     if let Ok(entries) = fs::read_dir("/sys/block") {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().into_owned();
@@ -378,16 +531,25 @@ pub fn apply_io_scheduler(scheduler: &str) {
                 continue;
             }
             let sched_path = format!("/sys/block/{}/queue/scheduler", name);
-            if Path::new(&sched_path).exists() && write_sysfs(&sched_path, scheduler, false) {
+            if !Path::new(&sched_path).exists() {
+                continue;
+            }
+            let current = fs::read_to_string(&sched_path).unwrap_or_default();
+            if current.contains(&format!("[{}]", scheduler)) {
+                already_set += 1;
+                continue;
+            }
+            if write_sysfs(&sched_path, scheduler, false) {
                 applied_count += 1;
             }
         }
     }
     if applied_count > 0 {
         log!(
-            "[IO] Applied scheduler '{}' across {} block device(s)",
+            "[IO] Applied scheduler '{}' across {} block device(s) ({} already set)",
             scheduler,
-            applied_count
+            applied_count,
+            already_set
         );
     }
 }
@@ -395,7 +557,7 @@ pub fn apply_io_scheduler(scheduler: &str) {
 pub fn sync_global_tweaks() {
     let (zram_size, zram_algo, swappiness) = crate::core::detector::get_global_zram_config();
     if let (Some(size), Some(algo)) = (zram_size, zram_algo) {
-        apply_zram(size, &algo);
+        request_zram(size, &algo);
     }
     if let Some(swap) = swappiness {
         apply_swappiness(swap);
@@ -584,4 +746,18 @@ pub fn eco_profile() {
     apply_universal_cpu("powersave", false, false, None);
     tune_schedutil_rate_limits(4000, 8000);
     soc::apply(SocProfile::Eco);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::selected_algorithm;
+
+    #[test]
+    fn selects_bracketed_compression_algorithm() {
+        assert_eq!(
+            selected_algorithm("lzo lzo-rle lz4 [lz4hc] zstd"),
+            Some("lz4hc")
+        );
+        assert_eq!(selected_algorithm("lzo lz4 zstd"), None);
+    }
 }
