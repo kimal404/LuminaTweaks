@@ -56,11 +56,15 @@ object ConfigRepository {
 
     private val GAMELIST_JSON_CANDIDATES = listOf(
         "/data/adb/.config/lumina/gamelist.json",
+        "/data/adb/modules/luminatweaks/config/gamelist.json",
+        "/data/adb/modules_update/luminatweaks/config/gamelist.json",
         "/data/adb/modules/luminatweaks/gamelist.json",
         "/data/adb/modules_update/luminatweaks/gamelist.json"
     )
 
     private val GAMELIST_TXT_CANDIDATES = listOf(
+        "/data/adb/modules/luminatweaks/config/gamelist.txt",
+        "/data/adb/modules_update/luminatweaks/config/gamelist.txt",
         "/data/adb/modules/luminatweaks/gamelist.txt",
         "/data/adb/modules_update/luminatweaks/gamelist.txt",
         "/data/adb/.config/lumina/gamelist.txt",

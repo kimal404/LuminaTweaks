@@ -54,6 +54,7 @@ macro_rules! binder_symbols {
         pub struct Api {
             $(pub $name: $ty,)*
             pub write_interface_token: Option<unsafe extern "C" fn(*mut AParcel, *const c_char) -> i32>,
+            pub write_string: Option<unsafe extern "C" fn(*mut AParcel, *const c_char, i32) -> i32>,
             pub death_new: Option<unsafe extern "C" fn(OnBinderDied) -> *mut c_void>,
             pub death_delete: Option<unsafe extern "C" fn(*mut c_void)>,
             pub link_to_death: Option<unsafe extern "C" fn(*mut AIBinder, *mut c_void, *mut c_void) -> i32>,
@@ -71,6 +72,7 @@ macro_rules! binder_symbols {
             let mut api = Api {
                 $($name: resolve(handle, $symbol)?,)*
                 write_interface_token: None,
+                write_string: None,
                 death_new: None,
                 death_delete: None,
                 link_to_death: None,
@@ -80,6 +82,7 @@ macro_rules! binder_symbols {
             // Removed from libbinder_ndk on newer Android; AIBinder_prepareTransaction
             // writes the interface header automatically there.
             api.write_interface_token = resolve_optional(handle, "AParcel_writeInterfaceToken");
+            api.write_string = resolve_optional(handle, "AParcel_writeString");
             api.death_new = resolve_optional(handle, "AIBinder_DeathRecipient_new");
             api.death_delete = resolve_optional(handle, "AIBinder_DeathRecipient_delete");
             api.link_to_death = resolve_optional(handle, "AIBinder_linkToDeath");
@@ -109,6 +112,7 @@ binder_symbols! {
         u32,
     ) -> i32),
     (write_strong_binder, "AParcel_writeStrongBinder", unsafe extern "C" fn(*mut AParcel, *mut AIBinder) -> i32),
+    (write_int32, "AParcel_writeInt32", unsafe extern "C" fn(*mut AParcel, i32) -> i32),
     (read_int32, "AParcel_readInt32", unsafe extern "C" fn(*const AParcel, *mut i32) -> i32),
     (read_status_header, "AParcel_readStatusHeader", unsafe extern "C" fn(*const AParcel, *mut *mut AStatus) -> i32),
     (status_is_ok, "AStatus_isOk", unsafe extern "C" fn(*const AStatus) -> bool),

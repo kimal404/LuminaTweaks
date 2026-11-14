@@ -102,15 +102,20 @@ jobs:
             cp -r module/* build_module/
           fi
 
-          cp LICENSE build_module/LICENSE
-          cp NOTICE.md build_module/NOTICE.md
+          mkdir -p build_module/docs
+          cp LICENSE build_module/docs/LICENSE
+          cp NOTICE.md build_module/docs/NOTICE.md
 
           rm -rf build_module/system build_module/webroot build_module/common
+          find build_module -maxdepth 1 -name '*.bak' -delete
 
-          cp daemon/target/aarch64-linux-android/release/luminad build_module/luminad
-          chmod 755 build_module/luminad
-          cp daemon/target/aarch64-linux-android/release/lumina-binder build_module/lumina-binder
-          chmod 755 build_module/lumina-binder
+          mkdir -p build_module/bin
+          cp daemon/target/aarch64-linux-android/release/luminad build_module/bin/luminad
+          chmod 755 build_module/bin/luminad
+          cp daemon/target/aarch64-linux-android/release/lumina-binder build_module/bin/lumina-binder
+          chmod 755 build_module/bin/lumina-binder
+          chmod 755 build_module/bin/soc.sh 2>/dev/null || true
+          chmod 644 build_module/bin/binder_resolver.apk 2>/dev/null || true
 
           APK_FILE=$(ls dist/*-signed.apk 2>/dev/null | head -n 1)
           if [ -z "$APK_FILE" ]; then

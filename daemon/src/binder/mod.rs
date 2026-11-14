@@ -48,7 +48,9 @@ use crate::core::detector::sanitize_pkg_name;
 use ffi::{AIBinder, AParcel, AStatus};
 use producer::{Death, Event, Focus, Shared};
 
-const RESOLVER_CANDIDATES: [&str; 4] = [
+const RESOLVER_CANDIDATES: [&str; 6] = [
+    "/data/adb/modules/luminatweaks/bin/binder_resolver.apk",
+    "/data/adb/modules_update/luminatweaks/bin/binder_resolver.apk",
     "/data/adb/modules/luminatweaks/binder_resolver.apk",
     "/data/adb/modules/lumina_tweaks/binder_resolver.apk",
     "/data/adb/.config/lumina/binder_resolver.apk",
@@ -60,6 +62,7 @@ const OBSERVER_DESCRIPTOR: &str = "android.app.IProcessObserver";
 const DISPLAY_DESCRIPTOR: &str = "android.hardware.display.IDisplayManager";
 const DISPLAY_CALLBACK_DESCRIPTOR: &str = "android.hardware.display.IDisplayManagerCallback";
 const POWER_DESCRIPTOR: &str = "android.os.IPowerManager";
+const NOTIFICATION_DESCRIPTOR: &str = "android.app.INotificationManager";
 
 const INITIAL_BACKOFF: Duration = Duration::from_secs(5);
 const MAX_BACKOFF: Duration = Duration::from_secs(60);
@@ -69,6 +72,9 @@ static TX_FOREGROUND: AtomicU32 = AtomicU32::new(0);
 static TX_DIED: AtomicU32 = AtomicU32::new(0);
 static TX_DISPLAY_EVENT: AtomicU32 = AtomicU32::new(0);
 static TX_INTERACTIVE: AtomicU32 = AtomicU32::new(0);
+static TX_POWER_SAVE: AtomicU32 = AtomicU32::new(0);
+static TX_DND_SET: AtomicU32 = AtomicU32::new(0);
+static TX_DND_GET: AtomicU32 = AtomicU32::new(0);
 static SHARED: OnceLock<Arc<Shared>> = OnceLock::new();
 static THREAD_POOL_STARTED: AtomicBool = AtomicBool::new(false);
 static SCREEN_GENERATION: AtomicU64 = AtomicU64::new(0);
@@ -126,35 +132,50 @@ fn run_monitor(shared: Arc<Shared>, running: Arc<AtomicBool>) {
     let mut backoff = INITIAL_BACKOFF;
 
     while running.load(Ordering::Relaxed) {
-        let Some(resolver) = find_resolver() else {
-            crate::log!(
-                "[SYSTEM] Binder Resolver APK unavailable, retrying in {}s",
-                backoff.as_secs()
-            );
-            sleep_while_running(&running, backoff);
-            backoff = next_backoff(backoff);
-            continue;
-        };
-
-        let codes = match resolver::resolve(&resolver) {
-            Some(codes) => codes,
+        // A persisted cache keyed by fingerprint means the resolver APK is
+        // spawned at most once per firmware build instead of on every binder
+        // restart or system_server soft-reboot.
+        let cached = resolver::load_cached();
+        let from_cache = cached.is_some();
+        let codes = match cached {
+            Some(codes) => {
+                crate::log!("[SYSTEM] Binder Transaction codes loaded from cache");
+                codes
+            }
             None => {
-                crate::log!(
-                    "[SYSTEM] Binder Transaction codes unavailable, retrying in {}s",
-                    backoff.as_secs()
-                );
-                sleep_while_running(&running, backoff);
-                backoff = next_backoff(backoff);
-                continue;
+                let Some(resolver) = find_resolver() else {
+                    crate::log!(
+                        "[SYSTEM] Binder Resolver APK unavailable, retrying in {}s",
+                        backoff.as_secs()
+                    );
+                    sleep_while_running(&running, backoff);
+                    backoff = next_backoff(backoff);
+                    continue;
+                };
+
+                match resolver::resolve(&resolver) {
+                    Some(codes) => codes,
+                    None => {
+                        crate::log!(
+                            "[SYSTEM] Binder Transaction codes unavailable, retrying in {}s",
+                            backoff.as_secs()
+                        );
+                        sleep_while_running(&running, backoff);
+                        backoff = next_backoff(backoff);
+                        continue;
+                    }
+                }
             }
         };
 
         crate::log!(
-            "[SYSTEM] Binder Transaction codes resolved (register={}, foreground={}, died={}, display={})",
+            "[SYSTEM] Binder Transaction codes ready (register={}, foreground={}, died={}, display={}, power_save={}, dnd={})",
             codes.register,
             codes.foreground,
             codes.died,
-            codes.display_register
+            codes.display_register,
+            codes.is_power_save,
+            codes.set_interruption_filter
         );
 
         shared.clear_dead();
@@ -177,6 +198,12 @@ fn run_monitor(shared: Arc<Shared>, running: Arc<AtomicBool>) {
                     error,
                     backoff.as_secs()
                 );
+                if from_cache && error.contains("rejected") {
+                    // The cached table no longer matches this ROM; drop it so
+                    // the next attempt re-resolves through the resolver APK.
+                    resolver::invalidate_cache();
+                    crate::log!("[SYSTEM] Binder Transaction cache invalidated");
+                }
                 sleep_while_running(&running, backoff);
                 backoff = next_backoff(backoff);
             }
@@ -202,7 +229,14 @@ fn sleep_while_running(running: &AtomicBool, total: Duration) {
 
 fn wait_for_death(shared: &Shared, running: &AtomicBool, handles: &Handles) {
     let alive = handles.api.is_alive;
+    // When a death recipient is linked, Binder notifies us immediately on a
+    // system_server soft-reboot; no periodic liveness polling is needed.
+    let death_linked = !handles.death.is_null();
     while running.load(Ordering::Relaxed) && !shared.is_dead() {
+        if death_linked {
+            shared.wait_dead(Duration::from_secs(2));
+            continue;
+        }
         std::thread::sleep(DEATH_POLL);
         if let Some(is_alive) = alive {
             let activity_ok = unsafe { is_alive(handles.activity) };
@@ -318,6 +352,9 @@ fn attach(codes: &resolver::Codes, shared: &Shared) -> Result<Handles, String> {
     TX_DIED.store(codes.died, Ordering::Relaxed);
     TX_DISPLAY_EVENT.store(codes.display_event, Ordering::Relaxed);
     TX_INTERACTIVE.store(codes.is_interactive, Ordering::Relaxed);
+    TX_POWER_SAVE.store(codes.is_power_save, Ordering::Relaxed);
+    TX_DND_SET.store(codes.set_interruption_filter, Ordering::Relaxed);
+    TX_DND_GET.store(codes.get_interruption_filter, Ordering::Relaxed);
 
     associate(api, handles.activity, ACTIVITY_DESCRIPTOR)?;
     if !handles.display.is_null() {
@@ -372,11 +409,16 @@ fn attach(codes: &resolver::Codes, shared: &Shared) -> Result<Handles, String> {
         }
     }
 
-    if codes.is_interactive != 0 {
-        if !display_registered {
+    if codes.is_interactive != 0 || codes.is_power_save != 0 {
+        if !display_registered && codes.is_interactive != 0 {
             crate::log!("[SYSTEM] Binder Screen state polled through IPowerManager");
         }
-        start_screen_worker(api, codes.is_interactive, !display_registered);
+        start_screen_worker(
+            api,
+            codes.is_interactive,
+            codes.is_power_save,
+            !display_registered,
+        );
     }
 
     if !handles.power.is_null() {
@@ -391,6 +433,20 @@ fn attach(codes: &resolver::Codes, shared: &Shared) -> Result<Handles, String> {
             let on = interactive != 0;
             if shared.update_screen(on) {
                 shared.push_event(Event::Screen(on));
+            }
+        }
+
+        let power_save = transact_read_int32(
+            api,
+            handles.power,
+            codes.is_power_save,
+            POWER_DESCRIPTOR,
+            -1,
+        );
+        if power_save >= 0 {
+            let on = power_save != 0;
+            if shared.update_power_save(on) {
+                shared.push_event(Event::PowerSave(on));
             }
         }
     }
@@ -571,8 +627,13 @@ fn transact_read_int32(
     value
 }
 
-fn start_screen_worker(api: &'static ffi::Api, code: u32, poll: bool) {
-    if code == 0 {
+fn start_screen_worker(
+    api: &'static ffi::Api,
+    interactive_code: u32,
+    power_save_code: u32,
+    poll: bool,
+) {
+    if interactive_code == 0 && power_save_code == 0 {
         return;
     }
     let Some(shared) = SHARED.get().cloned() else {
@@ -584,11 +645,16 @@ fn start_screen_worker(api: &'static ffi::Api, code: u32, poll: bool) {
         .name("binder-screen".to_string())
         .spawn(move || {
             while SCREEN_GENERATION.load(Ordering::Relaxed) == generation && !shared.is_dead() {
-                if poll {
-                    shared.wait_screen_request(Duration::from_secs(2));
+                // Without a display callback the screen state must be polled.
+                // With the callback registered this worker only wakes on real
+                // binder events (or a slow 60s safety net) so the hot path is
+                // fully event-driven.
+                let timeout = if poll && interactive_code != 0 {
+                    Duration::from_secs(2)
                 } else {
-                    shared.wait_screen_request(Duration::from_secs(5));
-                }
+                    Duration::from_secs(60)
+                };
+                shared.wait_screen_request(timeout);
                 if SCREEN_GENERATION.load(Ordering::Relaxed) != generation || shared.is_dead() {
                     break;
                 }
@@ -597,17 +663,206 @@ fn start_screen_worker(api: &'static ffi::Api, code: u32, poll: bool) {
                 if power.is_null() {
                     continue;
                 }
-                let value = transact_read_int32(api, power, code, POWER_DESCRIPTOR, -1);
+                if poll && interactive_code != 0 {
+                    let value =
+                        transact_read_int32(api, power, interactive_code, POWER_DESCRIPTOR, -1);
+                    if value >= 0 {
+                        let on = value != 0;
+                        if shared.update_screen(on) {
+                            shared.push_event(Event::Screen(on));
+                        }
+                    }
+                }
+                if power_save_code != 0 {
+                    let value =
+                        transact_read_int32(api, power, power_save_code, POWER_DESCRIPTOR, -1);
+                    if value >= 0 {
+                        let on = value != 0;
+                        if shared.update_power_save(on) {
+                            shared.push_event(Event::PowerSave(on));
+                        }
+                    }
+                }
                 unsafe { (api.dec_strong)(power) };
-                if value < 0 {
-                    continue;
-                }
-                let on = value != 0;
-                if shared.update_screen(on) {
-                    shared.push_event(Event::Screen(on));
-                }
             }
         });
+}
+
+pub fn dnd_arg_to_filter(arg: &str) -> i32 {
+    match arg {
+        "priority" => 2,
+        "none" => 3,
+        "alarms" => 4,
+        _ => 1,
+    }
+}
+
+pub fn filter_to_dnd_arg(filter: i32) -> &'static str {
+    match filter {
+        2 => "priority",
+        3 => "none",
+        4 => "alarms",
+        _ => "off",
+    }
+}
+
+fn transact_service_int(
+    service: &str,
+    descriptor: &str,
+    code: u32,
+    arg: Option<i32>,
+    with_pkg: bool,
+) -> Result<Option<i32>, String> {
+    let api = ffi::api().ok_or_else(|| "libbinder_ndk.so unavailable".to_string())?;
+    if code == 0 {
+        return Err("transaction code unavailable".to_string());
+    }
+
+    let binder = ffi::wait_for_service(api, service);
+    if binder.is_null() {
+        return Err(format!("{} service missing", service));
+    }
+
+    // AIDL signatures changed across releases: Android 11+ takes
+    // (String pkg, int filter) while older builds accepted only (int).
+    let mut result = Err("not attempted".to_string());
+    for (pkg, manual) in [
+        (with_pkg, false),
+        (false, false),
+        (with_pkg, true),
+        (false, true),
+    ] {
+        if manual && api.write_interface_token.is_none() {
+            continue;
+        }
+        result = transact_write_int_on(api, binder, descriptor, code, arg, pkg, manual);
+        if result.is_ok() {
+            break;
+        }
+    }
+    unsafe { (api.dec_strong)(binder) };
+    result
+}
+
+fn transact_write_int_on(
+    api: &'static ffi::Api,
+    service: *mut AIBinder,
+    descriptor: &str,
+    code: u32,
+    arg: Option<i32>,
+    with_pkg: bool,
+    manual_token: bool,
+) -> Result<Option<i32>, String> {
+    let mut input: *mut AParcel = std::ptr::null_mut();
+    if unsafe { (api.prepare_transaction)(service, &mut input) } != ffi::STATUS_OK
+        || input.is_null()
+    {
+        return Err("prepareTransaction failed".to_string());
+    }
+
+    if manual_token {
+        let (Some(write_token), Some(token)) =
+            (api.write_interface_token, ffi::interface_token(descriptor))
+        else {
+            unsafe { (api.parcel_delete)(input) };
+            return Err("interface token unavailable".to_string());
+        };
+        if unsafe { write_token(input, token.as_ptr()) } != ffi::STATUS_OK {
+            unsafe { (api.parcel_delete)(input) };
+            return Err("writeInterfaceToken failed".to_string());
+        }
+    }
+
+    if with_pkg {
+        let package = std::ffi::CString::new("android")
+            .map_err(|_| "invalid package placeholder".to_string())?;
+        let Some(write_string) = api.write_string else {
+            unsafe { (api.parcel_delete)(input) };
+            return Err("writeString unavailable".to_string());
+        };
+        if unsafe {
+            write_string(
+                input,
+                package.as_ptr(),
+                package.as_bytes().len() as i32,
+            )
+        } != ffi::STATUS_OK
+        {
+            unsafe { (api.parcel_delete)(input) };
+            return Err("writeString failed".to_string());
+        }
+    }
+
+    if let Some(value) = arg {
+        if unsafe { (api.write_int32)(input, value) } != ffi::STATUS_OK {
+            unsafe { (api.parcel_delete)(input) };
+            return Err("writeInt32 failed".to_string());
+        }
+    }
+
+    let mut output: *mut AParcel = std::ptr::null_mut();
+    let status = unsafe { (api.transact)(service, code, &mut input, &mut output, 0) };
+    if status != ffi::STATUS_OK {
+        if !output.is_null() {
+            unsafe { (api.parcel_delete)(output) };
+        }
+        return Err(format!("transact status {}", status));
+    }
+
+    let mut value = None;
+    if !output.is_null() {
+        let mut reply: *mut AStatus = std::ptr::null_mut();
+        if unsafe { (api.read_status_header)(output, &mut reply) } == ffi::STATUS_OK
+            && !reply.is_null()
+        {
+            if unsafe { (api.status_is_ok)(reply) } {
+                let mut read = 0i32;
+                if unsafe { (api.read_int32)(output, &mut read) } == ffi::STATUS_OK {
+                    value = Some(read);
+                }
+            } else {
+                let description = unsafe { (api.status_get_description)(reply) };
+                let text = if description.is_null() {
+                    String::new()
+                } else {
+                    let text = unsafe { std::ffi::CStr::from_ptr(description) }
+                        .to_string_lossy()
+                        .into_owned();
+                    unsafe { (api.status_delete_description)(description) };
+                    text
+                };
+                unsafe { (api.status_delete)(reply) };
+                unsafe { (api.parcel_delete)(output) };
+                return Err(format!("{} rejected: {}", descriptor, text));
+            }
+            unsafe { (api.status_delete)(reply) };
+        }
+        unsafe { (api.parcel_delete)(output) };
+    }
+
+    Ok(value)
+}
+
+/// Applies an interruption filter (DND) through `INotificationManager`.
+/// Runs inside the `lumina-binder` helper process; callers fall back to
+/// `cmd notification` when this returns false.
+pub fn set_interruption_filter(arg: &str) -> bool {
+    let code = TX_DND_SET.load(Ordering::Relaxed);
+    transact_service_int(
+        "notification",
+        NOTIFICATION_DESCRIPTOR,
+        code,
+        Some(dnd_arg_to_filter(arg)),
+        true,
+    )
+    .is_ok()
+}
+
+pub fn get_interruption_filter() -> Option<i32> {
+    let code = TX_DND_GET.load(Ordering::Relaxed);
+    transact_service_int("notification", NOTIFICATION_DESCRIPTOR, code, None, true)
+        .ok()
+        .flatten()
 }
 
 unsafe extern "C" fn on_create(args: *mut c_void) -> *mut c_void {
@@ -703,6 +958,9 @@ fn handle_foreground(pid: i32, uid: i32) {
         return;
     }
 
+    // Refresh screen and power-save snapshots on foreground transitions
+    // without polling the framework in a fixed interval.
+    shared.request_screen();
     shared.push_event(Event::Focus(focus));
 }
 

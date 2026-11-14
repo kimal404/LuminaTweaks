@@ -50,10 +50,12 @@ pub enum Event {
     Focus(Focus),
     Died(Death),
     Screen(bool),
+    PowerSave(bool),
 }
 
 struct State {
     screen_on: bool,
+    power_save: Option<bool>,
     focus: Option<Focus>,
     focus_at: Option<Instant>,
 }
@@ -64,6 +66,7 @@ pub struct Shared {
     queue_cv: Condvar,
     deaths: Mutex<VecDeque<Death>>,
     lifecycle: Mutex<bool>,
+    lifecycle_cv: Condvar,
     legacy: Mutex<()>,
     legacy_cv: Condvar,
     legacy_events: AtomicU64,
@@ -85,6 +88,7 @@ impl Shared {
         Self {
             state: Mutex::new(State {
                 screen_on: true,
+                power_save: None,
                 focus: None,
                 focus_at: None,
             }),
@@ -92,6 +96,7 @@ impl Shared {
             queue_cv: Condvar::new(),
             deaths: Mutex::new(VecDeque::new()),
             lifecycle: Mutex::new(false),
+            lifecycle_cv: Condvar::new(),
             legacy: Mutex::new(()),
             legacy_cv: Condvar::new(),
             legacy_events: AtomicU64::new(0),
@@ -155,6 +160,19 @@ impl Shared {
         }
         state.screen_on = on;
         true
+    }
+
+    pub fn update_power_save(&self, on: bool) -> bool {
+        let mut state = self.lock_state();
+        if state.power_save == Some(on) {
+            return false;
+        }
+        state.power_save = Some(on);
+        true
+    }
+
+    pub fn power_save(&self) -> Option<bool> {
+        self.lock_state().power_save
     }
 
     pub fn set_focus(&self, focus: Focus) -> bool {
@@ -305,6 +323,23 @@ impl Shared {
                     queue.push_back(Event::Screen(on));
                 }
             }
+            Event::PowerSave(on) => {
+                let mut queue = self.lock_queue();
+                if let Some(slot) = queue
+                    .iter_mut()
+                    .find(|item| matches!(item, Event::PowerSave(_)))
+                {
+                    *slot = Event::PowerSave(on);
+                } else if queue.len() < QUEUE_CAPACITY {
+                    queue.push_back(Event::PowerSave(on));
+                } else if let Some(index) = queue
+                    .iter()
+                    .position(|item| matches!(item, Event::Focus(_) | Event::Screen(_)))
+                {
+                    queue.remove(index);
+                    queue.push_back(Event::PowerSave(on));
+                }
+            }
         }
         self.queue_cv.notify_one();
     }
@@ -361,6 +396,19 @@ impl Shared {
         }
         self.queue_cv.notify_all();
         self.screen_cv.notify_all();
+        self.lifecycle_cv.notify_all();
+    }
+
+    pub fn wait_dead(&self, timeout: Duration) -> bool {
+        let guard = match self.lifecycle.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        let (guard, _) = self
+            .lifecycle_cv
+            .wait_timeout_while(guard, timeout, |dead| !*dead)
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *guard
     }
 
     pub fn is_dead(&self) -> bool {

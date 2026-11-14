@@ -39,12 +39,16 @@ const APP_CONFIG_JSON_CANDIDATES: &[&str] = &[
 
 const GAMELIST_JSON_CANDIDATES: &[&str] = &[
     "/data/adb/.config/lumina/gamelist.json",
+    "/data/adb/modules/luminatweaks/config/gamelist.json",
+    "/data/adb/modules_update/luminatweaks/config/gamelist.json",
     "/data/adb/modules/luminatweaks/gamelist.json",
     "/data/adb/modules/lumina_tweaks/gamelist.json",
 ];
 
 const GAMES_TXT_CANDIDATES: &[&str] = &[
     "/data/adb/.config/lumina/gamelist.txt",
+    "/data/adb/modules/luminatweaks/config/gamelist.txt",
+    "/data/adb/modules_update/luminatweaks/config/gamelist.txt",
     "/data/adb/modules/luminatweaks/gamelist.txt",
     "/data/adb/modules/lumina_tweaks/gamelist.txt",
     "/data/adb/.config/lumina/games.txt",

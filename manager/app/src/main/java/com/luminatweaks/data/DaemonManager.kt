@@ -25,8 +25,8 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 
 object DaemonManager {
-    private const val MODULE_DAEMON_PATH = "/data/adb/modules/luminatweaks/luminad"
-    private const val MODULE_BINDER_PATH = "/data/adb/modules/luminatweaks/lumina-binder"
+    private const val MODULE_DIR = "/data/adb/modules/luminatweaks"
+    private const val MODULE_BIN_DIR = "$MODULE_DIR/bin"
     private const val MODULE_UPDATE_DIR = "/data/adb/modules_update/luminatweaks"
     private const val PID_FILE_PATH = "/data/local/tmp/lumina.pid"
     private const val HEARTBEAT_FILE_PATH = "/data/local/tmp/lumina.alive"
@@ -113,7 +113,10 @@ object DaemonManager {
     }
 
     suspend fun isModuleInstalled(): Boolean = withContext(Dispatchers.IO) {
-        runSuCmd("[ -f $MODULE_DAEMON_PATH ] && echo 'OK'", 3).contains("OK")
+        runSuCmd(
+            "[ -f $MODULE_BIN_DIR/luminad ] || [ -f $MODULE_DIR/luminad ] && echo 'OK'",
+            3
+        ).contains("OK")
     }
 
     suspend fun getDaemonPid(): String? = withContext(Dispatchers.IO) {
@@ -173,10 +176,13 @@ object DaemonManager {
         }
 
         runSuCmd(
-            "if [ -f $MODULE_BINDER_PATH ] && ! pidof lumina-binder >/dev/null 2>&1; then " +
-                "chmod 755 $MODULE_BINDER_PATH && nohup $MODULE_BINDER_PATH >/dev/null 2>&1 & sleep 1; " +
+            "MODDIR=$MODULE_DIR; " +
+                "BINDER=\$MODDIR/bin/lumina-binder; [ -f \$BINDER ] || BINDER=\$MODDIR/lumina-binder; " +
+                "DAEMON=\$MODDIR/bin/luminad; [ -f \$DAEMON ] || DAEMON=\$MODDIR/luminad; " +
+                "if [ -f \$BINDER ] && ! pidof lumina-binder >/dev/null 2>&1; then " +
+                "chmod 755 \$BINDER && nohup \$BINDER >/dev/null 2>&1 & sleep 1; " +
                 "fi; " +
-                "chmod 755 $MODULE_DAEMON_PATH && nohup $MODULE_DAEMON_PATH >/dev/null 2>&1 &",
+                "chmod 755 \$DAEMON && nohup \$DAEMON >/dev/null 2>&1 &",
             5
         )
 

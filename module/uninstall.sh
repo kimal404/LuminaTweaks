@@ -55,10 +55,10 @@ setprop sys.lumina.profile Balanced 2>/dev/null || true
 
 MODDIR=${0%/*}
 RESTORE_BIN=""
-if [ -f "$MODDIR/luminad" ]; then
-    RESTORE_BIN="$MODDIR/luminad"
-elif [ -f "/data/adb/modules/luminatweaks/luminad" ]; then
-    RESTORE_BIN="/data/adb/modules/luminatweaks/luminad"
+if [ -f "$MODDIR/bin/luminad" ]; then
+    RESTORE_BIN="$MODDIR/bin/luminad"
+elif [ -f "/data/adb/modules/luminatweaks/bin/luminad" ]; then
+    RESTORE_BIN="/data/adb/modules/luminatweaks/bin/luminad"
 fi
 if [ -n "$RESTORE_BIN" ]; then
     chmod 755 "$RESTORE_BIN" 2>/dev/null || true

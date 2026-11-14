@@ -28,6 +28,8 @@ use std::sync::OnceLock;
 
 const SOC_CONFIG_PATHS: &[&str] = &[
     "/data/adb/.config/lumina/soc.conf",
+    "/data/adb/modules/luminatweaks/config/soc.conf",
+    "/data/adb/modules_update/luminatweaks/config/soc.conf",
     "/data/adb/modules/luminatweaks/soc.conf",
     "/data/adb/modules/lumina_tweaks/soc.conf",
 ];

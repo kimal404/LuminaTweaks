@@ -53,9 +53,11 @@ Thumbs.db
 *.bak
 
 # Magisk / KernelSU / Root Module Artifacts
-module/bin/
+module/bin/luminad
+module/bin/lumina-binder
 module/system/bin/*
 !module/system/bin/.gitkeep
+module/*.bak
 
 *.jks
 keystore/

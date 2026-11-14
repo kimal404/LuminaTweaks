@@ -34,6 +34,7 @@ use std::time::Duration;
 
 use crate::binder::producer::{monotonic_ms, Event, Focus, Shared, PROTO_VERSION};
 use crate::binder::protocol as binder_protocol;
+use crate::binder::{filter_to_dnd_arg, get_interruption_filter, set_interruption_filter};
 
 const LINE_LIMIT: usize = 512;
 const WRITE_TIMEOUT: Duration = Duration::from_millis(5);
@@ -378,6 +379,17 @@ fn send_snapshot(inner: &Inner, shared: &Shared) -> std::io::Result<()> {
     );
     write_shared(inner, &line)?;
 
+    if let Some(power_save) = shared.power_save() {
+        let seq = shared.next_seq();
+        let line = format!(
+            "POWER_SAVE {} {} {}\n",
+            if power_save { "on" } else { "off" },
+            seq,
+            monotonic_ms()
+        );
+        write_shared(inner, &line)?;
+    }
+
     if let Some(focus) = focus {
         let seq = shared.next_seq();
         let line = format!(
@@ -420,6 +432,12 @@ fn send_event(inner: &Inner, shared: &Shared, event: Event) -> std::io::Result<(
             )
         }
         Event::Screen(on) => format!("SCREEN {} {} {}\n", if on { "on" } else { "off" }, seq, ts),
+        Event::PowerSave(on) => format!(
+            "POWER_SAVE {} {} {}\n",
+            if on { "on" } else { "off" },
+            seq,
+            ts
+        ),
     };
     write_shared(inner, &line)
 }
@@ -468,6 +486,18 @@ fn respond(command: &str, shared: &Shared) -> Option<String> {
     match command {
         "PING" => Some("PONG\n".to_string()),
         "SYNC" => Some(state_line(shared)),
+        "ZEN" => Some(match get_interruption_filter() {
+            Some(filter) => format!("ZEN {} {}\n", filter, filter_to_dnd_arg(filter)),
+            None => "ERR 2 zen unavailable\n".to_string(),
+        }),
+        other if other.starts_with("DND ") => {
+            let mode = other[4..].trim();
+            if set_interruption_filter(mode) {
+                Some("OK\n".to_string())
+            } else {
+                Some("ERR 2 dnd unavailable\n".to_string())
+            }
+        }
         other => Some(format!("ERR 1 unknown {}\n", other)),
     }
 }
@@ -475,9 +505,14 @@ fn respond(command: &str, shared: &Shared) -> Option<String> {
 fn state_line(shared: &Shared) -> String {
     let (screen_on, focus) = shared.snapshot();
     let screen = if screen_on { "on" } else { "off" };
+    let power = match shared.power_save() {
+        Some(true) => "on",
+        Some(false) => "off",
+        None => "-",
+    };
     match focus {
-        Some(focus) => format!("STATE {} {} {}\n", focus.package, focus.pid, screen),
-        None => format!("STATE - 0 {}\n", screen),
+        Some(focus) => format!("STATE {} {} {} {}\n", focus.package, focus.pid, screen, power),
+        None => format!("STATE - 0 {} {}\n", screen, power),
     }
 }
 

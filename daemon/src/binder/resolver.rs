@@ -21,18 +21,26 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-const RESOLVE_TIMEOUT: Duration = Duration::from_secs(5);
+use crate::core::detector::get_system_prop;
 
-const QUERIES: [&str; 6] = [
+const RESOLVE_TIMEOUT: Duration = Duration::from_secs(5);
+const CACHE_SCHEMA: u32 = 1;
+const CACHE_PATH: &str = "/data/adb/.config/lumina/binder_codes.json";
+const CONFIG_DIR: &str = "/data/adb/.config/lumina";
+
+const QUERIES: [&str; 9] = [
     "android.app.IActivityManager.Stub::TRANSACTION_registerProcessObserver",
     "android.app.IProcessObserver.Stub::TRANSACTION_onForegroundActivitiesChanged",
     "android.app.IProcessObserver.Stub::TRANSACTION_onProcessDied",
     "android.hardware.display.IDisplayManager.Stub::TRANSACTION_registerCallback",
     "android.hardware.display.IDisplayManagerCallback.Stub::TRANSACTION_onDisplayEvent",
     "android.os.IPowerManager.Stub::TRANSACTION_isInteractive",
+    "android.os.IPowerManager.Stub::TRANSACTION_isPowerSaveMode",
+    "android.app.INotificationManager.Stub::TRANSACTION_setInterruptionFilter",
+    "android.app.INotificationManager.Stub::TRANSACTION_getInterruptionFilter",
 ];
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize)]
 pub struct Codes {
     pub register: u32,
     pub foreground: u32,
@@ -40,6 +48,69 @@ pub struct Codes {
     pub display_register: u32,
     pub display_event: u32,
     pub is_interactive: u32,
+    pub is_power_save: u32,
+    pub set_interruption_filter: u32,
+    pub get_interruption_filter: u32,
+}
+
+impl Codes {
+    fn essential_ok(&self) -> bool {
+        self.register != 0 && self.foreground != 0 && self.died != 0
+    }
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct CacheFile {
+    schema: u32,
+    fingerprint: String,
+    codes: Codes,
+}
+
+fn fingerprint() -> String {
+    format!(
+        "{}|{}",
+        get_system_prop("ro.build.fingerprint"),
+        get_system_prop("ro.build.version.sdk")
+    )
+}
+
+/// Returns cached transaction codes when they were resolved for the exact
+/// same firmware. The prebuilt resolver APK is therefore spawned at most once
+/// per OTA/ROM change instead of on every daemon or binder restart.
+pub fn load_cached() -> Option<Codes> {
+    let raw = std::fs::read_to_string(CACHE_PATH).ok()?;
+    let cache: CacheFile = serde_json::from_str(&raw).ok()?;
+    if cache.schema != CACHE_SCHEMA || cache.fingerprint != fingerprint() {
+        return None;
+    }
+    if !cache.codes.essential_ok() {
+        return None;
+    }
+    Some(cache.codes)
+}
+
+pub fn invalidate_cache() {
+    let _ = std::fs::remove_file(CACHE_PATH);
+}
+
+fn store_cache(codes: &Codes) {
+    let cache = CacheFile {
+        schema: CACHE_SCHEMA,
+        fingerprint: fingerprint(),
+        codes: *codes,
+    };
+    let Ok(payload) = serde_json::to_string(&cache) else {
+        return;
+    };
+    let _ = std::fs::create_dir_all(CONFIG_DIR);
+    let temp = format!("{}.tmp", CACHE_PATH);
+    if std::fs::write(&temp, payload).is_ok() {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&temp, std::fs::Permissions::from_mode(0o644));
+        if std::fs::rename(&temp, CACHE_PATH).is_err() {
+            let _ = std::fs::remove_file(&temp);
+        }
+    }
 }
 
 pub fn resolve(apk: &Path) -> Option<Codes> {
@@ -105,21 +176,22 @@ pub fn resolve(apk: &Path) -> Option<Codes> {
     }
 
     let resolved = reader.join().ok()?;
-    let register = *resolved.get(QUERIES[0])?;
-    let foreground = *resolved.get(QUERIES[1])?;
-    let died = *resolved.get(QUERIES[2])?;
-
-    if register == 0 || foreground == 0 || died == 0 {
-        return None;
-    }
-
     let codes = Codes {
-        register,
-        foreground,
-        died,
+        register: resolved.get(QUERIES[0]).copied().unwrap_or(0),
+        foreground: resolved.get(QUERIES[1]).copied().unwrap_or(0),
+        died: resolved.get(QUERIES[2]).copied().unwrap_or(0),
         display_register: resolved.get(QUERIES[3]).copied().unwrap_or(0),
         display_event: resolved.get(QUERIES[4]).copied().unwrap_or(0),
         is_interactive: resolved.get(QUERIES[5]).copied().unwrap_or(0),
+        is_power_save: resolved.get(QUERIES[6]).copied().unwrap_or(0),
+        set_interruption_filter: resolved.get(QUERIES[7]).copied().unwrap_or(0),
+        get_interruption_filter: resolved.get(QUERIES[8]).copied().unwrap_or(0),
     };
+
+    if !codes.essential_ok() {
+        return None;
+    }
+
+    store_cache(&codes);
     Some(codes)
 }

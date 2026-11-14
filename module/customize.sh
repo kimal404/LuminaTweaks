@@ -26,8 +26,8 @@ mkdir -p /data/adb/.config/lumina
 rm -f "$MODPATH/.bootcount" "$MODPATH/.bootloop_guard" "$MODPATH/disable"
 
 SOC="generic"
-if [ -f "$MODPATH/soc.sh" ]; then
-    . "$MODPATH/soc.sh"
+if [ -f "$MODPATH/bin/soc.sh" ]; then
+    . "$MODPATH/bin/soc.sh"
     SOC=$(detect_lumina_soc 2>/dev/null)
 fi
 case "$SOC" in
@@ -46,8 +46,8 @@ esac
 ui_print "- SoC terdeteksi: $SOC_LABEL"
 ui_print "- Tweak SoC: ${SOC}.rs"
 
-BASE_GAMELIST="$MODPATH/gamelist.txt"
-GEN_GAMELIST="$MODPATH/gamelist.json"
+BASE_GAMELIST="$MODPATH/config/gamelist.txt"
+GEN_GAMELIST="/data/adb/.config/lumina/gamelist.json"
 
 if [ -f "$BASE_GAMELIST" ]; then
     ui_print "- Membuat gamelist.json"
@@ -78,20 +78,24 @@ pkill -9 -f luminad 2>/dev/null
 killall -9 lumina-binder 2>/dev/null
 pkill -9 -f lumina-binder 2>/dev/null
 
-if [ -f "$MODPATH/luminad" ]; then
-    set_perm "$MODPATH/luminad" 0 0 0755
+if [ -f "$MODPATH/bin/luminad" ]; then
+    set_perm "$MODPATH/bin/luminad" 0 0 0755
 else
     ui_print "! Biner luminad tidak ditemukan"
 fi
 
-if [ -f "$MODPATH/lumina-binder" ]; then
-    set_perm "$MODPATH/lumina-binder" 0 0 0755
+if [ -f "$MODPATH/bin/lumina-binder" ]; then
+    set_perm "$MODPATH/bin/lumina-binder" 0 0 0755
 else
     ui_print "! Biner lumina-binder tidak ditemukan"
 fi
 
-if [ -f "$MODPATH/binder_resolver.apk" ]; then
-    set_perm "$MODPATH/binder_resolver.apk" 0 0 0644
+if [ -f "$MODPATH/bin/binder_resolver.apk" ]; then
+    set_perm "$MODPATH/bin/binder_resolver.apk" 0 0 0644
+fi
+
+if [ -f "$MODPATH/bin/soc.sh" ]; then
+    set_perm "$MODPATH/bin/soc.sh" 0 0 0755
 fi
 
 if [ -f "$MODPATH/manager.apk" ]; then
@@ -121,12 +125,13 @@ if [ -f "$MODPATH/manager.apk" ]; then
     appops set com.luminatweaks AUTO_START allow >/dev/null 2>&1
     appops set com.luminatweaks RUN_IN_BACKGROUND allow >/dev/null 2>&1
     dumpsys deviceidle whitelist +com.luminatweaks >/dev/null 2>&1
+
+    rm -f "$MODPATH/manager.apk"
 fi
 
 set_perm "$MODPATH/service.sh" 0 0 0755
 set_perm "$MODPATH/post-fs-data.sh" 0 0 0755
 set_perm "$MODPATH/action.sh" 0 0 0755
 set_perm "$MODPATH/uninstall.sh" 0 0 0755
-set_perm "$MODPATH/soc.sh" 0 0 0755
 
 ui_print "- Selesai"

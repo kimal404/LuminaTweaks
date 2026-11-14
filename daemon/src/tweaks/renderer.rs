@@ -13,13 +13,12 @@
 // limitations under the License.
 
 use std::fs;
-use std::path::Path;
 use std::process::Command;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 const CONFIG_DIR: &str = "/data/adb/.config/lumina";
-const MODULE_DIR: &str = "/data/adb/modules/luminatweaks";
+const LEGACY_MODULE_RENDERER: &str = "/data/adb/modules/luminatweaks/current_renderer.txt";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Backend {
@@ -126,10 +125,6 @@ fn config_path() -> String {
     format!("{}/current_renderer.txt", CONFIG_DIR)
 }
 
-fn module_path() -> String {
-    format!("{}/current_renderer.txt", MODULE_DIR)
-}
-
 pub fn setrender(renderer: &str) {
     match RendererSpec::parse(renderer) {
         Some(spec) => {
@@ -156,7 +151,7 @@ pub fn get_saved_renderer() -> String {
     }
 
     let mut value = String::new();
-    for path in [config_path(), module_path()] {
+    for path in [config_path(), LEGACY_MODULE_RENDERER.to_string()] {
         if let Ok(text) = fs::read_to_string(path) {
             let trimmed = text.trim();
             if !trimmed.is_empty() {
@@ -195,10 +190,7 @@ pub fn save_renderer(renderer: &str) {
     let _ = fs::write(config_path(), renderer);
     set_prop("persist.lumina.renderer", renderer);
 
-    let module = module_path();
-    if Path::new(&module).exists() {
-        let _ = fs::write(module, renderer);
-    }
+    let _ = fs::remove_file(LEGACY_MODULE_RENDERER);
 }
 
 pub fn apply_renderer(renderer: &str) {

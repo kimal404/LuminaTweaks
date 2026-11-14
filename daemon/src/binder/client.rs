@@ -49,6 +49,7 @@ pub struct BinderClient {
     last_seq: u64,
     focus: Option<Focus>,
     screen: Option<bool>,
+    power_save: Option<bool>,
     died: VecDeque<Died>,
 }
 
@@ -63,6 +64,7 @@ impl BinderClient {
             last_seq: 0,
             focus: None,
             screen: None,
+            power_save: None,
             died: VecDeque::new(),
         }
     }
@@ -102,6 +104,17 @@ impl BinderClient {
 
     pub fn screen_state(&self) -> Option<bool> {
         self.screen
+    }
+
+    pub fn power_save_state(&self) -> Option<bool> {
+        self.power_save
+    }
+
+    /// Sends a DND interruption-filter change through the persistent binder
+    /// helper. This is fire-and-forget: reading a reply would race with the
+    /// event stream in push mode and could swallow an `APP_FOCUS` line.
+    pub fn set_dnd(&mut self, mode: &str) -> bool {
+        self.send_command(&format!("DND {}", mode))
     }
 
     pub fn take_died(&mut self) -> Option<Died> {
@@ -275,6 +288,25 @@ impl BinderClient {
                 self.screen = Some(on);
                 changed
             }
+            Some("POWER_SAVE") => {
+                let (Some(state), Some(seq)) = (fields.next(), fields.next()) else {
+                    return false;
+                };
+                let Ok(seq) = seq.parse::<u64>() else {
+                    return false;
+                };
+                let on = match state {
+                    "on" => true,
+                    "off" => false,
+                    _ => return false,
+                };
+                if !self.accept_seq(seq) {
+                    return false;
+                }
+                let changed = self.power_save != Some(on);
+                self.power_save = Some(on);
+                changed
+            }
             Some("PONG") | Some("EVENT") | Some("NONE") | Some("OK") => false,
             _ => false,
         }
@@ -293,7 +325,25 @@ impl BinderClient {
         self.reader = None;
         self.focus = None;
         self.screen = None;
+        self.power_save = None;
         self.next_retry = Instant::now() + CONNECT_RETRY;
+    }
+
+    fn send_command(&mut self, command: &str) -> bool {
+        if self.stream.is_none() && !self.connect() {
+            return false;
+        }
+
+        let Some(stream) = self.stream.as_mut() else {
+            return false;
+        };
+        let _ = stream.set_write_timeout(Some(WRITE_TIMEOUT));
+        let message = format!("{}\n", command);
+        if stream.write_all(message.as_bytes()).is_err() || stream.flush().is_err() {
+            self.disconnect();
+            return false;
+        }
+        true
     }
 
     fn request(&mut self, command: &str, timeout: Duration) -> Option<String> {
@@ -367,6 +417,7 @@ impl BinderClient {
                     self.last_seq = 0;
                     self.focus = None;
                     self.screen = None;
+                    self.power_save = None;
                     self.stream = Some(stream);
                     self.reader = Some(reader);
                     self.connected_once = true;

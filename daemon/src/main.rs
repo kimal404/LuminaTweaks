@@ -124,6 +124,14 @@ fn set_system_profile_prop(name: &str) {
         .status();
 }
 
+/// Applies DND through the persistent binder helper (`INotificationManager`),
+/// falling back to the legacy shell command only when the transaction fails.
+fn set_dnd(binder: &mut binder_client::BinderClient, mode: &str) {
+    if !binder.set_dnd(mode) {
+        engine::set_dnd_mode(mode);
+    }
+}
+
 fn write_runtime_file(path: &str, value: &str) -> bool {
     let temp_path = format!("{}.tmp", path);
     if std::fs::write(&temp_path, value).is_err() {
@@ -189,6 +197,7 @@ struct EngineRuntime {
     prev_zen_mode: String,
     last_config_poll: Instant,
     last_sched_enforce: Instant,
+    low_power: bool,
     shared_state: Arc<SharedState>,
 }
 
@@ -211,6 +220,7 @@ impl EngineRuntime {
             prev_zen_mode: "0".to_string(),
             last_config_poll: Instant::now(),
             last_sched_enforce: Instant::now(),
+            low_power: is_low_power_active(),
             shared_state,
         }
     }
@@ -224,7 +234,11 @@ impl EngineRuntime {
         }
     }
 
-    fn apply_target(&mut self, target_pkg: Option<&str>) {
+    fn apply_target(
+        &mut self,
+        target_pkg: Option<&str>,
+        binder: &mut binder_client::BinderClient,
+    ) {
         let is_global_lite = is_lite_mode_active();
         let target_cfg = target_pkg.and_then(get_app_config);
 
@@ -239,12 +253,12 @@ impl EngineRuntime {
 
         if desired_dnd && !self.dnd_override {
             self.prev_zen_mode = engine::get_zen_mode();
-            engine::set_dnd_mode("priority");
+            set_dnd(binder, "priority");
             self.dnd_override = true;
             log!("[SYSTEM] DND ON (prev zen_mode={})", self.prev_zen_mode);
         } else if !desired_dnd && self.dnd_override {
             let restore = engine::zen_to_dnd_arg(&self.prev_zen_mode);
-            engine::set_dnd_mode(restore);
+            set_dnd(binder, restore);
             self.dnd_override = false;
             log!("[SYSTEM] DND restored -> {}", restore);
         }
@@ -260,7 +274,7 @@ impl EngineRuntime {
             } else {
                 Profile::Performance
             }
-        } else if is_low_power_active() {
+        } else if self.low_power {
             Profile::Eco
         } else {
             Profile::Balance
@@ -377,14 +391,18 @@ impl EngineRuntime {
         }
     }
 
-    fn reset_to_balance(&mut self) {
-        self.reset_to_balance_triggered("Inactive");
+    fn reset_to_balance(&mut self, binder: &mut binder_client::BinderClient) {
+        self.reset_to_balance_triggered("Inactive", binder);
     }
 
-    fn reset_to_balance_triggered(&mut self, trigger: &str) {
+    fn reset_to_balance_triggered(
+        &mut self,
+        trigger: &str,
+        binder: &mut binder_client::BinderClient,
+    ) {
         if self.dnd_override {
             let restore = engine::zen_to_dnd_arg(&self.prev_zen_mode);
-            engine::set_dnd_mode(restore);
+            set_dnd(binder, restore);
             self.dnd_override = false;
             log!("[SYSTEM] DND restored -> {}", restore);
         }
@@ -492,7 +510,7 @@ fn main() {
     loop {
         if SHUTDOWN.load(Ordering::Relaxed) {
             log!("[SYSTEM] Shutdown signal | Restoring baseline");
-            runtime.reset_to_balance();
+            runtime.reset_to_balance(&mut binder_client);
             engine::restore_balance();
             utility_ctrl.restore();
             TextureController::restore();
@@ -524,6 +542,9 @@ fn main() {
             last_screen_state = Some(screen_awake);
         }
         utility_ctrl.tick(screen_awake);
+        runtime.low_power = binder_client
+            .power_save_state()
+            .unwrap_or_else(is_low_power_active);
 
         let reload_requested = shared_state.reload_flag.swap(false, Ordering::Relaxed);
         let files_changed = config_watcher.poll_changed();
@@ -565,7 +586,7 @@ fn main() {
                 );
                 runtime.left_foreground_at = None;
                 runtime.target_game_pid = 0;
-                runtime.reset_to_balance_triggered("Died 0ms");
+                runtime.reset_to_balance_triggered("Died 0ms", &mut binder_client);
                 fps_monitor.observe(None);
                 TextureController::sync_config(None);
                 last_pkg_for_texture = None;
@@ -670,10 +691,10 @@ fn main() {
                 last_pkg_for_texture = target.clone();
             }
 
-            runtime.apply_target(target.as_deref());
+            runtime.apply_target(target.as_deref(), &mut binder_client);
             target
         } else {
-            runtime.reset_to_balance();
+            runtime.reset_to_balance(&mut binder_client);
             TextureController::restore();
             last_pkg_for_texture = None;
             None

@@ -64,17 +64,17 @@ rm -f /data/local/tmp/lumina.pid
 rm -f /data/local/tmp/lumina.alive
 
 DAEMON_BIN=""
-if [ -f "$MODDIR/luminad" ]; then
-    DAEMON_BIN="$MODDIR/luminad"
-elif [ -f "/data/adb/modules/luminatweaks/luminad" ]; then
-    DAEMON_BIN="/data/adb/modules/luminatweaks/luminad"
+if [ -f "$MODDIR/bin/luminad" ]; then
+    DAEMON_BIN="$MODDIR/bin/luminad"
+elif [ -f "/data/adb/modules/luminatweaks/bin/luminad" ]; then
+    DAEMON_BIN="/data/adb/modules/luminatweaks/bin/luminad"
 fi
 
 BINDER_BIN=""
-if [ -f "$MODDIR/lumina-binder" ]; then
-    BINDER_BIN="$MODDIR/lumina-binder"
-elif [ -f "/data/adb/modules/luminatweaks/lumina-binder" ]; then
-    BINDER_BIN="/data/adb/modules/luminatweaks/lumina-binder"
+if [ -f "$MODDIR/bin/lumina-binder" ]; then
+    BINDER_BIN="$MODDIR/bin/lumina-binder"
+elif [ -f "/data/adb/modules/luminatweaks/bin/lumina-binder" ]; then
+    BINDER_BIN="/data/adb/modules/luminatweaks/bin/lumina-binder"
 fi
 
 if [ -n "$BINDER_BIN" ]; then
