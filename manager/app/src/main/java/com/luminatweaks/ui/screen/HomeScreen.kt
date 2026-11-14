@@ -83,7 +83,6 @@ import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Palette
@@ -279,9 +278,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
     var currentFps by remember { mutableStateOf("-") }
     var isRootGranted by remember { mutableStateOf(false) }
     var selinuxStatus by remember { mutableStateOf("Unknown") }
-    var isIpcAlive by remember { mutableStateOf(false) }
-    var socLabel by remember { mutableStateOf<String?>(null) }
-    var isBinderReady by remember { mutableStateOf(false) }
     var showRebootDialog by remember { mutableStateOf(false) }
     var isScreenResumed by remember { mutableStateOf(true) }
     var resumeToken by remember { mutableIntStateOf(0) }
@@ -336,16 +332,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                 selinuxStatus = initialSelinux
                 isChecking = false
             }
-
-            val initialIpc = initialStatus.pid != null && DaemonManager.isIpcReachable()
-            val initialSoc = DaemonManager.getSocLabel()
-            val initialBinder = moduleInstalled && DaemonManager.isBinderBridgeReady()
-
-            withContext(Dispatchers.Main) {
-                isIpcAlive = initialIpc
-                socLabel = initialSoc
-                isBinderReady = initialBinder
-            }
         }
     }
 
@@ -362,15 +348,9 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
             }
             val refreshedRoot = RootUtil.checkRootAccess()
             val refreshedSelinux = DeviceUtil.getSelinuxStatus()
-            val refreshedIpc = DaemonManager.isIpcReachable()
-            val refreshedSoc = DaemonManager.getSocLabel()
-            val refreshedBinder = DaemonManager.isBinderBridgeReady()
             withContext(Dispatchers.Main) {
                 isRootGranted = refreshedRoot
                 selinuxStatus = refreshedSelinux
-                isIpcAlive = refreshedIpc
-                socLabel = refreshedSoc
-                isBinderReady = refreshedBinder
             }
 
             var fallbackChecks = 0
@@ -382,14 +362,9 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                 val currentTemp = DeviceUtil.getBatteryTemperature(context)
                 val propProfile = readSystemProperty("sys.lumina.profile")
                 val status = DaemonManager.getStatus()
-                val justStarted = status.pid != null && daemonPid == null
                 // The stopped-daemon fallback shells out through su. Throttle it
                 // to every 4th poll instead of spawning su every 2.5s.
                 val checkFallback = status.pid == null && fallbackChecks % 4 == 0
-                // Keep the transport indicator honest without pinging the
-                // socket on every tick. A fresh start probes it immediately.
-                val checkIpc = status.pid != null &&
-                    (justStarted || fallbackChecks % 8 == 0)
                 fallbackChecks++
                 val rebootNeeded = when {
                     checkFallback -> DaemonManager.isRebootRequired()
@@ -409,17 +384,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                     isModuleInstalled = installed
                     currentProfile = propProfile ?: status.profile
                     currentFps = status.fps
-                }
-
-                if (checkIpc) {
-                    val ipc = DaemonManager.isIpcReachable()
-                    val soc = if (justStarted) DaemonManager.getSocLabel() else null
-                    val binder = if (justStarted) DaemonManager.isBinderBridgeReady() else null
-                    withContext(Dispatchers.Main) {
-                        isIpcAlive = ipc
-                        if (soc != null) socLabel = soc
-                        if (binder != null) isBinderReady = binder
-                    }
                 }
                 delay(2500L)
             }
@@ -502,14 +466,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
         daemonPid = updated.pid
         currentProfile = readSystemProperty("sys.lumina.profile") ?: updated.profile
         currentFps = updated.fps
-        val refreshedIpc = updated.pid != null && DaemonManager.isIpcReachable()
-        val refreshedSoc = DaemonManager.getSocLabel()
-        val refreshedBinder = DaemonManager.isBinderBridgeReady()
-        withContext(Dispatchers.Main) {
-            isIpcAlive = refreshedIpc
-            socLabel = refreshedSoc
-            isBinderReady = refreshedBinder
-        }
         if (updated.pid == null) {
             isRebootRequired = DaemonManager.isRebootRequired()
             isModuleInstalled = DaemonManager.isModuleInstalled()
@@ -545,9 +501,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             deviceModel = deviceModel,
                             isRootGranted = isRootGranted,
                             selinuxStatus = selinuxStatus,
-                            isIpcAlive = isIpcAlive,
-                            socLabel = socLabel,
-                            isBinderReady = isBinderReady,
                             onRequestRebootDialog = { showRebootDialog = true },
                             onRestartDaemon = restartAction,
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" }
@@ -614,9 +567,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             deviceModel = deviceModel,
                             isRootGranted = isRootGranted,
                             selinuxStatus = selinuxStatus,
-                            isIpcAlive = isIpcAlive,
-                            socLabel = socLabel,
-                            isBinderReady = isBinderReady,
                             onRequestRebootDialog = { showRebootDialog = true },
                             onRestartDaemon = restartAction,
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" }
@@ -763,9 +713,6 @@ fun HomeDashboardContent(
     deviceModel: String,
     isRootGranted: Boolean,
     selinuxStatus: String,
-    isIpcAlive: Boolean = false,
-    socLabel: String? = null,
-    isBinderReady: Boolean = false,
     onRequestRebootDialog: () -> Unit,
     onRestartDaemon: suspend () -> Unit,
     onNavigateToPersonalisasi: () -> Unit
@@ -924,9 +871,6 @@ fun HomeDashboardContent(
                     isModuleInstalled = isModuleInstalled,
                     isRebootRequired = isRebootRequired,
                     daemonPid = daemonPid,
-                    isIpcAlive = isIpcAlive,
-                    socLabel = socLabel,
-                    isBinderReady = isBinderReady,
                     onStart = {
                         if (!isChecking && !isRunning && !isRestarting) {
                             coroutineScope.launch {
@@ -1147,9 +1091,6 @@ private fun CoreStatusCard(
     isModuleInstalled: Boolean,
     isRebootRequired: Boolean,
     daemonPid: String?,
-    isIpcAlive: Boolean,
-    socLabel: String?,
-    isBinderReady: Boolean,
     onStart: () -> Unit
 ) {
     val containerColor by animateColorAsState(
@@ -1229,164 +1170,68 @@ private fun CoreStatusCard(
                 )
             }
 
-            Column(
+            Row(
                 modifier = Modifier.padding(
                     start = 22.dp,
                     top = 22.dp,
                     end = 22.dp,
                     bottom = if (isAlive) 34.dp else 22.dp
-                )
+                ),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val iconMorph = remember { Morph(MaterialShapes.Circle, MaterialShapes.Cookie9Sided) }
-                    Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .background(contentColor.copy(alpha = 0.14f), MorphShape(iconMorph, morphProgress)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        when {
-                            isChecking || isRestarting -> CircularWavyProgressIndicator(
-                                modifier = Modifier.size(26.dp),
-                                color = contentColor,
-                                trackColor = contentColor.copy(alpha = 0.24f)
-                            )
-                            isAlive -> Icon(
-                                imageVector = Icons.Rounded.Check,
-                                contentDescription = null,
-                                tint = contentColor,
-                                modifier = Modifier.size(28.dp)
-                            )
-                            isRebootRequired -> Icon(
-                                imageVector = Icons.Rounded.Refresh,
-                                contentDescription = null,
-                                tint = contentColor,
-                                modifier = Modifier.size(28.dp)
-                            )
-                            else -> Icon(
-                                imageVector = Icons.Rounded.ErrorOutline,
-                                contentDescription = null,
-                                tint = contentColor,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(16.dp))
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.headlineSmallEmphasized,
+                val iconMorph = remember { Morph(MaterialShapes.Circle, MaterialShapes.Cookie9Sided) }
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .background(contentColor.copy(alpha = 0.14f), MorphShape(iconMorph, morphProgress)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    when {
+                        isChecking || isRestarting -> CircularWavyProgressIndicator(
+                            modifier = Modifier.size(26.dp),
                             color = contentColor,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            trackColor = contentColor.copy(alpha = 0.24f)
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = contentColor.copy(alpha = 0.78f),
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
+                        isAlive -> Icon(
+                            imageVector = Icons.Rounded.Check,
+                            contentDescription = null,
+                            tint = contentColor,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        isRebootRequired -> Icon(
+                            imageVector = Icons.Rounded.Refresh,
+                            contentDescription = null,
+                            tint = contentColor,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        else -> Icon(
+                            imageVector = Icons.Rounded.ErrorOutline,
+                            contentDescription = null,
+                            tint = contentColor,
+                            modifier = Modifier.size(28.dp)
                         )
                     }
                 }
 
-                if (isAlive) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        CoreInfoPill(
-                            icon = Icons.Rounded.Memory,
-                            label = stringResource(R.string.home_core_info_pid),
-                            value = daemonPid?.takeIf { pid -> pid.all(Char::isDigit) } ?: "-",
-                            contentColor = contentColor,
-                            modifier = Modifier.weight(1f)
-                        )
-                        CoreInfoPill(
-                            icon = Icons.Rounded.Link,
-                            label = stringResource(R.string.home_core_info_ipc),
-                            value = if (isIpcAlive) {
-                                stringResource(R.string.home_core_info_socket)
-                            } else {
-                                stringResource(R.string.home_core_info_offline)
-                            },
-                            contentColor = contentColor,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        CoreInfoPill(
-                            icon = Icons.Rounded.DeveloperBoard,
-                            label = stringResource(R.string.home_core_info_chipset),
-                            value = socLabel ?: stringResource(R.string.home_core_info_unknown),
-                            contentColor = contentColor,
-                            modifier = Modifier.weight(1f)
-                        )
-                        CoreInfoPill(
-                            icon = Icons.Rounded.Security,
-                            label = stringResource(R.string.home_core_info_binder),
-                            value = if (isBinderReady) {
-                                stringResource(R.string.home_core_info_ready)
-                            } else {
-                                stringResource(R.string.home_core_info_unavailable)
-                            },
-                            contentColor = contentColor,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
+                Spacer(modifier = Modifier.width(16.dp))
 
-@Composable
-private fun CoreInfoPill(
-    icon: ImageVector,
-    label: String,
-    value: String,
-    contentColor: Color,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        color = contentColor.copy(alpha = 0.10f)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = contentColor.copy(alpha = 0.82f),
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Column {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = contentColor.copy(alpha = 0.68f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = value,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = contentColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.headlineSmallEmphasized,
+                        color = contentColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = contentColor.copy(alpha = 0.78f),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }
