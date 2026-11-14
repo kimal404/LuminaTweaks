@@ -152,17 +152,19 @@ fun AppProfileScreen(
 ) {
     var inTeksturRinganScreen by remember { mutableStateOf(false) }
 
-    if (inTeksturRinganScreen) {
-        TeksturRinganScreen(
-            appName = app.name,
-            profile = profile,
-            onProfileChanged = onProfileChanged,
-            onBack = { inTeksturRinganScreen = false }
-        )
-        return
-    }
-
-    BackHandler(onBack = onBack)
+    LuminaDrillTransition(
+        targetState = inTeksturRinganScreen,
+        isForward = { _, target -> target }
+    ) { showTextureScreen ->
+        if (showTextureScreen) {
+            TeksturRinganScreen(
+                appName = app.name,
+                profile = profile,
+                onProfileChanged = onProfileChanged,
+                onBack = { inTeksturRinganScreen = false }
+            )
+        } else {
+            BackHandler(onBack = onBack)
 
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
@@ -586,6 +588,8 @@ fun AppProfileScreen(
             },
             onDismiss = { showDndSheet = false }
         )
+    }
+        }
     }
 }
 

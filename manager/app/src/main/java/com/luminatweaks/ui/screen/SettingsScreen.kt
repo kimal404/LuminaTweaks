@@ -123,15 +123,20 @@ fun SettingsScreen(
     var showUninstallDialog by remember { mutableStateOf(false) }
     var isUninstalling by remember { mutableStateOf(false) }
 
-    if (showAboutScreen && onNavigateToAbout == null) {
-        AboutScreen(onBackClick = { showAboutScreen = false })
-        return
+    val activeSettingsSubscreen = when {
+        showAboutScreen && onNavigateToAbout == null -> "about"
+        showPersonalisasiScreen && onNavigateToPersonalisasi == null -> "personalisasi"
+        else -> "main"
     }
 
-    if (showPersonalisasiScreen && onNavigateToPersonalisasi == null) {
-        PersonalisasiScreen(onBackClick = { showPersonalisasiScreen = false })
-        return
-    }
+    LuminaDrillTransition(
+        targetState = activeSettingsSubscreen,
+        isForward = { _, target -> target != "main" }
+    ) { route ->
+        when (route) {
+            "about" -> AboutScreen(onBackClick = { showAboutScreen = false })
+            "personalisasi" -> PersonalisasiScreen(onBackClick = { showPersonalisasiScreen = false })
+            else -> {
 
     val bottomPadding = if (isFloating) {
         108.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -508,6 +513,9 @@ fun SettingsScreen(
                         }
                     }
                 )
+            }
+        }
+    }
             }
         }
     }

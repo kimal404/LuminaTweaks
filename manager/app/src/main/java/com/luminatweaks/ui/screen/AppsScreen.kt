@@ -159,21 +159,26 @@ fun AppsScreen(
     }
 
     val activeApp = rawApps.find { it.packageName == selectedPackageName }
-    if (activeApp != null) {
-        val currentProfile = appConfigs[activeApp.packageName] ?: AppProfileConfig(pkg = activeApp.packageName)
-        AppProfileScreen(
-            app = activeApp,
-            profile = currentProfile,
-            onProfileChanged = { updated ->
-                appConfigs[updated.pkg] = updated
-                coroutineScope.launch {
-                    ConfigRepository.saveAppConfig(updated)
-                }
-            },
-            onBack = { selectedPackageName = null }
-        )
-        return
-    }
+
+    LuminaDrillTransition(
+        targetState = activeApp,
+        isForward = { _, target -> target != null },
+        contentKey = { it?.packageName ?: "apps_list" }
+    ) { targetApp ->
+        if (targetApp != null) {
+            val currentProfile = appConfigs[targetApp.packageName] ?: AppProfileConfig(pkg = targetApp.packageName)
+            AppProfileScreen(
+                app = targetApp,
+                profile = currentProfile,
+                onProfileChanged = { updated ->
+                    appConfigs[updated.pkg] = updated
+                    coroutineScope.launch {
+                        ConfigRepository.saveAppConfig(updated)
+                    }
+                },
+                onBack = { selectedPackageName = null }
+            )
+        } else {
 
     val visibleBaseApps = remember(rawApps, hideSystemApps) {
         rawApps.filter { app -> if (hideSystemApps) !app.isSystemApp else true }
@@ -505,6 +510,7 @@ fun AppsScreen(
                     }
                 }
             }
+        }
         }
     }
 }

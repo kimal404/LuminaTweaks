@@ -136,11 +136,11 @@ private fun persLocalizedLabel(id: String, en: String): String {
 
 @Composable
 private fun accentIntensityDisplayName(intensity: AccentIntensity): String {
-    return when (intensity.name.lowercase(Locale.ROOT)) {
-        "soft", "subtle", "low" -> persLocalizedLabel("Lembut", "Subtle")
-        "balanced", "medium", "default", "normal" -> persLocalizedLabel("Seimbang", "Balanced")
-        "vibrant", "high", "expressive" -> persLocalizedLabel("Bersemangat", "Vibrant")
-        else -> intensity.name
+    return when (intensity) {
+        AccentIntensity.Neutral -> persLocalizedLabel("Netral", "Neutral")
+        AccentIntensity.Balanced -> persLocalizedLabel("Seimbang", "Balanced")
+        AccentIntensity.Bright -> persLocalizedLabel("Cerah", "Bright")
+        AccentIntensity.Vibrant -> persLocalizedLabel("Bersemangat", "Vibrant")
     }
 }
 
@@ -559,12 +559,17 @@ private fun ExpressiveSwatchTile(
         color
     }
 
+    val swatchPaletteStyle = when (colorSpec) {
+        ColorEngine.MaterialYou -> PaletteStyle.TonalSpot
+        ColorEngine.MaterialExpressive -> PaletteStyle.Expressive
+    }
+
     val targetScheme = rememberDynamicColorScheme(
         seedColor = swatchSeed,
         isDark = isDark,
         isAmoled = isAmoled,
         specVersion = colorSpec.librarySpec,
-        style = PaletteStyle.TonalSpot
+        style = swatchPaletteStyle
     ).withAccentIntensity(
         intensity = accentIntensity,
         isDark = isDark,
@@ -657,23 +662,15 @@ private fun AccentIntensityCard(
     currentIntensity: AccentIntensity,
     onIntensityChange: (AccentIntensity) -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     val entries = remember { AccentIntensity.entries }
     val defaultIndex = remember(entries) {
-        val idx = entries.indexOfFirst {
-            it.name.equals("BALANCED", ignoreCase = true) ||
-                it.name.equals("DEFAULT", ignoreCase = true) ||
-                it.name.equals("MEDIUM", ignoreCase = true)
-        }
-        if (idx >= 0) idx else (entries.size / 2)
+        entries.indexOf(AccentIntensity.Balanced).coerceAtLeast(0)
     }
     val currentIndex = entries.indexOf(currentIntensity).coerceAtLeast(0)
     var sliderPos by remember(currentIndex) { mutableFloatStateOf(currentIndex.toFloat()) }
     val maxIdx = (entries.size - 1).coerceAtLeast(1)
-    val fraction = (sliderPos / maxIdx.toFloat()).coerceIn(0f, 1f)
-
-    val primary = MaterialTheme.colorScheme.primary
-    val trackBg = MaterialTheme.colorScheme.surfaceContainerHighest
-    val trackHeightPx = with(LocalDensity.current) { 26.dp.toPx() }
+    val snappedIdx = sliderPos.roundToInt().coerceIn(0, entries.lastIndex)
 
     Surface(
         shape = RoundedCornerShape(20.dp),
@@ -684,121 +681,113 @@ private fun AccentIntensityCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Tune,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(19.dp)
+                Icon(
+                    imageVector = Icons.Rounded.Tune,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = persLocalizedLabel("Intensitas aksen", "Accent intensity"),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = persLocalizedLabel(
+                            "Atur tingkat kepekatan warna tema",
+                            "Adjust theme color saturation"
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = persLocalizedLabel("Intensitas aksen", "Accent intensity"),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    text = accentIntensityDisplayName(entries[sliderPos.roundToInt().coerceIn(0, entries.lastIndex)]),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
+                Spacer(modifier = Modifier.width(8.dp))
+                Surface(
+                    shape = CircleShape,
                     color = MaterialTheme.colorScheme.primary
-                )
-                if (currentIndex != defaultIndex) {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    IconButton(
-                        onClick = {
-                            sliderPos = defaultIndex.toFloat()
-                            onIntensityChange(entries[defaultIndex])
-                        },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Refresh,
-                            contentDescription = stringResource(R.string.action_reset),
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                ) {
+                    Text(
+                        text = accentIntensityDisplayName(entries[snappedIdx]),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
                 }
             }
 
-            // Thick MD3 Expressive pill bar with vertical handle
-            BoxWithConstraints(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(36.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                val handleWidth = 4.dp
-                val gap = 6.dp
-                val usableWidth = (maxWidth - handleWidth - gap).coerceAtLeast(0.dp)
-                val handleOffset = usableWidth * fraction + gap
-
-                Canvas(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(end = handleWidth + gap)
-                        .height(26.dp)
-                ) {
-                    val activeW = size.width * fraction
-                    drawRoundRect(
-                        color = trackBg,
-                        topLeft = Offset.Zero,
-                        size = Size(size.width, trackHeightPx),
-                        cornerRadius = CornerRadius(trackHeightPx / 2f)
-                    )
-                    if (activeW > 0f) {
-                        drawRoundRect(
-                            color = primary,
-                            topLeft = Offset.Zero,
-                            size = Size(activeW, trackHeightPx),
-                            cornerRadius = CornerRadius(trackHeightPx / 2f)
-                        )
+            Slider(
+                value = sliderPos.coerceIn(0f, maxIdx.toFloat()),
+                onValueChange = { raw ->
+                    val nextIdx = raw.roundToInt().coerceIn(0, entries.lastIndex)
+                    if (nextIdx != sliderPos.roundToInt()) {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     }
-                }
+                    sliderPos = raw
+                    if (entries[nextIdx] != currentIntensity) {
+                        onIntensityChange(entries[nextIdx])
+                    }
+                },
+                valueRange = 0f..maxIdx.toFloat(),
+                steps = (entries.size - 2).coerceAtLeast(0),
+                modifier = Modifier.fillMaxWidth()
+            )
 
-                Box(
-                    modifier = Modifier
-                        .offset(x = handleOffset)
-                        .size(width = handleWidth, height = 34.dp)
-                        .clip(CircleShape)
-                        .background(primary)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = accentIntensityDisplayName(entries.first()),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-
-                Slider(
-                    value = sliderPos,
-                    onValueChange = { raw ->
-                        sliderPos = raw
-                        val snapped = raw.roundToInt().coerceIn(0, entries.lastIndex)
-                        if (entries[snapped] != currentIntensity) {
-                            onIntensityChange(entries[snapped])
+                Spacer(modifier = Modifier.weight(1f))
+                if (snappedIdx != defaultIndex) {
+                    Surface(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            sliderPos = defaultIndex.toFloat()
+                            onIntensityChange(entries[defaultIndex])
+                        },
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Refresh,
+                                contentDescription = stringResource(R.string.action_reset),
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = stringResource(R.string.action_reset),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
                         }
-                    },
-                    valueRange = 0f..maxIdx.toFloat(),
-                    steps = (entries.size - 2).coerceAtLeast(0),
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = SliderDefaults.colors(
-                        thumbColor = Color.Transparent,
-                        activeTrackColor = Color.Transparent,
-                        inactiveTrackColor = Color.Transparent,
-                        activeTickColor = Color.Transparent,
-                        inactiveTickColor = Color.Transparent
-                    )
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+                Text(
+                    text = accentIntensityDisplayName(entries.last()),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

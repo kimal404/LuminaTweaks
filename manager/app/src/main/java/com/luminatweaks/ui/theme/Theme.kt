@@ -132,15 +132,9 @@ fun LuminaTheme(
     val amoledMode = themeState.colorMode == ColorMode.DARKAMOLED
     val isDynamic = themeState.keyColor == 0
     val colorSpec = themeState.colorSpec.librarySpec
-    val paletteStyle: PaletteStyle = when (themeState.colorStyle) {
-        ColorStyle.TonalSpot -> PaletteStyle.TonalSpot
-        ColorStyle.Vibrant -> PaletteStyle.Vibrant
-        ColorStyle.Expressive -> PaletteStyle.Expressive
-        ColorStyle.Spritz -> PaletteStyle.Neutral
-        ColorStyle.Rainbow -> PaletteStyle.Rainbow
-        ColorStyle.FruitSalad -> PaletteStyle.FruitSalad
-        ColorStyle.Content -> PaletteStyle.Content
-        ColorStyle.Monochrome -> PaletteStyle.Monochrome
+    val paletteStyle: PaletteStyle = when (themeState.colorSpec) {
+        ColorEngine.MaterialYou -> PaletteStyle.TonalSpot
+        ColorEngine.MaterialExpressive -> PaletteStyle.Expressive
     }
 
     val resolvedSeedColor: Color = if (isDynamic) {
