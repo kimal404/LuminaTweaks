@@ -17,7 +17,12 @@
 package com.luminatweaks.ui.screen
 
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -60,6 +65,7 @@ import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Palette
@@ -100,6 +106,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
@@ -690,9 +697,48 @@ fun HomeDashboardContent(
             }
 
             item(key = "device") {
+                var isDeviceExpanded by remember { mutableStateOf(false) }
+                val arrowRotation by animateFloatAsState(
+                    targetValue = if (isDeviceExpanded) 180f else 0f,
+                    animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
+                    label = "deviceInfoArrowRotation"
+                )
+                val spatialSpec = MaterialTheme.motionScheme.defaultSpatialSpec<androidx.compose.ui.unit.IntSize>()
+                val effectsSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+
                 HomeNestedCardGroup(
                     headerIcon = Icons.Rounded.Smartphone,
-                    headerTitle = homeLocalizedLabel("Informasi Perangkat", "Device Information")
+                    headerTitle = homeLocalizedLabel("Informasi Perangkat", "Device Information"),
+                    onHeaderClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        isDeviceExpanded = !isDeviceExpanded
+                    },
+                    headerTrailing = {
+                        Surface(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                isDeviceExpanded = !isDeviceExpanded
+                            },
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Rounded.KeyboardArrowDown,
+                                    contentDescription = if (isDeviceExpanded) {
+                                        homeLocalizedLabel("Sembunyikan", "Collapse")
+                                    } else {
+                                        homeLocalizedLabel("Tampilkan lainnya", "Expand")
+                                    },
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .rotate(arrowRotation)
+                                )
+                            }
+                        }
+                    }
                 ) {
                     HomeNestedItemCard(
                         icon = Icons.Rounded.DeveloperBoard,
@@ -712,31 +758,35 @@ fun HomeDashboardContent(
                         title = stringResource(R.string.home_device_model),
                         subtitle = deviceModel
                     )
-                }
-            }
 
-            item(key = "security") {
-                HomeNestedCardGroup(
-                    headerIcon = Icons.Rounded.Security,
-                    headerTitle = homeLocalizedLabel("Status Sistem", "System Status")
-                ) {
-                    HomeNestedItemCard(
-                        icon = Icons.Rounded.Security,
-                        title = stringResource(R.string.home_root_access),
-                        subtitle = stringResource(
-                            if (isRootGranted) R.string.home_root_granted else R.string.home_root_denied
-                        ),
-                        subtitleColor = if (isRootGranted) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.error
+                    AnimatedVisibility(
+                        visible = isDeviceExpanded,
+                        enter = expandVertically(animationSpec = spatialSpec) + fadeIn(animationSpec = effectsSpec),
+                        exit = shrinkVertically(animationSpec = spatialSpec) + fadeOut(animationSpec = effectsSpec)
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            HomeNestedItemCard(
+                                icon = Icons.Rounded.Security,
+                                title = stringResource(R.string.home_root_access),
+                                subtitle = stringResource(
+                                    if (isRootGranted) R.string.home_root_granted else R.string.home_root_denied
+                                ),
+                                subtitleColor = if (isRootGranted) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.error
+                                }
+                            )
+                            HomeNestedItemCard(
+                                icon = Icons.Rounded.Security,
+                                title = stringResource(R.string.home_selinux_status),
+                                subtitle = selinuxStatus
+                            )
                         }
-                    )
-                    HomeNestedItemCard(
-                        icon = Icons.Rounded.Security,
-                        title = stringResource(R.string.home_selinux_status),
-                        subtitle = selinuxStatus
-                    )
+                    }
                 }
             }
 
@@ -1191,6 +1241,8 @@ private fun HomeNestedCardGroup(
     headerIcon: ImageVector,
     headerTitle: String,
     modifier: Modifier = Modifier,
+    onHeaderClick: (() -> Unit)? = null,
+    headerTrailing: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val outerRadius = LocalCornerRadius.current.coerceAtLeast(26.dp)
@@ -1209,7 +1261,15 @@ private fun HomeNestedCardGroup(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 2.dp, bottom = 4.dp),
+                    .clip(CircleShape)
+                    .then(
+                        if (onHeaderClick != null) {
+                            Modifier.clickable(onClick = onHeaderClick)
+                        } else {
+                            Modifier
+                        }
+                    )
+                    .padding(start = 2.dp, end = 2.dp, top = 2.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
@@ -1233,8 +1293,13 @@ private fun HomeNestedCardGroup(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
                 )
+                if (headerTrailing != null) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    headerTrailing()
+                }
             }
 
             content()
