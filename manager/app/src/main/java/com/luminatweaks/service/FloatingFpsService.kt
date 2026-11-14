@@ -492,7 +492,7 @@ class FloatingFpsService : Service() {
             setPalette(ThemeController.overlayPalette(this@FloatingFpsService))
             applyState(cfg, liveTelemetry)
             onDrag = drag@{ dx, dy ->
-                val lp = layoutParams
+                val lp = (layoutParams as? WindowManager.LayoutParams)
                 if (lp == null) return@drag
                 val metrics = resources.displayMetrics
                 hasCustomDragPosition = true
