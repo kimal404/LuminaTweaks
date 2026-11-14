@@ -114,6 +114,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -222,15 +223,40 @@ fun HomeScreen() {
     val context = LocalContext.current
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { 4 })
     val tabScope = rememberCoroutineScope()
+    // The bar indicator follows the tapped tab immediately. It is only synced
+    // back to the pager for manual swipes, so a far jump never lights up the
+    // tabs that are merely crossed by the scroll animation.
+    var targetTab by remember { mutableIntStateOf(0) }
+    var isNavigating by remember { mutableStateOf(false) }
+    var navigationToken by remember { mutableIntStateOf(0) }
     val onTabSelected: (Int) -> Unit = { index ->
-        if (pagerState.targetPage != index) {
+        targetTab = index
+        if (pagerState.currentPage != index) {
+            navigationToken += 1
+            val token = navigationToken
             tabScope.launch {
-                pagerState.animateScrollToPage(
-                    page = index,
-                    animationSpec = spring(dampingRatio = 0.86f, stiffness = 360f)
-                )
+                isNavigating = true
+                try {
+                    val current = pagerState.currentPage
+                    if (abs(index - current) > 1) {
+                        // Skip the intermediate page so a long jump does not
+                        // animate through the heavy apps list at full cost.
+                        pagerState.scrollToPage(
+                            if (index > current) index - 1 else index + 1
+                        )
+                    }
+                    pagerState.animateScrollToPage(
+                        page = index,
+                        animationSpec = spring(dampingRatio = 0.88f, stiffness = 380f)
+                    )
+                } finally {
+                    if (navigationToken == token) isNavigating = false
+                }
             }
         }
+    }
+    LaunchedEffect(pagerState.currentPage) {
+        if (!isNavigating) targetTab = pagerState.currentPage
     }
     var currentSubscreen by remember { mutableStateOf<String?>(null) }
     val unknownLabel = stringResource(R.string.status_unknown)
@@ -479,7 +505,7 @@ fun HomeScreen() {
                         .align(Alignment.BottomCenter)
                 ) {
                     LuminaBottomBar(
-                        selectedTab = pagerState.targetPage,
+                        selectedTab = targetTab,
                         onTabSelected = onTabSelected
                     )
                 }
@@ -496,7 +522,7 @@ fun HomeScreen() {
                         exit = slideOutVertically(animationSpec = barSpatial) { it } + fadeOut(animationSpec = barEffects)
                     ) {
                         LuminaBottomBar(
-                            selectedTab = pagerState.targetPage,
+                            selectedTab = targetTab,
                             onTabSelected = onTabSelected
                         )
                     }
@@ -553,15 +579,12 @@ internal fun LuminaTabPager(
                 .fillMaxSize()
                 .graphicsLayer {
                     // Read the scroll offset inside the layer block so the
-                    // depth effect updates in the draw phase without
-                    // recomposing every page during a swipe.
+                    // fade updates in the draw phase without recomposing
+                    // every page during a swipe. No scale here: transforming
+                    // the apps list hurt scroll performance.
                     val distance = abs(pagerState.getOffsetDistanceInPages(page))
                         .coerceIn(0f, 1f)
-                    val depth = 1f - distance
-                    val scale = 0.96f + 0.04f * depth
-                    scaleX = scale
-                    scaleY = scale
-                    alpha = 0.85f + 0.15f * depth
+                    alpha = 0.85f + 0.15f * (1f - distance)
                 }
         ) {
             pageContent(page)

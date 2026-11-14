@@ -16,17 +16,9 @@
 
 package com.luminatweaks.ui.component
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandHorizontally
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -58,19 +50,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import com.luminatweaks.R
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
+import kotlin.math.roundToInt
 
 private data class NavTab(
     val icon: ImageVector,
@@ -140,14 +133,18 @@ private fun FloatingNavItem(
 ) {
     val haptic = LocalHapticFeedback.current
     val motionScheme = MaterialTheme.motionScheme
-    // Responsive spring shared by the width/padding morph so the inactive
-    // circle grows into the selected stadium without any hard jump.
-    val morphDpSpec = spring<Dp>(dampingRatio = 0.82f, stiffness = 420f)
-    val morphWidthSpec = spring<IntSize>(dampingRatio = 0.82f, stiffness = 420f)
-    val labelFadeSpec = tween<Float>(durationMillis = 150)
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
 
+    // Single progress value drives the width, padding, and label opacity so the
+    // morph stays in lockstep and never clips words through a visibility
+    // animation.
+    val expandProgress by animateFloatAsState(
+        targetValue = if (selected) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.86f, stiffness = 400f),
+        label = "floatingNavExpand"
+    )
+    val clampedProgress = expandProgress.coerceIn(0f, 1f)
     val pressScale by animateFloatAsState(
         targetValue = if (pressed) 0.94f else 1f,
         animationSpec = motionScheme.defaultSpatialSpec(),
@@ -171,22 +168,8 @@ private fun FloatingNavItem(
         animationSpec = motionScheme.defaultEffectsSpec(),
         label = "floatingNavContent"
     )
-    val borderColor by animateColorAsState(
-        targetValue = if (selected) {
-            Color.Transparent
-        } else {
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-        },
-        animationSpec = motionScheme.defaultEffectsSpec(),
-        label = "floatingNavBorder"
-    )
-    // 26.dp icon + 2 * 13.dp = an exact 52.dp circle when idle; the selected
-    // pill adds breathing room before the label expands.
-    val horizontalPadding by animateDpAsState(
-        targetValue = if (selected) 20.dp else 13.dp,
-        animationSpec = morphDpSpec,
-        label = "floatingNavPadding"
-    )
+    // 26.dp icon + 2 * 11.dp = an exact 48.dp circle when idle.
+    val horizontalPadding = 11.dp + 9.dp * clampedProgress
     val label = stringResource(tab.labelRes)
 
     Surface(
@@ -197,7 +180,6 @@ private fun FloatingNavItem(
         shape = CircleShape,
         color = containerColor,
         contentColor = contentColor,
-        border = BorderStroke(1.dp, borderColor),
         interactionSource = interactionSource,
         modifier = Modifier.graphicsLayer {
             scaleX = pressScale
@@ -206,7 +188,7 @@ private fun FloatingNavItem(
     ) {
         Row(
             modifier = Modifier
-                .height(52.dp)
+                .height(48.dp)
                 .padding(horizontal = horizontalPadding),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -216,13 +198,7 @@ private fun FloatingNavItem(
                 modifier = Modifier.size(26.dp),
                 tint = contentColor
             )
-            AnimatedVisibility(
-                visible = selected,
-                enter = expandHorizontally(animationSpec = morphWidthSpec) +
-                    fadeIn(animationSpec = labelFadeSpec),
-                exit = shrinkHorizontally(animationSpec = morphWidthSpec) +
-                    fadeOut(animationSpec = labelFadeSpec)
-            ) {
+            CollapsibleLabel(progress = clampedProgress) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
@@ -235,6 +211,30 @@ private fun FloatingNavItem(
                         overflow = TextOverflow.Visible
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CollapsibleLabel(
+    progress: Float,
+    content: @Composable () -> Unit
+) {
+    val alpha = ((progress - 0.25f) / 0.75f).coerceIn(0f, 1f)
+    Layout(
+        content = content,
+        modifier = Modifier
+            .clipToBounds()
+            .graphicsLayer { this.alpha = alpha }
+    ) { measurables, _ ->
+        val placeable = measurables.firstOrNull()?.measure(Constraints())
+        if (placeable == null) {
+            layout(0, 0) {}
+        } else {
+            val width = (placeable.width * progress.coerceIn(0f, 1f)).roundToInt()
+            layout(width, placeable.height) {
+                placeable.place(0, 0)
             }
         }
     }
