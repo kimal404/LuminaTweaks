@@ -77,21 +77,21 @@ enum class PageTransition(val persistedName: String, val default: Boolean = fals
 }
 
 enum class AccentIntensity(val label: String) {
-    Neutral("Netral"),
+    Neutral("Dibungkam"),
     Balanced("Seimbang"),
-    Bright("Terang"),
-    Vibrant("Hidup");
+    Bright("Cerah"),
+    Vibrant("Bersemangat");
 
     val saturationFactor: Float
         get() = when (this) {
-            Neutral -> 0.72f
-            Balanced -> 1f
-            Bright -> 1.28f
-            Vibrant -> 1.55f
+            Neutral -> 0.14f
+            Balanced -> 0.68f
+            Bright -> 1.0f
+            Vibrant -> 1.32f
         }
 
     companion object {
-        fun fromValue(value: Int): AccentIntensity = entries.getOrElse(value) { Balanced }
+        fun fromValue(value: Int): AccentIntensity = entries.getOrElse(value) { Vibrant }
     }
 }
 
@@ -122,7 +122,7 @@ object ThemeController {
         val colorSpec = ColorEngine.fromPersisted(prefs.getString("color_spec", null))
         val accentIntensity = AccentIntensity.fromValue(
             prefs.getString("pers_accent_intensity", null)?.toIntOrNull()
-                ?: prefs.getInt("pers_accent_intensity", AccentIntensity.Balanced.ordinal)
+                ?: prefs.getInt("pers_accent_intensity", AccentIntensity.Vibrant.ordinal)
         )
         val cornerRadius = prefs.getInt("ui_corner_radius", DEFAULT_CORNER_RADIUS)
             .coerceIn(MIN_CORNER_RADIUS, MAX_CORNER_RADIUS)
@@ -238,12 +238,12 @@ fun ColorScheme.withAccentIntensity(
     isAmoled: Boolean = false
 ): ColorScheme {
     val f = intensity.saturationFactor
-    val tintedPrimary = if (intensity == AccentIntensity.Balanced) primary else primary.scaledSaturation(f)
+    val tintedPrimary = primary.scaledSaturation(f)
     val tintScale = when (intensity) {
-        AccentIntensity.Neutral -> 0.55f
-        AccentIntensity.Balanced -> 1.0f
-        AccentIntensity.Bright -> 1.25f
-        AccentIntensity.Vibrant -> 1.45f
+        AccentIntensity.Neutral -> 0.14f
+        AccentIntensity.Balanced -> 0.65f
+        AccentIntensity.Bright -> 1.0f
+        AccentIntensity.Vibrant -> 1.32f
     }
 
     val tintedScheme = if (isDark && isAmoled) {
@@ -281,8 +281,6 @@ fun ColorScheme.withAccentIntensity(
         )
     }
 
-    if (intensity == AccentIntensity.Balanced) return tintedScheme
-
     return tintedScheme.copy(
         primary = primary.scaledSaturation(f),
         onPrimary = onPrimary.scaledSaturation(f),
@@ -291,6 +289,7 @@ fun ColorScheme.withAccentIntensity(
         secondary = secondary.scaledSaturation(f),
         onSecondary = onSecondary.scaledSaturation(f),
         secondaryContainer = secondaryContainer.scaledSaturation(f),
+        onSecondaryContainer = onSecondaryContainer.scaledSaturation(f),
         tertiary = tertiary.scaledSaturation(f),
         tertiaryContainer = tertiaryContainer.scaledSaturation(f)
     )

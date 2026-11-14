@@ -21,6 +21,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
@@ -31,11 +32,11 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -47,7 +48,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -61,12 +61,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Brightness1
 import androidx.compose.material.icons.rounded.Brightness3
-import androidx.compose.material.icons.rounded.Brightness4
-import androidx.compose.material.icons.rounded.Brightness7
+import androidx.compose.material.icons.rounded.BrightnessAuto
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.RoundedCorner
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Waves
@@ -77,7 +77,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SliderState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -98,15 +98,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -137,7 +134,7 @@ private fun persLocalizedLabel(id: String, en: String): String {
 @Composable
 private fun accentIntensityDisplayName(intensity: AccentIntensity): String {
     return when (intensity) {
-        AccentIntensity.Neutral -> persLocalizedLabel("Netral", "Neutral")
+        AccentIntensity.Neutral -> persLocalizedLabel("Dibungkam", "Muted")
         AccentIntensity.Balanced -> persLocalizedLabel("Seimbang", "Balanced")
         AccentIntensity.Bright -> persLocalizedLabel("Cerah", "Bright")
         AccentIntensity.Vibrant -> persLocalizedLabel("Bersemangat", "Vibrant")
@@ -230,13 +227,6 @@ fun PersonalisasiScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item(key = "color_and_theme") {
-                val activeModeName = when (currentColorMode) {
-                    ColorMode.SYSTEM -> persLocalizedLabel("Ikuti Sistem", "Follow System")
-                    ColorMode.LIGHT -> persLocalizedLabel("Terang", "Light")
-                    ColorMode.DARK -> persLocalizedLabel("Gelap", "Dark")
-                    ColorMode.DARKAMOLED -> "Pure AMOLED"
-                }
-
                 Surface(
                     shape = RoundedCornerShape(outerRadius),
                     color = MaterialTheme.colorScheme.surfaceContainer,
@@ -248,9 +238,10 @@ fun PersonalisasiScreen(
                             .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        // Section Header: Warna + Active Mode Badge
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 2.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
@@ -264,24 +255,10 @@ fun PersonalisasiScreen(
                                 text = stringResource(R.string.personalization_color),
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.weight(1f)
+                                color = MaterialTheme.colorScheme.onSurface
                             )
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh
-                            ) {
-                                Text(
-                                    text = activeModeName,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
-                                )
-                            }
                         }
 
-                        // Row 1: Materi Anda vs Ekspresif Materi
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -311,7 +288,6 @@ fun PersonalisasiScreen(
                             )
                         }
 
-                        // Row 2: Two-tone Swatch Tiles
                         LazyRow(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -346,16 +322,15 @@ fun PersonalisasiScreen(
                             }
                         }
 
-                        // Row 3: 4 Mode Pills (Ikuti Sistem, Terang, Gelap, Pure AMOLED)
                         val themeModes = listOf(
                             Triple(
                                 ColorMode.SYSTEM,
-                                Icons.Rounded.Brightness4,
+                                Icons.Rounded.BrightnessAuto,
                                 persLocalizedLabel("Ikuti Sistem", "Follow System")
                             ),
                             Triple(
                                 ColorMode.LIGHT,
-                                Icons.Rounded.Brightness7,
+                                Icons.Rounded.LightMode,
                                 persLocalizedLabel("Terang", "Light")
                             ),
                             Triple(
@@ -394,7 +369,7 @@ fun PersonalisasiScreen(
                                     label = "modePillTint"
                                 )
                                 val weight by animateFloatAsState(
-                                    targetValue = if (isSelected) 1.4f else 1f,
+                                    targetValue = if (isSelected) 1.45f else 1f,
                                     animationSpec = spring(
                                         dampingRatio = Spring.DampingRatioMediumBouncy,
                                         stiffness = Spring.StiffnessMediumLow
@@ -427,7 +402,6 @@ fun PersonalisasiScreen(
                             }
                         }
 
-                        // Row 4: Intensitas Aksen Card with Thick Expressive Slider
                         AccentIntensityCard(
                             currentIntensity = currentIntensity,
                             onIntensityChange = { newIntensity ->
@@ -561,7 +535,7 @@ private fun ExpressiveSwatchTile(
 
     val swatchPaletteStyle = when (colorSpec) {
         ColorEngine.MaterialYou -> PaletteStyle.TonalSpot
-        ColorEngine.MaterialExpressive -> PaletteStyle.Expressive
+        ColorEngine.MaterialExpressive -> PaletteStyle.Vibrant
     }
 
     val targetScheme = rememberDynamicColorScheme(
@@ -658,15 +632,148 @@ private fun ExpressiveSwatchTile(
 }
 
 @Composable
+private fun M3ExpressiveSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int = 0,
+    modifier: Modifier = Modifier
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isDragged by interactionSource.collectIsDraggedAsState()
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val isInteracting = isDragged || isPressed
+
+    val thumbHeight by animateDpAsState(
+        targetValue = if (isInteracting) 32.dp else 28.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "m3eThumbHeight"
+    )
+    val thumbWidth by animateDpAsState(
+        targetValue = if (isInteracting) 3.dp else 4.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "m3eThumbWidth"
+    )
+
+    val activeColor = MaterialTheme.colorScheme.primary
+    val inactiveColor = MaterialTheme.colorScheme.surfaceContainerHighest
+    val dotColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+
+    Slider(
+        value = value,
+        onValueChange = onValueChange,
+        valueRange = valueRange,
+        steps = steps,
+        interactionSource = interactionSource,
+        modifier = modifier.fillMaxWidth(),
+        thumb = {
+            Box(
+                modifier = Modifier
+                    .height(34.dp)
+                    .width(14.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(thumbWidth)
+                        .height(thumbHeight)
+                        .clip(CircleShape)
+                        .background(activeColor)
+                )
+            }
+        },
+        track = { sliderState: SliderState ->
+            val span = (sliderState.valueRange.endInclusive - sliderState.valueRange.start)
+                .takeIf { it > 0f } ?: 1f
+            val fraction = ((sliderState.value - sliderState.valueRange.start) / span)
+                .coerceIn(0f, 1f)
+
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(16.dp)
+            ) {
+                val trackH = size.height
+                val outerR = trackH / 2f
+                val innerR = 4.dp.toPx().coerceAtMost(outerR)
+                val gapPx = 5.dp.toPx()
+                val thumbCenterX = size.width * fraction
+
+                val activeRight = (thumbCenterX - gapPx).coerceAtLeast(0f)
+                val inactiveLeft = (thumbCenterX + gapPx).coerceAtMost(size.width)
+
+                if (activeRight > 1f) {
+                    val path = androidx.compose.ui.graphics.Path().apply {
+                        addRoundRect(
+                            androidx.compose.ui.geometry.RoundRect(
+                                left = 0f,
+                                top = 0f,
+                                right = activeRight,
+                                bottom = trackH,
+                                topLeftCornerRadius = androidx.compose.ui.geometry.CornerRadius(outerR),
+                                bottomLeftCornerRadius = androidx.compose.ui.geometry.CornerRadius(outerR),
+                                topRightCornerRadius = androidx.compose.ui.geometry.CornerRadius(innerR),
+                                bottomRightCornerRadius = androidx.compose.ui.geometry.CornerRadius(innerR)
+                            )
+                        )
+                    }
+                    drawPath(path = path, color = activeColor)
+                }
+
+                if (inactiveLeft < size.width - 1f) {
+                    val path = androidx.compose.ui.graphics.Path().apply {
+                        addRoundRect(
+                            androidx.compose.ui.geometry.RoundRect(
+                                left = inactiveLeft,
+                                top = 0f,
+                                right = size.width,
+                                bottom = trackH,
+                                topLeftCornerRadius = androidx.compose.ui.geometry.CornerRadius(innerR),
+                                bottomLeftCornerRadius = androidx.compose.ui.geometry.CornerRadius(innerR),
+                                topRightCornerRadius = androidx.compose.ui.geometry.CornerRadius(outerR),
+                                bottomRightCornerRadius = androidx.compose.ui.geometry.CornerRadius(outerR)
+                            )
+                        )
+                    }
+                    drawPath(path = path, color = inactiveColor)
+                }
+
+                if (steps > 0) {
+                    val totalTicks = steps + 2
+                    val dotRadius = 2.dp.toPx()
+                    val pad = outerR
+                    val usableW = (size.width - pad * 2f).coerceAtLeast(0f)
+                    for (i in 0 until totalTicks) {
+                        val tickFrac = i.toFloat() / (totalTicks - 1).toFloat()
+                        val tickX = pad + usableW * tickFrac
+                        if (tickX > inactiveLeft + dotRadius * 2f) {
+                            drawCircle(
+                                color = dotColor,
+                                radius = dotRadius,
+                                center = Offset(tickX, trackH / 2f)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    )
+}
+
+@Composable
 private fun AccentIntensityCard(
     currentIntensity: AccentIntensity,
     onIntensityChange: (AccentIntensity) -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
     val entries = remember { AccentIntensity.entries }
-    val defaultIndex = remember(entries) {
-        entries.indexOf(AccentIntensity.Balanced).coerceAtLeast(0)
-    }
+    val defaultIntensity = AccentIntensity.Vibrant
     val currentIndex = entries.indexOf(currentIntensity).coerceAtLeast(0)
     var sliderPos by remember(currentIndex) { mutableFloatStateOf(currentIndex.toFloat()) }
     val maxIdx = (entries.size - 1).coerceAtLeast(1)
@@ -680,53 +787,65 @@ private fun AccentIntensityCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.Tune,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(22.dp)
-                )
-                Spacer(modifier = Modifier.width(14.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = persLocalizedLabel("Intensitas aksen", "Accent intensity"),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = persLocalizedLabel(
-                            "Atur tingkat kepekatan warna tema",
-                            "Adjust theme color saturation"
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.secondaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Tune,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(19.dp)
                     )
                 }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = persLocalizedLabel("Intensitas aksen", "Accent intensity"),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
                 Spacer(modifier = Modifier.width(8.dp))
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primary
+                Text(
+                    text = accentIntensityDisplayName(entries[snappedIdx]),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                IconButton(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        val defIdx = entries.indexOf(defaultIntensity).coerceAtLeast(0)
+                        sliderPos = defIdx.toFloat()
+                        onIntensityChange(defaultIntensity)
+                    },
+                    modifier = Modifier.size(28.dp)
                 ) {
-                    Text(
-                        text = accentIntensityDisplayName(entries[snappedIdx]),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    Icon(
+                        imageVector = Icons.Rounded.History,
+                        contentDescription = stringResource(R.string.action_reset),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(19.dp)
                     )
                 }
             }
 
-            Slider(
+            M3ExpressiveSlider(
                 value = sliderPos.coerceIn(0f, maxIdx.toFloat()),
                 onValueChange = { raw ->
                     val nextIdx = raw.roundToInt().coerceIn(0, entries.lastIndex)
@@ -739,57 +858,8 @@ private fun AccentIntensityCard(
                     }
                 },
                 valueRange = 0f..maxIdx.toFloat(),
-                steps = (entries.size - 2).coerceAtLeast(0),
-                modifier = Modifier.fillMaxWidth()
+                steps = (entries.size - 2).coerceAtLeast(0)
             )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = accentIntensityDisplayName(entries.first()),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                if (snappedIdx != defaultIndex) {
-                    Surface(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            sliderPos = defaultIndex.toFloat()
-                            onIntensityChange(entries[defaultIndex])
-                        },
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.secondaryContainer
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Refresh,
-                                contentDescription = stringResource(R.string.action_reset),
-                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = stringResource(R.string.action_reset),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.weight(1f))
-                }
-                Text(
-                    text = accentIntensityDisplayName(entries.last()),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
         }
     }
 }
@@ -855,7 +925,7 @@ private fun PersFloatingNavSwitchCard(
 ) {
     Surface(
         onClick = { onCheckedChange(!checked) },
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -865,18 +935,26 @@ private fun PersFloatingNavSwitchCard(
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Rounded.Waves,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(22.dp)
-            )
-            Spacer(modifier = Modifier.width(14.dp))
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.secondaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Waves,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(19.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.personalization_floating_navbar_short),
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -920,57 +998,71 @@ private fun PersCornerRadiusCard(
         .coerceAtLeast(0)
 
     Surface(
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.RoundedCorner,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(22.dp)
-                )
-                Spacer(modifier = Modifier.width(14.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.personalization_corner_radius),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = stringResource(R.string.personalization_corner_radius_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.secondaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.RoundedCorner,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(19.dp)
                     )
                 }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = stringResource(R.string.personalization_corner_radius),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
                 Spacer(modifier = Modifier.width(8.dp))
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primary
+                Text(
+                    text = "$displayedRadius dp",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                IconButton(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        sliderValue = ThemeController.DEFAULT_CORNER_RADIUS.toFloat()
+                        onRadiusChange(ThemeController.DEFAULT_CORNER_RADIUS)
+                    },
+                    modifier = Modifier.size(28.dp)
                 ) {
-                    Text(
-                        text = "$displayedRadius dp",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    Icon(
+                        imageVector = Icons.Rounded.History,
+                        contentDescription = stringResource(R.string.action_reset),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(19.dp)
                     )
                 }
             }
 
-            Slider(
+            M3ExpressiveSlider(
                 value = sliderValue.coerceIn(minRadius, maxRadius),
                 onValueChange = { newVal ->
                     if (newVal.roundToInt() != sliderValue.roundToInt()) {
@@ -984,57 +1076,8 @@ private fun PersCornerRadiusCard(
                     onRadiusChange(rounded)
                 },
                 valueRange = minRadius..maxRadius,
-                steps = stepCount,
-                modifier = Modifier.fillMaxWidth()
+                steps = stepCount
             )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "${ThemeController.MIN_CORNER_RADIUS} dp",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                if (displayedRadius != ThemeController.DEFAULT_CORNER_RADIUS) {
-                    Surface(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            sliderValue = ThemeController.DEFAULT_CORNER_RADIUS.toFloat()
-                            onRadiusChange(ThemeController.DEFAULT_CORNER_RADIUS)
-                        },
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.secondaryContainer
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Refresh,
-                                contentDescription = stringResource(R.string.action_reset),
-                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = stringResource(R.string.action_reset),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.weight(1f))
-                }
-                Text(
-                    text = "${ThemeController.MAX_CORNER_RADIUS} dp",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
         }
     }
 }

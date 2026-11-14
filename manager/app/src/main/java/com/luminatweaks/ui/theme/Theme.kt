@@ -134,7 +134,7 @@ fun LuminaTheme(
     val colorSpec = themeState.colorSpec.librarySpec
     val paletteStyle: PaletteStyle = when (themeState.colorSpec) {
         ColorEngine.MaterialYou -> PaletteStyle.TonalSpot
-        ColorEngine.MaterialExpressive -> PaletteStyle.Expressive
+        ColorEngine.MaterialExpressive -> PaletteStyle.Vibrant
     }
 
     val resolvedSeedColor: Color = if (isDynamic) {

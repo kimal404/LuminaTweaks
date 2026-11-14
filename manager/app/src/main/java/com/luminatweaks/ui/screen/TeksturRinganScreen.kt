@@ -12,26 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 
 package com.luminatweaks.ui.screen
 
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas as AndroidCanvas
-import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RadialGradient
-import android.graphics.RectF
 import android.graphics.Shader
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -42,7 +41,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -54,15 +52,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.BlurOn
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Compare
 import androidx.compose.material.icons.rounded.GridOn
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.RestartAlt
-import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -72,6 +71,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
@@ -79,24 +79,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import com.luminatweaks.R
 import com.luminatweaks.data.AppProfileConfig
@@ -114,134 +109,48 @@ private fun textureLocalizedLabel(id: String, en: String): String {
     return if (isIndonesian) id else en
 }
 
-private fun renderFallbackSceneBitmap(): Bitmap {
-    val w = 360
-    val h = 216
-    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+private fun renderFallbackIconBitmap(): Bitmap {
+    val size = 256
+    val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = AndroidCanvas(bmp)
     val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    val horizonY = h * 0.56f
+    val cx = size * 0.5f
+    val cy = size * 0.5f
+    val r = size * 0.42f
 
-    paint.shader = LinearGradient(
-        0f, 0f, 0f, horizonY,
-        intArrayOf(
-            android.graphics.Color.rgb(12, 22, 38),
-            android.graphics.Color.rgb(22, 48, 78),
-            android.graphics.Color.rgb(38, 92, 128)
-        ),
-        floatArrayOf(0f, 0.55f, 1f),
-        Shader.TileMode.CLAMP
-    )
-    canvas.drawRect(0f, 0f, w.toFloat(), horizonY, paint)
-
-    paint.shader = LinearGradient(
-        0f, horizonY, 0f, h.toFloat(),
-        intArrayOf(
-            android.graphics.Color.rgb(16, 36, 52),
-            android.graphics.Color.rgb(11, 20, 32)
-        ),
-        null,
-        Shader.TileMode.CLAMP
-    )
-    canvas.drawRect(0f, horizonY, w.toFloat(), h.toFloat(), paint)
-    paint.shader = null
-
-    val sphereCx = w * 0.5f
-    val sphereCy = h * 0.48f
-    val sphereR = 52f
     paint.shader = RadialGradient(
-        sphereCx - sphereR * 0.32f,
-        sphereCy - sphereR * 0.34f,
-        sphereR * 1.35f,
+        cx - r * 0.3f,
+        cy - r * 0.32f,
+        r * 1.35f,
         intArrayOf(
-            android.graphics.Color.rgb(235, 250, 255),
+            android.graphics.Color.rgb(224, 246, 255),
             android.graphics.Color.rgb(92, 196, 248),
-            android.graphics.Color.rgb(28, 86, 138),
-            android.graphics.Color.rgb(12, 32, 58)
+            android.graphics.Color.rgb(34, 102, 160),
+            android.graphics.Color.rgb(18, 48, 82)
         ),
-        floatArrayOf(0f, 0.22f, 0.68f, 1f),
+        floatArrayOf(0f, 0.28f, 0.72f, 1f),
         Shader.TileMode.CLAMP
     )
-    canvas.drawCircle(sphereCx, sphereCy, sphereR, paint)
+    canvas.drawCircle(cx, cy, r, paint)
     return bmp
 }
 
-private fun renderAppIconPreviewBitmap(context: Context, packageName: String): Bitmap {
-    if (packageName.isBlank()) return renderFallbackSceneBitmap()
-    val iconBitmap = runCatching {
+private fun loadCleanAppIconBitmap(context: Context, packageName: String): Bitmap {
+    if (packageName.isBlank()) return renderFallbackIconBitmap()
+    return runCatching {
         context.packageManager.getApplicationIcon(packageName).toBitmap(width = 256, height = 256)
-    }.getOrNull() ?: return renderFallbackSceneBitmap()
-
-    val w = 360
-    val h = 216
-    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-    val canvas = AndroidCanvas(bmp)
-    val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-
-    // Soft studio backdrop gradient
-    paint.shader = LinearGradient(
-        0f, 0f, w.toFloat(), h.toFloat(),
-        intArrayOf(
-            android.graphics.Color.rgb(14, 24, 38),
-            android.graphics.Color.rgb(22, 36, 54),
-            android.graphics.Color.rgb(12, 20, 32)
-        ),
-        floatArrayOf(0f, 0.5f, 1f),
-        Shader.TileMode.CLAMP
-    )
-    canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), paint)
-    paint.shader = null
-
-    // Subtle radial spotlight behind app logo
-    val cx = w * 0.5f
-    val cy = h * 0.5f
-    paint.shader = RadialGradient(
-        cx, cy, 118f,
-        intArrayOf(
-            android.graphics.Color.argb(75, 130, 210, 255),
-            android.graphics.Color.TRANSPARENT
-        ),
-        null,
-        Shader.TileMode.CLAMP
-    )
-    canvas.drawCircle(cx, cy, 118f, paint)
-    paint.shader = null
-
-    // Subtle reference grid lines behind icon to make compression changes obvious
-    paint.color = android.graphics.Color.argb(26, 200, 230, 255)
-    paint.strokeWidth = 1f
-    val gridStep = 18f
-    var gx = gridStep
-    while (gx < w) {
-        canvas.drawLine(gx, 0f, gx, h.toFloat(), paint)
-        gx += gridStep
+    }.getOrElse {
+        renderFallbackIconBitmap()
     }
-    var gy = gridStep
-    while (gy < h) {
-        canvas.drawLine(0f, gy, w.toFloat(), gy, paint)
-        gy += gridStep
-    }
-
-    // Center the high-res app logo
-    val iconSize = 116f
-    val dstRect = RectF(
-        cx - iconSize / 2f,
-        cy - iconSize / 2f,
-        cx + iconSize / 2f,
-        cy + iconSize / 2f
-    )
-    canvas.drawBitmap(iconBitmap, null, dstRect, paint)
-    return bmp
 }
 
 fun generateTextureBitmap(lod: Int): ImageBitmap {
-    val base = renderFallbackSceneBitmap()
+    val base = renderFallbackIconBitmap()
     val clampedLod = lod.coerceIn(0, 4)
     if (clampedLod == 0) return base.asImageBitmap()
     val scale = 1 shl clampedLod
-    val targetW = (base.width / scale).coerceAtLeast(12)
-    val targetH = (base.height / scale).coerceAtLeast(8)
-    return Bitmap.createScaledBitmap(base, targetW, targetH, true).asImageBitmap()
+    val targetSize = (base.width / scale).coerceAtLeast(12)
+    return Bitmap.createScaledBitmap(base, targetSize, targetSize, true).asImageBitmap()
 }
 
 @Composable
@@ -253,168 +162,209 @@ fun TextureComparisonPreview(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val baseScene = remember(packageName) { renderAppIconPreviewBitmap(context, packageName) }
-    val beforeBitmap = remember(baseScene) { baseScene.asImageBitmap() }
-    val afterBitmap = remember(baseScene, lod, isActive) {
-        if (!isActive || lod <= 0) {
-            beforeBitmap
+    val baseBitmap = remember(packageName) { loadCleanAppIconBitmap(context, packageName) }
+    val originalImage = remember(baseBitmap) { baseBitmap.asImageBitmap() }
+    val clampedLod = lod.coerceIn(0, 4)
+    val scaleDivider = 1 shl clampedLod
+
+    val processedImage = remember(baseBitmap, clampedLod, isActive) {
+        if (!isActive || clampedLod <= 0) {
+            originalImage
         } else {
-            val scale = 1 shl lod.coerceIn(1, 4)
-            val targetW = (baseScene.width / scale).coerceAtLeast(14)
-            val targetH = (baseScene.height / scale).coerceAtLeast(9)
-            Bitmap.createScaledBitmap(baseScene, targetW, targetH, true).asImageBitmap()
+            val targetSize = (baseBitmap.width / scaleDivider).coerceAtLeast(12)
+            Bitmap.createScaledBitmap(baseBitmap, targetSize, targetSize, true).asImageBitmap()
         }
     }
-    var splitFraction by remember { mutableFloatStateOf(0.5f) }
 
-    val handleWidth = 34.dp
-    val handleHeight = 46.dp
-    val primaryColor = MaterialTheme.colorScheme.primary
-    val onPrimaryColor = MaterialTheme.colorScheme.onPrimary
-    val dividerColor = primaryColor.copy(alpha = 0.92f)
-    val cardRadius = LocalCornerRadius.current.coerceAtLeast(26.dp)
+    var pulseTrigger by remember { mutableFloatStateOf(1f) }
+    LaunchedEffect(clampedLod, pixelSharp, isActive) {
+        pulseTrigger = 0.92f
+        pulseTrigger = 1f
+    }
+    val previewScale by animateFloatAsState(
+        targetValue = pulseTrigger,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "previewIconPulse"
+    )
+
+    val resultCardColor by animateColorAsState(
+        targetValue = if (isActive) {
+            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f)
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        },
+        label = "previewResultCardColor"
+    )
+
+    val outerRadius = LocalCornerRadius.current.coerceAtLeast(26.dp)
+    val innerRadius = (LocalCornerRadius.current * 0.78f).coerceIn(16.dp, 22.dp)
+
+    val badgeText = if (isActive && clampedLod > 0) {
+        val modeName = if (pixelSharp) {
+            stringResource(R.string.texture_mode_pixel)
+        } else {
+            stringResource(R.string.texture_mode_blur)
+        }
+        "$modeName • 1/${scaleDivider}x"
+    } else {
+        stringResource(R.string.texture_badge_inactive)
+    }
 
     Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(216.dp),
-        shape = RoundedCornerShape(cardRadius),
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(outerRadius),
         color = MaterialTheme.colorScheme.surfaceContainer
     ) {
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val totalWidth = constraints.maxWidth.toFloat()
-            val totalHeight = constraints.maxHeight.toFloat()
-            val splitPx = totalWidth * splitFraction
-
-            Canvas(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(Unit) {
-                        detectDragGestures { change, dragAmount ->
-                            change.consume()
-                            splitFraction = (splitFraction + dragAmount.x / totalWidth).coerceIn(0.08f, 0.92f)
-                        }
-                    }
-            ) {
-                clipRect(left = 0f, top = 0f, right = splitPx, bottom = size.height) {
-                    drawImage(
-                        image = beforeBitmap,
-                        dstSize = IntSize(size.width.toInt(), size.height.toInt()),
-                        filterQuality = FilterQuality.High
-                    )
-                }
-
-                clipRect(left = splitPx, top = 0f, right = size.width, bottom = size.height) {
-                    drawImage(
-                        image = afterBitmap,
-                        dstSize = IntSize(size.width.toInt(), size.height.toInt()),
-                        filterQuality = if (isActive && pixelSharp && lod > 0) FilterQuality.None else FilterQuality.Medium
-                    )
-                }
-
-                drawLine(
-                    color = dividerColor,
-                    start = Offset(splitPx, 0f),
-                    end = Offset(splitPx, size.height),
-                    strokeWidth = 2.dp.toPx()
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .offset {
-                        IntOffset(
-                            x = (splitPx - (handleWidth / 2).toPx()).toInt(),
-                            y = ((totalHeight / 2) - (handleHeight / 2).toPx()).toInt()
-                        )
-                    }
-                    .size(width = handleWidth, height = handleHeight)
-                    .shadow(6.dp, CircleShape)
-                    .clip(CircleShape)
-                    .background(primaryColor),
-                contentAlignment = Alignment.Center
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Rounded.SwapHoriz,
+                    imageVector = Icons.Rounded.Compare,
                     contentDescription = null,
-                    tint = onPrimaryColor,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp)
                 )
-            }
-
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.88f),
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.outline)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = stringResource(R.string.texture_badge_original),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        letterSpacing = 0.6.sp
-                    )
-                }
-            }
-
-            Surface(
-                shape = CircleShape,
-                color = if (isActive) {
-                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.94f)
-                } else {
-                    MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.88f)
-                },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(if (isActive) Color(0xFF4CAF50) else Color.Gray)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = if (isActive) stringResource(R.string.texture_badge_active) else stringResource(R.string.texture_badge_inactive),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                        letterSpacing = 0.6.sp
-                    )
-                }
-            }
-
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.74f),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 10.dp)
-            ) {
+                Spacer(modifier = Modifier.width(10.dp))
                 Text(
-                    text = stringResource(R.string.texture_drag_compare),
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                    text = textureLocalizedLabel("Pratinjau Tekstur", "Texture Preview"),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
                 )
+                Surface(
+                    shape = CircleShape,
+                    color = if (isActive) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerHigh
+                    }
+                ) {
+                    Text(
+                        text = badgeText,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isActive) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Kartu Kiri: Asli
+                Surface(
+                    shape = RoundedCornerShape(innerRadius),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp, horizontal = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Canvas(
+                            modifier = Modifier
+                                .size(82.dp)
+                                .clip(RoundedCornerShape(20.dp))
+                        ) {
+                            drawImage(
+                                image = originalImage,
+                                dstSize = IntSize(size.width.toInt(), size.height.toInt()),
+                                filterQuality = FilterQuality.High
+                            )
+                        }
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest
+                        ) {
+                            Text(
+                                text = textureLocalizedLabel("Asli", "Original"),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Kartu Kanan: Hasil Filter
+                Surface(
+                    shape = RoundedCornerShape(innerRadius),
+                    color = resultCardColor,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp, horizontal = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Canvas(
+                            modifier = Modifier
+                                .size(82.dp)
+                                .graphicsLayer {
+                                    scaleX = previewScale
+                                    scaleY = previewScale
+                                }
+                                .clip(RoundedCornerShape(20.dp))
+                        ) {
+                            drawImage(
+                                image = processedImage,
+                                dstSize = IntSize(size.width.toInt(), size.height.toInt()),
+                                filterQuality = if (isActive && pixelSharp && clampedLod > 0) {
+                                    FilterQuality.None
+                                } else {
+                                    FilterQuality.Low
+                                }
+                            )
+                        }
+                        Surface(
+                            shape = CircleShape,
+                            color = if (isActive) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.surfaceContainerHighest
+                            }
+                        ) {
+                            Text(
+                                text = if (isActive) {
+                                    textureLocalizedLabel("Hasil", "Result")
+                                } else {
+                                    textureLocalizedLabel("Standar", "Default")
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isActive) {
+                                    MaterialTheme.colorScheme.onPrimary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -694,14 +644,14 @@ fun TeksturRinganScreen(
 
             item(key = "info_card") {
                 Surface(
-                    shape = RoundedCornerShape(18.dp),
+                    shape = RoundedCornerShape(outerRadius),
                     color = MaterialTheme.colorScheme.surfaceContainer,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -807,7 +757,7 @@ fun TeksturRinganScreen(
 @Composable
 private fun FilterPillTile(
     selected: Boolean,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
