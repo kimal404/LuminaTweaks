@@ -129,6 +129,10 @@ impl ConfigWatcher {
                     None => break,
                 };
 
+                if len > total.saturating_sub(offset + EVENT_HEADER_SIZE) {
+                    break;
+                }
+
                 if mask & (IN_IGNORED | IN_DELETE_SELF) != 0 {
                     watch_lost = true;
                 }

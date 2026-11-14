@@ -588,13 +588,6 @@ fn main() {
                 TextureController::sync_config(None);
                 last_pkg_for_texture = None;
                 suppress_fallback = true;
-            } else {
-                log!(
-                    "[SYSTEM] APP_DIED {} ({}) uid {} ignored",
-                    died.package.as_deref().unwrap_or("-"),
-                    died.pid,
-                    died.uid
-                );
             }
         }
 

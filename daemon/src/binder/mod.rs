@@ -717,6 +717,14 @@ fn start_screen_worker(
     let _ = std::thread::Builder::new()
         .name("binder-screen".to_string())
         .spawn(move || {
+            // Keep one power-service reference for the worker lifetime instead
+            // of re-acquiring it on every wake-up. The monitor drops the
+            // handles (and bumps the generation) when system_server dies.
+            let power = ffi::wait_for_service(api, "power");
+            if power.is_null() {
+                return;
+            }
+
             while SCREEN_GENERATION.load(Ordering::Relaxed) == generation && !shared.is_dead() {
                 // Without a display callback the screen state must be polled.
                 // With the callback registered this worker only wakes on real
@@ -732,10 +740,6 @@ fn start_screen_worker(
                     break;
                 }
 
-                let power = ffi::wait_for_service(api, "power");
-                if power.is_null() {
-                    continue;
-                }
                 if poll && interactive_code != 0 {
                     let value =
                         transact_read_int32(api, power, interactive_code, POWER_DESCRIPTOR, -1);
@@ -756,8 +760,9 @@ fn start_screen_worker(
                         }
                     }
                 }
-                unsafe { (api.dec_strong)(power) };
             }
+
+            unsafe { (api.dec_strong)(power) };
         });
 }
 

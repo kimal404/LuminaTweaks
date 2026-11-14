@@ -296,12 +296,25 @@ fun HomeScreen() {
                 selinuxStatus = refreshedSelinux
             }
 
+            var fallbackChecks = 0
             while (isActive) {
                 val currentTemp = DeviceUtil.getBatteryTemperature(context)
                 val propProfile = readSystemProperty("sys.lumina.profile")
                 val status = DaemonManager.getStatus()
-                val rebootNeeded = if (status.pid == null) DaemonManager.isRebootRequired() else false
-                val installed = if (status.pid == null) DaemonManager.isModuleInstalled() else true
+                // The stopped-daemon fallback shells out through su. Throttle it
+                // to every 4th poll instead of spawning su every 2.5s.
+                val checkFallback = status.pid == null && fallbackChecks % 4 == 0
+                fallbackChecks++
+                val rebootNeeded = when {
+                    checkFallback -> DaemonManager.isRebootRequired()
+                    status.pid == null -> isRebootRequired
+                    else -> false
+                }
+                val installed = when {
+                    checkFallback -> DaemonManager.isModuleInstalled()
+                    status.pid == null -> isModuleInstalled
+                    else -> true
+                }
 
                 withContext(Dispatchers.Main) {
                     batteryTemp = currentTemp
