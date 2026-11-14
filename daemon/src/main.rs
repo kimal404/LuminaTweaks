@@ -50,8 +50,11 @@ const SIGTERM: i32 = 15;
 const LOCK_EX: i32 = 2;
 const LOCK_NB: i32 = 4;
 
-const PID_FILE_PATH: &str = "/data/local/tmp/lumina.pid";
-const HEARTBEAT_FILE_PATH: &str = "/data/local/tmp/lumina.alive";
+const RUNTIME_DIR: &str = "/data/adb/.config/lumina";
+const PID_FILE_PATH: &str = "/data/adb/.config/lumina/luminad.pid";
+const HEARTBEAT_FILE_PATH: &str = "/data/adb/.config/lumina/luminad.alive";
+const LEGACY_PID_FILE_PATH: &str = "/data/local/tmp/lumina.pid";
+const LEGACY_HEARTBEAT_FILE_PATH: &str = "/data/local/tmp/lumina.alive";
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(2);
 
 extern "C" fn handle_signal(_: i32) {
@@ -59,7 +62,11 @@ extern "C" fn handle_signal(_: i32) {
 }
 
 fn acquire_instance_lock() -> Option<File> {
-    for lock_path in ["/dev/socket/luminad.lock", "/data/local/tmp/luminad.lock"] {
+    let _ = std::fs::create_dir_all(RUNTIME_DIR);
+    for lock_path in [
+        "/data/adb/.config/lumina/luminad.lock",
+        "/data/local/tmp/luminad.lock",
+    ] {
         if let Ok(file) = OpenOptions::new()
             .create(true)
             .read(true)
@@ -133,6 +140,11 @@ fn set_dnd(binder: &mut binder_client::BinderClient, mode: &str) {
 }
 
 fn write_runtime_file(path: &str, value: &str) -> bool {
+    if let Some(parent) = std::path::Path::new(path).parent() {
+        if std::fs::create_dir_all(parent).is_err() {
+            return false;
+        }
+    }
     let temp_path = format!("{}.tmp", path);
     if std::fs::write(&temp_path, value).is_err() {
         let _ = std::fs::remove_file(&temp_path);
@@ -149,21 +161,32 @@ fn write_runtime_file(path: &str, value: &str) -> bool {
 }
 
 fn publish_pid() {
-    if !write_runtime_file(PID_FILE_PATH, &format!("{}\n", std::process::id())) {
+    let pid = format!("{}\n", std::process::id());
+    if !write_runtime_file(PID_FILE_PATH, &pid) {
         log!("[WARN] PID file unavailable; manager may not detect daemon");
     }
+    // Keep the pre-reorganisation location in sync so an older Manager that
+    // still reads it can detect the daemon during a rolling update.
+    let _ = write_runtime_file(LEGACY_PID_FILE_PATH, &pid);
 }
 
 fn publish_heartbeat() {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis())
-        .unwrap_or(0);
-    let _ = write_runtime_file(HEARTBEAT_FILE_PATH, &timestamp.to_string());
+        .unwrap_or(0)
+        .to_string();
+    let _ = write_runtime_file(HEARTBEAT_FILE_PATH, &timestamp);
+    let _ = write_runtime_file(LEGACY_HEARTBEAT_FILE_PATH, &timestamp);
 }
 
 fn cleanup_runtime_files() {
-    for path in [PID_FILE_PATH, HEARTBEAT_FILE_PATH] {
+    for path in [
+        PID_FILE_PATH,
+        HEARTBEAT_FILE_PATH,
+        LEGACY_PID_FILE_PATH,
+        LEGACY_HEARTBEAT_FILE_PATH,
+    ] {
         let _ = std::fs::remove_file(path);
         let _ = std::fs::remove_file(format!("{}.tmp", path));
     }

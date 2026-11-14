@@ -17,8 +17,9 @@
 MODDIR=${0%/*}
 [ -d "$MODDIR" ] || MODDIR="/data/adb/modules/luminatweaks"
 
+CONFIG_DIR="/data/adb/.config/lumina"
 WATCHDOG_PID_FILE="/data/local/tmp/lumina_watchdog.pid"
-HEARTBEAT_FILE="/data/local/tmp/lumina.alive"
+HEARTBEAT_FILE="$CONFIG_DIR/luminad.alive"
 
 until [ "$(getprop sys.boot_completed)" = "1" ]; do
     sleep 2
@@ -26,6 +27,7 @@ done
 
 sleep 3
 
+mkdir -p "$CONFIG_DIR"
 echo 0 > "$MODDIR/.bootcount"
 rm -f "$MODDIR/.bootloop_guard"
 
@@ -60,8 +62,8 @@ killall -9 lumina-binder 2>/dev/null || pkill -9 -x lumina-binder 2>/dev/null ||
 
 rm -f /dev/socket/lumina.sock /dev/socket/lumina_ipc.sock /dev/socket/lumina_binder.sock
 rm -f /data/local/tmp/lumina.sock /data/local/tmp/lumina_ipc.sock /data/local/tmp/lumina_binder.sock
-rm -f /data/local/tmp/lumina.pid
-rm -f /data/local/tmp/lumina.alive
+rm -f /data/local/tmp/lumina.pid /data/local/tmp/lumina.alive
+rm -f "$CONFIG_DIR/lumina.sock" "$CONFIG_DIR/luminad.pid" "$CONFIG_DIR/luminad.alive"
 
 DAEMON_BIN=""
 if [ -f "$MODDIR/bin/luminad" ]; then

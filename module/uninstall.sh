@@ -47,6 +47,10 @@ rm -f /data/local/tmp/luminad.lock
 rm -f /data/local/tmp/lumina-binder.lock
 rm -f /data/local/tmp/lumina.pid
 rm -f /data/local/tmp/lumina.alive
+rm -f /data/adb/.config/lumina/lumina.sock
+rm -f /data/adb/.config/lumina/luminad.pid
+rm -f /data/adb/.config/lumina/luminad.alive
+rm -f /data/adb/.config/lumina/luminad.lock
 rm -f /data/local/tmp/lumina.log*
 rm -f /data/local/tmp/luminad.log*
 rm -f /data/local/tmp/lumina-binder.log*

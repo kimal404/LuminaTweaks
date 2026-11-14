@@ -56,7 +56,7 @@ object ConfigRepository {
     private const val CONFIG_DIR = "/data/adb/.config/lumina"
     private const val GLOBAL_CONFIG_PATH = "$CONFIG_DIR/config.json"
     private const val APP_CONFIG_PATH = "$CONFIG_DIR/app_config.json"
-    private const val IPC_SOCKET_PRIMARY = "/dev/socket/lumina_ipc.sock"
+    private const val IPC_SOCKET_PRIMARY = "$CONFIG_DIR/lumina.sock"
     private const val IPC_SOCKET_FALLBACK = "/data/local/tmp/lumina_ipc.sock"
     private const val BATCH_SEP = "___LUMINA_SEP___"
 
@@ -121,10 +121,10 @@ object ConfigRepository {
     }
 
     private fun reloadCommand(): String =
-        "(printf 'RELOAD\\n' | nc -U $IPC_SOCKET_PRIMARY 2>/dev/null || " +
-            "printf 'RELOAD\\n' | toybox nc -U $IPC_SOCKET_PRIMARY 2>/dev/null || " +
-            "printf 'RELOAD\\n' | nc -U $IPC_SOCKET_FALLBACK 2>/dev/null || " +
-            "printf 'RELOAD\\n' | toybox nc -U $IPC_SOCKET_FALLBACK 2>/dev/null) >/dev/null 2>&1 &"
+        "(printf 'RELOAD\\n' | nc -w 1 -U $IPC_SOCKET_PRIMARY 2>/dev/null || " +
+            "printf 'RELOAD\\n' | toybox nc -w 1 -U $IPC_SOCKET_PRIMARY 2>/dev/null || " +
+            "printf 'RELOAD\\n' | nc -w 1 -U $IPC_SOCKET_FALLBACK 2>/dev/null || " +
+            "printf 'RELOAD\\n' | toybox nc -w 1 -U $IPC_SOCKET_FALLBACK 2>/dev/null) >/dev/null 2>&1 &"
 
     private fun writeFileAtomically(
         targetPath: String,

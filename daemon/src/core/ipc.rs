@@ -23,8 +23,18 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-pub const IPC_SOCKET_PRIMARY: &str = "/dev/socket/lumina_ipc.sock";
+/// `/dev/socket` is reserved for init on modern Android and SELinux denies
+/// non-init daemons from binding there. The module runtime directory is
+/// writable by both luminad and the Manager (through su), so it is the
+/// primary location; `/data/local/tmp` remains as a last-resort fallback.
+pub const IPC_SOCKET_PRIMARY: &str = "/data/adb/.config/lumina/lumina.sock";
 pub const IPC_SOCKET_FALLBACK: &str = "/data/local/tmp/lumina_ipc.sock";
+
+fn ensure_parent_dir(path: &str) {
+    if let Some(parent) = std::path::Path::new(path).parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+}
 
 pub struct SharedState {
     pub current_profile: std::sync::Mutex<String>,
@@ -65,15 +75,22 @@ pub fn cleanup_socket() {
 
 fn bind_socket() -> Option<(UnixListener, String)> {
     for path in [IPC_SOCKET_PRIMARY, IPC_SOCKET_FALLBACK] {
+        ensure_parent_dir(path);
+
         if let Ok(meta) = fs::symlink_metadata(path) {
             if !meta.is_dir() {
                 let _ = fs::remove_file(path);
             }
         }
 
-        if let Ok(listener) = UnixListener::bind(path) {
-            let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
-            return Some((listener, path.to_string()));
+        match UnixListener::bind(path) {
+            Ok(listener) => {
+                let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
+                return Some((listener, path.to_string()));
+            }
+            Err(error) => {
+                crate::log!("[WARN] IPC bind {} failed: {}", path, error);
+            }
         }
     }
 

@@ -1037,7 +1037,10 @@ private fun CoreStatusCard(
     }
     val subtitle = when {
         isChecking || isRestarting -> stringResource(R.string.home_core_scanning)
-        isRunning -> stringResource(R.string.home_core_pid_format, daemonPid ?: "-")
+        isRunning -> stringResource(
+            R.string.home_core_pid_format,
+            daemonPid?.takeIf { pid -> pid.all(Char::isDigit) } ?: "-"
+        )
         isRebootRequired -> stringResource(R.string.home_core_reboot_hint)
         !isModuleInstalled -> stringResource(R.string.home_core_install_hint)
         else -> stringResource(R.string.home_core_tap_start)
