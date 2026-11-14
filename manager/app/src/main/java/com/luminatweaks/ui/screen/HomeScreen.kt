@@ -545,7 +545,7 @@ fun HomeScreen() {
                     pagerState = pagerState,
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(bottom = innerPadding.calculateBottomPadding())
+                        .padding(innerPadding)
                 ) { tab ->
                     when (tab) {
                         0 -> HomeDashboardContent(

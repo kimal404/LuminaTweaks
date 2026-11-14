@@ -89,7 +89,8 @@ fun LuminaBottomBar(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .navigationBarsPadding(),
+                .navigationBarsPadding()
+                .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 20.dp),
             contentAlignment = Alignment.Center
         ) {
             Surface(
@@ -100,8 +101,8 @@ fun LuminaBottomBar(
                 shadowElevation = 8.dp
             ) {
                 Row(
-                    modifier = Modifier.padding(6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(7.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     navTabs.forEachIndexed { index, tab ->
@@ -166,8 +167,8 @@ private fun FloatingNavItem(
         animationSpec = motionScheme.defaultEffectsSpec(),
         label = "floatingNavContent"
     )
-    // 26.dp icon + 2 * 11.dp = an exact 48.dp circle when idle.
-    val horizontalPadding = 11.dp + 9.dp * clampedProgress
+    // 26.dp icon + 2 * 14.dp = an exact 54.dp circle when idle.
+    val horizontalPadding = 14.dp + 7.dp * clampedProgress
     val label = stringResource(tab.labelRes)
 
     Surface(
@@ -186,7 +187,7 @@ private fun FloatingNavItem(
     ) {
         Row(
             modifier = Modifier
-                .height(48.dp)
+                .height(54.dp)
                 .padding(horizontal = horizontalPadding),
             verticalAlignment = Alignment.CenterVertically
         ) {
