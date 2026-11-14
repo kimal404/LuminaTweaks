@@ -228,13 +228,26 @@ data class FloatingFpsConfig(
     val corner: FpsOverlayCorner = FpsOverlayCorner.TOP_RIGHT,
     val autoGame: Boolean = true,
     val touchLock: Boolean = false,
+    val showFps: Boolean = true,
     val showFrametime: Boolean = true,
+    val showCpuCluster: Boolean = false,
     val showTemp: Boolean = false,
+    val showRam: Boolean = false,
     val showProfile: Boolean = false,
     val scale: Float = 1.0f,
     val bgAlpha: Float = 0.88f,
     val intervalMs: Int = 500
-)
+) {
+    val activeModuleCount: Int
+        get() = listOf(
+            showFps,
+            showFrametime,
+            showCpuCluster,
+            showTemp,
+            showRam,
+            showProfile
+        ).count { it }
+}
 
 object FloatingFpsPrefs {
     private const val PREF_NAME = "floating_fps_prefs"
@@ -247,8 +260,11 @@ object FloatingFpsPrefs {
             corner = FpsOverlayCorner.fromKey(sp.getString("corner", FpsOverlayCorner.TOP_RIGHT.key)),
             autoGame = sp.getBoolean("auto_game", true),
             touchLock = sp.getBoolean("touch_lock", false),
+            showFps = sp.getBoolean("show_fps", true),
             showFrametime = sp.getBoolean("show_frametime", true),
+            showCpuCluster = sp.getBoolean("show_cpu_cluster", false),
             showTemp = sp.getBoolean("show_temp", false),
+            showRam = sp.getBoolean("show_ram", false),
             showProfile = sp.getBoolean("show_profile", false),
             scale = sp.getFloat("scale", 1.0f).coerceIn(0.8f, 1.3f),
             bgAlpha = sp.getFloat("bg_alpha", 0.88f).coerceIn(0.25f, 1.0f),
@@ -263,8 +279,11 @@ object FloatingFpsPrefs {
             .putString("corner", config.corner.key)
             .putBoolean("auto_game", config.autoGame)
             .putBoolean("touch_lock", config.touchLock)
+            .putBoolean("show_fps", config.showFps)
             .putBoolean("show_frametime", config.showFrametime)
+            .putBoolean("show_cpu_cluster", config.showCpuCluster)
             .putBoolean("show_temp", config.showTemp)
+            .putBoolean("show_ram", config.showRam)
             .putBoolean("show_profile", config.showProfile)
             .putFloat("scale", config.scale)
             .putFloat("bg_alpha", config.bgAlpha)
@@ -277,7 +296,9 @@ private data class SimulatedFpsTelemetry(
     val fps: Int = 120,
     val targetHz: Int = 120,
     val frametimeMs: Float = 8.3f,
-    val tempLabel: String = "37.2°C",
+    val cpuClusterLabel: String = "2.0·2.8·3.2 GHz",
+    val tempLabel: String = "37.2°C · 3.8W",
+    val ramLabel: String = "RAM 54%",
     val profileLabel: String = "Balanced",
     val history: List<Float> = listOf(8.3f, 8.4f, 8.2f, 8.3f, 8.5f, 8.3f, 8.2f, 8.3f, 8.4f, 8.3f, 8.2f, 8.3f)
 )
@@ -697,16 +718,6 @@ fun TweaksScreen(pagerState: PagerState? = null) {
                 }
             }
 
-            item(key = "floating_fps") {
-                FloatingFpsCardSection(
-                    config = fpsConfig,
-                    targetHz = liveRefreshRate,
-                    isScrolling = pagerState?.isScrollInProgress == true,
-                    onConfigChange = updateFpsConfig,
-                    onOpenCustomize = { inFloatingFpsSubpage = true }
-                )
-            }
-
             item(key = "additional") {
                 NestedTweakCardGroup(
                     headerIcon = Icons.Rounded.Memory,
@@ -729,10 +740,30 @@ fun TweaksScreen(pagerState: PagerState? = null) {
             }
 
             item(key = "utility") {
+                val telemetrySubtitle = if (fpsConfig.enabled) {
+                    val count = fpsConfig.activeModuleCount.coerceAtLeast(1)
+                    localizedLabel(
+                        "Aktif · ${fpsStyleLabel(fpsConfig.style)} · $count modul",
+                        "Active · ${fpsStyleLabel(fpsConfig.style)} · $count modules"
+                    )
+                } else {
+                    localizedLabel(
+                        "Pantau FPS, cluster CPU & daya secara mengambang",
+                        "Monitor FPS, CPU clusters & power in a floating overlay"
+                    )
+                }
+
                 NestedTweakCardGroup(
                     headerIcon = Icons.Rounded.Widgets,
                     headerTitle = stringResource(R.string.section_utility_diagnostics)
                 ) {
+                    NestedTweakActionItem(
+                        icon = Icons.Rounded.Speed,
+                        title = localizedLabel("Overlay Telemetri", "Telemetry Overlay"),
+                        subtitle = telemetrySubtitle,
+                        onClick = { inFloatingFpsSubpage = true }
+                    )
+
                     NestedTweakActionItem(
                         icon = Icons.Rounded.DeveloperBoard,
                         title = stringResource(R.string.hardware_diag_title),
@@ -769,156 +800,6 @@ private fun fpsCornerLabel(corner: FpsOverlayCorner): String = when (corner) {
     FpsOverlayCorner.TOP_RIGHT -> localizedLabel("Kanan Atas", "Top Right")
     FpsOverlayCorner.BOTTOM_LEFT -> localizedLabel("Kiri Bawah", "Bottom Left")
     FpsOverlayCorner.BOTTOM_RIGHT -> localizedLabel("Kanan Bawah", "Bottom Right")
-}
-
-@Composable
-private fun FloatingFpsCardSection(
-    config: FloatingFpsConfig,
-    targetHz: Int,
-    isScrolling: Boolean,
-    onConfigChange: (FloatingFpsConfig) -> Unit,
-    onOpenCustomize: () -> Unit
-) {
-    val haptic = LocalHapticFeedback.current
-    val telemetry = rememberSimulatedFpsTelemetry(
-        targetHz = targetHz,
-        intervalMs = config.intervalMs,
-        active = !isScrolling
-    )
-    val innerRadius = (LocalCornerRadius.current * 0.78f).coerceIn(16.dp, 24.dp)
-
-    val statusText = if (config.enabled) {
-        localizedLabel(
-            "Aktif · Gaya ${fpsStyleLabel(config.style)} · ${config.intervalMs} ms",
-            "Active · ${fpsStyleLabel(config.style)} style · ${config.intervalMs} ms"
-        )
-    } else {
-        localizedLabel(
-            "Tampilkan penghitung FPS real-time mengambang di layar",
-            "Display a real-time floating FPS counter on screen"
-        )
-    }
-
-    val customizeSubtitle = buildString {
-        append(fpsCornerLabel(config.corner))
-        append(" · ")
-        append(
-            if (config.autoGame) {
-                localizedLabel("Auto-Game Aktif", "Auto-Game On")
-            } else {
-                localizedLabel("Manual", "Manual")
-            }
-        )
-        append(" · ${(config.scale * 100).roundToInt()}%")
-    }
-
-    NestedTweakCardGroup(
-        headerIcon = Icons.Rounded.Speed,
-        headerTitle = localizedLabel("Floating FPS Monitor", "Floating FPS Monitor")
-    ) {
-        NestedTweakSwitchItem(
-            icon = Icons.Rounded.Speed,
-            title = localizedLabel("Aktifkan Overlay FPS", "Enable FPS Overlay"),
-            subtitle = statusText,
-            checked = config.enabled,
-            onCheckedChange = { enabled ->
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onConfigChange(config.copy(enabled = enabled))
-            }
-        )
-
-        // Interactive Live Preview Stage
-        Surface(
-            shape = RoundedCornerShape(innerRadius),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = localizedLabel("Pratinjau Langsung", "Live Preview"),
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    val previewContext = LocalContext.current
-                    val previewScope = rememberCoroutineScope()
-                    Surface(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            previewScope.launch {
-                                if (FloatingFpsService.ensureOverlayPermission(previewContext)) {
-                                    FloatingFpsService.triggerPreviewBurst(previewContext)
-                                }
-                            }
-                        },
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primaryContainer
-                    ) {
-                        Text(
-                            text = localizedLabel("TES OVERLAY 5D", "TEST 5S"),
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                }
-
-                FpsViewportStage(
-                    config = config,
-                    telemetry = telemetry,
-                    heightDp = 112
-                )
-
-                // Connected 3-style selector (MD3E ButtonGroup)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FpsOverlayStyle.entries.forEachIndexed { index, style ->
-                        val shapes = when (index) {
-                            0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
-                            FpsOverlayStyle.entries.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
-                            else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
-                        }
-                        ToggleButton(
-                            checked = config.style == style,
-                            onCheckedChange = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                onConfigChange(config.copy(style = style))
-                            },
-                            shapes = shapes,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                text = fpsStyleLabel(style),
-                                style = MaterialTheme.typography.labelLarge,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        NestedTweakActionItem(
-            icon = Icons.Rounded.Tune,
-            title = localizedLabel("Kustomisasi & Auto-Game", "Customize & Auto-Game"),
-            subtitle = customizeSubtitle,
-            onClick = onOpenCustomize
-        )
-    }
 }
 
 @Composable
@@ -989,13 +870,21 @@ private fun FpsOverlayPreviewBadge(
     val textColor = MaterialTheme.colorScheme.onSurface
     val subTextColor = MaterialTheme.colorScheme.onSurfaceVariant
 
-    val extraParts = remember(config, telemetry) {
+    val secondaryParts = remember(config, telemetry) {
         buildList {
             if (config.showFrametime) add(String.format(Locale.US, "%.1f ms", telemetry.frametimeMs))
+            if (config.showCpuCluster) add(telemetry.cpuClusterLabel)
             if (config.showTemp) add(telemetry.tempLabel)
+            if (config.showRam) add(telemetry.ramLabel)
             if (config.showProfile) add(telemetry.profileLabel)
         }
     }
+    val headlineText = if (config.showFps) {
+        "${telemetry.fps} FPS"
+    } else {
+        secondaryParts.firstOrNull() ?: "${telemetry.fps} FPS"
+    }
+    val trailingParts = if (config.showFps) secondaryParts else secondaryParts.drop(1)
 
     when (config.style) {
         FpsOverlayStyle.PILL -> {
@@ -1015,25 +904,20 @@ private fun FpsOverlayPreviewBadge(
                     )
                     Spacer(modifier = Modifier.width(7.dp))
                     Text(
-                        text = "${telemetry.fps}",
-                        style = MaterialTheme.typography.titleSmall,
+                        text = headlineText,
+                        style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.ExtraBold,
-                        color = statusColor
+                        color = if (config.showFps) statusColor else textColor,
+                        maxLines = 1
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "FPS",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = textColor
-                    )
-                    if (extraParts.isNotEmpty()) {
+                    if (trailingParts.isNotEmpty()) {
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = extraParts.joinToString(" · "),
+                            text = trailingParts.joinToString(" · "),
                             style = MaterialTheme.typography.labelSmall,
                             color = subTextColor,
-                            maxLines = 1
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -1047,7 +931,7 @@ private fun FpsOverlayPreviewBadge(
             ) {
                 Column(
                     modifier = Modifier
-                        .width(156.dp)
+                        .width(172.dp)
                         .padding(horizontal = 11.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
@@ -1065,20 +949,31 @@ private fun FpsOverlayPreviewBadge(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "${telemetry.fps} FPS",
+                                text = headlineText,
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = statusColor
+                                color = if (config.showFps) statusColor else textColor,
+                                maxLines = 1
                             )
                         }
-                        if (extraParts.isNotEmpty()) {
+                        if (trailingParts.isNotEmpty()) {
                             Text(
-                                text = extraParts.first(),
+                                text = trailingParts.first(),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = subTextColor,
                                 maxLines = 1
                             )
                         }
+                    }
+
+                    if (trailingParts.size > 1) {
+                        Text(
+                            text = trailingParts.drop(1).joinToString(" · "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = subTextColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
 
                     FrametimeSparkline(
@@ -1102,18 +997,21 @@ private fun FpsOverlayPreviewBadge(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${telemetry.fps}",
-                        style = MaterialTheme.typography.titleMedium,
+                        text = if (config.showFps) "${telemetry.fps}" else headlineText,
+                        style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.ExtraBold,
-                        color = statusColor
+                        color = if (config.showFps) statusColor else textColor,
+                        maxLines = 1
                     )
-                    if (extraParts.isNotEmpty()) {
+                    if (trailingParts.isNotEmpty()) {
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = extraParts.first(),
+                            text = trailingParts.joinToString(" · "),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
-                            color = textColor.copy(alpha = 0.85f)
+                            color = textColor.copy(alpha = 0.85f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -1193,7 +1091,7 @@ private fun FloatingFpsConfigScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = localizedLabel("Floating FPS Monitor", "Floating FPS Monitor"),
+                        text = localizedLabel("Overlay Telemetri", "Telemetry Overlay"),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -1273,18 +1171,37 @@ private fun FloatingFpsConfigScreen(
                         }
                     }
 
+                    val previewContext = LocalContext.current
+                    val previewScope = rememberCoroutineScope()
+
                     NestedTweakSwitchItem(
                         icon = Icons.Rounded.Speed,
-                        title = localizedLabel("Status Overlay FPS", "FPS Overlay Status"),
+                        title = localizedLabel("Aktifkan Overlay Telemetri", "Enable Telemetry Overlay"),
                         subtitle = if (config.enabled) {
-                            localizedLabel("Overlay diaktifkan", "Overlay enabled")
+                            localizedLabel("Overlay aktif di layar", "Overlay active on screen")
                         } else {
-                            localizedLabel("Overlay dinonaktifkan", "Overlay disabled")
+                            localizedLabel("Overlay nonaktif", "Overlay disabled")
                         },
                         checked = config.enabled,
                         onCheckedChange = { enabled ->
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onConfigChange(config.copy(enabled = enabled))
+                        }
+                    )
+
+                    NestedTweakActionItem(
+                        icon = Icons.Rounded.Widgets,
+                        title = localizedLabel("Tes Overlay 5 Detik", "Test Overlay 5 Seconds"),
+                        subtitle = localizedLabel(
+                            "Tampilkan pratinjau langsung di atas aplikasi selama 5 detik",
+                            "Show live floating overlay above apps for 5 seconds"
+                        ),
+                        onClick = {
+                            previewScope.launch {
+                                if (FloatingFpsService.ensureOverlayPermission(previewContext)) {
+                                    FloatingFpsService.triggerPreviewBurst(previewContext)
+                                }
+                            }
                         }
                     )
                 }
@@ -1382,7 +1299,7 @@ private fun FloatingFpsConfigScreen(
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Text(
-                                text = localizedLabel("Metrik Pendamping", "Secondary Metrics"),
+                                text = localizedLabel("Modul Telemetri", "Telemetry Modules"),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -1392,18 +1309,49 @@ private fun FloatingFpsConfigScreen(
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 FilterChip(
+                                    selected = config.showFps,
+                                    onClick = {
+                                        if (!config.showFps || config.activeModuleCount > 1) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            onConfigChange(config.copy(showFps = !config.showFps))
+                                        }
+                                    },
+                                    label = { Text("FPS") }
+                                )
+                                FilterChip(
                                     selected = config.showFrametime,
                                     onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        onConfigChange(config.copy(showFrametime = !config.showFrametime))
+                                        if (!config.showFrametime || config.activeModuleCount > 1) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            onConfigChange(config.copy(showFrametime = !config.showFrametime))
+                                        }
                                     },
                                     label = { Text("Frametime (ms)") }
                                 )
                                 FilterChip(
+                                    selected = config.showCpuCluster,
+                                    onClick = {
+                                        if (!config.showCpuCluster || config.activeModuleCount > 1) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            onConfigChange(config.copy(showCpuCluster = !config.showCpuCluster))
+                                        }
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Rounded.DeveloperBoard,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    },
+                                    label = { Text(localizedLabel("CPU Cluster (GHz)", "CPU Clusters (GHz)")) }
+                                )
+                                FilterChip(
                                     selected = config.showTemp,
                                     onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        onConfigChange(config.copy(showTemp = !config.showTemp))
+                                        if (!config.showTemp || config.activeModuleCount > 1) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            onConfigChange(config.copy(showTemp = !config.showTemp))
+                                        }
                                     },
                                     leadingIcon = {
                                         Icon(
@@ -1412,13 +1360,32 @@ private fun FloatingFpsConfigScreen(
                                             modifier = Modifier.size(16.dp)
                                         )
                                     },
-                                    label = { Text(localizedLabel("Suhu (°C)", "Temp (°C)")) }
+                                    label = { Text(localizedLabel("Suhu & Daya (°C · W)", "Temp & Power (°C · W)")) }
+                                )
+                                FilterChip(
+                                    selected = config.showRam,
+                                    onClick = {
+                                        if (!config.showRam || config.activeModuleCount > 1) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            onConfigChange(config.copy(showRam = !config.showRam))
+                                        }
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Memory,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    },
+                                    label = { Text("RAM (%)") }
                                 )
                                 FilterChip(
                                     selected = config.showProfile,
                                     onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        onConfigChange(config.copy(showProfile = !config.showProfile))
+                                        if (!config.showProfile || config.activeModuleCount > 1) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            onConfigChange(config.copy(showProfile = !config.showProfile))
+                                        }
                                     },
                                     label = { Text(localizedLabel("Profil", "Profile")) }
                                 )
