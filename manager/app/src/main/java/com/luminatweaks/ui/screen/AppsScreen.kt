@@ -160,26 +160,6 @@ fun AppsScreen(
 
     val activeApp = rawApps.find { it.packageName == selectedPackageName }
 
-    LuminaDrillTransition(
-        targetState = activeApp,
-        isForward = { _, target -> target != null },
-        contentKey = { it?.packageName ?: "apps_list" }
-    ) { targetApp ->
-        if (targetApp != null) {
-            val currentProfile = appConfigs[targetApp.packageName] ?: AppProfileConfig(pkg = targetApp.packageName)
-            AppProfileScreen(
-                app = targetApp,
-                profile = currentProfile,
-                onProfileChanged = { updated ->
-                    appConfigs[updated.pkg] = updated
-                    coroutineScope.launch {
-                        ConfigRepository.saveAppConfig(updated)
-                    }
-                },
-                onBack = { selectedPackageName = null }
-            )
-        } else {
-
     val visibleBaseApps = remember(rawApps, hideSystemApps) {
         rawApps.filter { app -> if (hideSystemApps) !app.isSystemApp else true }
     }
@@ -227,290 +207,310 @@ fun AppsScreen(
     val navBottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val outerContainerRadius = LocalCornerRadius.current.coerceAtLeast(28.dp)
 
-    Scaffold(
-        modifier = modifier,
-        contentWindowInsets = WindowInsets(0.dp),
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = stringResource(R.string.apps_title),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
+    LuminaDrillTransition(
+        targetState = activeApp,
+        isForward = { _, target -> target != null },
+        contentKey = { it?.packageName ?: "apps_list" }
+    ) { targetApp ->
+        if (targetApp != null) {
+            val currentProfile = appConfigs[targetApp.packageName] ?: AppProfileConfig(pkg = targetApp.packageName)
+            AppProfileScreen(
+                app = targetApp,
+                profile = currentProfile,
+                onProfileChanged = { updated ->
+                    appConfigs[updated.pkg] = updated
+                    coroutineScope.launch {
+                        ConfigRepository.saveAppConfig(updated)
+                    }
                 },
-                actions = {
-                    IconButton(
-                        onClick = {
-                            if (!isScanningGames) {
-                                coroutineScope.launch {
-                                    isScanningGames = true
-                                    try {
-                                        val syncedConfigs = ConfigRepository.syncInstalledGameWhitelist(
-                                            rawApps.map { it.packageName }
-                                        )
-                                        appConfigs.clear()
-                                        appConfigs.putAll(syncedConfigs)
-                                    } finally {
-                                        isScanningGames = false
+                onBack = { selectedPackageName = null }
+            )
+        } else {
+            Scaffold(
+                modifier = modifier,
+                contentWindowInsets = WindowInsets(0.dp),
+                topBar = {
+                    TopAppBar(
+                        title = {
+                            Text(
+                                text = stringResource(R.string.apps_title),
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        actions = {
+                            IconButton(
+                                onClick = {
+                                    if (!isScanningGames) {
+                                        coroutineScope.launch {
+                                            isScanningGames = true
+                                            try {
+                                                val syncedConfigs = ConfigRepository.syncInstalledGameWhitelist(
+                                                    rawApps.map { it.packageName }
+                                                )
+                                                appConfigs.clear()
+                                                appConfigs.putAll(syncedConfigs)
+                                            } finally {
+                                                isScanningGames = false
+                                            }
+                                        }
                                     }
+                                },
+                                enabled = !isScanningGames
+                            ) {
+                                if (isScanningGames) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Refresh,
+                                        contentDescription = stringResource(R.string.apps_scan_games),
+                                        tint = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+
+                            Box {
+                                IconButton(onClick = { showMoreMenu = true }) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.MoreVert,
+                                        contentDescription = stringResource(R.string.action_more),
+                                        tint = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+
+                                DropdownMenu(
+                                    expanded = showMoreMenu,
+                                    onDismissRequest = { showMoreMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                if (hideSystemApps) {
+                                                    stringResource(R.string.apps_show_system)
+                                                } else {
+                                                    stringResource(R.string.apps_hide_system)
+                                                }
+                                            )
+                                        },
+                                        onClick = {
+                                            hideSystemApps = !hideSystemApps
+                                            showMoreMenu = false
+                                        }
+                                    )
                                 }
                             }
                         },
-                        enabled = !isScanningGames
-                    ) {
-                        if (isScanningGames) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Rounded.Refresh,
-                                contentDescription = stringResource(R.string.apps_scan_games),
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-
-                    Box {
-                        IconButton(onClick = { showMoreMenu = true }) {
-                            Icon(
-                                imageVector = Icons.Rounded.MoreVert,
-                                contentDescription = stringResource(R.string.action_more),
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-
-                        DropdownMenu(
-                            expanded = showMoreMenu,
-                            onDismissRequest = { showMoreMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        if (hideSystemApps) {
-                                            stringResource(R.string.apps_show_system)
-                                        } else {
-                                            stringResource(R.string.apps_hide_system)
-                                        }
-                                    )
-                                },
-                                onClick = {
-                                    hideSystemApps = !hideSystemApps
-                                    showMoreMenu = false
-                                }
-                            )
-                        }
-                    }
-                },
-                windowInsets = WindowInsets.statusBars,
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
-            )
-        }
-    ) { innerPadding ->
-        if (isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-            }
-        } else {
-            val allLabel = appsLocalizedLabel("Semua", "All")
-            val activeLabel = appsLocalizedLabel("Aktif", "Active")
-            val gamesLabel = appsLocalizedLabel("Game", "Games")
-
-            val filterChips = listOf(
-                AppListFilter.ALL to "$allLabel (${visibleBaseApps.size})",
-                AppListFilter.ACTIVE to "$activeLabel ($activeCount)",
-                AppListFilter.GAMES to "$gamesLabel ($gameCount)"
-            )
-
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(
-                        top = innerPadding.calculateTopPadding() + 4.dp,
-                        start = 16.dp,
-                        end = 16.dp,
-                        bottom = if (isFloating) 12.dp + navBottomInset else 12.dp
+                        windowInsets = WindowInsets.statusBars,
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.background
+                        )
                     )
-            ) {
-                TextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = {
-                        Text(
-                            text = stringResource(R.string.apps_search_placeholder),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Rounded.Search,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = "" }) {
+                }
+            ) { innerPadding ->
+                if (isLoading) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    }
+                } else {
+                    val allLabel = appsLocalizedLabel("Semua", "All")
+                    val activeLabel = appsLocalizedLabel("Aktif", "Active")
+                    val gamesLabel = appsLocalizedLabel("Game", "Games")
+
+                    val filterChips = listOf(
+                        AppListFilter.ALL to "$allLabel (${visibleBaseApps.size})",
+                        AppListFilter.ACTIVE to "$activeLabel ($activeCount)",
+                        AppListFilter.GAMES to "$gamesLabel ($gameCount)"
+                    )
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(
+                                top = innerPadding.calculateTopPadding() + 4.dp,
+                                start = 16.dp,
+                                end = 16.dp,
+                                bottom = if (isFloating) 12.dp + navBottomInset else 12.dp
+                            )
+                    ) {
+                        TextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = {
+                                Text(
+                                    text = stringResource(R.string.apps_search_placeholder),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            leadingIcon = {
                                 Icon(
-                                    imageVector = Icons.Rounded.Clear,
-                                    contentDescription = stringResource(R.string.action_clear),
+                                    imageVector = Icons.Rounded.Search,
+                                    contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    shape = CircleShape,
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        disabledIndicatorColor = Color.Transparent
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                LazyRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 12.dp, bottom = 14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(filterChips, key = { it.first }) { (filter, label) ->
-                        val isSelected = selectedFilter == filter
-                        val chipBg by animateColorAsState(
-                            targetValue = if (isSelected) {
-                                MaterialTheme.colorScheme.primaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surfaceContainerHigh
                             },
-                            label = "filterChipBg"
-                        )
-                        val chipContent by animateColorAsState(
-                            targetValue = if (isSelected) {
-                                MaterialTheme.colorScheme.onPrimaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                            label = "filterChipText"
-                        )
-
-                        Surface(
-                            onClick = {
-                                if (!isSelected) {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    selectedFilter = filter
+                            trailingIcon = {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { searchQuery = "" }) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Clear,
+                                            contentDescription = stringResource(R.string.action_clear),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
                             },
+                            singleLine = true,
                             shape = CircleShape,
-                            color = chipBg
-                        ) {
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = chipContent,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                            )
-                        }
-                    }
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(outerContainerRadius),
-                    color = MaterialTheme.colorScheme.surfaceContainer,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(outerContainerRadius))
-                ) {
-                    if (filteredApps.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(20.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = appsLocalizedLabel(
-                                    "Tidak ada aplikasi yang cocok",
-                                    "No matching applications found"
-                                ),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    } else {
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(
-                                start = 12.dp,
-                                end = 12.dp,
-                                top = 12.dp,
-                                bottom = if (isFloating) 84.dp else 12.dp
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
+                                disabledIndicatorColor = Color.Transparent
                             ),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            items(filteredApps, key = { it.packageName }) { appItem ->
-                                val currentCfg = appConfigs[appItem.packageName]
-                                    ?: AppProfileConfig(pkg = appItem.packageName)
-                                val isEnabled = if (appConfigs.containsKey(appItem.packageName)) {
-                                    !currentCfg.disabled && currentCfg.saklarUtama
-                                } else {
-                                    ConfigRepository.isAppActive(appItem.packageName)
-                                }
+                            modifier = Modifier.fillMaxWidth()
+                        )
 
-                                AppRowCard(
-                                    app = appItem,
-                                    isEnabled = isEnabled,
-                                    onClick = { selectedPackageName = appItem.packageName },
-                                    onToggleActive = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        val updated = if (!isEnabled) {
-                                            currentCfg.copy(
-                                                saklarUtama = true,
-                                                disabled = false,
-                                                custom = currentCfg.custom || !ConfigRepository.defaultGames.contains(appItem.packageName)
-                                            )
-                                        } else {
-                                            currentCfg.copy(
-                                                saklarUtama = false,
-                                                disabled = true,
-                                                custom = false
-                                            )
-                                        }
-                                        appConfigs[appItem.packageName] = updated
-                                        coroutineScope.launch {
-                                            ConfigRepository.saveAppConfig(updated)
+                        LazyRow(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 12.dp, bottom = 14.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(filterChips, key = { it.first }) { (filter, label) ->
+                                val isSelected = selectedFilter == filter
+                                val chipBg by animateColorAsState(
+                                    targetValue = if (isSelected) {
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceContainerHigh
+                                    },
+                                    label = "filterChipBg"
+                                )
+                                val chipContent by animateColorAsState(
+                                    targetValue = if (isSelected) {
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    label = "filterChipText"
+                                )
+
+                                Surface(
+                                    onClick = {
+                                        if (!isSelected) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            selectedFilter = filter
                                         }
                                     },
-                                    onOpenAppInfo = {
-                                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                            data = Uri.fromParts("package", appItem.packageName, null)
-                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    shape = CircleShape,
+                                    color = chipBg
+                                ) {
+                                    Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = chipContent,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(outerContainerRadius),
+                            color = MaterialTheme.colorScheme.surfaceContainer,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(outerContainerRadius))
+                        ) {
+                            if (filteredApps.isEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(20.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = appsLocalizedLabel(
+                                            "Tidak ada aplikasi yang cocok",
+                                            "No matching applications found"
+                                        ),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            } else {
+                                LazyColumn(
+                                    state = listState,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = PaddingValues(
+                                        start = 12.dp,
+                                        end = 12.dp,
+                                        top = 12.dp,
+                                        bottom = if (isFloating) 84.dp else 12.dp
+                                    ),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    items(filteredApps, key = { it.packageName }) { appItem ->
+                                        val currentCfg = appConfigs[appItem.packageName]
+                                            ?: AppProfileConfig(pkg = appItem.packageName)
+                                        val isEnabled = if (appConfigs.containsKey(appItem.packageName)) {
+                                            !currentCfg.disabled && currentCfg.saklarUtama
+                                        } else {
+                                            ConfigRepository.isAppActive(appItem.packageName)
                                         }
-                                        context.startActivity(intent)
+
+                                        AppRowCard(
+                                            app = appItem,
+                                            isEnabled = isEnabled,
+                                            onClick = { selectedPackageName = appItem.packageName },
+                                            onToggleActive = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                val updated = if (!isEnabled) {
+                                                    currentCfg.copy(
+                                                        saklarUtama = true,
+                                                        disabled = false,
+                                                        custom = currentCfg.custom || !ConfigRepository.defaultGames.contains(appItem.packageName)
+                                                    )
+                                                } else {
+                                                    currentCfg.copy(
+                                                        saklarUtama = false,
+                                                        disabled = true,
+                                                        custom = false
+                                                    )
+                                                }
+                                                appConfigs[appItem.packageName] = updated
+                                                coroutineScope.launch {
+                                                    ConfigRepository.saveAppConfig(updated)
+                                                }
+                                            },
+                                            onOpenAppInfo = {
+                                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                                    data = Uri.fromParts("package", appItem.packageName, null)
+                                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                }
+                                                context.startActivity(intent)
+                                            }
+                                        )
                                     }
-                                )
+                                }
                             }
                         }
                     }
                 }
             }
-        }
         }
     }
 }
