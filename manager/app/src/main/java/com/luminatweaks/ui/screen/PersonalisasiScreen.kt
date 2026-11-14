@@ -89,6 +89,7 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -665,11 +666,24 @@ private fun M3ExpressiveSlider(
     val inactiveColor = MaterialTheme.colorScheme.surfaceContainerHighest
     val dotColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
 
+    val sliderState = remember(steps, valueRange) {
+        SliderState(
+            value = value.coerceIn(valueRange.start, valueRange.endInclusive),
+            steps = steps,
+            valueRange = valueRange
+        )
+    }
+
+    LaunchedEffect(value) {
+        sliderState.value = value.coerceIn(valueRange.start, valueRange.endInclusive)
+    }
+
     Slider(
-        value = value,
-        onValueChange = onValueChange,
-        valueRange = valueRange,
-        steps = steps,
+        state = sliderState,
+        onValueChange = { newVal ->
+            sliderState.value = newVal
+            onValueChange(newVal)
+        },
         interactionSource = interactionSource,
         modifier = modifier.fillMaxWidth(),
         thumb = {
