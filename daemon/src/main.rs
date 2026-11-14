@@ -563,11 +563,8 @@ fn main() {
             }
         }
 
-        let active_pid = binder_client
-            .active_focus()
-            .map(|focus| focus.pid)
-            .unwrap_or(0);
-        runtime.active_target_pid = active_pid;
+        let focus_now = binder_client.active_focus().cloned();
+        let active_pid = focus_now.as_ref().map(|focus| focus.pid).unwrap_or(0);
         let active_pkg = runtime.active_target_pkg.clone();
         let mut suppress_fallback = false;
 
@@ -613,14 +610,10 @@ fn main() {
             match binder_focus {
                 Some(package) if is_app_enabled(&package) => {
                     if runtime.active_target_pkg.as_deref() != Some(package.as_str()) {
-                        let pid = binder_client
-                            .active_focus()
-                            .map(|focus| focus.pid)
-                            .unwrap_or(0);
-                        let uid = binder_client
-                            .active_focus()
-                            .map(|focus| focus.uid)
-                            .unwrap_or(0);
+                        let (pid, uid) = focus_now
+                            .as_ref()
+                            .map(|focus| (focus.pid, focus.uid))
+                            .unwrap_or((0, 0));
                         log!("[SYSTEM] APP_FOCUS {} (pid={}, uid={})", package, pid, uid);
                     }
                     Some(package)
@@ -640,6 +633,11 @@ fn main() {
                 if runtime.left_foreground_at.is_some() {
                     log!("[SYSTEM] Focus restored -> {}", pkg_str);
                     runtime.left_foreground_at = None;
+                }
+                if active_pid > 0 {
+                    // Keep the profile log tied to the focused process instead
+                    // of the previous target's stale pid.
+                    runtime.active_target_pid = active_pid;
                 }
                 runtime.active_target_pkg = Some(pkg_str.clone());
                 if active_pid > 0 {

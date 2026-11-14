@@ -24,11 +24,11 @@ use std::time::{Duration, Instant};
 use crate::core::detector::get_system_prop;
 
 const RESOLVE_TIMEOUT: Duration = Duration::from_secs(5);
-const CACHE_SCHEMA: u32 = 1;
+const CACHE_SCHEMA: u32 = 2;
 const CACHE_PATH: &str = "/data/adb/.config/lumina/binder_codes.json";
 const CONFIG_DIR: &str = "/data/adb/.config/lumina";
 
-const QUERIES: [&str; 9] = [
+const QUERIES: [&str; 10] = [
     "android.app.IActivityManager.Stub::TRANSACTION_registerProcessObserver",
     "android.app.IProcessObserver.Stub::TRANSACTION_onForegroundActivitiesChanged",
     "android.app.IProcessObserver.Stub::TRANSACTION_onProcessDied",
@@ -38,6 +38,7 @@ const QUERIES: [&str; 9] = [
     "android.os.IPowerManager.Stub::TRANSACTION_isPowerSaveMode",
     "android.app.INotificationManager.Stub::TRANSACTION_setInterruptionFilter",
     "android.app.INotificationManager.Stub::TRANSACTION_getInterruptionFilter",
+    "android.hardware.display.IDisplayManager.Stub::TRANSACTION_registerCallbackWithEventMask",
 ];
 
 #[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize)]
@@ -51,11 +52,25 @@ pub struct Codes {
     pub is_power_save: u32,
     pub set_interruption_filter: u32,
     pub get_interruption_filter: u32,
+    /// `registerCallbackWithEventMask` (Android 14+). Zero on older builds.
+    #[serde(default)]
+    pub display_register_with_mask: u32,
 }
 
 impl Codes {
     fn essential_ok(&self) -> bool {
         self.register != 0 && self.foreground != 0 && self.died != 0
+    }
+
+    /// Only a table with every code used by event-driven monitoring is worth
+    /// persisting. Power-save and DND codes may legitimately stay zero on some
+    /// firmwares (both have userspace fallbacks), but a missing display or
+    /// interactive code must not be cached forever.
+    fn cacheable(&self) -> bool {
+        self.essential_ok()
+            && self.display_register != 0
+            && self.display_event != 0
+            && self.is_interactive != 0
     }
 }
 
@@ -83,7 +98,7 @@ pub fn load_cached() -> Option<Codes> {
     if cache.schema != CACHE_SCHEMA || cache.fingerprint != fingerprint() {
         return None;
     }
-    if !cache.codes.essential_ok() {
+    if !cache.codes.cacheable() {
         return None;
     }
     Some(cache.codes)
@@ -186,12 +201,15 @@ pub fn resolve(apk: &Path) -> Option<Codes> {
         is_power_save: resolved.get(QUERIES[6]).copied().unwrap_or(0),
         set_interruption_filter: resolved.get(QUERIES[7]).copied().unwrap_or(0),
         get_interruption_filter: resolved.get(QUERIES[8]).copied().unwrap_or(0),
+        display_register_with_mask: resolved.get(QUERIES[9]).copied().unwrap_or(0),
     };
 
     if !codes.essential_ok() {
         return None;
     }
 
-    store_cache(&codes);
+    if codes.cacheable() {
+        store_cache(&codes);
+    }
     Some(codes)
 }

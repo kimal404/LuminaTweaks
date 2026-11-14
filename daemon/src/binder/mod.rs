@@ -67,6 +67,12 @@ const NOTIFICATION_DESCRIPTOR: &str = "android.app.INotificationManager";
 const INITIAL_BACKOFF: Duration = Duration::from_secs(5);
 const MAX_BACKOFF: Duration = Duration::from_secs(60);
 const DEATH_POLL: Duration = Duration::from_millis(1000);
+// Display callbacks need an explicit bitmask since Android 15: display
+// state changes are delivered through a dedicated event that the legacy
+// `registerCallback` mask does not include. Android 14 uses public flags
+// (ADDED=1, REMOVED=2, CHANGED=4) and ignores the extra 0x80 bit, while
+// Android 15+ uses internal flags (ADDED=1, CHANGED=2, REMOVED=4, STATE=0x80).
+const DISPLAY_EVENT_MASK: i64 = 0x87;
 
 static TX_FOREGROUND: AtomicU32 = AtomicU32::new(0);
 static TX_DIED: AtomicU32 = AtomicU32::new(0);
@@ -169,11 +175,12 @@ fn run_monitor(shared: Arc<Shared>, running: Arc<AtomicBool>) {
         };
 
         crate::log!(
-            "[SYSTEM] Binder Transaction codes ready (register={}, foreground={}, died={}, display={}, power_save={}, dnd={})",
+            "[SYSTEM] Binder Transaction codes ready (register={}, foreground={}, died={}, display={}, display_mask={}, power_save={}, dnd={})",
             codes.register,
             codes.foreground,
             codes.died,
             codes.display_register,
+            codes.display_register_with_mask,
             codes.is_power_save,
             codes.set_interruption_filter
         );
@@ -231,9 +238,10 @@ fn wait_for_death(shared: &Shared, running: &AtomicBool, handles: &Handles) {
     let alive = handles.api.is_alive;
     // When a death recipient is linked, Binder notifies us immediately on a
     // system_server soft-reboot; no periodic liveness polling is needed.
-    let death_linked = !handles.death.is_null();
+    // A failed linkToDeath must not be treated as linked, otherwise a
+    // soft-reboot would go unnoticed forever.
     while running.load(Ordering::Relaxed) && !shared.is_dead() {
-        if death_linked {
+        if handles.death_linked {
             shared.wait_dead(Duration::from_secs(2));
             continue;
         }
@@ -259,6 +267,7 @@ struct Handles {
     observer: *mut AIBinder,
     display_callback: *mut AIBinder,
     death: *mut c_void,
+    death_linked: bool,
 }
 
 unsafe impl Send for Handles {}
@@ -273,6 +282,7 @@ impl Handles {
             observer: std::ptr::null_mut(),
             display_callback: std::ptr::null_mut(),
             death: std::ptr::null_mut(),
+            death_linked: false,
         }
     }
 }
@@ -342,7 +352,12 @@ fn attach(codes: &resolver::Codes, shared: &Shared) -> Result<Handles, String> {
             let status = unsafe { link(binder, death, std::ptr::null_mut()) };
             if status != ffi::STATUS_OK {
                 crate::log!("[SYSTEM] Binder linkToDeath failed with status {}", status);
+            } else {
+                handles.death_linked = true;
             }
+        }
+        if !handles.death_linked {
+            crate::log!("[SYSTEM] Binder death recipient unlinked; polling service liveness");
         }
     } else {
         crate::log!("[SYSTEM] Binder death recipient API unavailable; relying on re-resolve");
@@ -383,16 +398,31 @@ fn attach(codes: &resolver::Codes, shared: &Shared) -> Result<Handles, String> {
     if !handles.display.is_null() && codes.display_register != 0 && codes.display_event != 0 {
         match new_binder(api, DISPLAY_CALLBACK_DESCRIPTOR, on_display_transact) {
             Ok(callback) => {
-                if register(
-                    api,
-                    handles.display,
-                    DISPLAY_DESCRIPTOR,
-                    callback,
-                    codes.display_register,
-                ) {
+                let mask_ok = codes.display_register_with_mask != 0
+                    && register_display_mask(
+                        api,
+                        handles.display,
+                        DISPLAY_DESCRIPTOR,
+                        callback,
+                        codes.display_register_with_mask,
+                    );
+                let plain_ok = !mask_ok
+                    && register(
+                        api,
+                        handles.display,
+                        DISPLAY_DESCRIPTOR,
+                        callback,
+                        codes.display_register,
+                    );
+                if mask_ok {
                     handles.display_callback = callback;
                     display_registered = true;
-                    crate::log!("[SYSTEM] Binder Display callback registered");
+                    crate::log!("[SYSTEM] Binder Display callback registered (STATE mask)");
+                } else if plain_ok {
+                    // The legacy callback carries no display-state event on
+                    // Android 15+, so screen state must stay polled.
+                    handles.display_callback = callback;
+                    crate::log!("[SYSTEM] Binder Display legacy callback; polling screen state");
                 } else {
                     crate::log!(
                         "[SYSTEM] Binder Display callback unavailable; polling screen state"
@@ -502,11 +532,46 @@ fn register(
     callback: *mut AIBinder,
     code: u32,
 ) -> bool {
-    if try_register(api, service, descriptor, callback, code, false) {
+    if try_register(api, service, descriptor, callback, code, false, None) {
         return true;
     }
     if api.write_interface_token.is_some() {
-        return try_register(api, service, descriptor, callback, code, true);
+        return try_register(api, service, descriptor, callback, code, true, None);
+    }
+    false
+}
+
+/// Registers the display callback through `registerCallbackWithEventMask`.
+/// The legacy `registerCallback` entry point only subscribes to add/change/
+/// remove events, so screen on/off transitions are missed on Android 15+.
+fn register_display_mask(
+    api: &'static ffi::Api,
+    service: *mut AIBinder,
+    descriptor: &str,
+    callback: *mut AIBinder,
+    code: u32,
+) -> bool {
+    if try_register(
+        api,
+        service,
+        descriptor,
+        callback,
+        code,
+        false,
+        Some(DISPLAY_EVENT_MASK),
+    ) {
+        return true;
+    }
+    if api.write_interface_token.is_some() {
+        return try_register(
+            api,
+            service,
+            descriptor,
+            callback,
+            code,
+            true,
+            Some(DISPLAY_EVENT_MASK),
+        );
     }
     false
 }
@@ -518,6 +583,7 @@ fn try_register(
     callback: *mut AIBinder,
     code: u32,
     manual_token: bool,
+    extra_long: Option<i64>,
 ) -> bool {
     let mut input: *mut AParcel = std::ptr::null_mut();
     if unsafe { (api.prepare_transaction)(service, &mut input) } != ffi::STATUS_OK
@@ -544,6 +610,13 @@ fn try_register(
     if unsafe { (api.write_strong_binder)(input, callback) } != ffi::STATUS_OK {
         unsafe { (api.parcel_delete)(input) };
         return false;
+    }
+
+    if let Some(value) = extra_long {
+        if unsafe { (api.write_int64)(input, value) } != ffi::STATUS_OK {
+            unsafe { (api.parcel_delete)(input) };
+            return false;
+        }
     }
 
     let mut output: *mut AParcel = std::ptr::null_mut();

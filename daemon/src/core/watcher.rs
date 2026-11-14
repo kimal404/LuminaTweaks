@@ -33,6 +33,19 @@ const IN_Q_OVERFLOW: u32 = 0x0000_4000;
 
 const WATCH_MASK: u32 = IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE | IN_DELETE;
 
+// The config directory also holds daemon runtime files (fps.txt,
+// binder_codes.json, engine_state.json, ...) that are rewritten in a loop.
+// Reloading on those writes would restart the tweak pipeline every second, so
+// only real configuration files may trigger a reload.
+const CONFIG_FILES: [&str; 6] = [
+    "config.json",
+    "app_config.json",
+    "gamelist.json",
+    "soc.conf",
+    "master.conf",
+    "lite_mode.conf",
+];
+
 const EVENT_HEADER_SIZE: usize = 16;
 
 extern "C" {
@@ -119,7 +132,18 @@ impl ConfigWatcher {
                 if mask & (IN_IGNORED | IN_DELETE_SELF) != 0 {
                     watch_lost = true;
                 }
-                if mask & (WATCH_MASK | IN_Q_OVERFLOW) != 0 {
+
+                let name = buf
+                    .get(offset + EVENT_HEADER_SIZE..offset + EVENT_HEADER_SIZE + len)
+                    .and_then(|bytes| std::str::from_utf8(bytes).ok())
+                    .map(|raw| raw.trim_end_matches('\0'))
+                    .unwrap_or("");
+
+                if mask & IN_Q_OVERFLOW != 0 {
+                    changed = true;
+                } else if mask & WATCH_MASK != 0
+                    && (name.is_empty() || CONFIG_FILES.contains(&name))
+                {
                     changed = true;
                 }
 

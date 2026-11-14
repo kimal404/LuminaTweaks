@@ -30,7 +30,7 @@ object DaemonManager {
     private const val MODULE_UPDATE_DIR = "/data/adb/modules_update/luminatweaks"
     private const val PID_FILE_PATH = "/data/local/tmp/lumina.pid"
     private const val HEARTBEAT_FILE_PATH = "/data/local/tmp/lumina.alive"
-    private const val HEARTBEAT_MAX_AGE_MS = 10_000L
+    private const val HEARTBEAT_MAX_AGE_MS = 30_000L
     private const val PUBLIC_FPS_PATH = "/data/local/tmp/lumina.fps"
     private const val LEGACY_FPS_PATH = "/data/adb/.config/lumina/fps.txt"
 
@@ -84,6 +84,7 @@ object DaemonManager {
             if (!pidFile.exists() || !pidFile.canRead()) return null
             val pid = pidFile.readText().trim()
             if (pid.isEmpty() || !pid.all { it.isDigit() }) return null
+            if (!File("/proc/$pid").exists()) return null
             val commFile = File("/proc/$pid/comm")
             if (commFile.exists() && commFile.canRead()) {
                 return if (commFile.readText().trim() == "luminad") pid else null

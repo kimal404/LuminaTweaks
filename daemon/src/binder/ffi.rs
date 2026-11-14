@@ -113,6 +113,7 @@ binder_symbols! {
     ) -> i32),
     (write_strong_binder, "AParcel_writeStrongBinder", unsafe extern "C" fn(*mut AParcel, *mut AIBinder) -> i32),
     (write_int32, "AParcel_writeInt32", unsafe extern "C" fn(*mut AParcel, i32) -> i32),
+    (write_int64, "AParcel_writeInt64", unsafe extern "C" fn(*mut AParcel, i64) -> i32),
     (read_int32, "AParcel_readInt32", unsafe extern "C" fn(*const AParcel, *mut i32) -> i32),
     (read_status_header, "AParcel_readStatusHeader", unsafe extern "C" fn(*const AParcel, *mut *mut AStatus) -> i32),
     (status_is_ok, "AStatus_isOk", unsafe extern "C" fn(*const AStatus) -> bool),

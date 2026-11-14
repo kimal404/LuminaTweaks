@@ -420,12 +420,6 @@ fn send_event(inner: &Inner, shared: &Shared, event: Event) -> std::io::Result<(
                 .package
                 .filter(|value| valid_package(value))
                 .unwrap_or_else(|| "-".to_string());
-            crate::log!(
-                "[SYSTEM] APP_DIED pid={} uid={} pkg={}",
-                death.pid,
-                death.uid,
-                package
-            );
             format!(
                 "APP_DIED {} {} {} {} {}\n",
                 death.pid, death.uid, package, seq, ts
