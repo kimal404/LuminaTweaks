@@ -341,27 +341,7 @@ private fun WizardTopBar(
             modifier = Modifier.width(56.dp),
             contentAlignment = Alignment.CenterStart
         ) {
-            AnimatedVisibility(
-                visible = canGoBack,
-                enter = fadeIn(tween(180)) + scaleIn(initialScale = 0.8f),
-                exit = fadeOut(tween(120)) + scaleOut(targetScale = 0.8f)
-            ) {
-                Surface(
-                    onClick = onBack,
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    modifier = Modifier.size(44.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Rounded.ArrowBack,
-                            contentDescription = stringResource(R.string.setup_back),
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-            }
+            WizardBackButton(visible = canGoBack, onClick = onBack)
         }
 
         val position = (page + pageOffsetFraction).coerceIn(0f, (PAGE_COUNT - 1).toFloat())
@@ -394,22 +374,61 @@ private fun WizardTopBar(
             modifier = Modifier.width(56.dp),
             contentAlignment = Alignment.CenterEnd
         ) {
-            AnimatedVisibility(
+            WizardSkipButton(
                 visible = page < PAGE_COUNT - 1,
-                enter = fadeIn(tween(180)),
-                exit = fadeOut(tween(120))
-            ) {
-                TextButton(
-                    onClick = onSkip,
-                    contentPadding = PaddingValues(horizontal = 4.dp)
-                ) {
-                    Text(
-                        text = stringResource(R.string.setup_skip),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                onClick = onSkip
+            )
+        }
+    }
+}
+
+@Composable
+private fun WizardBackButton(
+    visible: Boolean,
+    onClick: () -> Unit
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(tween(180)) + scaleIn(initialScale = 0.8f),
+        exit = fadeOut(tween(120)) + scaleOut(targetScale = 0.8f)
+    ) {
+        Surface(
+            onClick = onClick,
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.size(44.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Rounded.ArrowBack,
+                    contentDescription = stringResource(R.string.setup_back),
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
             }
+        }
+    }
+}
+
+@Composable
+private fun WizardSkipButton(
+    visible: Boolean,
+    onClick: () -> Unit
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(tween(180)),
+        exit = fadeOut(tween(120))
+    ) {
+        TextButton(
+            onClick = onClick,
+            contentPadding = PaddingValues(horizontal = 4.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.setup_skip),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
