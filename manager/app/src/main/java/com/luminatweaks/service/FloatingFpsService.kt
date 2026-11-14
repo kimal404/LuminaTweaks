@@ -588,7 +588,7 @@ class FloatingFpsService : Service() {
                         config = activeConfig,
                         telemetry = liveTelemetry,
                         onDragDelta = { dx, dy ->
-                            val lp = layoutParams ?: return@LiveFpsOverlayContent
+                            val lp = this@FloatingFpsService.layoutParams ?: return@LiveFpsOverlayContent
                             val metrics = resources.displayMetrics
                             hasCustomDragPosition = true
                             lp.x = (lp.x + dx.roundToInt()).coerceIn(0, (metrics.widthPixels - 80).coerceAtLeast(0))
