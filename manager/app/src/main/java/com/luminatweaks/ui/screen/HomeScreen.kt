@@ -83,6 +83,7 @@ import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Palette
@@ -220,7 +221,7 @@ fun getConnectedContainerShape(
 }
 
 @Composable
-fun HomeScreen() {
+fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
     val context = LocalContext.current
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { 4 })
     val tabScope = rememberCoroutineScope()
@@ -278,8 +279,12 @@ fun HomeScreen() {
     var currentFps by remember { mutableStateOf("-") }
     var isRootGranted by remember { mutableStateOf(false) }
     var selinuxStatus by remember { mutableStateOf("Unknown") }
+    var isIpcAlive by remember { mutableStateOf(false) }
+    var socLabel by remember { mutableStateOf<String?>(null) }
+    var isBinderReady by remember { mutableStateOf(false) }
     var showRebootDialog by remember { mutableStateOf(false) }
     var isScreenResumed by remember { mutableStateOf(true) }
+    var resumeToken by remember { mutableIntStateOf(0) }
 
     DisposableEffect(context) {
         val lifecycleOwner = context as? LifecycleOwner
@@ -288,7 +293,10 @@ fun HomeScreen() {
         } else {
             val observer = LifecycleEventObserver { _, event ->
                 when (event) {
-                    Lifecycle.Event.ON_RESUME -> isScreenResumed = true
+                    Lifecycle.Event.ON_RESUME -> {
+                        isScreenResumed = true
+                        resumeToken += 1
+                    }
                     Lifecycle.Event.ON_PAUSE -> isScreenResumed = false
                     else -> Unit
                 }
@@ -328,10 +336,20 @@ fun HomeScreen() {
                 selinuxStatus = initialSelinux
                 isChecking = false
             }
+
+            val initialIpc = initialStatus.pid != null && DaemonManager.isIpcReachable()
+            val initialSoc = DaemonManager.getSocLabel()
+            val initialBinder = moduleInstalled && DaemonManager.isBinderBridgeReady()
+
+            withContext(Dispatchers.Main) {
+                isIpcAlive = initialIpc
+                socLabel = initialSoc
+                isBinderReady = initialBinder
+            }
         }
     }
 
-    LaunchedEffect(pagerState.currentPage, isScreenResumed, currentSubscreen) {
+    LaunchedEffect(pagerState.currentPage, isScreenResumed, currentSubscreen, resumeToken) {
         if (pagerState.currentPage != 0 || !isScreenResumed || currentSubscreen != null) {
             return@LaunchedEffect
         }
@@ -344,9 +362,15 @@ fun HomeScreen() {
             }
             val refreshedRoot = RootUtil.checkRootAccess()
             val refreshedSelinux = DeviceUtil.getSelinuxStatus()
+            val refreshedIpc = DaemonManager.isIpcReachable()
+            val refreshedSoc = DaemonManager.getSocLabel()
+            val refreshedBinder = DaemonManager.isBinderBridgeReady()
             withContext(Dispatchers.Main) {
                 isRootGranted = refreshedRoot
                 selinuxStatus = refreshedSelinux
+                isIpcAlive = refreshedIpc
+                socLabel = refreshedSoc
+                isBinderReady = refreshedBinder
             }
 
             var fallbackChecks = 0
@@ -358,9 +382,14 @@ fun HomeScreen() {
                 val currentTemp = DeviceUtil.getBatteryTemperature(context)
                 val propProfile = readSystemProperty("sys.lumina.profile")
                 val status = DaemonManager.getStatus()
+                val justStarted = status.pid != null && daemonPid == null
                 // The stopped-daemon fallback shells out through su. Throttle it
                 // to every 4th poll instead of spawning su every 2.5s.
                 val checkFallback = status.pid == null && fallbackChecks % 4 == 0
+                // Keep the transport indicator honest without pinging the
+                // socket on every tick. A fresh start probes it immediately.
+                val checkIpc = status.pid != null &&
+                    (justStarted || fallbackChecks % 8 == 0)
                 fallbackChecks++
                 val rebootNeeded = when {
                     checkFallback -> DaemonManager.isRebootRequired()
@@ -380,6 +409,17 @@ fun HomeScreen() {
                     isModuleInstalled = installed
                     currentProfile = propProfile ?: status.profile
                     currentFps = status.fps
+                }
+
+                if (checkIpc) {
+                    val ipc = DaemonManager.isIpcReachable()
+                    val soc = if (justStarted) DaemonManager.getSocLabel() else null
+                    val binder = if (justStarted) DaemonManager.isBinderBridgeReady() else null
+                    withContext(Dispatchers.Main) {
+                        isIpcAlive = ipc
+                        if (soc != null) socLabel = soc
+                        if (binder != null) isBinderReady = binder
+                    }
                 }
                 delay(2500L)
             }
@@ -462,6 +502,14 @@ fun HomeScreen() {
         daemonPid = updated.pid
         currentProfile = readSystemProperty("sys.lumina.profile") ?: updated.profile
         currentFps = updated.fps
+        val refreshedIpc = updated.pid != null && DaemonManager.isIpcReachable()
+        val refreshedSoc = DaemonManager.getSocLabel()
+        val refreshedBinder = DaemonManager.isBinderBridgeReady()
+        withContext(Dispatchers.Main) {
+            isIpcAlive = refreshedIpc
+            socLabel = refreshedSoc
+            isBinderReady = refreshedBinder
+        }
         if (updated.pid == null) {
             isRebootRequired = DaemonManager.isRebootRequired()
             isModuleInstalled = DaemonManager.isModuleInstalled()
@@ -497,13 +545,19 @@ fun HomeScreen() {
                             deviceModel = deviceModel,
                             isRootGranted = isRootGranted,
                             selinuxStatus = selinuxStatus,
+                            isIpcAlive = isIpcAlive,
+                            socLabel = socLabel,
+                            isBinderReady = isBinderReady,
                             onRequestRebootDialog = { showRebootDialog = true },
                             onRestartDaemon = restartAction,
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" }
                         )
                         1 -> AppsScreen(pagerState = pagerState)
                         2 -> TweaksScreen(pagerState = pagerState)
-                        3 -> SettingsScreen(onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" })
+                        3 -> SettingsScreen(
+                            onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" },
+                            onOpenSetupWizard = onOpenSetupWizard
+                        )
                     }
                 }
 
@@ -560,13 +614,19 @@ fun HomeScreen() {
                             deviceModel = deviceModel,
                             isRootGranted = isRootGranted,
                             selinuxStatus = selinuxStatus,
+                            isIpcAlive = isIpcAlive,
+                            socLabel = socLabel,
+                            isBinderReady = isBinderReady,
                             onRequestRebootDialog = { showRebootDialog = true },
                             onRestartDaemon = restartAction,
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" }
                         )
                         1 -> AppsScreen(pagerState = pagerState)
                         2 -> TweaksScreen(pagerState = pagerState)
-                        3 -> SettingsScreen(onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" })
+                        3 -> SettingsScreen(
+                            onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" },
+                            onOpenSetupWizard = onOpenSetupWizard
+                        )
                     }
                 }
             }
@@ -703,6 +763,9 @@ fun HomeDashboardContent(
     deviceModel: String,
     isRootGranted: Boolean,
     selinuxStatus: String,
+    isIpcAlive: Boolean = false,
+    socLabel: String? = null,
+    isBinderReady: Boolean = false,
     onRequestRebootDialog: () -> Unit,
     onRestartDaemon: suspend () -> Unit,
     onNavigateToPersonalisasi: () -> Unit
@@ -861,6 +924,9 @@ fun HomeDashboardContent(
                     isModuleInstalled = isModuleInstalled,
                     isRebootRequired = isRebootRequired,
                     daemonPid = daemonPid,
+                    isIpcAlive = isIpcAlive,
+                    socLabel = socLabel,
+                    isBinderReady = isBinderReady,
                     onStart = {
                         if (!isChecking && !isRunning && !isRestarting) {
                             coroutineScope.launch {
@@ -1081,6 +1147,9 @@ private fun CoreStatusCard(
     isModuleInstalled: Boolean,
     isRebootRequired: Boolean,
     daemonPid: String?,
+    isIpcAlive: Boolean,
+    socLabel: String?,
+    isBinderReady: Boolean,
     onStart: () -> Unit
 ) {
     val containerColor by animateColorAsState(
@@ -1223,6 +1292,101 @@ private fun CoreStatusCard(
                         )
                     }
                 }
+
+                if (isAlive) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CoreInfoPill(
+                            icon = Icons.Rounded.Memory,
+                            label = stringResource(R.string.home_core_info_pid),
+                            value = daemonPid?.takeIf { pid -> pid.all(Char::isDigit) } ?: "-",
+                            contentColor = contentColor,
+                            modifier = Modifier.weight(1f)
+                        )
+                        CoreInfoPill(
+                            icon = Icons.Rounded.Link,
+                            label = stringResource(R.string.home_core_info_ipc),
+                            value = if (isIpcAlive) {
+                                stringResource(R.string.home_core_info_socket)
+                            } else {
+                                stringResource(R.string.home_core_info_offline)
+                            },
+                            contentColor = contentColor,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CoreInfoPill(
+                            icon = Icons.Rounded.DeveloperBoard,
+                            label = stringResource(R.string.home_core_info_chipset),
+                            value = socLabel ?: stringResource(R.string.home_core_info_unknown),
+                            contentColor = contentColor,
+                            modifier = Modifier.weight(1f)
+                        )
+                        CoreInfoPill(
+                            icon = Icons.Rounded.Security,
+                            label = stringResource(R.string.home_core_info_binder),
+                            value = if (isBinderReady) {
+                                stringResource(R.string.home_core_info_ready)
+                            } else {
+                                stringResource(R.string.home_core_info_unavailable)
+                            },
+                            contentColor = contentColor,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CoreInfoPill(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    contentColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        color = contentColor.copy(alpha = 0.10f)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = contentColor.copy(alpha = 0.82f),
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = contentColor.copy(alpha = 0.68f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = contentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }

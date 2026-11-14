@@ -289,6 +289,17 @@ Fitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. P
     <string name="home_core_pid_format">PID: %1$s</string>
     <string name="home_core_reboot_hint">Reboot perangkat untuk mengaktifkan modul</string>
     <string name="home_core_install_hint">Pasang atau aktifkan modul LuminaTweaks terlebih dahulu</string>
+    <string name="home_core_info_pid">PID</string>
+    <string name="home_core_info_ipc">IPC</string>
+    <string name="home_core_info_socket">lumina.sock</string>
+    <string name="home_core_info_offline">Offline</string>
+    <string name="home_core_info_chipset">Chipset</string>
+    <string name="home_core_info_binder">Binder</string>
+    <string name="home_core_info_ready">Aktif</string>
+    <string name="home_core_info_unavailable">Tidak tersedia</string>
+    <string name="home_core_info_unknown">Tidak diketahui</string>
+    <string name="settings_setup_wizard">Setup Wizard</string>
+    <string name="settings_setup_wizard_desc">Jalankan ulang panduan awal dan diagnostik</string>
     <string name="home_version_release_format">v%1$s (Release)</string>
     <string name="home_quick_trim">Trim</string>
     <string name="home_quick_cache">Cache</string>

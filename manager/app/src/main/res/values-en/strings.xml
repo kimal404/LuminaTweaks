@@ -288,6 +288,17 @@ Features on this page are only active when the system is in the Performance prof
     <string name="home_core_pid_format">PID: %1$s</string>
     <string name="home_core_reboot_hint">Reboot device to activate module</string>
     <string name="home_core_install_hint">Install or enable LuminaTweaks module first</string>
+    <string name="home_core_info_pid">PID</string>
+    <string name="home_core_info_ipc">IPC</string>
+    <string name="home_core_info_socket">lumina.sock</string>
+    <string name="home_core_info_offline">Offline</string>
+    <string name="home_core_info_chipset">Chipset</string>
+    <string name="home_core_info_binder">Binder</string>
+    <string name="home_core_info_ready">Active</string>
+    <string name="home_core_info_unavailable">Unavailable</string>
+    <string name="home_core_info_unknown">Unknown</string>
+    <string name="settings_setup_wizard">Setup Wizard</string>
+    <string name="settings_setup_wizard_desc">Replay the initial setup and diagnostics</string>
     <string name="home_version_release_format">v%1$s (Release)</string>
     <string name="home_quick_trim">Trim</string>
     <string name="home_quick_cache">Cache</string>

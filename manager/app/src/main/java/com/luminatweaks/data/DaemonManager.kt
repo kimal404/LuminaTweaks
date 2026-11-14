@@ -182,9 +182,52 @@ object DaemonManager {
 
     suspend fun isModuleInstalled(): Boolean = withContext(Dispatchers.IO) {
         runSuCmd(
-            "[ -f $MODULE_BIN_DIR/luminad ] || [ -f $MODULE_DIR/luminad ] && echo 'OK'",
+            "if [ -f $MODULE_DIR/module.prop ] && [ -f $MODULE_BIN_DIR/luminad ] && " +
+                "[ ! -f $MODULE_DIR/disable ] && [ ! -f $MODULE_DIR/remove ]; then " +
+                "echo 'OK'; fi",
             3
         ).contains("OK")
+    }
+
+    suspend fun isIpcReachable(): Boolean = withContext(Dispatchers.IO) {
+        val cmd = "N=\$(command -v timeout >/dev/null 2>&1 && echo 'timeout 1'); " +
+            "for s in $IPC_SOCKET_PRIMARY $IPC_SOCKET_FALLBACK; do " +
+            "[ -S \"\$s\" ] || continue; " +
+            "printf 'PING\\n' | \$N toybox nc -w 1 -U \"\$s\" 2>/dev/null | grep -q PONG && " +
+            "{ echo ALIVE; exit 0; }; " +
+            "printf 'PING\\n' | \$N nc -w 1 -U \"\$s\" 2>/dev/null | grep -q PONG && " +
+            "{ echo ALIVE; exit 0; }; " +
+            "done; echo OFFLINE"
+        runSuCmd(cmd, 4).contains("ALIVE")
+    }
+
+    suspend fun getSocLabel(): String? = withContext(Dispatchers.IO) {
+        val output = runSuCmd(
+            "cat $CONFIG_DIR/soc.conf 2>/dev/null; getprop persist.lumina.soc 2>/dev/null",
+            4
+        )
+        val raw = output.lineSequence()
+            .map { it.trim().lowercase() }
+            .firstOrNull { it.isNotBlank() }
+            ?: return@withContext null
+
+        when {
+            raw == "mediatek" || raw.startsWith("mt") -> "MediaTek"
+            raw == "snapdragon" || raw.contains("qualcomm") -> "Snapdragon"
+            raw == "unisoc" || raw.contains("spreadtrum") -> "Unisoc"
+            raw == "exynos" -> "Exynos"
+            raw == "tensor" -> "Tensor"
+            raw == "kirin" -> "Kirin"
+            raw == "generic" -> "Generic"
+            else -> raw.replaceFirstChar { it.uppercase() }
+        }
+    }
+
+    suspend fun isBinderBridgeReady(): Boolean = withContext(Dispatchers.IO) {
+        runSuCmd(
+            "[ -f $CONFIG_DIR/binder_codes.json ] && echo LUMINA_YES || echo LUMINA_NO",
+            3
+        ).contains("LUMINA_YES")
     }
 
     suspend fun getDaemonPid(): String? = withContext(Dispatchers.IO) {

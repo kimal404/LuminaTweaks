@@ -46,6 +46,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DeleteForever
@@ -103,7 +104,8 @@ import kotlinx.coroutines.withContext
 @Composable
 fun SettingsScreen(
     onNavigateToAbout: (() -> Unit)? = null,
-    onNavigateToPersonalisasi: (() -> Unit)? = null
+    onNavigateToPersonalisasi: (() -> Unit)? = null,
+    onOpenSetupWizard: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -219,6 +221,13 @@ fun SettingsScreen(
                             stringResource(R.string.language_indonesian)
                         },
                         onClick = { showLanguageSheet = true }
+                    )
+
+                    SettingsNestedActionCard(
+                        icon = Icons.Rounded.AutoFixHigh,
+                        title = stringResource(R.string.settings_setup_wizard),
+                        subtitle = stringResource(R.string.settings_setup_wizard_desc),
+                        onClick = onOpenSetupWizard
                     )
                 }
             }

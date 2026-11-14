@@ -40,6 +40,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        private const val PREFS_NAME = "lumina_prefs"
+        private const val KEY_SETUP_WIZARD_V2_COMPLETED = "setup_wizard_v2_completed"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -67,12 +72,12 @@ class MainActivity : ComponentActivity() {
             } catch (_: Exception) {}
         }
 
-        val prefs = getSharedPreferences("lumina_prefs", Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
         setContent {
             LuminaTheme {
                 var isSetupFinished by remember {
-                    mutableStateOf(prefs.getBoolean("setup_completed", false))
+                    mutableStateOf(prefs.getBoolean(KEY_SETUP_WIZARD_V2_COMPLETED, false))
                 }
 
                 AnimatedContent(
@@ -86,12 +91,12 @@ class MainActivity : ComponentActivity() {
                     if (!finished) {
                         SetupWizardScreen(
                             onComplete = {
-                                prefs.edit().putBoolean("setup_completed", true).apply()
+                                prefs.edit().putBoolean(KEY_SETUP_WIZARD_V2_COMPLETED, true).apply()
                                 isSetupFinished = true
                             }
                         )
                     } else {
-                        HomeScreen()
+                        HomeScreen(onOpenSetupWizard = { isSetupFinished = false })
                     }
                 }
             }

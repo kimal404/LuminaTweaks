@@ -664,11 +664,11 @@ private fun DiagnosticsPage(isActive: Boolean) {
             coreChecked = true
         }
         launch {
-            socLabel = runCatching { readSocLabel() }.getOrNull()
+            socLabel = runCatching { DaemonManager.getSocLabel() }.getOrNull()
             socChecked = true
         }
         launch {
-            binderReady = runCatching { isBinderBridgeReady() }.getOrDefault(false)
+            binderReady = runCatching { DaemonManager.isBinderBridgeReady() }.getOrDefault(false)
             binderChecked = true
         }
     }
@@ -1455,34 +1455,6 @@ private fun StatusHeroCard(
             trailing()
         }
     }
-}
-
-private suspend fun readSocLabel(): String? {
-    val (_, output) = RootUtil.runAsRootWithOutput(
-        "cat /data/adb/.config/lumina/soc.conf 2>/dev/null; getprop persist.lumina.soc 2>/dev/null"
-    )
-    val raw = output.lineSequence()
-        .map { it.trim().lowercase() }
-        .firstOrNull { it.isNotBlank() }
-        ?: return null
-
-    return when {
-        raw == "mediatek" || raw.startsWith("mt") -> "MediaTek"
-        raw == "snapdragon" || raw.contains("qualcomm") -> "Snapdragon"
-        raw == "unisoc" || raw.contains("spreadtrum") -> "Unisoc"
-        raw == "exynos" -> "Exynos"
-        raw == "tensor" -> "Tensor"
-        raw == "kirin" -> "Kirin"
-        raw == "generic" -> "Generic"
-        else -> raw.replaceFirstChar { it.uppercase() }
-    }
-}
-
-private suspend fun isBinderBridgeReady(): Boolean {
-    val (_, output) = RootUtil.runAsRootWithOutput(
-        "[ -f /data/adb/.config/lumina/binder_codes.json ] && echo LUMINA_YES || echo LUMINA_NO"
-    )
-    return output.contains("LUMINA_YES")
 }
 
 private fun groupedShape(index: Int, count: Int): Shape {
