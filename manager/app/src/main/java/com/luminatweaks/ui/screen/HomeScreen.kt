@@ -12,7 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-@file:OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
+@file:OptIn(
+    androidx.compose.foundation.ExperimentalFoundationApi::class,
+    ExperimentalMaterial3ExpressiveApi::class,
+    ExperimentalMaterial3Api::class
+)
 
 package com.luminatweaks.ui.screen
 
@@ -64,6 +68,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -107,7 +114,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -155,6 +161,7 @@ import com.luminatweaks.util.DeviceUtil
 import com.luminatweaks.util.RootUtil
 import java.util.Locale
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -213,7 +220,18 @@ fun getConnectedContainerShape(
 @Composable
 fun HomeScreen() {
     val context = LocalContext.current
-    var selectedTab by remember { mutableIntStateOf(0) }
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { 4 })
+    val tabScope = rememberCoroutineScope()
+    val onTabSelected: (Int) -> Unit = { index ->
+        if (pagerState.targetPage != index) {
+            tabScope.launch {
+                pagerState.animateScrollToPage(
+                    page = index,
+                    animationSpec = spring(dampingRatio = 0.86f, stiffness = 360f)
+                )
+            }
+        }
+    }
     var currentSubscreen by remember { mutableStateOf<String?>(null) }
     val unknownLabel = stringResource(R.string.status_unknown)
     val kernelVersion = remember(unknownLabel) { System.getProperty("os.version") ?: unknownLabel }
@@ -283,8 +301,8 @@ fun HomeScreen() {
         }
     }
 
-    LaunchedEffect(selectedTab, isScreenResumed, currentSubscreen) {
-        if (selectedTab != 0 || !isScreenResumed || currentSubscreen != null) {
+    LaunchedEffect(pagerState.currentPage, isScreenResumed, currentSubscreen) {
+        if (pagerState.currentPage != 0 || !isScreenResumed || currentSubscreen != null) {
             return@LaunchedEffect
         }
 
@@ -423,8 +441,8 @@ fun HomeScreen() {
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
             ) {
-                LuminaTabTransition(
-                    selectedTab = selectedTab,
+                LuminaTabPager(
+                    pagerState = pagerState,
                     modifier = Modifier.fillMaxSize()
                 ) { tab ->
                     when (tab) {
@@ -461,8 +479,8 @@ fun HomeScreen() {
                         .align(Alignment.BottomCenter)
                 ) {
                     LuminaBottomBar(
-                        selectedTab = selectedTab,
-                        onTabSelected = { selectedTab = it }
+                        selectedTab = pagerState.targetPage,
+                        onTabSelected = onTabSelected
                     )
                 }
             }
@@ -478,14 +496,14 @@ fun HomeScreen() {
                         exit = slideOutVertically(animationSpec = barSpatial) { it } + fadeOut(animationSpec = barEffects)
                     ) {
                         LuminaBottomBar(
-                            selectedTab = selectedTab,
-                            onTabSelected = { selectedTab = it }
+                            selectedTab = pagerState.targetPage,
+                            onTabSelected = onTabSelected
                         )
                     }
                 }
             ) { innerPadding ->
-                LuminaTabTransition(
-                    selectedTab = selectedTab,
+                LuminaTabPager(
+                    pagerState = pagerState,
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(bottom = innerPadding.calculateBottomPadding())
@@ -513,6 +531,40 @@ fun HomeScreen() {
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+internal fun LuminaTabPager(
+    pagerState: PagerState,
+    modifier: Modifier = Modifier,
+    pageContent: @Composable (Int) -> Unit
+) {
+    HorizontalPager(
+        state = pagerState,
+        modifier = modifier,
+        beyondViewportPageCount = 1,
+        pageSpacing = 12.dp,
+        key = { it }
+    ) { page ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    // Read the scroll offset inside the layer block so the
+                    // depth effect updates in the draw phase without
+                    // recomposing every page during a swipe.
+                    val distance = abs(pagerState.getOffsetDistanceInPages(page))
+                        .coerceIn(0f, 1f)
+                    val depth = 1f - distance
+                    val scale = 0.96f + 0.04f * depth
+                    scaleX = scale
+                    scaleY = scale
+                    alpha = 0.85f + 0.15f * depth
+                }
+        ) {
+            pageContent(page)
         }
     }
 }

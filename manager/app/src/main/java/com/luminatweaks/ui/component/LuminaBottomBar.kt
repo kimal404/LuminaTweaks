@@ -20,10 +20,13 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -31,6 +34,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -62,6 +66,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.luminatweaks.R
@@ -97,7 +102,7 @@ fun LuminaBottomBar(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                color = MaterialTheme.colorScheme.surfaceContainer,
                 tonalElevation = 4.dp,
                 shadowElevation = 8.dp
             ) {
@@ -135,8 +140,11 @@ private fun FloatingNavItem(
 ) {
     val haptic = LocalHapticFeedback.current
     val motionScheme = MaterialTheme.motionScheme
-    val widthSpec = motionScheme.defaultSpatialSpec<IntSize>()
-    val fadeSpec = motionScheme.defaultEffectsSpec<Float>()
+    // Responsive spring shared by the width/padding morph so the inactive
+    // circle grows into the selected stadium without any hard jump.
+    val morphDpSpec = spring<Dp>(dampingRatio = 0.82f, stiffness = 420f)
+    val morphWidthSpec = spring<IntSize>(dampingRatio = 0.82f, stiffness = 420f)
+    val labelFadeSpec = tween<Float>(durationMillis = 150)
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
 
@@ -149,7 +157,7 @@ private fun FloatingNavItem(
         targetValue = if (selected) {
             MaterialTheme.colorScheme.primary
         } else {
-            Color.Transparent
+            MaterialTheme.colorScheme.surfaceContainerHigh
         },
         animationSpec = motionScheme.defaultEffectsSpec(),
         label = "floatingNavContainer"
@@ -163,9 +171,20 @@ private fun FloatingNavItem(
         animationSpec = motionScheme.defaultEffectsSpec(),
         label = "floatingNavContent"
     )
+    val borderColor by animateColorAsState(
+        targetValue = if (selected) {
+            Color.Transparent
+        } else {
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+        },
+        animationSpec = motionScheme.defaultEffectsSpec(),
+        label = "floatingNavBorder"
+    )
+    // 26.dp icon + 2 * 13.dp = an exact 52.dp circle when idle; the selected
+    // pill adds breathing room before the label expands.
     val horizontalPadding by animateDpAsState(
-        targetValue = if (selected) 22.dp else 18.dp,
-        animationSpec = motionScheme.defaultSpatialSpec(),
+        targetValue = if (selected) 20.dp else 13.dp,
+        animationSpec = morphDpSpec,
         label = "floatingNavPadding"
     )
     val label = stringResource(tab.labelRes)
@@ -178,6 +197,7 @@ private fun FloatingNavItem(
         shape = CircleShape,
         color = containerColor,
         contentColor = contentColor,
+        border = BorderStroke(1.dp, borderColor),
         interactionSource = interactionSource,
         modifier = Modifier.graphicsLayer {
             scaleX = pressScale
@@ -185,7 +205,9 @@ private fun FloatingNavItem(
         }
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = horizontalPadding, vertical = 14.dp),
+            modifier = Modifier
+                .height(52.dp)
+                .padding(horizontal = horizontalPadding),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
@@ -196,8 +218,10 @@ private fun FloatingNavItem(
             )
             AnimatedVisibility(
                 visible = selected,
-                enter = expandHorizontally(animationSpec = widthSpec) + fadeIn(animationSpec = fadeSpec),
-                exit = shrinkHorizontally(animationSpec = widthSpec) + fadeOut(animationSpec = fadeSpec)
+                enter = expandHorizontally(animationSpec = morphWidthSpec) +
+                    fadeIn(animationSpec = labelFadeSpec),
+                exit = shrinkHorizontally(animationSpec = morphWidthSpec) +
+                    fadeOut(animationSpec = labelFadeSpec)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Spacer(modifier = Modifier.width(10.dp))
