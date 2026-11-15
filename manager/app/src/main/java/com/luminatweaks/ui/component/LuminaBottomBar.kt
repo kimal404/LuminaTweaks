@@ -36,6 +36,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -74,6 +75,7 @@ private data class NavTab(
 private val navTabs = listOf(
     NavTab(Icons.Rounded.Home, R.string.nav_home),
     NavTab(Icons.Rounded.Apps, R.string.nav_apps),
+    NavTab(Icons.Rounded.Insights, R.string.nav_monitor),
     NavTab(Icons.Rounded.Tune, R.string.nav_tweaks),
     NavTab(Icons.Rounded.Settings, R.string.nav_settings)
 )
@@ -90,7 +92,7 @@ fun LuminaBottomBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 20.dp),
+                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 20.dp),
             contentAlignment = Alignment.Center
         ) {
             Surface(
@@ -101,8 +103,8 @@ fun LuminaBottomBar(
                 shadowElevation = 8.dp
             ) {
                 Row(
-                    modifier = Modifier.padding(7.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     navTabs.forEachIndexed { index, tab ->
@@ -168,7 +170,7 @@ private fun FloatingNavItem(
         label = "floatingNavContent"
     )
     // 26.dp icon + 2 * 14.dp = an exact 54.dp circle when idle.
-    val horizontalPadding = 14.dp + 7.dp * clampedProgress
+    val horizontalPadding = 12.dp + 5.dp * clampedProgress
     val label = stringResource(tab.labelRes)
 
     Surface(
@@ -187,19 +189,19 @@ private fun FloatingNavItem(
     ) {
         Row(
             modifier = Modifier
-                .height(54.dp)
+                .height(50.dp)
                 .padding(horizontal = horizontalPadding),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = tab.icon,
                 contentDescription = label,
-                modifier = Modifier.size(26.dp),
+                modifier = Modifier.size(23.dp),
                 tint = contentColor
             )
             CollapsibleLabel(progress = clampedProgress) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = label,
                         style = MaterialTheme.typography.titleSmall,
@@ -244,79 +246,32 @@ private fun LuminaBottomBarItems(
     selectedTab: Int,
     onTabSelected: (Int) -> Unit
 ) {
-    ShortNavigationBarItem(
-        selected = selectedTab == 0,
-        onClick = { onTabSelected(0) },
-        icon = {
-            Icon(
-                imageVector = Icons.Rounded.Home,
-                contentDescription = stringResource(R.string.nav_home)
+    navTabs.forEachIndexed { index, tab ->
+        val label = stringResource(tab.labelRes)
+        ShortNavigationBarItem(
+            selected = selectedTab == index,
+            onClick = { onTabSelected(index) },
+            icon = {
+                Icon(
+                    imageVector = tab.icon,
+                    contentDescription = label
+                )
+            },
+            label = {
+                Text(
+                    text = label,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+            },
+            colors = ShortNavigationBarItemDefaults.colors(
+                selectedIndicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                selectedTextColorTopIconPosition = MaterialTheme.colorScheme.onSurface,
+                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
             )
-        },
-        label = { Text(stringResource(R.string.nav_home)) },
-        colors = ShortNavigationBarItemDefaults.colors(
-            selectedIndicatorColor = MaterialTheme.colorScheme.secondaryContainer,
-            selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-            selectedTextColorTopIconPosition = MaterialTheme.colorScheme.onSurface,
-            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
         )
-    )
-
-    ShortNavigationBarItem(
-        selected = selectedTab == 1,
-        onClick = { onTabSelected(1) },
-        icon = {
-            Icon(
-                imageVector = Icons.Rounded.Apps,
-                contentDescription = stringResource(R.string.nav_apps)
-            )
-        },
-        label = { Text(stringResource(R.string.nav_apps)) },
-        colors = ShortNavigationBarItemDefaults.colors(
-            selectedIndicatorColor = MaterialTheme.colorScheme.secondaryContainer,
-            selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-            selectedTextColorTopIconPosition = MaterialTheme.colorScheme.onSurface,
-            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    )
-
-    ShortNavigationBarItem(
-        selected = selectedTab == 2,
-        onClick = { onTabSelected(2) },
-        icon = {
-            Icon(
-                imageVector = Icons.Rounded.Tune,
-                contentDescription = stringResource(R.string.nav_tweaks)
-            )
-        },
-        label = { Text(stringResource(R.string.nav_tweaks)) },
-        colors = ShortNavigationBarItemDefaults.colors(
-            selectedIndicatorColor = MaterialTheme.colorScheme.secondaryContainer,
-            selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-            selectedTextColorTopIconPosition = MaterialTheme.colorScheme.onSurface,
-            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    )
-
-    ShortNavigationBarItem(
-        selected = selectedTab == 3,
-        onClick = { onTabSelected(3) },
-        icon = {
-            Icon(
-                imageVector = Icons.Rounded.Settings,
-                contentDescription = stringResource(R.string.nav_settings)
-            )
-        },
-        label = { Text(stringResource(R.string.nav_settings)) },
-        colors = ShortNavigationBarItemDefaults.colors(
-            selectedIndicatorColor = MaterialTheme.colorScheme.secondaryContainer,
-            selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-            selectedTextColorTopIconPosition = MaterialTheme.colorScheme.onSurface,
-            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    )
+    }
 }

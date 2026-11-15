@@ -21,6 +21,8 @@
 package com.luminatweaks.ui.screen
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import com.luminatweaks.service.FloatingFpsService
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SizeTransform
@@ -222,7 +224,7 @@ fun getConnectedContainerShape(
 @Composable
 fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
     val context = LocalContext.current
-    val pagerState = rememberPagerState(initialPage = 0, pageCount = { 4 })
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { 5 })
     val tabScope = rememberCoroutineScope()
     // The bar indicator follows the tapped tab immediately. It is only synced
     // back to the pager for manual swipes, so a far jump never lights up the
@@ -468,12 +470,41 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
         }
     }
 
+    var overlayConfig by remember { mutableStateOf(FloatingFpsPrefs.load(context)) }
+    val homeScope = rememberCoroutineScope()
+
     LuminaDrillTransition(
         targetState = currentSubscreen,
         isForward = { _, target -> target != null }
     ) { subscreen ->
         if (subscreen == "personalisasi") {
             PersonalisasiScreen(onBackClick = { currentSubscreen = null })
+        } else if (subscreen == "telemetry_overlay") {
+            BackHandler { currentSubscreen = null }
+            TelemetryOverlayScreen(
+                config = overlayConfig,
+                targetHz = 120,
+                onConfigChange = { updated ->
+                    val wasEnabled = overlayConfig.enabled
+                    overlayConfig = updated
+                    FloatingFpsPrefs.save(context, updated)
+                    if (updated.enabled && !wasEnabled) {
+                        homeScope.launch {
+                            val granted = FloatingFpsService.ensureOverlayPermission(context)
+                            if (granted) {
+                                FloatingFpsService.sync(context, updated)
+                            } else {
+                                val reverted = updated.copy(enabled = false)
+                                overlayConfig = reverted
+                                FloatingFpsPrefs.save(context, reverted)
+                            }
+                        }
+                    } else {
+                        FloatingFpsService.sync(context, updated)
+                    }
+                },
+                onBack = { currentSubscreen = null }
+            )
         } else if (isFloating) {
             Box(
                 modifier = Modifier
@@ -501,8 +532,15 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" }
                         )
                         1 -> AppsScreen(pagerState = pagerState)
-                        2 -> TweaksScreen(pagerState = pagerState)
-                        3 -> SettingsScreen(
+                        2 -> MonitorScreen(
+                            pagerState = pagerState,
+                            onOpenOverlaySettings = {
+                                overlayConfig = FloatingFpsPrefs.load(context)
+                                currentSubscreen = "telemetry_overlay"
+                            }
+                        )
+                        3 -> TweaksScreen(pagerState = pagerState)
+                        4 -> SettingsScreen(
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" },
                             onOpenSetupWizard = onOpenSetupWizard
                         )
@@ -566,8 +604,15 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" }
                         )
                         1 -> AppsScreen(pagerState = pagerState)
-                        2 -> TweaksScreen(pagerState = pagerState)
-                        3 -> SettingsScreen(
+                        2 -> MonitorScreen(
+                            pagerState = pagerState,
+                            onOpenOverlaySettings = {
+                                overlayConfig = FloatingFpsPrefs.load(context)
+                                currentSubscreen = "telemetry_overlay"
+                            }
+                        )
+                        3 -> TweaksScreen(pagerState = pagerState)
+                        4 -> SettingsScreen(
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" },
                             onOpenSetupWizard = onOpenSetupWizard
                         )
