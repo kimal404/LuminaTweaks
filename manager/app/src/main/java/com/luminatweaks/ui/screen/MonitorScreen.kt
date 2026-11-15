@@ -168,7 +168,7 @@ private data class RawFpsFeed(
 
 private fun parseRawFpsFeed(raw: String?): RawFpsFeed? {
     if (raw.isNullOrBlank()) return null
-    val parts = raw.trim().split(Regex("\s+"))
+    val parts = raw.trim().split(Regex("\\s+"))
     if (parts.size < 2) return null
     val fps = parts[0].toFloatOrNull() ?: return null
     val epochMs = parts[1].toLongOrNull()?.takeIf { it > 0L } ?: return null
