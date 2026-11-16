@@ -36,7 +36,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -75,7 +74,6 @@ private data class NavTab(
 private val navTabs = listOf(
     NavTab(Icons.Rounded.Home, R.string.nav_home),
     NavTab(Icons.Rounded.Apps, R.string.nav_apps),
-    NavTab(Icons.Rounded.Insights, R.string.nav_monitor),
     NavTab(Icons.Rounded.Tune, R.string.nav_tweaks),
     NavTab(Icons.Rounded.Settings, R.string.nav_settings)
 )
@@ -92,7 +90,7 @@ fun LuminaBottomBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 20.dp),
+                .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 20.dp),
             contentAlignment = Alignment.Center
         ) {
             Surface(
@@ -103,8 +101,8 @@ fun LuminaBottomBar(
                 shadowElevation = 8.dp
             ) {
                 Row(
-                    modifier = Modifier.padding(6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(7.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     navTabs.forEachIndexed { index, tab ->
@@ -170,7 +168,7 @@ private fun FloatingNavItem(
         label = "floatingNavContent"
     )
     // 26.dp icon + 2 * 14.dp = an exact 54.dp circle when idle.
-    val horizontalPadding = 12.dp + 5.dp * clampedProgress
+    val horizontalPadding = 14.dp + 7.dp * clampedProgress
     val label = stringResource(tab.labelRes)
 
     Surface(
@@ -189,19 +187,19 @@ private fun FloatingNavItem(
     ) {
         Row(
             modifier = Modifier
-                .height(50.dp)
+                .height(54.dp)
                 .padding(horizontal = horizontalPadding),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = tab.icon,
                 contentDescription = label,
-                modifier = Modifier.size(23.dp),
+                modifier = Modifier.size(26.dp),
                 tint = contentColor
             )
             CollapsibleLabel(progress = clampedProgress) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = label,
                         style = MaterialTheme.typography.titleSmall,

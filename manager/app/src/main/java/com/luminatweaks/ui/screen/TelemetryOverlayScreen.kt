@@ -199,9 +199,9 @@ private data class SimulatedFpsTelemetry(
     val fps: Int = 120,
     val targetHz: Int = 120,
     val frametimeMs: Float = 8.3f,
-    val cpuClusterLabel: String = "2.0·2.8·3.2 GHz",
-    val tempLabel: String = "37.2°C · 3.8W",
-    val ramLabel: String = "RAM 54%",
+    val cpuClusterLabel: String = "3.2 GHz",
+    val tempLabel: String = "38.1°C",
+    val ramLabel: String = "54%",
     val profileLabel: String = "Balanced",
     val history: List<Float> = listOf(8.3f, 8.4f, 8.2f, 8.3f, 8.5f, 8.3f, 8.2f, 8.3f, 8.4f, 8.3f, 8.2f, 8.3f)
 )
@@ -321,155 +321,74 @@ private fun FpsOverlayPreviewBadge(
         targetValue = targetStatusColor,
         label = "fpsStatusColor"
     )
-    val containerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = config.bgAlpha)
+    val isMinimal = config.style == FpsOverlayStyle.MINIMAL
+    val containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(
+        alpha = if (isMinimal) (config.bgAlpha * 0.78f).coerceIn(0.25f, 0.92f) else config.bgAlpha
+    )
+    val outlineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isMinimal) 0.25f else 0.45f)
     val textColor = MaterialTheme.colorScheme.onSurface
-    val subTextColor = MaterialTheme.colorScheme.onSurfaceVariant
 
-    val secondaryParts = remember(config, telemetry) {
+    val lines = remember(config, telemetry) {
         buildList {
             if (config.showFrametime) add(String.format(Locale.US, "%.1f ms", telemetry.frametimeMs))
+            if (config.showProfile) add(telemetry.profileLabel)
             if (config.showCpuCluster) add(telemetry.cpuClusterLabel)
             if (config.showTemp) add(telemetry.tempLabel)
             if (config.showRam) add(telemetry.ramLabel)
-            if (config.showProfile) add(telemetry.profileLabel)
         }
     }
-    val headlineText = if (config.showFps) {
-        "${telemetry.fps} FPS"
-    } else {
-        secondaryParts.firstOrNull() ?: "${telemetry.fps} FPS"
-    }
-    val trailingParts = if (config.showFps) secondaryParts else secondaryParts.drop(1)
 
-    when (config.style) {
-        FpsOverlayStyle.PILL -> {
-            Surface(
-                shape = CircleShape,
-                color = containerColor
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+    val cardShape = RoundedCornerShape(if (isMinimal) 14.dp else 18.dp)
+
+    Surface(
+        shape = cardShape,
+        color = containerColor,
+        modifier = Modifier.border(1.dp, outlineColor, cardShape)
+    ) {
+        Column(
+            modifier = Modifier.padding(
+                horizontal = if (isMinimal) 9.dp else 11.dp,
+                vertical = if (isMinimal) 7.dp else 9.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(if (isMinimal) 2.dp else 4.dp)
+        ) {
+            if (config.showFps) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(8.dp)
+                            .size(if (isMinimal) 6.dp else 7.dp)
                             .clip(CircleShape)
                             .background(statusColor)
                     )
-                    Spacer(modifier = Modifier.width(7.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = headlineText,
-                        style = MaterialTheme.typography.labelLarge,
+                        text = "${telemetry.fps}",
+                        style = if (isMinimal) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.ExtraBold,
-                        color = if (config.showFps) statusColor else textColor,
+                        color = statusColor,
                         maxLines = 1
                     )
-                    if (trailingParts.isNotEmpty()) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = trailingParts.joinToString(" · "),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = subTextColor,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
                 }
             }
-        }
 
-        FpsOverlayStyle.GRAPH -> {
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = containerColor
-            ) {
-                Column(
+            if (config.style == FpsOverlayStyle.GRAPH) {
+                FrametimeSparkline(
+                    samples = telemetry.history,
+                    lineColor = statusColor,
                     modifier = Modifier
-                        .width(172.dp)
-                        .padding(horizontal = 11.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(7.dp)
-                                    .clip(CircleShape)
-                                    .background(statusColor)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = headlineText,
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = if (config.showFps) statusColor else textColor,
-                                maxLines = 1
-                            )
-                        }
-                        if (trailingParts.isNotEmpty()) {
-                            Text(
-                                text = trailingParts.first(),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = subTextColor,
-                                maxLines = 1
-                            )
-                        }
-                    }
-
-                    if (trailingParts.size > 1) {
-                        Text(
-                            text = trailingParts.drop(1).joinToString(" · "),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = subTextColor,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-
-                    FrametimeSparkline(
-                        samples = telemetry.history,
-                        lineColor = statusColor,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(22.dp)
-                    )
-                }
+                        .width(68.dp)
+                        .height(18.dp)
+                )
             }
-        }
 
-        FpsOverlayStyle.MINIMAL -> {
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.background.copy(alpha = (config.bgAlpha * 0.65f).coerceIn(0.15f, 0.75f))
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = if (config.showFps) "${telemetry.fps}" else headlineText,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = if (config.showFps) statusColor else textColor,
-                        maxLines = 1
-                    )
-                    if (trailingParts.isNotEmpty()) {
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = trailingParts.joinToString(" · "),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = textColor.copy(alpha = 0.85f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
+            lines.forEach { itemText ->
+                Text(
+                    text = itemText,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = textColor,
+                    maxLines = 1
+                )
             }
         }
     }
@@ -546,7 +465,7 @@ internal fun TelemetryOverlayScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = localizedLabel("Overlay Telemetri", "Telemetry Overlay"),
+                        text = "Floating HUD",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -631,7 +550,7 @@ internal fun TelemetryOverlayScreen(
 
                     NestedTweakSwitchItem(
                         icon = Icons.Rounded.Speed,
-                        title = localizedLabel("Aktifkan Overlay Telemetri", "Enable Telemetry Overlay"),
+                        title = localizedLabel("Aktifkan Floating HUD", "Enable Floating HUD"),
                         subtitle = if (config.enabled) {
                             localizedLabel("Overlay aktif di layar", "Overlay active on screen")
                         } else {
@@ -798,7 +717,7 @@ internal fun TelemetryOverlayScreen(
                                             modifier = Modifier.size(16.dp)
                                         )
                                     },
-                                    label = { Text(localizedLabel("CPU Cluster (GHz)", "CPU Clusters (GHz)")) }
+                                    label = { Text("CPU") }
                                 )
                                 FilterChip(
                                     selected = config.showTemp,
@@ -815,7 +734,7 @@ internal fun TelemetryOverlayScreen(
                                             modifier = Modifier.size(16.dp)
                                         )
                                     },
-                                    label = { Text(localizedLabel("Suhu & Daya (°C · W)", "Temp & Power (°C · W)")) }
+                                    label = { Text(localizedLabel("Suhu", "Temp")) }
                                 )
                                 FilterChip(
                                     selected = config.showRam,
@@ -832,7 +751,7 @@ internal fun TelemetryOverlayScreen(
                                             modifier = Modifier.size(16.dp)
                                         )
                                     },
-                                    label = { Text("RAM (%)") }
+                                    label = { Text("RAM") }
                                 )
                                 FilterChip(
                                     selected = config.showProfile,
@@ -916,7 +835,11 @@ internal fun TelemetryOverlayScreen(
                                         ) {
                                             Text(
                                                 text = "$ms ms",
-                                                style = MaterialTheme.typography.labelLarge
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1,
+                                                softWrap = false,
+                                                overflow = TextOverflow.Ellipsis
                                             )
                                         }
                                     }

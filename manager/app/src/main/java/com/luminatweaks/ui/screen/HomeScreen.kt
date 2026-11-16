@@ -224,7 +224,7 @@ fun getConnectedContainerShape(
 @Composable
 fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
     val context = LocalContext.current
-    val pagerState = rememberPagerState(initialPage = 0, pageCount = { 5 })
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { 4 })
     val tabScope = rememberCoroutineScope()
     // The bar indicator follows the tapped tab immediately. It is only synced
     // back to the pager for manual swipes, so a far jump never lights up the
@@ -532,15 +532,14 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" }
                         )
                         1 -> AppsScreen(pagerState = pagerState)
-                        2 -> MonitorScreen(
+                        2 -> TweaksScreen(
                             pagerState = pagerState,
-                            onOpenOverlaySettings = {
+                            onOpenFloatingHud = {
                                 overlayConfig = FloatingFpsPrefs.load(context)
                                 currentSubscreen = "telemetry_overlay"
                             }
                         )
-                        3 -> TweaksScreen(pagerState = pagerState)
-                        4 -> SettingsScreen(
+                        3 -> SettingsScreen(
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" },
                             onOpenSetupWizard = onOpenSetupWizard
                         )
@@ -604,15 +603,14 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" }
                         )
                         1 -> AppsScreen(pagerState = pagerState)
-                        2 -> MonitorScreen(
+                        2 -> TweaksScreen(
                             pagerState = pagerState,
-                            onOpenOverlaySettings = {
+                            onOpenFloatingHud = {
                                 overlayConfig = FloatingFpsPrefs.load(context)
                                 currentSubscreen = "telemetry_overlay"
                             }
                         )
-                        3 -> TweaksScreen(pagerState = pagerState)
-                        4 -> SettingsScreen(
+                        3 -> SettingsScreen(
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" },
                             onOpenSetupWizard = onOpenSetupWizard
                         )

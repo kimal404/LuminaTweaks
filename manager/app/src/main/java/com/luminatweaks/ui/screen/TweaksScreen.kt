@@ -246,7 +246,7 @@ private suspend fun awaitPagerSettled(pagerState: PagerState?) {
 }
 
 @Composable
-fun TweaksScreen(pagerState: PagerState? = null) {
+fun TweaksScreen(pagerState: PagerState? = null, onOpenFloatingHud: (() -> Unit)? = null) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
@@ -608,8 +608,8 @@ fun TweaksScreen(pagerState: PagerState? = null) {
                     )
                 } else {
                     localizedLabel(
-                        "Pantau FPS, cluster CPU & daya secara mengambang",
-                        "Monitor FPS, CPU clusters & power in a floating overlay"
+                        "Tampilkan FPS, profil, CPU & suhu secara mengambang",
+                        "Show floating FPS, profile, CPU & temp HUD"
                     )
                 }
 
@@ -619,9 +619,9 @@ fun TweaksScreen(pagerState: PagerState? = null) {
                 ) {
                     NestedTweakActionItem(
                         icon = Icons.Rounded.Speed,
-                        title = localizedLabel("Overlay Telemetri", "Telemetry Overlay"),
+                        title = "Floating HUD",
                         subtitle = telemetrySubtitle,
-                        onClick = { inFloatingFpsSubpage = true }
+                        onClick = { if (onOpenFloatingHud != null) onOpenFloatingHud() else inFloatingFpsSubpage = true }
                     )
 
                     NestedTweakActionItem(
