@@ -18,13 +18,22 @@ package com.luminatweaks.util
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.concurrent.TimeUnit
 
 object RootUtil {
+    private const val ROOT_TIMEOUT_SECONDS = 15L
+
+    private fun await(process: Process): Boolean {
+        if (process.waitFor(ROOT_TIMEOUT_SECONDS, TimeUnit.SECONDS)) return true
+        process.destroyForcibly()
+        return false
+    }
+
     suspend fun checkRootAccess(): Boolean = withContext(Dispatchers.IO) {
         try {
             val process = ProcessBuilder("su", "-c", "id").start()
-            val exitCode = process.waitFor()
-            exitCode == 0
+            if (!await(process)) return@withContext false
+            process.exitValue() == 0
         } catch (_: Exception) {
             false
         }
@@ -40,9 +49,9 @@ object RootUtil {
                     "elif [ -d /data/adb/magisk ] || command -v magisk >/dev/null 2>&1; then echo Magisk; " +
                     "else echo Unknown; fi"
             ).redirectErrorStream(true).start()
+            if (!await(process)) return@withContext null
             val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
-            val exitCode = process.waitFor()
-            if (exitCode != 0) return@withContext null
+            if (process.exitValue() != 0) return@withContext null
             when {
                 output.contains("KernelSU") -> "KernelSU"
                 output.contains("APatch") -> "APatch"
@@ -59,9 +68,9 @@ object RootUtil {
             val process = ProcessBuilder("su", "-c", command)
                 .redirectErrorStream(true)
                 .start()
+            if (!await(process)) return@withContext false
             val output = process.inputStream.bufferedReader().use { it.readText() }
-            val exitCode = process.waitFor()
-            exitCode == 0 && !output.contains("Permission denied")
+            process.exitValue() == 0 && !output.contains("Permission denied")
         } catch (_: Exception) {
             false
         }
@@ -73,9 +82,9 @@ object RootUtil {
                 val process = ProcessBuilder("su", "-c", command)
                     .redirectErrorStream(true)
                     .start()
+                if (!await(process)) return@withContext false to "root timeout"
                 val output = process.inputStream.bufferedReader().use { it.readText() }
-                val exitCode = process.waitFor()
-                (exitCode == 0) to output.trim()
+                (process.exitValue() == 0) to output.trim()
             } catch (e: Exception) {
                 false to (e.message ?: "")
             }

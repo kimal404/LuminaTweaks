@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-pub const PRIMARY_SOCKET: &str = "/dev/socket/lumina_binder.sock";
+pub const PRIMARY_SOCKET: &str = "/data/adb/.config/lumina/lumina_binder.sock";
 pub const FALLBACK_SOCKET: &str = "/data/local/tmp/lumina_binder.sock";
 pub const SOCKET_ENV: &str = "LUMINA_BINDER_SOCKET";
 

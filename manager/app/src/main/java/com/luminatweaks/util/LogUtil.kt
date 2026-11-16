@@ -20,12 +20,14 @@ import android.content.Context
 import android.content.Intent
 import android.media.MediaScannerConnection
 import androidx.core.content.FileProvider
+import com.luminatweaks.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 object LogUtil {
 
@@ -34,7 +36,11 @@ object LogUtil {
             val process = ProcessBuilder("su", "-c", cmd)
                 .redirectErrorStream(true)
                 .start()
-            process.waitFor() == 0
+            if (!process.waitFor(60, TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+                return false
+            }
+            process.exitValue() == 0
         } catch (e: Exception) {
             false
         }
@@ -61,7 +67,7 @@ object LogUtil {
         val appVersion = try {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
         } catch (e: Exception) {
-            "2.0.1"
+            BuildConfig.VERSION_NAME
         }
 
         val d = "$"
@@ -89,7 +95,7 @@ object LogUtil {
             INFO_FILE="${d}TMP_DIR/system/device_info.txt"
 
             MODULE_VER=${d}(grep '^version=' /data/adb/modules/luminatweaks/module.prop 2>/dev/null | cut -d= -f2)
-            [ -z "${d}MODULE_VER" ] && MODULE_VER="2.0.0 (Remastered)"
+            [ -z "${d}MODULE_VER" ] && MODULE_VER="unknown"
 
             KERNEL_INFO=${d}(uname -r -m)
             ANDROID_VER=${d}(getprop ro.build.version.release)

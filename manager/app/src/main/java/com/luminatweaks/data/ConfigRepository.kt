@@ -152,9 +152,10 @@ object ConfigRepository {
 
     fun killApp(packageName: String) {
         val safePkg = packageName.replace(Regex("[^a-zA-Z0-9._]"), "")
-        if (safePkg.isNotEmpty()) {
+        if (safePkg.isEmpty()) return
+        Thread {
             runSuCmd("am force-stop $safePkg", 4)
-        }
+        }.start()
     }
 
     private fun ensureDir() {

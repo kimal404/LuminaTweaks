@@ -38,6 +38,7 @@ import com.luminatweaks.ui.screen.SetupWizardScreen
 import com.luminatweaks.ui.theme.LuminaTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
     companion object {
@@ -68,7 +69,7 @@ class MainActivity : ComponentActivity() {
                 }
                 os.writeBytes("exit\n")
                 os.flush()
-                p.waitFor()
+                if (!p.waitFor(15, TimeUnit.SECONDS)) p.destroyForcibly()
             } catch (_: Exception) {}
         }
 

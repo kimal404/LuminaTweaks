@@ -19,6 +19,7 @@ MODDIR=${0%/*}
 
 CONFIG_DIR="/data/adb/.config/lumina"
 WATCHDOG_PID_FILE="/data/local/tmp/lumina_watchdog.pid"
+STOP_FLAG="$CONFIG_DIR/daemon.disabled"
 HEARTBEAT_FILE="$CONFIG_DIR/luminad.alive"
 
 until [ "$(getprop sys.boot_completed)" = "1" ]; do
@@ -35,14 +36,19 @@ cmd appops set com.luminatweaks AUTO_START allow >/dev/null 2>&1
 cmd appops set com.luminatweaks RUN_IN_BACKGROUND allow >/dev/null 2>&1
 dumpsys deviceidle whitelist +com.luminatweaks >/dev/null 2>&1
 
-# Stop previous watchdog subshell before restarting daemons
+# Reuse a live watchdog from an earlier invocation, but never trust a stale
+# PID that may have been recycled by an unrelated process.
 if [ -f "$WATCHDOG_PID_FILE" ]; then
     OLD_WD_PID=$(cat "$WATCHDOG_PID_FILE" 2>/dev/null)
-    if [ -n "$OLD_WD_PID" ] && [ "$OLD_WD_PID" != "$$" ]; then
-        kill -9 "$OLD_WD_PID" 2>/dev/null || true
+    if [ -n "$OLD_WD_PID" ] && [ "$OLD_WD_PID" != "$$" ] &&
+        grep -qa "service.sh" "/proc/$OLD_WD_PID/cmdline" 2>/dev/null; then
+        exit 0
     fi
     rm -f "$WATCHDOG_PID_FILE"
 fi
+
+# A fresh boot starts the daemon even if the previous session was stopped.
+rm -f "$STOP_FLAG"
 
 # Graceful shutdown (SIGTERM + wait up to 2.5s so luminad unlocks 0444 nodes and restores balance)
 killall -15 luminad 2>/dev/null || pkill -15 -x luminad 2>/dev/null || true
@@ -63,7 +69,7 @@ killall -9 lumina-binder 2>/dev/null || pkill -9 -x lumina-binder 2>/dev/null ||
 rm -f /dev/socket/lumina.sock /dev/socket/lumina_ipc.sock /dev/socket/lumina_binder.sock
 rm -f /data/local/tmp/lumina.sock /data/local/tmp/lumina_ipc.sock /data/local/tmp/lumina_binder.sock
 rm -f /data/local/tmp/lumina.pid /data/local/tmp/lumina.alive
-rm -f "$CONFIG_DIR/lumina.sock" "$CONFIG_DIR/luminad.pid" "$CONFIG_DIR/luminad.alive"
+rm -f "$CONFIG_DIR/lumina.sock" "$CONFIG_DIR/lumina_binder.sock" "$CONFIG_DIR/luminad.pid" "$CONFIG_DIR/luminad.alive"
 
 DAEMON_BIN=""
 if [ -f "$MODDIR/bin/luminad" ]; then
@@ -97,6 +103,11 @@ fi
 (
     LAST_PID=""
     while true; do
+        if [ -f "$STOP_FLAG" ] || [ -f "$MODDIR/disable" ] || [ -f "$MODDIR/remove" ]; then
+            rm -f "$WATCHDOG_PID_FILE"
+            exit 0
+        fi
+
         if [ -n "$BINDER_BIN" ] && ! pidof lumina-binder >/dev/null 2>&1; then
             nohup "$BINDER_BIN" >/dev/null 2>&1 &
         fi

@@ -67,6 +67,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -465,6 +466,8 @@ internal fun TelemetryOverlayScreen(
         active = true
     )
     val innerRadius = (LocalCornerRadius.current * 0.78f).coerceIn(16.dp, 24.dp)
+    var scaleDraft by remember(config.scale) { mutableFloatStateOf(config.scale) }
+    var alphaDraft by remember(config.bgAlpha) { mutableFloatStateOf(config.bgAlpha) }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
@@ -768,18 +771,24 @@ internal fun TelemetryOverlayScreen(
                         ) {
                             FpsSliderRow(
                                 label = localizedLabel("Skala HUD", "HUD Scale"),
-                                valueText = "${(config.scale * 100).roundToInt()}%",
-                                value = config.scale,
+                                valueText = "${(scaleDraft * 100).roundToInt()}%",
+                                value = scaleDraft,
                                 valueRange = 0.8f..1.3f,
-                                onValueChange = { onConfigChange(config.copy(scale = it)) }
+                                onValueChange = { scaleDraft = it },
+                                onValueChangeFinished = {
+                                    onConfigChange(config.copy(scale = scaleDraft))
+                                }
                             )
 
                             FpsSliderRow(
                                 label = localizedLabel("Opasitas Latar", "Background Opacity"),
-                                valueText = "${(config.bgAlpha * 100).roundToInt()}%",
-                                value = config.bgAlpha,
+                                valueText = "${(alphaDraft * 100).roundToInt()}%",
+                                value = alphaDraft,
                                 valueRange = 0.25f..1.0f,
-                                onValueChange = { onConfigChange(config.copy(bgAlpha = it)) }
+                                onValueChange = { alphaDraft = it },
+                                onValueChangeFinished = {
+                                    onConfigChange(config.copy(bgAlpha = alphaDraft))
+                                }
                             )
 
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -847,7 +856,8 @@ private fun FpsSliderRow(
     valueText: String,
     value: Float,
     valueRange: ClosedFloatingPointRange<Float>,
-    onValueChange: (Float) -> Unit
+    onValueChange: (Float) -> Unit,
+    onValueChangeFinished: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
@@ -871,6 +881,7 @@ private fun FpsSliderRow(
         Slider(
             value = value,
             onValueChange = onValueChange,
+            onValueChangeFinished = onValueChangeFinished,
             valueRange = valueRange
         )
     }

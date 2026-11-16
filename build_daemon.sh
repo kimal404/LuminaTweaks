@@ -23,5 +23,13 @@ mkdir -p "$TARGET_DIR"
 echo "[*] Building daemon release binaries..."
 cd daemon
 CARGO_TARGET_DIR="$TARGET_DIR" cargo build --target "$TARGET" --release
+cd ..
+
+echo "[*] Menyalin binary ke module/bin..."
+mkdir -p module/bin
+cp "$TARGET_DIR/$TARGET/release/luminad" module/bin/luminad
+cp "$TARGET_DIR/$TARGET/release/lumina-binder" module/bin/lumina-binder
+chmod 755 module/bin/luminad module/bin/lumina-binder
 
 echo "[✓] Selesai: $TARGET_DIR/$TARGET/release/{luminad,lumina-binder}"
+echo "[✓] Terpasang: module/bin/{luminad,lumina-binder}"

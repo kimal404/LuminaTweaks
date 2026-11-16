@@ -96,6 +96,7 @@ import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.LogUtil
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -664,6 +665,12 @@ private suspend fun uninstallModule(context: Context) {
         try {
             val p = Runtime.getRuntime().exec("su")
             p.outputStream.bufferedWriter().use { writer ->
+                writer.write("touch /data/adb/.config/lumina/daemon.disabled 2>/dev/null || true\n")
+                writer.write("if [ -f /data/local/tmp/lumina_watchdog.pid ]; then\n")
+                writer.write("  P=\$(cat /data/local/tmp/lumina_watchdog.pid 2>/dev/null)\n")
+                writer.write("  if [ -n \"\$P\" ] && grep -qa service.sh \"/proc/\$P/cmdline\" 2>/dev/null; then kill -9 \"\$P\" 2>/dev/null; fi\n")
+                writer.write("  rm -f /data/local/tmp/lumina_watchdog.pid\n")
+                writer.write("fi\n")
                 writer.write("pkill -TERM luminad 2>/dev/null || killall -TERM luminad 2>/dev/null\n")
                 writer.write("pkill -TERM lumina-binder 2>/dev/null || killall -TERM lumina-binder 2>/dev/null\n")
                 writer.write("sleep 1\n")
@@ -679,7 +686,7 @@ private suspend fun uninstallModule(context: Context) {
                 writer.write("exit\n")
                 writer.flush()
             }
-            p.waitFor()
+            if (!p.waitFor(30, TimeUnit.SECONDS)) p.destroyForcibly()
         } catch (_: Exception) {}
     }
     withContext(Dispatchers.Main) {

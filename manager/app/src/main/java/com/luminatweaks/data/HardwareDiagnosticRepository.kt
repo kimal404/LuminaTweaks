@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.util.concurrent.TimeUnit
 
 object HardwareDiagnosticRepository {
 
@@ -196,10 +197,12 @@ object HardwareDiagnosticRepository {
     private fun executeSu(script: String): List<String> {
         return try {
             val process = ProcessBuilder("su", "-c", script).start()
+            if (!process.waitFor(15, TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+                return emptyList()
+            }
             val reader = BufferedReader(InputStreamReader(process.inputStream))
-            val lines = reader.readLines()
-            process.waitFor()
-            lines
+            reader.readLines()
         } catch (_: Exception) {
             emptyList()
         }

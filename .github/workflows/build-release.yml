@@ -88,7 +88,8 @@ jobs:
 
           MOD_VER=$(grep "^version=" module/module.prop 2>/dev/null | head -n 1 | cut -d'=' -f2 | tr -d '[:space:]')
           if [ -z "$MOD_VER" ]; then
-            MOD_VER="v2.0.2"
+            echo "::error::module/module.prop is missing a version"
+            exit 1
           fi
           case "$MOD_VER" in
             v*|V*) ;;

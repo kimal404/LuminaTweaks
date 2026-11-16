@@ -34,6 +34,8 @@ object DaemonManager {
     private const val LEGACY_PID_FILE_PATH = "/data/local/tmp/lumina.pid"
     private const val LEGACY_HEARTBEAT_FILE_PATH = "/data/local/tmp/lumina.alive"
     private const val HEARTBEAT_MAX_AGE_MS = 30_000L
+    private const val WATCHDOG_PID_FILE = "/data/local/tmp/lumina_watchdog.pid"
+    private const val STOP_FLAG_PATH = "$CONFIG_DIR/daemon.disabled"
     private const val IPC_SOCKET_PRIMARY = "$CONFIG_DIR/lumina.sock"
     private const val IPC_SOCKET_FALLBACK = "/data/local/tmp/lumina_ipc.sock"
     private const val IPC_SENTINEL_PID = "ipc"
@@ -288,7 +290,11 @@ object DaemonManager {
 
     suspend fun stopDaemon(): Boolean = withContext(Dispatchers.IO) {
         runSuCmd(
-            "killall -15 luminad 2>/dev/null || pkill -15 -x luminad 2>/dev/null || true; " +
+            "touch $STOP_FLAG_PATH 2>/dev/null || true; " +
+                "WD=$WATCHDOG_PID_FILE; if [ -f \$WD ]; then P=\$(cat \$WD 2>/dev/null); " +
+                "if [ -n \"\$P\" ] && grep -qa service.sh /proc/\$P/cmdline 2>/dev/null; then " +
+                "kill -9 \"\$P\" 2>/dev/null || true; fi; rm -f \$WD; fi; " +
+                "killall -15 luminad 2>/dev/null || pkill -15 -x luminad 2>/dev/null || true; " +
                 "i=0; while [ \$i -lt 5 ]; do pidof luminad >/dev/null 2>&1 || break; sleep 0.5; i=\$((i+1)); done; " +
                 "killall -9 luminad 2>/dev/null || pkill -9 -x luminad 2>/dev/null || true; " +
                 "rm -f $PID_FILE_PATH $HEARTBEAT_FILE_PATH " +
@@ -311,7 +317,8 @@ object DaemonManager {
         }
 
         runSuCmd(
-            "MODDIR=$MODULE_DIR; " +
+            "rm -f $STOP_FLAG_PATH; " +
+                "MODDIR=$MODULE_DIR; " +
                 "BINDER=\$MODDIR/bin/lumina-binder; [ -f \$BINDER ] || BINDER=\$MODDIR/lumina-binder; " +
                 "DAEMON=\$MODDIR/bin/luminad; [ -f \$DAEMON ] || DAEMON=\$MODDIR/luminad; " +
                 "if [ -f \$BINDER ] && ! pidof lumina-binder >/dev/null 2>&1; then " +

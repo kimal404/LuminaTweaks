@@ -205,6 +205,7 @@ class FloatingFpsService : Service() {
             ACTION_STOP -> {
                 val updated = FloatingFpsPrefs.load(this).copy(enabled = false)
                 FloatingFpsPrefs.save(this, updated)
+                startForegroundCompat()
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -252,6 +253,7 @@ class FloatingFpsService : Service() {
         activeConfig = loaded
 
         if (!loaded.enabled && System.currentTimeMillis() >= burstUntilMs) {
+            startForegroundCompat()
             stopSelf()
             return START_NOT_STICKY
         }

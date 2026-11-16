@@ -73,15 +73,13 @@ if [ -f "$BASE_GAMELIST" ]; then
     } > "$GEN_GAMELIST"
 fi
 
-killall -9 luminad 2>/dev/null
-pkill -9 -f luminad 2>/dev/null
-killall -9 lumina-binder 2>/dev/null
-pkill -9 -f lumina-binder 2>/dev/null
+killall -9 luminad 2>/dev/null || pkill -9 -x luminad 2>/dev/null || true
+killall -9 lumina-binder 2>/dev/null || pkill -9 -x lumina-binder 2>/dev/null || true
 
 if [ -f "$MODPATH/bin/luminad" ]; then
     set_perm "$MODPATH/bin/luminad" 0 0 0755
 else
-    ui_print "! Biner luminad tidak ditemukan"
+    abort "! Biner luminad tidak ditemukan"
 fi
 
 if [ -f "$MODPATH/bin/lumina-binder" ]; then

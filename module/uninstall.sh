@@ -15,9 +15,13 @@
 # limitations under the License.
 
 WATCHDOG_PID_FILE="/data/local/tmp/lumina_watchdog.pid"
+touch /data/adb/.config/lumina/daemon.disabled 2>/dev/null || true
 if [ -f "$WATCHDOG_PID_FILE" ]; then
     WD_PID=$(cat "$WATCHDOG_PID_FILE" 2>/dev/null)
-    [ -n "$WD_PID" ] && kill -9 "$WD_PID" 2>/dev/null || true
+    if [ -n "$WD_PID" ] &&
+        grep -qa "service.sh" "/proc/$WD_PID/cmdline" 2>/dev/null; then
+        kill -9 "$WD_PID" 2>/dev/null || true
+    fi
     rm -f "$WATCHDOG_PID_FILE"
 fi
 
