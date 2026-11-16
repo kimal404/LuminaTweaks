@@ -437,57 +437,22 @@ class FloatingFpsService : Service() {
             val base = File("/sys/devices/system/cpu/cpufreq")
             val policies = base.listFiles { file ->
                 file.isDirectory && file.name.startsWith("policy")
-            }?.sortedBy { file ->
-                file.name.removePrefix("policy").toIntOrNull() ?: Int.MAX_VALUE
             }.orEmpty()
-
-            if (policies.isEmpty()) return "-- GHz"
-            val freqs = policies.mapNotNull { policyDir ->
+            val peakKhz = policies.mapNotNull { policyDir ->
                 val raw = runCatching {
                     File(policyDir, "scaling_cur_freq").takeIf { it.canRead() }?.readText()?.trim()
                         ?: File(policyDir, "cpuinfo_cur_freq").takeIf { it.canRead() }?.readText()?.trim()
                 }.getOrNull()
-                val khz = raw?.toLongOrNull()?.takeIf { it > 0L } ?: return@mapNotNull null
-                String.format(Locale.US, "%.1f", khz / 1_000_000f)
-            }
-            if (freqs.isEmpty()) "-- GHz" else "${freqs.joinToString("·")} GHz"
+                raw?.toLongOrNull()?.takeIf { it > 0L }
+            }.maxOrNull()
+            if (peakKhz == null) "-- GHz" else String.format(Locale.US, "%.1f GHz", peakKhz / 1_000_000f)
         } catch (_: Exception) {
             "-- GHz"
         }
     }
 
     private fun readBatteryTempAndPowerLabel(): String {
-        val tempStr = DeviceUtil.getBatteryTemperature(this)
-        return try {
-            val bm = getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
-            val rawCurrent = bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
-                ?: Int.MIN_VALUE
-            val batteryIntent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-            val rawVoltage = batteryIntent?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1) ?: -1
-
-            if (rawCurrent == Int.MIN_VALUE || rawCurrent == 0 || rawVoltage <= 0) {
-                return tempStr
-            }
-            val absCurrent = abs(rawCurrent.toLong())
-            val amps = if (absCurrent >= 10_000L) {
-                absCurrent / 1_000_000.0
-            } else {
-                absCurrent / 1_000.0
-            }
-            val volts = if (rawVoltage > 100_000) {
-                rawVoltage / 1_000_000.0
-            } else {
-                rawVoltage / 1_000.0
-            }
-            val watts = volts * amps
-            if (watts in 0.05..180.0) {
-                "$tempStr · ${String.format(Locale.US, "%.1fW", watts)}"
-            } else {
-                tempStr
-            }
-        } catch (_: Exception) {
-            tempStr
-        }
+        return DeviceUtil.getBatteryTemperature(this)
     }
 
     private fun readRamUsageLabel(): String {
@@ -499,7 +464,7 @@ class FloatingFpsService : Service() {
             val usedPct = (((info.totalMem - info.availMem).toDouble() / info.totalMem.toDouble()) * 100.0)
                 .roundToInt()
                 .coerceIn(1, 99)
-            "RAM $usedPct%"
+            "$usedPct%"
         } catch (_: Exception) {
             "RAM --%"
         }
@@ -898,6 +863,9 @@ private class FpsOverlayView(context: Context) : View(context) {
         invalidate()
     }
 
+    private val outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+    }
     private var lastLayoutSignature = ""
 
     fun applyState(config: FloatingFpsConfig, telemetry: LiveFpsTelemetry) {
@@ -905,15 +873,17 @@ private class FpsOverlayView(context: Context) : View(context) {
         this.config = config
         this.telemetry = telemetry
         val scale = config.scale.coerceIn(0.8f, 1.3f)
-        fpsPaint.textSize = 15f * scale * scaledDensity
-        labelPaint.textSize = 10f * scale * scaledDensity
-        extraPaint.textSize = 10f * scale * scaledDensity
+        val isMinimal = config.style == FpsOverlayStyle.MINIMAL
+        fpsPaint.textSize = (if (isMinimal) 13.5f else 15.5f) * scale * scaledDensity
+        extraPaint.textSize = 10.5f * scale * scaledDensity
+        extraPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         linePaint.strokeWidth = 2f * scale * density
-        val secondary = secondaryParts()
-        val sig = "${config.style}|$scale|${config.showFps}|${fpsLabel()}|${secondary.joinToString("|")}"
+        outlinePaint.strokeWidth = 1f * scale * density
+        val lines = stackedLines()
+        val sig = "${config.style}|$scale|${config.showFps}|${fpsLabel()}|${lines.joinToString("|")}"
         contentDescription = buildList {
             if (config.showFps) add("FPS ${fpsLabel()}")
-            addAll(secondary)
+            addAll(lines)
         }.joinToString(", ")
         if (relayout || sig != lastLayoutSignature) {
             lastLayoutSignature = sig
@@ -924,16 +894,25 @@ private class FpsOverlayView(context: Context) : View(context) {
 
     private fun scale(): Float = config.scale.coerceIn(0.8f, 1.3f)
 
-    private fun secondaryParts(): List<String> {
-        val parts = ArrayList<String>(5)
-        if (config.showFrametime && telemetry.fps > 0) {
-            parts.add(String.format(Locale.US, "%.1f ms", telemetry.frametimeMs))
+    private fun stackedLines(): List<String> {
+        val lines = ArrayList<String>(5)
+        if (config.showFrametime) {
+            val msText = if (telemetry.fps > 0) String.format(Locale.US, "%.1f ms", telemetry.frametimeMs) else "-- ms"
+            lines.add(msText)
         }
-        if (config.showCpuCluster) parts.add(telemetry.cpuClusterLabel)
-        if (config.showTemp) parts.add(telemetry.tempLabel)
-        if (config.showRam) parts.add(telemetry.ramLabel)
-        if (config.showProfile) parts.add(telemetry.profileLabel)
-        return parts
+        if (config.showProfile) {
+            lines.add(telemetry.profileLabel)
+        }
+        if (config.showCpuCluster) {
+            lines.add(telemetry.cpuClusterLabel)
+        }
+        if (config.showTemp) {
+            lines.add(telemetry.tempLabel)
+        }
+        if (config.showRam) {
+            lines.add(telemetry.ramLabel)
+        }
+        return lines
     }
 
     private fun textHeight(paint: Paint): Float {
@@ -944,60 +923,43 @@ private class FpsOverlayView(context: Context) : View(context) {
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val s = scale()
         val dp = density * s
-        val dot = 8f * dp
-        val parts = secondaryParts()
-        val width: Float
-        val height: Float
+        val isMinimal = config.style == FpsOverlayStyle.MINIMAL
+        val padX = (if (isMinimal) 9f else 11f) * dp
+        val padY = (if (isMinimal) 7f else 9f) * dp
+        val rowGap = (if (isMinimal) 2.5f else 4f) * dp
+        val lines = stackedLines()
 
-        when (config.style) {
-            FpsOverlayStyle.PILL -> {
-                if (config.showFps) {
-                    val extra = parts.joinToString(" · ")
-                    var content = dot + 7f * dp + fpsPaint.measureText("120") + 4f * dp +
-                        labelPaint.measureText("FPS")
-                    if (extra.isNotEmpty()) content += 8f * dp + extraPaint.measureText(extra)
-                    width = content + 24f * dp
-                } else {
-                    val primary = parts.firstOrNull() ?: "--"
-                    val rest = parts.drop(1).joinToString(" · ")
-                    var content = dot + 7f * dp + labelPaint.measureText(primary)
-                    if (rest.isNotEmpty()) content += 8f * dp + extraPaint.measureText(rest)
-                    width = content + 24f * dp
-                }
-                height = max(textHeight(fpsPaint), dot) + 12f * dp
-            }
-            FpsOverlayStyle.GRAPH -> {
-                val primaryText = if (config.showFps) "${fpsLabel()} FPS" else (parts.firstOrNull() ?: "--")
-                val rightText = if (config.showFps) parts.firstOrNull().orEmpty() else parts.getOrNull(1).orEmpty()
-                val subLineParts = if (config.showFps) parts.drop(1) else parts.drop(2)
-                val headerNeeded = 22f * dp + 7f * dp + 6f * dp +
-                    fpsPaint.measureText(primaryText) +
-                    if (rightText.isNotEmpty()) 10f * dp + extraPaint.measureText(rightText) else 0f
-                val subLineNeeded = if (subLineParts.isNotEmpty()) {
-                    22f * dp + extraPaint.measureText(subLineParts.joinToString(" · "))
-                } else {
-                    0f
-                }
-                width = max(164f * dp, max(headerNeeded, subLineNeeded))
-                val extraRowHeight = if (subLineParts.isNotEmpty()) textHeight(extraPaint) + 3f * dp else 0f
-                height = 8f * dp + max(textHeight(fpsPaint), extraPaint.textSize) + extraRowHeight +
-                    5f * dp + 22f * dp + 8f * dp
-            }
-            FpsOverlayStyle.MINIMAL -> {
-                if (config.showFps) {
-                    val extra = parts.joinToString(" · ")
-                    var content = fpsPaint.measureText("120")
-                    if (extra.isNotEmpty()) content += 6f * dp + extraPaint.measureText(extra)
-                    width = content + 20f * dp
-                } else {
-                    val primary = parts.firstOrNull() ?: "--"
-                    val rest = parts.drop(1).joinToString(" · ")
-                    var content = labelPaint.measureText(primary)
-                    if (rest.isNotEmpty()) content += 6f * dp + extraPaint.measureText(rest)
-                    width = content + 20f * dp
-                }
-                height = max(textHeight(fpsPaint), extraPaint.textSize) + 8f * dp
-            }
+        var maxInnerWidth = if (config.style == FpsOverlayStyle.GRAPH) 68f * dp else 42f * dp
+        if (config.showFps) {
+            val dot = (if (isMinimal) 6f else 7f) * dp
+            val heroW = dot + 6f * dp + fpsPaint.measureText("120")
+            maxInnerWidth = max(maxInnerWidth, heroW)
+        }
+        for (line in lines) {
+            maxInnerWidth = max(maxInnerWidth, extraPaint.measureText(line))
+        }
+
+        val width = maxInnerWidth + padX * 2f
+        var height = padY * 2f
+        var blockCount = 0
+
+        if (config.showFps) {
+            height += max(textHeight(fpsPaint), 8f * dp)
+            blockCount++
+        }
+
+        if (config.style == FpsOverlayStyle.GRAPH) {
+            if (blockCount > 0) height += rowGap
+            height += 18f * dp
+            blockCount++
+        }
+
+        if (lines.isNotEmpty()) {
+            val lineH = textHeight(extraPaint)
+            if (blockCount > 0) height += rowGap
+            height += lines.size * lineH + (lines.size - 1) * rowGap
+        } else if (blockCount == 0) {
+            height += textHeight(fpsPaint)
         }
 
         setMeasuredDimension(
@@ -1015,132 +977,64 @@ private class FpsOverlayView(context: Context) : View(context) {
         if (w <= 0f || h <= 0f) return
 
         val status = statusColor()
-        val alpha = (config.bgAlpha * (if (config.style == FpsOverlayStyle.MINIMAL) 0.68f else 1f))
-            .coerceIn(0.15f, 1f)
+        val isMinimal = config.style == FpsOverlayStyle.MINIMAL
+        val alpha = (config.bgAlpha * (if (isMinimal) 0.78f else 1f)).coerceIn(0.20f, 1f)
 
         backgroundPaint.color = palette.background
         backgroundPaint.alpha = (alpha * 255f).roundToInt().coerceIn(0, 255)
-        val radius = if (config.style == FpsOverlayStyle.GRAPH) 16f * dp else h / 2f
+        val radius = (if (isMinimal) 14f else 18f) * dp
         rect.set(0f, 0f, w, h)
         canvas.drawRoundRect(rect, radius, radius, backgroundPaint)
 
-        when (config.style) {
-            FpsOverlayStyle.PILL -> drawPill(canvas, s, dp, h, status)
-            FpsOverlayStyle.GRAPH -> drawGraph(canvas, s, dp, w, h, status)
-            FpsOverlayStyle.MINIMAL -> drawMinimal(canvas, s, dp, h, status)
+        val strokeInset = outlinePaint.strokeWidth / 2f
+        rect.set(strokeInset, strokeInset, w - strokeInset, h - strokeInset)
+        outlinePaint.color = palette.onSurfaceVariant
+        outlinePaint.alpha = if (isMinimal) 64 else 110
+        canvas.drawRoundRect(rect, (radius - strokeInset).coerceAtLeast(1f), (radius - strokeInset).coerceAtLeast(1f), outlinePaint)
+
+        val padX = (if (isMinimal) 9f else 11f) * dp
+        val padY = (if (isMinimal) 7f else 9f) * dp
+        val rowGap = (if (isMinimal) 2.5f else 4f) * dp
+        var cursorY = padY
+        var hasDrawnBlock = false
+
+        if (config.showFps) {
+            val dot = (if (isMinimal) 6f else 7f) * dp
+            val heroH = max(textHeight(fpsPaint), dot)
+            val cy = cursorY + heroH / 2f
+            dotPaint.color = status
+            canvas.drawCircle(padX + dot / 2f, cy, dot / 2f, dotPaint)
+
+            fpsPaint.color = status
+            drawCentered(canvas, fpsLabel(), fpsPaint, padX + dot + 6f * dp, cy)
+            cursorY += heroH
+            hasDrawnBlock = true
+        }
+
+        if (config.style == FpsOverlayStyle.GRAPH) {
+            if (hasDrawnBlock) cursorY += rowGap
+            val graphH = 18f * dp
+            if (telemetry.fps > 0) {
+                drawSparkline(canvas, padX, cursorY, w - padX, cursorY + graphH, status, dp)
+            }
+            cursorY += graphH
+            hasDrawnBlock = true
+        }
+
+        val lines = stackedLines()
+        if (lines.isNotEmpty()) {
+            val lineH = textHeight(extraPaint)
+            extraPaint.color = palette.onSurface
+            lines.forEachIndexed { index, itemText ->
+                if (hasDrawnBlock || index > 0) cursorY += rowGap
+                val cy = cursorY + lineH / 2f
+                drawCentered(canvas, itemText, extraPaint, padX, cy)
+                cursorY += lineH
+            }
         }
     }
 
     private fun fpsLabel(): String = if (telemetry.fps > 0) telemetry.fps.toString() else "--"
-
-    private fun drawPill(canvas: Canvas, s: Float, dp: Float, h: Float, status: Int) {
-        val dot = 8f * dp
-        val cy = h / 2f
-        var x = 12f * dp
-        val parts = secondaryParts()
-
-        dotPaint.color = status
-        canvas.drawCircle(x + dot / 2f, cy, dot / 2f, dotPaint)
-        x += dot + 7f * dp
-
-        if (config.showFps) {
-            fpsPaint.color = status
-            drawCentered(canvas, fpsLabel(), fpsPaint, x, cy)
-            x += fpsPaint.measureText("120") + 4f * dp
-
-            labelPaint.color = palette.onSurface
-            drawCentered(canvas, "FPS", labelPaint, x, cy)
-            x += labelPaint.measureText("FPS")
-
-            val extra = parts.joinToString(" · ")
-            if (extra.isNotEmpty()) {
-                extraPaint.color = palette.onSurfaceVariant
-                drawCentered(canvas, extra, extraPaint, x + 8f * dp, cy)
-            }
-        } else {
-            val primary = parts.firstOrNull() ?: "--"
-            labelPaint.color = palette.onSurface
-            drawCentered(canvas, primary, labelPaint, x, cy)
-            x += labelPaint.measureText(primary)
-
-            val rest = parts.drop(1).joinToString(" · ")
-            if (rest.isNotEmpty()) {
-                extraPaint.color = palette.onSurfaceVariant
-                drawCentered(canvas, rest, extraPaint, x + 8f * dp, cy)
-            }
-        }
-    }
-
-    private fun drawGraph(canvas: Canvas, s: Float, dp: Float, w: Float, h: Float, status: Int) {
-        val pad = 11f * dp
-        val top = 8f * dp
-        var x = pad
-        val headerHeight = max(textHeight(fpsPaint), extraPaint.textSize)
-        val headerCenter = top + headerHeight / 2f
-        val dot = 7f * dp
-        val parts = secondaryParts()
-
-        dotPaint.color = status
-        canvas.drawCircle(x + dot / 2f, headerCenter, dot / 2f, dotPaint)
-        x += dot + 6f * dp
-
-        val primaryText = if (config.showFps) "${fpsLabel()} FPS" else (parts.firstOrNull() ?: "--")
-        fpsPaint.color = if (config.showFps) status else palette.onSurface
-        drawCentered(canvas, primaryText, fpsPaint, x, headerCenter)
-
-        val rightText = if (config.showFps) parts.firstOrNull() else parts.getOrNull(1)
-        if (rightText != null) {
-            extraPaint.color = palette.onSurfaceVariant
-            val textWidth = extraPaint.measureText(rightText)
-            drawCentered(canvas, rightText, extraPaint, w - pad - textWidth, headerCenter)
-        }
-
-        val subLineParts = if (config.showFps) parts.drop(1) else parts.drop(2)
-        var cursorTop = top + headerHeight
-        if (subLineParts.isNotEmpty()) {
-            val subCenter = cursorTop + 3f * dp + textHeight(extraPaint) / 2f
-            extraPaint.color = palette.onSurfaceVariant
-            drawCentered(canvas, subLineParts.joinToString(" · "), extraPaint, pad, subCenter)
-            cursorTop += 3f * dp + textHeight(extraPaint)
-        }
-
-        val graphTop = cursorTop + 5f * dp
-        val graphBottom = h - 8f * dp
-        val graphLeft = pad
-        val graphRight = w - pad
-        if (telemetry.fps > 0) {
-            drawSparkline(canvas, graphLeft, graphTop, graphRight, graphBottom, status, dp)
-        }
-    }
-
-    private fun drawMinimal(canvas: Canvas, s: Float, dp: Float, h: Float, status: Int) {
-        val cy = h / 2f
-        var x = 10f * dp
-        val parts = secondaryParts()
-
-        if (config.showFps) {
-            fpsPaint.color = status
-            drawCentered(canvas, fpsLabel(), fpsPaint, x, cy)
-            x += fpsPaint.measureText("120")
-
-            val extra = parts.joinToString(" · ")
-            if (extra.isNotEmpty()) {
-                extraPaint.color = palette.onSurfaceVariant
-                drawCentered(canvas, extra, extraPaint, x + 6f * dp, cy)
-            }
-        } else {
-            val primary = parts.firstOrNull() ?: "--"
-            labelPaint.color = palette.onSurface
-            drawCentered(canvas, primary, labelPaint, x, cy)
-            x += labelPaint.measureText(primary)
-
-            val rest = parts.drop(1).joinToString(" · ")
-            if (rest.isNotEmpty()) {
-                extraPaint.color = palette.onSurfaceVariant
-                drawCentered(canvas, rest, extraPaint, x + 6f * dp, cy)
-            }
-        }
-    }
 
     private fun drawCentered(canvas: Canvas, text: String, paint: Paint, x: Float, centerY: Float) {
         val metrics = paint.fontMetrics
