@@ -866,6 +866,7 @@ private class FpsOverlayView(context: Context) : View(context) {
     private val outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
     }
+    private val heroPillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private var lastLayoutSignature = ""
 
     fun applyState(config: FloatingFpsConfig, telemetry: LiveFpsTelemetry) {
@@ -874,10 +875,10 @@ private class FpsOverlayView(context: Context) : View(context) {
         this.telemetry = telemetry
         val scale = config.scale.coerceIn(0.8f, 1.3f)
         val isMinimal = config.style == FpsOverlayStyle.MINIMAL
-        fpsPaint.textSize = (if (isMinimal) 13.5f else 15.5f) * scale * scaledDensity
-        extraPaint.textSize = 10.5f * scale * scaledDensity
+        fpsPaint.textSize = (if (isMinimal) 17f else 20f) * scale * scaledDensity
+        extraPaint.textSize = (if (isMinimal) 11.5f else 12.5f) * scale * scaledDensity
         extraPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        linePaint.strokeWidth = 2f * scale * density
+        linePaint.strokeWidth = 2.2f * scale * density
         outlinePaint.strokeWidth = 1f * scale * density
         val lines = stackedLines()
         val sig = "${config.style}|$scale|${config.showFps}|${fpsLabel()}|${lines.joinToString("|")}"
@@ -924,15 +925,19 @@ private class FpsOverlayView(context: Context) : View(context) {
         val s = scale()
         val dp = density * s
         val isMinimal = config.style == FpsOverlayStyle.MINIMAL
-        val padX = (if (isMinimal) 9f else 11f) * dp
-        val padY = (if (isMinimal) 7f else 9f) * dp
-        val rowGap = (if (isMinimal) 2.5f else 4f) * dp
+        val padX = (if (isMinimal) 11f else 14f) * dp
+        val padY = (if (isMinimal) 9f else 12f) * dp
+        val rowGap = (if (isMinimal) 4f else 6f) * dp
         val lines = stackedLines()
 
-        var maxInnerWidth = if (config.style == FpsOverlayStyle.GRAPH) 68f * dp else 42f * dp
+        var maxInnerWidth = if (isMinimal) 56f * dp else 66f * dp
+        if (config.style == FpsOverlayStyle.GRAPH) {
+            maxInnerWidth = max(maxInnerWidth, 84f * dp)
+        }
         if (config.showFps) {
-            val dot = (if (isMinimal) 6f else 7f) * dp
-            val heroW = dot + 6f * dp + fpsPaint.measureText("120")
+            val dot = (if (isMinimal) 7f else 9f) * dp
+            val pillPadH = if (isMinimal) 0f else 20f * dp
+            val heroW = pillPadH + dot + 7f * dp + fpsPaint.measureText("120")
             maxInnerWidth = max(maxInnerWidth, heroW)
         }
         for (line in lines) {
@@ -944,13 +949,14 @@ private class FpsOverlayView(context: Context) : View(context) {
         var blockCount = 0
 
         if (config.showFps) {
-            height += max(textHeight(fpsPaint), 8f * dp)
+            val pillPadV = if (isMinimal) 0f else 8f * dp
+            height += max(textHeight(fpsPaint), 9f * dp) + pillPadV
             blockCount++
         }
 
         if (config.style == FpsOverlayStyle.GRAPH) {
             if (blockCount > 0) height += rowGap
-            height += 18f * dp
+            height += 22f * dp
             blockCount++
         }
 
@@ -978,42 +984,53 @@ private class FpsOverlayView(context: Context) : View(context) {
 
         val status = statusColor()
         val isMinimal = config.style == FpsOverlayStyle.MINIMAL
-        val alpha = (config.bgAlpha * (if (isMinimal) 0.78f else 1f)).coerceIn(0.20f, 1f)
+        val alpha = (config.bgAlpha * (if (isMinimal) 0.80f else 1f)).coerceIn(0.20f, 1f)
 
         backgroundPaint.color = palette.background
         backgroundPaint.alpha = (alpha * 255f).roundToInt().coerceIn(0, 255)
-        val radius = (if (isMinimal) 14f else 18f) * dp
+        val radius = (if (isMinimal) 16f else 22f) * dp
         rect.set(0f, 0f, w, h)
         canvas.drawRoundRect(rect, radius, radius, backgroundPaint)
 
         val strokeInset = outlinePaint.strokeWidth / 2f
         rect.set(strokeInset, strokeInset, w - strokeInset, h - strokeInset)
         outlinePaint.color = palette.onSurfaceVariant
-        outlinePaint.alpha = if (isMinimal) 64 else 110
+        outlinePaint.alpha = if (isMinimal) 72 else 120
         canvas.drawRoundRect(rect, (radius - strokeInset).coerceAtLeast(1f), (radius - strokeInset).coerceAtLeast(1f), outlinePaint)
 
-        val padX = (if (isMinimal) 9f else 11f) * dp
-        val padY = (if (isMinimal) 7f else 9f) * dp
-        val rowGap = (if (isMinimal) 2.5f else 4f) * dp
+        val padX = (if (isMinimal) 11f else 14f) * dp
+        val padY = (if (isMinimal) 9f else 12f) * dp
+        val rowGap = (if (isMinimal) 4f else 6f) * dp
         var cursorY = padY
         var hasDrawnBlock = false
 
         if (config.showFps) {
-            val dot = (if (isMinimal) 6f else 7f) * dp
-            val heroH = max(textHeight(fpsPaint), dot)
+            val dot = (if (isMinimal) 7f else 9f) * dp
+            val pillPadV = if (isMinimal) 0f else 4f * dp
+            val pillPadH = if (isMinimal) 0f else 10f * dp
+            val heroH = max(textHeight(fpsPaint), dot) + pillPadV * 2f
+
+            if (!isMinimal) {
+                heroPillPaint.color = status
+                heroPillPaint.alpha = 38
+                rect.set(padX, cursorY, w - padX, cursorY + heroH)
+                canvas.drawRoundRect(rect, 13f * dp, 13f * dp, heroPillPaint)
+            }
+
             val cy = cursorY + heroH / 2f
+            val contentStart = padX + pillPadH
             dotPaint.color = status
-            canvas.drawCircle(padX + dot / 2f, cy, dot / 2f, dotPaint)
+            canvas.drawCircle(contentStart + dot / 2f, cy, dot / 2f, dotPaint)
 
             fpsPaint.color = status
-            drawCentered(canvas, fpsLabel(), fpsPaint, padX + dot + 6f * dp, cy)
+            drawCentered(canvas, fpsLabel(), fpsPaint, contentStart + dot + 7f * dp, cy)
             cursorY += heroH
             hasDrawnBlock = true
         }
 
         if (config.style == FpsOverlayStyle.GRAPH) {
             if (hasDrawnBlock) cursorY += rowGap
-            val graphH = 18f * dp
+            val graphH = 22f * dp
             if (telemetry.fps > 0) {
                 drawSparkline(canvas, padX, cursorY, w - padX, cursorY + graphH, status, dp)
             }

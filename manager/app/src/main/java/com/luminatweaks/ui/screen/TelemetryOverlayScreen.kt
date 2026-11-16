@@ -323,9 +323,9 @@ private fun FpsOverlayPreviewBadge(
     )
     val isMinimal = config.style == FpsOverlayStyle.MINIMAL
     val containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(
-        alpha = if (isMinimal) (config.bgAlpha * 0.78f).coerceIn(0.25f, 0.92f) else config.bgAlpha
+        alpha = if (isMinimal) (config.bgAlpha * 0.80f).coerceIn(0.25f, 0.92f) else config.bgAlpha
     )
-    val outlineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isMinimal) 0.25f else 0.45f)
+    val outlineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isMinimal) 0.30f else 0.50f)
     val textColor = MaterialTheme.colorScheme.onSurface
 
     val lines = remember(config, telemetry) {
@@ -338,7 +338,7 @@ private fun FpsOverlayPreviewBadge(
         }
     }
 
-    val cardShape = RoundedCornerShape(if (isMinimal) 14.dp else 18.dp)
+    val cardShape = RoundedCornerShape(if (isMinimal) 16.dp else 22.dp)
 
     Surface(
         shape = cardShape,
@@ -347,27 +347,42 @@ private fun FpsOverlayPreviewBadge(
     ) {
         Column(
             modifier = Modifier.padding(
-                horizontal = if (isMinimal) 9.dp else 11.dp,
-                vertical = if (isMinimal) 7.dp else 9.dp
+                horizontal = if (isMinimal) 11.dp else 14.dp,
+                vertical = if (isMinimal) 9.dp else 12.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(if (isMinimal) 2.dp else 4.dp)
+            verticalArrangement = Arrangement.spacedBy(if (isMinimal) 4.dp else 6.dp)
         ) {
             if (config.showFps) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                val heroContent: @Composable () -> Unit = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(if (isMinimal) 7.dp else 9.dp)
+                                .clip(CircleShape)
+                                .background(statusColor)
+                        )
+                        Spacer(modifier = Modifier.width(7.dp))
+                        Text(
+                            text = "${telemetry.fps}",
+                            style = if (isMinimal) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = statusColor,
+                            maxLines = 1
+                        )
+                    }
+                }
+
+                if (isMinimal) {
+                    heroContent()
+                } else {
                     Box(
                         modifier = Modifier
-                            .size(if (isMinimal) 6.dp else 7.dp)
-                            .clip(CircleShape)
-                            .background(statusColor)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "${telemetry.fps}",
-                        style = if (isMinimal) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = statusColor,
-                        maxLines = 1
-                    )
+                            .clip(RoundedCornerShape(13.dp))
+                            .background(statusColor.copy(alpha = 0.15f))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        heroContent()
+                    }
                 }
             }
 
@@ -376,15 +391,15 @@ private fun FpsOverlayPreviewBadge(
                     samples = telemetry.history,
                     lineColor = statusColor,
                     modifier = Modifier
-                        .width(68.dp)
-                        .height(18.dp)
+                        .width(84.dp)
+                        .height(22.dp)
                 )
             }
 
             lines.forEach { itemText ->
                 Text(
                     text = itemText,
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = textColor,
                     maxLines = 1
