@@ -25,9 +25,7 @@ import android.app.Service
 import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.res.Configuration
-import android.os.BatteryManager
 import android.content.pm.ServiceInfo
 import android.graphics.Canvas
 import android.graphics.LinearGradient
@@ -63,7 +61,6 @@ import com.luminatweaks.util.DeviceUtil
 import com.luminatweaks.util.RootUtil
 import java.io.File
 import java.util.Locale
-import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -584,8 +581,8 @@ class FloatingFpsService : Service() {
                 Toast.makeText(
                     this@FloatingFpsService,
                     localizedText(
-                        "Sentuhan overlay dikunci (buka lewat notifikasi)",
-                        "Overlay touch locked (unlock from notification)"
+                        "Sentuhan overlay dikunci",
+                        "Overlay touch locked"
                     ),
                     Toast.LENGTH_SHORT
                 ).show()
@@ -744,20 +741,20 @@ class FloatingFpsService : Service() {
 
         val statusLine = when {
             isShowing && activeConfig.touchLock -> localizedText(
-                "Overlay aktif (sentuhan dikunci)",
-                "Overlay active (touch locked)"
+                "Sentuhan overlay dikunci",
+                "Overlay touch locked"
             )
             isShowing && liveTelemetry.fps <= 0 -> localizedText(
-                "Menunggu frame game...",
-                "Waiting for game frames..."
+                "Menunggu sesi game",
+                "Waiting for game session"
             )
             isShowing -> localizedText(
-                "Menampilkan FPS real-time di layar",
-                "Showing real-time FPS on screen"
+                "Floating HUD aktif",
+                "Floating HUD active"
             )
             else -> localizedText(
-                "Mode Auto-Game aktif · Menunggu game dibuka",
-                "Auto-Game active · Waiting for game launch"
+                "Menunggu sesi game",
+                "Waiting for game session"
             )
         }
 
@@ -863,9 +860,6 @@ private class FpsOverlayView(context: Context) : View(context) {
         invalidate()
     }
 
-    private val outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-    }
     private val heroPillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private var lastLayoutSignature = ""
 
@@ -879,7 +873,6 @@ private class FpsOverlayView(context: Context) : View(context) {
         extraPaint.textSize = (if (isMinimal) 11.5f else 12.5f) * scale * scaledDensity
         extraPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         linePaint.strokeWidth = 2.2f * scale * density
-        outlinePaint.strokeWidth = 1f * scale * density
         val lines = stackedLines()
         val sig = "${config.style}|$scale|${config.showFps}|${fpsLabel()}|${lines.joinToString("|")}"
         contentDescription = buildList {
@@ -991,12 +984,6 @@ private class FpsOverlayView(context: Context) : View(context) {
         val radius = (if (isMinimal) 16f else 22f) * dp
         rect.set(0f, 0f, w, h)
         canvas.drawRoundRect(rect, radius, radius, backgroundPaint)
-
-        val strokeInset = outlinePaint.strokeWidth / 2f
-        rect.set(strokeInset, strokeInset, w - strokeInset, h - strokeInset)
-        outlinePaint.color = palette.onSurfaceVariant
-        outlinePaint.alpha = if (isMinimal) 72 else 120
-        canvas.drawRoundRect(rect, (radius - strokeInset).coerceAtLeast(1f), (radius - strokeInset).coerceAtLeast(1f), outlinePaint)
 
         val padX = (if (isMinimal) 11f else 14f) * dp
         val padY = (if (isMinimal) 9f else 12f) * dp

@@ -51,8 +51,6 @@ import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.Thermostat
-import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -72,7 +70,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -87,20 +84,17 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.luminatweaks.R
-import com.luminatweaks.service.FloatingFpsService
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import java.util.Locale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 
 enum class FpsOverlayStyle(val key: String) {
     PILL("pill"),
@@ -325,7 +319,6 @@ private fun FpsOverlayPreviewBadge(
     val containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(
         alpha = if (isMinimal) (config.bgAlpha * 0.80f).coerceIn(0.25f, 0.92f) else config.bgAlpha
     )
-    val outlineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isMinimal) 0.30f else 0.50f)
     val textColor = MaterialTheme.colorScheme.onSurface
 
     val lines = remember(config, telemetry) {
@@ -342,8 +335,7 @@ private fun FpsOverlayPreviewBadge(
 
     Surface(
         shape = cardShape,
-        color = containerColor,
-        modifier = Modifier.border(1.dp, outlineColor, cardShape)
+        color = containerColor
     ) {
         Column(
             modifier = Modifier.padding(
@@ -560,37 +552,18 @@ internal fun TelemetryOverlayScreen(
                         }
                     }
 
-                    val previewContext = LocalContext.current
-                    val previewScope = rememberCoroutineScope()
-
                     NestedTweakSwitchItem(
                         icon = Icons.Rounded.Speed,
                         title = localizedLabel("Aktifkan Floating HUD", "Enable Floating HUD"),
                         subtitle = if (config.enabled) {
-                            localizedLabel("Overlay aktif di layar", "Overlay active on screen")
+                            localizedLabel("Tampilkan overlay di atas aplikasi", "Display overlay above apps")
                         } else {
-                            localizedLabel("Overlay nonaktif", "Overlay disabled")
+                            localizedLabel("Nonaktif", "Disabled")
                         },
                         checked = config.enabled,
                         onCheckedChange = { enabled ->
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onConfigChange(config.copy(enabled = enabled))
-                        }
-                    )
-
-                    NestedTweakActionItem(
-                        icon = Icons.Rounded.Widgets,
-                        title = localizedLabel("Tes Overlay 5 Detik", "Test Overlay 5 Seconds"),
-                        subtitle = localizedLabel(
-                            "Tampilkan pratinjau langsung di atas aplikasi selama 5 detik",
-                            "Show live floating overlay above apps for 5 seconds"
-                        ),
-                        onClick = {
-                            previewScope.launch {
-                                if (FloatingFpsService.ensureOverlayPermission(previewContext)) {
-                                    FloatingFpsService.triggerPreviewBurst(previewContext)
-                                }
-                            }
                         }
                     )
                 }
@@ -603,10 +576,10 @@ internal fun TelemetryOverlayScreen(
                 ) {
                     NestedTweakSwitchItem(
                         icon = Icons.Rounded.SportsEsports,
-                        title = localizedLabel("Auto-Muncul di Game", "Auto-Show in Games"),
+                        title = localizedLabel("Deteksi Game Otomatis", "Automatic Game Detection"),
                         subtitle = localizedLabel(
-                            "Otomatis aktif saat membuka paket di daftar game",
-                            "Automatically appear when launching games in game list"
+                            "Aktif otomatis saat menjalankan aplikasi dalam daftar game",
+                            "Activate automatically when running apps in the game list"
                         ),
                         checked = config.autoGame,
                         onCheckedChange = { autoGame ->
@@ -617,10 +590,10 @@ internal fun TelemetryOverlayScreen(
 
                     NestedTweakSwitchItem(
                         icon = Icons.Rounded.Lock,
-                        title = localizedLabel("Kunci Sentuhan (Touch Pass-Through)", "Touch Pass-Through Lock"),
+                        title = localizedLabel("Kunci Sentuhan", "Touch Pass-Through"),
                         subtitle = localizedLabel(
-                            "Sentuhan menembus overlay agar tidak mengganggu tombol game",
-                            "Let touches pass through so overlay never blocks game controls"
+                            "Teruskan sentuhan ke layar di bawah overlay",
+                            "Pass touch input through to the screen beneath"
                         ),
                         checked = config.touchLock,
                         onCheckedChange = { touchLock ->
@@ -641,7 +614,7 @@ internal fun TelemetryOverlayScreen(
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Text(
-                                text = localizedLabel("Posisi Sudut Awal", "Initial Corner Position"),
+                                text = localizedLabel("Posisi Awal", "Initial Anchor"),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -688,7 +661,7 @@ internal fun TelemetryOverlayScreen(
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Text(
-                                text = localizedLabel("Modul Telemetri", "Telemetry Modules"),
+                                text = localizedLabel("Metrik Aktif", "Active Metrics"),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -794,7 +767,7 @@ internal fun TelemetryOverlayScreen(
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             FpsSliderRow(
-                                label = localizedLabel("Skala Ukuran", "Overlay Scale"),
+                                label = localizedLabel("Skala HUD", "HUD Scale"),
                                 valueText = "${(config.scale * 100).roundToInt()}%",
                                 value = config.scale,
                                 valueRange = 0.8f..1.3f,
@@ -816,7 +789,7 @@ internal fun TelemetryOverlayScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = localizedLabel("Interval Pembaruan", "Refresh Interval"),
+                                        text = localizedLabel("Interval Sampling", "Sampling Interval"),
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface
