@@ -161,13 +161,13 @@ data class GameSessionRecord(
     val samples: List<SessionSamplePoint>
 )
 
-private data class RecordableAppEntry(
+internal data class RecordableAppEntry(
     val packageName: String,
     val appName: String,
     val isInGameList: Boolean
 )
 
-private data class SessionLoadResult(
+internal data class SessionLoadResult(
     val sessions: List<GameSessionRecord>,
     val isMockData: Boolean
 )
@@ -679,25 +679,22 @@ internal fun SessionStatsScreen(
             onExportCsv = {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 scope.launch {
+                    val isIndo = Locale.getDefault().language in setOf("in", "id")
                     val res = SessionStatsRepository.exportSessionCsv(activeDetail)
                     res.onSuccess { file ->
-                        Toast.makeText(
-                            context,
-                            localizedLabel(
-                                "Tersimpan: Download/LuminaTweaks/${file.name}",
-                                "Saved: Download/LuminaTweaks/${file.name}"
-                            ),
-                            Toast.LENGTH_LONG
-                        ).show()
+                        val msg = if (isIndo) {
+                            "Tersimpan: Download/LuminaTweaks/${file.name}"
+                        } else {
+                            "Saved: Download/LuminaTweaks/${file.name}"
+                        }
+                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                     }.onFailure { err ->
-                        Toast.makeText(
-                            context,
-                            localizedLabel(
-                                "Gagal ekspor CSV: ${err.message}",
-                                "CSV export failed: ${err.message}"
-                            ),
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        val msg = if (isIndo) {
+                            "Gagal ekspor CSV: ${err.message}"
+                        } else {
+                            "CSV export failed: ${err.message}"
+                        }
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                     }
                 }
             },
