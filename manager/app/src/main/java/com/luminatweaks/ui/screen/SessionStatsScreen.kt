@@ -24,12 +24,18 @@ import android.graphics.drawable.Drawable
 import android.os.Environment
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -64,6 +70,7 @@ import androidx.compose.material.icons.rounded.Timeline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
@@ -98,6 +105,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -106,12 +114,12 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.luminatweaks.data.LuminaBridge
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -163,59 +171,34 @@ internal object SessionStatsRepository {
     private const val PREFS_NAME = "lumina_session_stats"
     private const val KEY_RECORD_PACKAGES = "record_packages_set"
     private const val KEY_SAMPLE_DISMISSED = "sample_dismissed"
-    private const val DAEMON_SESSIONS_PATH = "/data/adb/.config/lumina/sessions.json"
-    private const val DAEMON_RECORD_APPS_PATH = "/data/adb/.config/lumina/record_apps.json"
-    private const val ROOT_READ_TIMEOUT_MS = 3_000L
     private val PACKAGE_NAME_REGEX = Regex("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)+$")
 
     /**
-     * `/data/adb` is `0700 root:root`, so the untrusted Manager process can
-     * never open files below it directly.  Read through `su` and keep a local
-     * copy as the fallback for devices where root is momentarily unavailable.
+     * Reads go through the privileged `lumina-binder` bridge first.  The local
+     * mirror in `filesDir` is only a fallback for the brief window where the
+     * helper is restarting; nothing here ever spawns `su`.
      */
-    private fun readTextWithRoot(path: String): String? {
-        val process = runCatching {
-            ProcessBuilder("su", "-c", "cat '$path'")
-                .redirectErrorStream(false)
-                .start()
-        }.getOrNull() ?: return null
+    private suspend fun readConfig(
+        context: Context,
+        localName: String,
+        remote: suspend () -> String?
+    ): String? {
+        val bridged = runCatching { remote() }.getOrNull()?.takeIf { it.isNotBlank() }
+        if (bridged != null) return bridged
 
-        var output: String? = null
-        val reader = Thread {
-            output = runCatching {
-                process.inputStream.bufferedReader().use { it.readText() }
-            }.getOrNull()
-        }
-        reader.isDaemon = true
-        reader.start()
-        reader.join(ROOT_READ_TIMEOUT_MS)
-
-        if (reader.isAlive) {
-            runCatching { process.destroyForcibly() }
-            return null
-        }
-        val exited = runCatching {
-            process.waitFor(500, TimeUnit.MILLISECONDS)
-        }.getOrDefault(false)
-        if (!exited) {
-            runCatching { process.destroyForcibly() }
-            return null
-        }
-        if (runCatching { process.exitValue() }.getOrDefault(-1) != 0) {
-            return null
-        }
-        return output?.takeIf { it.isNotBlank() }
-    }
-
-    private fun readLocalOrRoot(context: Context, rootPath: String, localName: String): String? {
-        readTextWithRoot(rootPath)?.let { return it }
         val localFile = File(context.filesDir, localName)
         if (!localFile.exists() || !localFile.canRead()) return null
         return runCatching { localFile.readText().takeIf { it.isNotBlank() } }.getOrNull()
     }
 
+    private fun mirrorLocally(context: Context, localName: String, json: String) {
+        runCatching { File(context.filesDir, localName).writeText(json) }
+    }
+
     suspend fun getRecordedPackages(context: Context): Set<String> = withContext(Dispatchers.IO) {
-        val raw = readLocalOrRoot(context, DAEMON_RECORD_APPS_PATH, "record_apps.json")
+        val raw = readConfig(context, "record_apps.json") {
+            LuminaBridge.readRecordApps(context)
+        }
         if (raw != null) {
             val parsed = runCatching {
                 val arr = JSONArray(raw.trim().ifEmpty { "[]" })
@@ -245,23 +228,16 @@ internal object SessionStatsRepository {
                 .apply()
 
             val json = JSONArray(snapshot.sorted()).toString()
-            runCatching {
-                File(context.filesDir, "record_apps.json").writeText("$json\n")
-            }
-            runCatching {
-                val escaped = json.replace("'", "'\\''")
-                val proc = ProcessBuilder(
-                    "su", "-c",
-                    "mkdir -p /data/adb/.config/lumina && printf '%s\\n' '$escaped' > $DAEMON_RECORD_APPS_PATH.tmp && chmod 644 $DAEMON_RECORD_APPS_PATH.tmp && mv $DAEMON_RECORD_APPS_PATH.tmp $DAEMON_RECORD_APPS_PATH"
-                ).redirectErrorStream(true).start()
-                proc.waitFor()
-            }
+            mirrorLocally(context, "record_apps.json", "$json\n")
+            runCatching { LuminaBridge.writeRecordApps(context, json) }
             snapshot
         }
     }
 
     suspend fun loadSessions(context: Context): SessionLoadResult = withContext(Dispatchers.IO) {
-        val raw = readLocalOrRoot(context, DAEMON_SESSIONS_PATH, "sessions.json")
+        val raw = readConfig(context, "sessions.json") {
+            LuminaBridge.readSessions(context)
+        }
         if (raw != null) {
             val parsed = runCatching { parseSessionsJson(context, raw) }.getOrNull()
             if (parsed != null) {
@@ -349,15 +325,8 @@ internal object SessionStatsRepository {
             return@withContext updated
         }
         val json = serializeSessionsJson(updated)
-        runCatching { File(context.filesDir, "sessions.json").writeText(json) }
-        runCatching {
-            val escaped = json.replace("'", "'\\''")
-            val proc = ProcessBuilder(
-                "su", "-c",
-                "printf '%s' '$escaped' > $DAEMON_SESSIONS_PATH.tmp && chmod 644 $DAEMON_SESSIONS_PATH.tmp && mv $DAEMON_SESSIONS_PATH.tmp $DAEMON_SESSIONS_PATH"
-            ).redirectErrorStream(true).start()
-            proc.waitFor()
-        }
+        mirrorLocally(context, "sessions.json", json)
+        runCatching { LuminaBridge.writeSessions(context, json) }
         updated
     }
 
@@ -369,14 +338,8 @@ internal object SessionStatsRepository {
                 .apply()
             return@withContext
         }
-        runCatching { File(context.filesDir, "sessions.json").writeText("[]\n") }
-        runCatching {
-            val proc = ProcessBuilder(
-                "su", "-c",
-                "printf '[]\\n' > $DAEMON_SESSIONS_PATH && chmod 644 $DAEMON_SESSIONS_PATH"
-            ).redirectErrorStream(true).start()
-            proc.waitFor()
-        }
+        mirrorLocally(context, "sessions.json", "[]\n")
+        runCatching { LuminaBridge.writeSessions(context, "[]") }
     }
 
     suspend fun restoreSamplePreview(context: Context): List<GameSessionRecord> = withContext(Dispatchers.IO) {
@@ -632,6 +595,7 @@ internal fun SessionStatsScreen(
 
     var sessions by remember { mutableStateOf<List<GameSessionRecord>>(emptyList()) }
     var isSampleData by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(true) }
     var selectedSession by remember { mutableStateOf<GameSessionRecord?>(null) }
     var showClearDialog by remember { mutableStateOf(false) }
 
@@ -639,51 +603,7 @@ internal fun SessionStatsScreen(
         val result = SessionStatsRepository.loadSessions(context)
         sessions = result.sessions
         isSampleData = result.isSampleData
-    }
-
-    val activeDetail = selectedSession
-    if (activeDetail != null) {
-        BackHandler { selectedSession = null }
-        SessionDetailScreen(
-            session = activeDetail,
-            isSampleData = isSampleData,
-            onBack = { selectedSession = null },
-            onExportCsv = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                scope.launch {
-                    val isIndo = Locale.getDefault().language in setOf("in", "id")
-                    val res = SessionStatsRepository.exportSessionCsv(activeDetail)
-                    res.onSuccess { file ->
-                        val msg = if (isIndo) {
-                            "Tersimpan di Download/LuminaTweaks/${file.name}"
-                        } else {
-                            "Saved to Download/LuminaTweaks/${file.name}"
-                        }
-                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-                    }.onFailure { err ->
-                        val msg = if (isIndo) {
-                            "Gagal menyimpan CSV: ${err.message}"
-                        } else {
-                            "Failed to save CSV: ${err.message}"
-                        }
-                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                    }
-                }
-            },
-            onDelete = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                scope.launch {
-                    sessions = SessionStatsRepository.deleteSession(
-                        context = context,
-                        id = activeDetail.id,
-                        current = sessions,
-                        isSample = isSampleData
-                    )
-                    selectedSession = null
-                }
-            }
-        )
-        return
+        isLoading = false
     }
 
     if (showClearDialog) {
@@ -729,10 +649,56 @@ internal fun SessionStatsScreen(
         )
     }
 
-    val outerRadius = LocalCornerRadius.current.coerceAtLeast(24.dp)
-    val bottomPadding = 24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    LuminaDrillTransition(
+        targetState = selectedSession,
+        isForward = { _, target -> target != null }
+    ) { detail ->
+        if (detail != null) {
+            BackHandler { selectedSession = null }
+            SessionDetailScreen(
+                session = detail,
+                isSampleData = isSampleData,
+                onBack = { selectedSession = null },
+                onExportCsv = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    scope.launch {
+                        val isIndo = Locale.getDefault().language in setOf("in", "id")
+                        val res = SessionStatsRepository.exportSessionCsv(detail)
+                        res.onSuccess { file ->
+                            val msg = if (isIndo) {
+                                "Tersimpan di Download/LuminaTweaks/${file.name}"
+                            } else {
+                                "Saved to Download/LuminaTweaks/${file.name}"
+                            }
+                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                        }.onFailure { err ->
+                            val msg = if (isIndo) {
+                                "Gagal menyimpan CSV: ${err.message}"
+                            } else {
+                                "Failed to save CSV: ${err.message}"
+                            }
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                },
+                onDelete = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    scope.launch {
+                        sessions = SessionStatsRepository.deleteSession(
+                            context = context,
+                            id = detail.id,
+                            current = sessions,
+                            isSample = isSampleData
+                        )
+                        selectedSession = null
+                    }
+                }
+            )
+        } else {
+            val outerRadius = LocalCornerRadius.current.coerceAtLeast(24.dp)
+            val bottomPadding = 24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
-    Scaffold(
+            Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
         topBar = {
             TopAppBar(
@@ -795,7 +761,20 @@ internal fun SessionStatsScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (sessions.isEmpty()) {
+            when {
+                isLoading -> {
+                    item(key = "loading_state") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 48.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(strokeWidth = 2.5.dp)
+                        }
+                    }
+                }
+                sessions.isEmpty() -> {
                 item(key = "empty_state") {
                     Surface(
                         shape = RoundedCornerShape(outerRadius),
@@ -850,29 +829,47 @@ internal fun SessionStatsScreen(
                         }
                     }
                 }
-            } else {
+            } else -> {
                 items(sessions, key = { it.id }) { session ->
                     SessionHistoryCard(
                         session = session,
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             selectedSession = session
-                        }
+                        },
+                        modifier = Modifier.animateItem()
                     )
                 }
             }
         }
+        }
+    }
+    }
     }
 }
 
 @Composable
 private fun SessionHistoryCard(
     session: GameSessionRecord,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val outerRadius = LocalCornerRadius.current.coerceAtLeast(24.dp)
     val innerRadius = (LocalCornerRadius.current * 0.75f).coerceIn(14.dp, 22.dp)
+
+    // Draw-phase press feedback: scaling through graphicsLayer never triggers
+    // recomposition or relayout, so the 120 Hz scroll stays untouched.
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed) 0.975f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "sessionCardPress"
+    )
 
     val appIcon by produceState<ImageBitmap?>(initialValue = null, session.packageName) {
         value = withContext(Dispatchers.IO) {
@@ -892,10 +889,18 @@ private fun SessionHistoryCard(
     Surface(
         shape = RoundedCornerShape(outerRadius),
         color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
             .clip(RoundedCornerShape(outerRadius))
-            .clickable(onClick = onClick)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                onClick = onClick
+            )
     ) {
         Column(
             modifier = Modifier
@@ -1074,14 +1079,14 @@ private fun SessionDetailScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onExportCsv) {
+                    PressableIconButton(onClick = onExportCsv) {
                         Icon(
                             imageVector = Icons.Rounded.FileDownload,
                             contentDescription = localizedLabel("Simpan CSV", "Save CSV"),
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
-                    IconButton(onClick = onDelete) {
+                    PressableIconButton(onClick = onDelete) {
                         Icon(
                             imageVector = Icons.Rounded.DeleteOutline,
                             contentDescription = localizedLabel("Hapus sesi", "Delete session"),
@@ -1492,6 +1497,34 @@ private fun SessionTagChip(
 }
 
 @Composable
+private fun PressableIconButton(
+    onClick: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.88f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "iconButtonPress"
+    )
+
+    IconButton(
+        onClick = onClick,
+        interactionSource = interactionSource,
+        modifier = Modifier.graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        }
+    ) {
+        content()
+    }
+}
+
+@Composable
 private fun TelemetryMetricRow(
     icon: ImageVector,
     label: String,
@@ -1499,10 +1532,10 @@ private fun TelemetryMetricRow(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
+            modifier = Modifier.weight(1f),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -1514,15 +1547,20 @@ private fun TelemetryMetricRow(
             )
             Text(
                 text = label,
+                modifier = Modifier.weight(1f, fill = false),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
+        Spacer(modifier = Modifier.width(12.dp))
         Text(
             text = value,
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1
         )
     }
 }

@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
+import com.luminatweaks.data.LuminaBridge
 import com.luminatweaks.ui.screen.HomeScreen
 import com.luminatweaks.ui.screen.SetupWizardScreen
 import com.luminatweaks.ui.theme.LuminaTheme
@@ -49,6 +50,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Warm the root bridge once so Session Stats screens never wait for a
+        // connection and never shell out to `su`.
+        LuminaBridge.start(applicationContext)
 
         lifecycleScope.launch(Dispatchers.IO) {
             val pkg = packageName

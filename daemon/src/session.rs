@@ -58,7 +58,10 @@ const MAX_SAMPLE_POINTS: usize = 50;
 const JANK_FRAME_FACTOR: f32 = 1.5;
 const HIST_BIN_MS: f32 = 0.1;
 const HIST_BINS: usize = 20_000;
-const MAX_FRAME_MS: f32 = 2_000.0;
+/// Loading screens, draft picks and static menus deliver isolated frame
+/// intervals far above one second. They are not gameplay stutter, so they are
+/// excluded from every statistic instead of dragging 1 % / 0.1 % low to 1 FPS.
+const STALL_FRAME_MS: f32 = 250.0;
 const THERMAL_DIR: &str = "/sys/class/thermal";
 const POWER_SUPPLY_DIR: &str = "/sys/class/power_supply";
 
@@ -563,17 +566,21 @@ impl ActiveSession {
         if frames.is_empty() {
             return;
         }
-        let budget_ms = 1000.0 / self.display_hz.max(1) as f32;
+        // A display can never present more frames than its refresh rate. Two
+        // back-to-back swap buffers (screen transition, rotation) produce
+        // sub-refresh frame times that inflate the average to impossible
+        // values such as 174 FPS on a 120 Hz panel. Clamp every interval to at
+        // least one refresh period so the resulting FPS can never exceed
+        // `display_hz`.
+        let refresh_ms = 1000.0 / self.display_hz.max(1) as f32;
         let index = self.ensure_bucket(offset_sec);
         let bucket = &mut self.buckets[index];
 
         for &frametime in frames {
-            if !frametime.is_finite()
-                || frametime <= 0.0
-                || frametime > MAX_FRAME_MS
-            {
+            if !frametime.is_finite() || frametime <= 0.0 || frametime > STALL_FRAME_MS {
                 continue;
             }
+            let frametime = frametime.max(refresh_ms);
 
             self.total_frames = self.total_frames.saturating_add(1);
 
@@ -586,7 +593,7 @@ impl ActiveSession {
             let bin = ((frametime / HIST_BIN_MS) as usize).min(HIST_BINS - 1);
             self.histogram[bin] = self.histogram[bin].saturating_add(1);
 
-            if frametime > budget_ms * JANK_FRAME_FACTOR {
+            if frametime > refresh_ms * JANK_FRAME_FACTOR {
                 self.jank_count = self.jank_count.saturating_add(1);
                 bucket.jank = bucket.jank.saturating_add(1);
             }
@@ -640,8 +647,9 @@ impl ActiveSession {
 
         let duration_sec = elapsed.as_secs() as i32;
         let active_secs = self.active_time.as_secs_f64().max(0.001);
+        let display_hz = self.display_hz.max(1) as f32;
         let avg_fps = if self.total_frames > 0 {
-            (self.total_frames as f64 / active_secs).clamp(0.0, 1_000.0) as f32
+            (self.total_frames as f64 / active_secs).min(display_hz as f64) as f32
         } else {
             0.0
         };
@@ -649,7 +657,7 @@ impl ActiveSession {
         let mut min_fps = 0.0f32;
         let mut max_fps = 0.0f32;
         for bucket in &self.buckets {
-            let Some(value) = bucket_avg_fps(bucket) else {
+            let Some(value) = bucket_avg_fps(bucket, display_hz) else {
                 continue;
             };
             if min_fps == 0.0 || value < min_fps {
@@ -660,8 +668,8 @@ impl ActiveSession {
             }
         }
 
-        let one_percent_low_fps = low_fps_from_histogram(&self.histogram, 0.01);
-        let zero_point_one_low_fps = low_fps_from_histogram(&self.histogram, 0.001);
+        let one_percent_low_fps = low_fps_from_histogram(&self.histogram, 0.01).min(display_hz);
+        let zero_point_one_low_fps = low_fps_from_histogram(&self.histogram, 0.001).min(display_hz);
         let frame_pacing_std_dev_ms = if self.pacing_count > 1 {
             (self.pacing_m2 / self.pacing_count as f64).sqrt() as f32
         } else {
@@ -693,12 +701,12 @@ impl ActiveSession {
             start_battery_temp_c: round2(self.start_battery_temp.unwrap_or(0.0)),
             peak_battery_temp_c: round2(self.peak_battery_temp),
             avg_power_mw,
-            samples: build_samples(&self.buckets),
+            samples: build_samples(&self.buckets, display_hz),
         })
     }
 }
 
-fn bucket_avg_fps(bucket: &Bucket) -> Option<f32> {
+fn bucket_avg_fps(bucket: &Bucket, display_hz: f32) -> Option<f32> {
     if bucket.frames.is_empty() {
         return None;
     }
@@ -706,7 +714,7 @@ fn bucket_avg_fps(bucket: &Bucket) -> Option<f32> {
     if total <= 0.0 {
         return None;
     }
-    Some((bucket.frames.len() as f32 * 1000.0 / total).clamp(0.0, 1_000.0))
+    Some((bucket.frames.len() as f32 * 1000.0 / total).min(display_hz))
 }
 
 fn low_fps_from_histogram(histogram: &[u32], fraction: f64) -> f32 {
@@ -754,7 +762,7 @@ fn low_fps_from_sorted(sorted: &[f32], fraction: f32) -> f32 {
     (1000.0 / mean_ms).clamp(0.0, 1_000.0)
 }
 
-fn build_samples(buckets: &[Bucket]) -> Vec<StoredSample> {
+fn build_samples(buckets: &[Bucket], display_hz: f32) -> Vec<StoredSample> {
     let active: Vec<&Bucket> = buckets
         .iter()
         .filter(|bucket| !bucket.frames.is_empty())
@@ -801,11 +809,11 @@ fn build_samples(buckets: &[Bucket]) -> Vec<StoredSample> {
         frames.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         let total_ms: f32 = frames.iter().sum();
         let avg_fps = if total_ms > 0.0 {
-            (frames.len() as f32 * 1000.0 / total_ms).clamp(0.0, 1_000.0)
+            (frames.len() as f32 * 1000.0 / total_ms).min(display_hz)
         } else {
             0.0
         };
-        let min_fps = (1000.0 / frames[frames.len() - 1].max(0.001)).clamp(0.0, 1_000.0);
+        let min_fps = (1000.0 / frames[frames.len() - 1].max(0.001)).min(display_hz);
         let power_mw = if power_count > 0 {
             (power_sum / power_count as f64).round() as i32
         } else {
@@ -816,8 +824,10 @@ fn build_samples(buckets: &[Bucket]) -> Vec<StoredSample> {
             offset_sec: slice[0].offset_sec as i32,
             avg_fps: round2(avg_fps),
             min_fps: round2(min_fps),
-            one_percent_low: round2(low_fps_from_sorted(&frames, 0.01)),
-            zero_point_one_percent_low: round2(low_fps_from_sorted(&frames, 0.001)),
+            one_percent_low: round2(low_fps_from_sorted(&frames, 0.01).min(display_hz)),
+            zero_point_one_percent_low: round2(
+                low_fps_from_sorted(&frames, 0.001).min(display_hz),
+            ),
             jank_frames: jank as i32,
             cpu_temp_c: round2(cpu_temp),
             battery_temp_c: round2(battery_temp),
