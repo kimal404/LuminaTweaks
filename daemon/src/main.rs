@@ -15,6 +15,7 @@
 #[macro_use]
 mod core;
 mod binder;
+mod session;
 mod tweaks;
 
 use binder::client as binder_client;
@@ -539,6 +540,7 @@ fn main() {
     let mut fallback_blocked_until = Instant::now();
     let mut last_screen_state: Option<bool> = None;
     let mut fps_monitor = fps::FpsMonitor::new();
+    let mut session_recorder = session::SessionRecorder::new(fps_monitor.tap());
     let mut last_heartbeat = Instant::now();
     let mut reload_pending_at: Option<Instant> = None;
     let mut reload_force = false;
@@ -550,6 +552,7 @@ fn main() {
             engine::restore_balance();
             utility_ctrl.restore();
             TextureController::restore();
+            session_recorder.shutdown();
             fps_monitor.stop();
             core::ipc::cleanup_socket();
             cleanup_runtime_files();
@@ -747,22 +750,29 @@ fn main() {
             None
         };
 
-        // Sampling follows the whitelisted game only. A preview deadline from
-        // the Manager keeps it alive for the overlay test window, using the
-        // currently focused app even when it is not in gamelist.json.
+        // Sampling follows the whitelisted game, a recording candidate, or a
+        // short preview requested by the Manager. Recording candidates are
+        // independent from the tweak whitelist: a user may opt in to session
+        // stats for an app whose profile is disabled.
         let preview_active = screen_awake && shared_state.fps_preview_active();
+        let record_candidate =
+            session_recorder.candidate(screen_awake, focused.as_deref());
         let fps_package = if screen_awake {
-            current_target.clone().or_else(|| {
-                if preview_active {
-                    focused.clone()
-                } else {
-                    None
-                }
-            })
+            current_target
+                .clone()
+                .or_else(|| record_candidate.clone())
+                .or_else(|| {
+                    if preview_active {
+                        focused.clone()
+                    } else {
+                        None
+                    }
+                })
         } else {
             None
         };
-        let fps_game_active = screen_awake && current_target.is_some();
+        let fps_game_active =
+            screen_awake && (current_target.is_some() || record_candidate.is_some());
         let fps_pid = if fps_game_active && runtime.target_game_pid > 0 {
             runtime.target_game_pid
         } else {
@@ -770,9 +780,15 @@ fn main() {
         };
         fps_monitor.observe(fps_package.as_deref(), fps_game_active, fps_pid);
 
+        let profile_label = runtime
+            .current_profile
+            .unwrap_or(Profile::Balance)
+            .as_str();
+        session_recorder.tick(screen_awake, focused.as_deref(), profile_label);
+
         let sleep_ms = if binder_client.is_push() {
             250
-        } else if current_target.is_some() {
+        } else if current_target.is_some() || record_candidate.is_some() {
             400
         } else {
             1200

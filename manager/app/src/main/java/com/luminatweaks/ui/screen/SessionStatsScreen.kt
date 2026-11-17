@@ -227,7 +227,7 @@ internal object SessionStatsRepository {
         }
 
         if (sourceFile != null) {
-            val parsed = runCatching { parseSessionsJson(sourceFile.readText()) }.getOrNull()
+            val parsed = runCatching { parseSessionsJson(context, sourceFile.readText()) }.getOrNull()
             if (parsed != null) {
                 return@withContext SessionLoadResult(sessions = parsed, isSampleData = false)
             }
@@ -359,7 +359,7 @@ internal object SessionStatsRepository {
         }
     }
 
-    private fun parseSessionsJson(raw: String): List<GameSessionRecord> {
+    private fun parseSessionsJson(context: Context, raw: String): List<GameSessionRecord> {
         val arr = JSONArray(raw.trim().ifEmpty { "[]" })
         val list = ArrayList<GameSessionRecord>(arr.length())
         for (i in 0 until arr.length()) {
@@ -387,7 +387,18 @@ internal object SessionStatsRepository {
                 GameSessionRecord(
                     id = obj.optString("id", i.toString()),
                     packageName = obj.optString("packageName", "unknown.app"),
-                    appName = obj.optString("appName", obj.optString("packageName", "Game")),
+                    appName = run {
+                        val pkg = obj.optString("packageName", "unknown.app")
+                        val rawName = obj.optString("appName", "").trim()
+                        if (rawName.isEmpty() || rawName == pkg) {
+                            runCatching {
+                                val info = context.packageManager.getApplicationInfo(pkg, 0)
+                                context.packageManager.getApplicationLabel(info).toString()
+                            }.getOrDefault(pkg)
+                        } else {
+                            rawName
+                        }
+                    },
                     profile = obj.optString("profile", "Balanced"),
                     displayHz = obj.optInt("displayHz", 120),
                     stopReason = obj.optString("stopReason", "auto"),

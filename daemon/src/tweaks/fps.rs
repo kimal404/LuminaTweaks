@@ -58,6 +58,7 @@ const EBPF_RETRY_AFTER: Duration = Duration::from_secs(30);
 const EBPF_MAX_HISTORY: usize = 144;
 const EBPF_MAX_FRAME_TIME: Duration = Duration::from_secs(2);
 const IDLE_MARKER: f32 = -1.0;
+const FRAME_TAP_CAPACITY: usize = 8192;
 const FPSGO_STATUS_PATHS: &[&str] = &[
     "/sys/kernel/debug/fpsgo/fstb/fpsgo_status",
     "/sys/kernel/fpsgo/fstb/fpsgo_status",
@@ -87,6 +88,69 @@ fn monotonic_ns() -> u64 {
     (value.tv_sec as u64)
         .saturating_mul(1_000_000_000)
         .saturating_add(value.tv_nsec.max(0) as u64)
+}
+
+/// Shared, bounded tap of per-frame durations.
+///
+/// The sampler worker owns the vendor-specific frame source, while the
+/// session recorder runs inside the main loop.  This tap is the only hand-off
+/// between them: it stores raw frame times when eBPF is active and synthetic
+/// window samples when a vendor fallback is used.  The buffer is bounded so an
+/// idle or non-recorded game can never grow memory without limit.
+#[derive(Default)]
+struct TapState {
+    frames: VecDeque<f32>,
+}
+
+#[derive(Clone)]
+pub struct FrameTap {
+    state: Arc<Mutex<TapState>>,
+}
+
+impl FrameTap {
+    fn new() -> Self {
+        Self {
+            state: Arc::new(Mutex::new(TapState::default())),
+        }
+    }
+
+    fn push(&self, frametime_ms: f32) {
+        if !frametime_ms.is_finite() || frametime_ms <= 0.0 {
+            return;
+        }
+        if let Ok(mut state) = self.state.lock() {
+            if state.frames.len() >= FRAME_TAP_CAPACITY {
+                state.frames.pop_front();
+            }
+            state.frames.push_back(frametime_ms);
+        }
+    }
+
+    /// Vendor fallbacks report a window average instead of individual frames.
+    /// Expand it proportionally so percentile and jank maths still operate on
+    /// frame-sized units; the window duration is approximated as one second.
+    fn push_window(&self, fps: f32, frametime_ms: f32) {
+        if !fps.is_finite() || !frametime_ms.is_finite() || fps <= 0.0 || frametime_ms <= 0.0 {
+            return;
+        }
+        let frames = (1000.0 / frametime_ms).round().clamp(1.0, 600.0) as usize;
+        for _ in 0..frames {
+            self.push(frametime_ms);
+        }
+    }
+
+    pub fn drain_into(&self, out: &mut Vec<f32>) {
+        if let Ok(mut state) = self.state.lock() {
+            out.reserve(state.frames.len());
+            out.extend(state.frames.drain(..));
+        }
+    }
+
+    pub fn clear(&self) {
+        if let Ok(mut state) = self.state.lock() {
+            state.frames.clear();
+        }
+    }
 }
 
 fn write_status_file(path: &str, frame: &str) {
@@ -449,11 +513,12 @@ impl EbpfSource {
         })
     }
 
-    fn drain(&mut self) {
+    fn drain(&mut self, tap: &FrameTap) {
         while let Some((pid, frametime)) = self.probe.recv_with_deadline(Duration::ZERO) {
             if pid != self.pid || frametime.is_zero() || frametime > EBPF_MAX_FRAME_TIME {
                 continue;
             }
+            tap.push(frametime.as_secs_f32() * 1000.0);
             let now = Instant::now();
             self.frames.push_back((now, frametime));
             self.last_frame = Some(now);
@@ -568,6 +633,7 @@ pub struct FpsMonitor {
     tx: Sender<Request>,
     last: Option<(Option<String>, bool, i32)>,
     stopped: Arc<Mutex<bool>>,
+    tap: FrameTap,
 }
 
 impl FpsMonitor {
@@ -575,16 +641,23 @@ impl FpsMonitor {
         let (tx, rx) = mpsc::channel();
         let stopped = Arc::new(Mutex::new(false));
         let worker_stopped = Arc::clone(&stopped);
+        let tap = FrameTap::new();
+        let worker_tap = tap.clone();
 
         let _ = thread::Builder::new()
             .name("fps-sampler".to_string())
-            .spawn(move || sampler_loop(rx, worker_stopped));
+            .spawn(move || sampler_loop(rx, worker_stopped, worker_tap));
 
         Self {
             tx,
             last: None,
             stopped,
+            tap,
         }
+    }
+
+    pub fn tap(&self) -> FrameTap {
+        self.tap.clone()
     }
 
     pub fn observe(&mut self, package: Option<&str>, game_active: bool, pid: i32) {
@@ -613,7 +686,7 @@ impl FpsMonitor {
     }
 }
 
-fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>) {
+fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>, tap: FrameTap) {
     let mut package: Option<String> = None;
     let mut game_active = false;
     let mut pid = 0;
@@ -664,6 +737,7 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>) {
                     unavailable_at = None;
                     ebpf = None;
                     ebpf_failed_at = None;
+                    tap.clear();
                 }
                 if next_pid != pid {
                     ebpf_failed_at = None;
@@ -699,7 +773,7 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>) {
 
         maintain_ebpf(&mut ebpf, &mut ebpf_failed_at, Some(pid));
         if let Some(probe) = ebpf.as_mut() {
-            probe.drain();
+            probe.drain(&tap);
         }
 
         let ebpf_reading = ebpf.as_ref().and_then(EbpfSource::reading);
@@ -799,6 +873,7 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>) {
             Some((fps, frametime)) => {
                 missing = 0;
                 slow = fps < 1.0;
+                tap.push_window(fps, frametime);
                 write_status(fps, frametime, game_active);
             }
             None => {
