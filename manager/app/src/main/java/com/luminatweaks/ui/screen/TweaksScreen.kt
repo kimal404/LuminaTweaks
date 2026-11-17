@@ -277,6 +277,7 @@ fun TweaksScreen(pagerState: PagerState? = null, onOpenFloatingHud: (() -> Unit)
     var showRenderSheet by rememberSaveable { mutableStateOf(false) }
     var showIoSchedulerSheet by rememberSaveable { mutableStateOf(false) }
     var inFloatingFpsSubpage by rememberSaveable { mutableStateOf(false) }
+    var inSessionStatsSubpage by remember { mutableStateOf(false) }
     var inMemoryZramSubpage by rememberSaveable { mutableStateOf(false) }
     var inHardwareDiagnosticSubpage by rememberSaveable { mutableStateOf(false) }
     var inUtilitySubpage by rememberSaveable { mutableStateOf(false) }
