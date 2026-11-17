@@ -58,6 +58,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeveloperBoard
+import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Speed
@@ -226,7 +227,7 @@ private suspend fun awaitPagerSettled(pagerState: PagerState?) {
 }
 
 @Composable
-fun TweaksScreen(pagerState: PagerState? = null, onOpenFloatingHud: (() -> Unit)? = null) {
+fun TweaksScreen(pagerState: PagerState? = null, onOpenFloatingHud: (() -> Unit)? = null, onOpenSessionStats: (() -> Unit)? = null) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
@@ -361,6 +362,10 @@ fun TweaksScreen(pagerState: PagerState? = null, onOpenFloatingHud: (() -> Unit)
 
     // ---- Subpages ----------------------------------------------------------
 
+    if (inSessionStatsSubpage) {
+        SessionStatsScreen(onBack = { inSessionStatsSubpage = false })
+        return
+    }
     if (inFloatingFpsSubpage) {
         BackHandler { inFloatingFpsSubpage = false }
         TelemetryOverlayScreen(
@@ -602,6 +607,16 @@ fun TweaksScreen(pagerState: PagerState? = null, onOpenFloatingHud: (() -> Unit)
                         title = "Floating HUD",
                         subtitle = telemetrySubtitle,
                         onClick = { if (onOpenFloatingHud != null) onOpenFloatingHud() else inFloatingFpsSubpage = true }
+                    )
+
+                    NestedTweakActionItem(
+                        icon = Icons.Rounded.Insights,
+                        title = localizedLabel("Statistik Sesi", "Session Stats"),
+                        subtitle = localizedLabel(
+                            "Riwayat FPS, stabilitas frame & suhu saat bermain",
+                            "FPS history, frame stability & thermal logs during gameplay"
+                        ),
+                        onClick = { if (onOpenSessionStats != null) onOpenSessionStats() else inSessionStatsSubpage = true }
                     )
 
                     NestedTweakActionItem(

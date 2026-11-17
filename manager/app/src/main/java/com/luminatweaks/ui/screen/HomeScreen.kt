@@ -479,6 +479,9 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
     ) { subscreen ->
         if (subscreen == "personalisasi") {
             PersonalisasiScreen(onBackClick = { currentSubscreen = null })
+        } else if (subscreen == "session_stats") {
+            BackHandler { currentSubscreen = null }
+            SessionStatsScreen(onBack = { currentSubscreen = null })
         } else if (subscreen == "telemetry_overlay") {
             BackHandler { currentSubscreen = null }
             TelemetryOverlayScreen(
@@ -531,13 +534,17 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             onRestartDaemon = restartAction,
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" }
                         )
-                        1 -> AppsScreen(pagerState = pagerState)
+                        1 -> AppsScreen(
+                            pagerState = pagerState,
+                            onOpenSessionStats = { currentSubscreen = "session_stats" }
+                        )
                         2 -> TweaksScreen(
                             pagerState = pagerState,
                             onOpenFloatingHud = {
                                 overlayConfig = FloatingFpsPrefs.load(context)
                                 currentSubscreen = "telemetry_overlay"
-                            }
+                            },
+                            onOpenSessionStats = { currentSubscreen = "session_stats" }
                         )
                         3 -> SettingsScreen(
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" },
@@ -602,13 +609,17 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             onRestartDaemon = restartAction,
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" }
                         )
-                        1 -> AppsScreen(pagerState = pagerState)
+                        1 -> AppsScreen(
+                            pagerState = pagerState,
+                            onOpenSessionStats = { currentSubscreen = "session_stats" }
+                        )
                         2 -> TweaksScreen(
                             pagerState = pagerState,
                             onOpenFloatingHud = {
                                 overlayConfig = FloatingFpsPrefs.load(context)
                                 currentSubscreen = "telemetry_overlay"
-                            }
+                            },
+                            onOpenSessionStats = { currentSubscreen = "session_stats" }
                         )
                         3 -> SettingsScreen(
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" },
