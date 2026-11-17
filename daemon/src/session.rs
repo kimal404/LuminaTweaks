@@ -122,6 +122,7 @@ impl RecordApps {
 fn parse_record_apps(raw: &str) -> HashSet<String> {
     let mut packages = HashSet::new();
     let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) else {
+        log!("[SESSION] record_apps.json is not valid JSON; ignoring");
         return packages;
     };
 
@@ -871,10 +872,20 @@ struct StoredSession {
 }
 
 fn read_sessions() -> Vec<StoredSession> {
-    fs::read_to_string(config_path(SESSIONS_FILE))
-        .ok()
-        .and_then(|raw| serde_json::from_str::<Vec<StoredSession>>(&raw).ok())
-        .unwrap_or_default()
+    let path = config_path(SESSIONS_FILE);
+    let Ok(raw) = fs::read_to_string(&path) else {
+        return Vec::new();
+    };
+    if raw.trim().is_empty() {
+        return Vec::new();
+    }
+    match serde_json::from_str::<Vec<StoredSession>>(&raw) {
+        Ok(sessions) => sessions,
+        Err(error) => {
+            log!("[SESSION] Failed to parse {}: {}", path, error);
+            Vec::new()
+        }
+    }
 }
 
 fn persist_session(session: StoredSession) {
@@ -947,7 +958,7 @@ impl SessionRecorder {
         if !screen_on {
             return None;
         }
-        let foreground = foreground?;
+        let foreground = foreground.map(sanitize_pkg_name).filter(|pkg| !pkg.is_empty())?;
         if self.config.packages.contains(foreground) {
             Some(foreground.to_string())
         } else {
@@ -958,6 +969,9 @@ impl SessionRecorder {
     pub fn tick(&mut self, screen_on: bool, foreground: Option<&str>, profile: &str) {
         self.config.refresh(false);
         let now = Instant::now();
+        let foreground = foreground
+            .map(sanitize_pkg_name)
+            .filter(|pkg| !pkg.is_empty());
 
         if self.active.is_some() {
             let stop = {

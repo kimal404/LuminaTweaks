@@ -676,6 +676,12 @@ fn main() {
         } else {
             None
         };
+        // Binder and /proc cmdline can expose a sub-process suffix such as
+        // `com.mobile.legends:UnityKillsMe`.  Normalise once so recording,
+        // profiles and texture rules all compare the base package name.
+        let focused = focused
+            .map(|package| detector::sanitize_pkg_name(&package).to_string())
+            .filter(|package| !package.is_empty());
 
         let current_target = if is_master_enabled() {
             let newly_focused_target = focused.as_deref().filter(|pkg| is_app_enabled(pkg));

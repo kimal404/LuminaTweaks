@@ -182,9 +182,7 @@ fun AppProfileScreen(
     var showRendererSheet by remember { mutableStateOf(false) }
     var showDndSheet by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    var isSessionRecordEnabled by remember(app.packageName) {
-        mutableStateOf(SessionStatsRepository.getRecordedPackages(context).contains(app.packageName))
-    }
+    var isSessionRecordEnabled by remember(app.packageName) { mutableStateOf(false) }
 
     LaunchedEffect(app.packageName) {
         isSessionRecordEnabled = SessionStatsRepository.getRecordedPackages(context).contains(app.packageName)

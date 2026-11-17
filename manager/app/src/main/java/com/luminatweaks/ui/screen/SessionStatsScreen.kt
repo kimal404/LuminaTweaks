@@ -111,6 +111,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -164,18 +165,60 @@ internal object SessionStatsRepository {
     private const val KEY_SAMPLE_DISMISSED = "sample_dismissed"
     private const val DAEMON_SESSIONS_PATH = "/data/adb/.config/lumina/sessions.json"
     private const val DAEMON_RECORD_APPS_PATH = "/data/adb/.config/lumina/record_apps.json"
+    private const val ROOT_READ_TIMEOUT_MS = 3_000L
+    private val PACKAGE_NAME_REGEX = Regex("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)+$")
 
-    fun getRecordedPackages(context: Context): Set<String> {
-        val daemonFile = File(DAEMON_RECORD_APPS_PATH)
-        val localFile = File(context.filesDir, "record_apps.json")
-        val source = when {
-            daemonFile.exists() && daemonFile.canRead() -> daemonFile
-            localFile.exists() && localFile.canRead() -> localFile
-            else -> null
+    /**
+     * `/data/adb` is `0700 root:root`, so the untrusted Manager process can
+     * never open files below it directly.  Read through `su` and keep a local
+     * copy as the fallback for devices where root is momentarily unavailable.
+     */
+    private fun readTextWithRoot(path: String): String? {
+        val process = runCatching {
+            ProcessBuilder("su", "-c", "cat '$path'")
+                .redirectErrorStream(false)
+                .start()
+        }.getOrNull() ?: return null
+
+        var output: String? = null
+        val reader = Thread {
+            output = runCatching {
+                process.inputStream.bufferedReader().use { it.readText() }
+            }.getOrNull()
         }
-        if (source != null) {
+        reader.isDaemon = true
+        reader.start()
+        reader.join(ROOT_READ_TIMEOUT_MS)
+
+        if (reader.isAlive) {
+            runCatching { process.destroyForcibly() }
+            return null
+        }
+        val exited = runCatching {
+            process.waitFor(500, TimeUnit.MILLISECONDS)
+        }.getOrDefault(false)
+        if (!exited) {
+            runCatching { process.destroyForcibly() }
+            return null
+        }
+        if (runCatching { process.exitValue() }.getOrDefault(-1) != 0) {
+            return null
+        }
+        return output?.takeIf { it.isNotBlank() }
+    }
+
+    private fun readLocalOrRoot(context: Context, rootPath: String, localName: String): String? {
+        readTextWithRoot(rootPath)?.let { return it }
+        val localFile = File(context.filesDir, localName)
+        if (!localFile.exists() || !localFile.canRead()) return null
+        return runCatching { localFile.readText().takeIf { it.isNotBlank() } }.getOrNull()
+    }
+
+    suspend fun getRecordedPackages(context: Context): Set<String> = withContext(Dispatchers.IO) {
+        val raw = readLocalOrRoot(context, DAEMON_RECORD_APPS_PATH, "record_apps.json")
+        if (raw != null) {
             val parsed = runCatching {
-                val arr = JSONArray(source.readText().trim().ifEmpty { "[]" })
+                val arr = JSONArray(raw.trim().ifEmpty { "[]" })
                 buildSet {
                     for (i in 0 until arr.length()) {
                         val pkg = arr.optString(i).trim()
@@ -183,9 +226,9 @@ internal object SessionStatsRepository {
                     }
                 }
             }.getOrNull()
-            if (parsed != null) return parsed
+            if (parsed != null) return@withContext parsed
         }
-        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getStringSet(KEY_RECORD_PACKAGES, emptySet())
             .orEmpty()
     }
@@ -218,16 +261,9 @@ internal object SessionStatsRepository {
     }
 
     suspend fun loadSessions(context: Context): SessionLoadResult = withContext(Dispatchers.IO) {
-        val daemonFile = File(DAEMON_SESSIONS_PATH)
-        val localFile = File(context.filesDir, "sessions.json")
-        val sourceFile = when {
-            daemonFile.exists() && daemonFile.canRead() -> daemonFile
-            localFile.exists() && localFile.canRead() -> localFile
-            else -> null
-        }
-
-        if (sourceFile != null) {
-            val parsed = runCatching { parseSessionsJson(context, sourceFile.readText()) }.getOrNull()
+        val raw = readLocalOrRoot(context, DAEMON_SESSIONS_PATH, "sessions.json")
+        if (raw != null) {
+            val parsed = runCatching { parseSessionsJson(context, raw) }.getOrNull()
             if (parsed != null) {
                 return@withContext SessionLoadResult(sessions = parsed, isSampleData = false)
             }
@@ -359,6 +395,19 @@ internal object SessionStatsRepository {
         }
     }
 
+    private fun resolveAppLabel(context: Context, packageName: String, rawLabel: String): String {
+        val label = rawLabel.trim()
+        val needsResolution = label.isEmpty() ||
+            label == packageName ||
+            PACKAGE_NAME_REGEX.matches(label)
+        if (!needsResolution) return label
+
+        return runCatching {
+            val info = context.packageManager.getApplicationInfo(packageName, 0)
+            context.packageManager.getApplicationLabel(info).toString()
+        }.getOrDefault(if (label.isNotEmpty()) label else packageName)
+    }
+
     private fun parseSessionsJson(context: Context, raw: String): List<GameSessionRecord> {
         val arr = JSONArray(raw.trim().ifEmpty { "[]" })
         val list = ArrayList<GameSessionRecord>(arr.length())
@@ -383,22 +432,19 @@ internal object SessionStatsRepository {
             } else {
                 emptyList()
             }
+            val packageName = obj.optString("packageName", "unknown.app")
+                .substringBefore(':')
+                .trim()
+                .ifEmpty { "unknown.app" }
             list.add(
                 GameSessionRecord(
                     id = obj.optString("id", i.toString()),
-                    packageName = obj.optString("packageName", "unknown.app"),
-                    appName = run {
-                        val pkg = obj.optString("packageName", "unknown.app")
-                        val rawName = obj.optString("appName", "").trim()
-                        if (rawName.isEmpty() || rawName == pkg) {
-                            runCatching {
-                                val info = context.packageManager.getApplicationInfo(pkg, 0)
-                                context.packageManager.getApplicationLabel(info).toString()
-                            }.getOrDefault(pkg)
-                        } else {
-                            rawName
-                        }
-                    },
+                    packageName = packageName,
+                    appName = resolveAppLabel(
+                        context,
+                        packageName,
+                        obj.optString("appName", "")
+                    ),
                     profile = obj.optString("profile", "Balanced"),
                     displayHz = obj.optInt("displayHz", 120),
                     stopReason = obj.optString("stopReason", "auto"),
