@@ -17,8 +17,6 @@
 package com.luminatweaks.ui.screen
 
 import android.content.Context
-import android.content.pm.ApplicationInfo
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas as AndroidCanvas
 import android.graphics.drawable.BitmapDrawable
@@ -53,33 +51,27 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Bolt
-import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.FileDownload
-import androidx.compose.material.icons.rounded.FiberManualRecord
-import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material.icons.rounded.Timeline
-import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -161,24 +153,17 @@ data class GameSessionRecord(
     val samples: List<SessionSamplePoint>
 )
 
-internal data class RecordableAppEntry(
-    val packageName: String,
-    val appName: String,
-    val isInGameList: Boolean
-)
-
 internal data class SessionLoadResult(
     val sessions: List<GameSessionRecord>,
-    val isMockData: Boolean
+    val isSampleData: Boolean
 )
 
 internal object SessionStatsRepository {
     private const val PREFS_NAME = "lumina_session_stats"
     private const val KEY_RECORD_PACKAGES = "record_packages_set"
-    private const val KEY_MOCK_DISMISSED = "mock_dismissed"
+    private const val KEY_SAMPLE_DISMISSED = "sample_dismissed"
     private const val DAEMON_SESSIONS_PATH = "/data/adb/.config/lumina/sessions.json"
     private const val DAEMON_RECORD_APPS_PATH = "/data/adb/.config/lumina/record_apps.json"
-    private const val DAEMON_GAMELIST_PATH = "/data/adb/.config/lumina/gamelist.json"
 
     fun getRecordedPackages(context: Context): Set<String> {
         val daemonFile = File(DAEMON_RECORD_APPS_PATH)
@@ -232,57 +217,6 @@ internal object SessionStatsRepository {
         }
     }
 
-    suspend fun loadRecordableApps(context: Context): List<RecordableAppEntry> = withContext(Dispatchers.IO) {
-        val pm = context.packageManager
-        val gamePackages = runCatching {
-            val f = File(DAEMON_GAMELIST_PATH)
-            if (f.exists() && f.canRead()) {
-                val raw = f.readText().trim()
-                if (raw.startsWith("[")) {
-                    val arr = JSONArray(raw)
-                    buildSet {
-                        for (i in 0 until arr.length()) {
-                            val item = arr.opt(i)
-                            val pkg = when (item) {
-                                is String -> item
-                                is JSONObject -> item.optString("packageName", item.optString("package", ""))
-                                else -> ""
-                            }.trim()
-                            if (pkg.isNotEmpty()) add(pkg)
-                        }
-                    }
-                } else {
-                    raw.lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.toSet()
-                }
-            } else {
-                emptySet()
-            }
-        }.getOrDefault(emptySet())
-
-        val installed = runCatching {
-            pm.getInstalledApplications(PackageManager.GET_META_DATA)
-        }.getOrDefault(emptyList())
-
-        installed.mapNotNull { appInfo ->
-            val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
-            val isUpdatedSystem = (appInfo.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
-            if (isSystem && !isUpdatedSystem && appInfo.packageName !in gamePackages) {
-                return@mapNotNull null
-            }
-            if (appInfo.packageName == context.packageName) return@mapNotNull null
-            val label = runCatching { pm.getApplicationLabel(appInfo).toString() }
-                .getOrDefault(appInfo.packageName)
-            RecordableAppEntry(
-                packageName = appInfo.packageName,
-                appName = label,
-                isInGameList = appInfo.packageName in gamePackages
-            )
-        }.sortedWith(
-            compareByDescending<RecordableAppEntry> { it.isInGameList }
-                .thenBy { it.appName.lowercase(Locale.getDefault()) }
-        )
-    }
-
     suspend fun loadSessions(context: Context): SessionLoadResult = withContext(Dispatchers.IO) {
         val daemonFile = File(DAEMON_SESSIONS_PATH)
         val localFile = File(context.filesDir, "sessions.json")
@@ -295,16 +229,16 @@ internal object SessionStatsRepository {
         if (sourceFile != null) {
             val parsed = runCatching { parseSessionsJson(sourceFile.readText()) }.getOrNull()
             if (parsed != null) {
-                return@withContext SessionLoadResult(sessions = parsed, isMockData = false)
+                return@withContext SessionLoadResult(sessions = parsed, isSampleData = false)
             }
         }
 
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        if (prefs.getBoolean(KEY_MOCK_DISMISSED, false)) {
-            return@withContext SessionLoadResult(sessions = emptyList(), isMockData = false)
+        if (prefs.getBoolean(KEY_SAMPLE_DISMISSED, false)) {
+            return@withContext SessionLoadResult(sessions = emptyList(), isSampleData = false)
         }
 
-        SessionLoadResult(sessions = defaultMockSessions(), isMockData = true)
+        SessionLoadResult(sessions = defaultSampleSessions(), isSampleData = true)
     }
 
     suspend fun exportSessionCsv(session: GameSessionRecord): Result<File> = withContext(Dispatchers.IO) {
@@ -315,38 +249,37 @@ internal object SessionStatsRepository {
 
             val safeName = session.appName.replace(Regex("[^a-zA-Z0-9._-]"), "_").take(28)
             val outFile = File(exportDir, "lumina_session_${safeName}_${session.id}.csv")
-            val recordedAtStr = SimpleDateFormat("EEE MMM dd HH:mm:ss z yyyy", Locale.US)
+            val recordedAtStr = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
                 .format(Date(session.startTimeMs))
 
             val sb = StringBuilder()
-            sb.appendLine("LUMINA TWEAKS SESSION REPORT")
-            sb.appendLine("Game Title,${escapeCsv(session.appName)}")
-            sb.appendLine("Package Name,${escapeCsv(session.packageName)}")
+            sb.appendLine("LUMINA TWEAKS TELEMETRY SESSION")
+            sb.appendLine("App Name,${escapeCsv(session.appName)}")
+            sb.appendLine("Package,${escapeCsv(session.packageName)}")
             sb.appendLine("Profile,${escapeCsv(session.profile)}")
-            sb.appendLine("Display Refresh Rate (Hz),${session.displayHz}")
-            sb.appendLine("Stopped,${escapeCsv(session.stopReason)}")
+            sb.appendLine("Display Hz,${session.displayHz}")
+            sb.appendLine("Stop Mode,${escapeCsv(session.stopReason)}")
             sb.appendLine("Recorded At,${escapeCsv(recordedAtStr)}")
-            sb.appendLine("Duration (Seconds),${session.durationSec}")
-            sb.appendLine("Total Samples,${session.samples.size}")
+            sb.appendLine("Duration Seconds,${session.durationSec}")
             sb.appendLine(String.format(Locale.US, "Average FPS,%.1f", session.avgFps))
             sb.appendLine("Min FPS,${session.minFps}")
-            sb.appendLine("Peak FPS,${session.maxFps}")
+            sb.appendLine("Max FPS,${session.maxFps}")
             sb.appendLine(String.format(Locale.US, "1%% Low FPS,%.1f", session.onePercentLowFps))
             sb.appendLine(String.format(Locale.US, "0.1%% Low FPS,%.1f", session.zeroPointOnePercentLowFps))
             sb.appendLine(String.format(Locale.US, "Frame Pacing StdDev (ms),%.2f", session.framePacingStdDevMs))
-            sb.appendLine("Total Jank Frames,${session.jankCount}")
-            sb.appendLine(String.format(Locale.US, "Max CPU Temp (°C),%.1f", session.maxCpuTempC))
-            sb.appendLine(String.format(Locale.US, "Start Battery Temp (°C),%.1f", session.startBatteryTempC))
-            sb.appendLine(String.format(Locale.US, "Peak Battery Temp (°C),%.1f", session.peakBatteryTempC))
+            sb.appendLine("Jank Frames,${session.jankCount}")
+            sb.appendLine(String.format(Locale.US, "Peak CPU Temp (C),%.1f", session.maxCpuTempC))
+            sb.appendLine(String.format(Locale.US, "Start Battery Temp (C),%.1f", session.startBatteryTempC))
+            sb.appendLine(String.format(Locale.US, "Peak Battery Temp (C),%.1f", session.peakBatteryTempC))
             sb.appendLine("Average Power (mW),${session.avgPowerMw}")
             sb.appendLine()
-            sb.appendLine("Timestamp Offset (ms),Average FPS,Min FPS,1% Low,0.1% Low,Jank Frames,CPU Temp (°C),Battery Temp (°C),Power (mW)")
+            sb.appendLine("Offset (s),Avg FPS,Min FPS,1% Low,0.1% Low,Jank Frames,CPU Temp (C),Battery Temp (C),Power (mW)")
             for (pt in session.samples) {
                 sb.appendLine(
                     String.format(
                         Locale.US,
                         "%d,%.1f,%.1f,%.1f,%.1f,%d,%.1f,%.1f,%d",
-                        pt.offsetSec * 1000L,
+                        pt.offsetSec,
                         pt.avgFps,
                         pt.minFps,
                         pt.onePercentLow,
@@ -367,14 +300,14 @@ internal object SessionStatsRepository {
         context: Context,
         id: String,
         current: List<GameSessionRecord>,
-        isMock: Boolean
+        isSample: Boolean
     ): List<GameSessionRecord> = withContext(Dispatchers.IO) {
         val updated = current.filterNot { it.id == id }
-        if (isMock) {
+        if (isSample) {
             if (updated.isEmpty()) {
                 context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                     .edit()
-                    .putBoolean(KEY_MOCK_DISMISSED, true)
+                    .putBoolean(KEY_SAMPLE_DISMISSED, true)
                     .apply()
             }
             return@withContext updated
@@ -392,11 +325,11 @@ internal object SessionStatsRepository {
         updated
     }
 
-    suspend fun clearAll(context: Context, isMock: Boolean) = withContext(Dispatchers.IO) {
-        if (isMock) {
+    suspend fun clearAll(context: Context, isSample: Boolean) = withContext(Dispatchers.IO) {
+        if (isSample) {
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .edit()
-                .putBoolean(KEY_MOCK_DISMISSED, true)
+                .putBoolean(KEY_SAMPLE_DISMISSED, true)
                 .apply()
             return@withContext
         }
@@ -410,12 +343,12 @@ internal object SessionStatsRepository {
         }
     }
 
-    suspend fun restoreMockPreview(context: Context): List<GameSessionRecord> = withContext(Dispatchers.IO) {
+    suspend fun restoreSamplePreview(context: Context): List<GameSessionRecord> = withContext(Dispatchers.IO) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
-            .putBoolean(KEY_MOCK_DISMISSED, false)
+            .putBoolean(KEY_SAMPLE_DISMISSED, false)
             .apply()
-        defaultMockSessions()
+        defaultSampleSessions()
     }
 
     private fun escapeCsv(value: String): String {
@@ -457,7 +390,7 @@ internal object SessionStatsRepository {
                     appName = obj.optString("appName", obj.optString("packageName", "Game")),
                     profile = obj.optString("profile", "Balanced"),
                     displayHz = obj.optInt("displayHz", 120),
-                    stopReason = obj.optString("stopReason", "manual"),
+                    stopReason = obj.optString("stopReason", "auto"),
                     startTimeMs = obj.optLong("startTimeMs", System.currentTimeMillis()),
                     durationSec = obj.optInt("durationSec", 0),
                     avgFps = obj.optDouble("avgFps", 0.0).toFloat(),
@@ -524,7 +457,7 @@ internal object SessionStatsRepository {
         return arr.toString()
     }
 
-    private fun defaultMockSessions(): List<GameSessionRecord> {
+    private fun defaultSampleSessions(): List<GameSessionRecord> {
         val now = System.currentTimeMillis()
         val mlbbAvg = listOf(115f, 118f, 112f, 119f, 116f, 108f, 114f, 117f, 104f, 111f, 118f, 115f, 98f, 109f, 116f, 118f, 112f, 117f, 106f, 114f, 119f, 116f, 110f, 115f)
         val mlbbMin = listOf(96f, 104f, 88f, 108f, 94f, 76f, 92f, 101f, 64f, 84f, 103f, 95f, 52f, 79f, 98f, 105f, 86f, 99f, 72f, 91f, 107f, 97f, 81f, 94f)
@@ -563,9 +496,9 @@ internal object SessionStatsRepository {
                 id = "1794594124635",
                 packageName = "com.mobile.legends",
                 appName = "Mobile Legends: Bang Bang",
-                profile = "performance",
+                profile = "Performance",
                 displayHz = 120,
-                stopReason = "manual",
+                stopReason = "Otomatis",
                 startTimeMs = now - 3_600_000L,
                 durationSec = 1157,
                 avgFps = 113.4f,
@@ -585,9 +518,9 @@ internal object SessionStatsRepository {
                 id = "1794594209677",
                 packageName = "com.tencent.ig",
                 appName = "PUBG Mobile",
-                profile = "performance",
+                profile = "Performance",
                 displayHz = 90,
-                stopReason = "auto",
+                stopReason = "Otomatis",
                 startTimeMs = now - 18_000_000L,
                 durationSec = 1900,
                 avgFps = 87.9f,
@@ -628,7 +561,7 @@ private fun formatClockDuration(durationSec: Int): String {
 }
 
 private fun formatSessionDate(startTimeMs: Long): String {
-    val sdf = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault())
+    val sdf = SimpleDateFormat("dd MMM yyyy · HH:mm", Locale.getDefault())
     return sdf.format(Date(startTimeMs))
 }
 
@@ -640,33 +573,15 @@ internal fun SessionStatsScreen(
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
 
-    var recordedPackages by remember { mutableStateOf(SessionStatsRepository.getRecordedPackages(context)) }
     var sessions by remember { mutableStateOf<List<GameSessionRecord>>(emptyList()) }
-    var isMockData by remember { mutableStateOf(false) }
+    var isSampleData by remember { mutableStateOf(false) }
     var selectedSession by remember { mutableStateOf<GameSessionRecord?>(null) }
-    var showAppToggleManager by remember { mutableStateOf(false) }
     var showClearDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        recordedPackages = SessionStatsRepository.getRecordedPackages(context)
         val result = SessionStatsRepository.loadSessions(context)
         sessions = result.sessions
-        isMockData = result.isMockData
-    }
-
-    if (showAppToggleManager) {
-        BackHandler { showAppToggleManager = false }
-        PerAppRecordToggleScreen(
-            recordedPackages = recordedPackages,
-            onToggleApp = { pkg, enabled ->
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                scope.launch {
-                    recordedPackages = SessionStatsRepository.setAppRecordEnabled(context, pkg, enabled)
-                }
-            },
-            onBack = { showAppToggleManager = false }
-        )
-        return
+        isSampleData = result.isSampleData
     }
 
     val activeDetail = selectedSession
@@ -674,7 +589,7 @@ internal fun SessionStatsScreen(
         BackHandler { selectedSession = null }
         SessionDetailScreen(
             session = activeDetail,
-            isMockData = isMockData,
+            isSampleData = isSampleData,
             onBack = { selectedSession = null },
             onExportCsv = {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -683,16 +598,16 @@ internal fun SessionStatsScreen(
                     val res = SessionStatsRepository.exportSessionCsv(activeDetail)
                     res.onSuccess { file ->
                         val msg = if (isIndo) {
-                            "Tersimpan: Download/LuminaTweaks/${file.name}"
+                            "Tersimpan di Download/LuminaTweaks/${file.name}"
                         } else {
-                            "Saved: Download/LuminaTweaks/${file.name}"
+                            "Saved to Download/LuminaTweaks/${file.name}"
                         }
                         Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                     }.onFailure { err ->
                         val msg = if (isIndo) {
-                            "Gagal ekspor CSV: ${err.message}"
+                            "Gagal menyimpan CSV: ${err.message}"
                         } else {
-                            "CSV export failed: ${err.message}"
+                            "Failed to save CSV: ${err.message}"
                         }
                         Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                     }
@@ -705,7 +620,7 @@ internal fun SessionStatsScreen(
                         context = context,
                         id = activeDetail.id,
                         current = sessions,
-                        isMock = isMockData
+                        isSample = isSampleData
                     )
                     selectedSession = null
                 }
@@ -737,7 +652,7 @@ internal fun SessionStatsScreen(
                         showClearDialog = false
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         scope.launch {
-                            SessionStatsRepository.clearAll(context, isMockData)
+                            SessionStatsRepository.clearAll(context, isSampleData)
                             sessions = emptyList()
                         }
                     }
@@ -758,7 +673,6 @@ internal fun SessionStatsScreen(
     }
 
     val outerRadius = LocalCornerRadius.current.coerceAtLeast(24.dp)
-    val innerRadius = (LocalCornerRadius.current * 0.78f).coerceIn(16.dp, 24.dp)
     val bottomPadding = 24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     Scaffold(
@@ -772,7 +686,7 @@ internal fun SessionStatsScreen(
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold
                         )
-                        if (isMockData && sessions.isNotEmpty()) {
+                        if (isSampleData && sessions.isNotEmpty()) {
                             Spacer(modifier = Modifier.width(8.dp))
                             Surface(
                                 shape = CircleShape,
@@ -792,7 +706,7 @@ internal fun SessionStatsScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
-                            imageVector = Icons.Rounded.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                             contentDescription = null
                         )
                     }
@@ -822,76 +736,8 @@ internal fun SessionStatsScreen(
                 start = 16.dp,
                 end = 16.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item(key = "per_app_control") {
-                NestedTweakCardGroup(
-                    headerIcon = Icons.Rounded.FiberManualRecord,
-                    headerTitle = localizedLabel("Perekaman Per Aplikasi", "Per-App Recording")
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(innerRadius),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = if (recordedPackages.isEmpty()) {
-                                            localizedLabel("Belum ada aplikasi dipilih", "No apps selected")
-                                        } else {
-                                            localizedLabel(
-                                                "${recordedPackages.size} aplikasi diaktifkan",
-                                                "${recordedPackages.size} apps enabled"
-                                            )
-                                        },
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = localizedLabel(
-                                            "Pilih masing-masing aplikasi yang ingin direkam sesinya",
-                                            "Toggle session recording individually per application"
-                                        ),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-
-                            FilledTonalButton(
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    showAppToggleManager = true
-                                },
-                                shape = CircleShape,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Tune,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = localizedLabel("Atur Toggle Per Aplikasi", "Configure Per-App Toggles"),
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
             if (sessions.isEmpty()) {
                 item(key = "empty_state") {
                     Surface(
@@ -902,13 +748,13 @@ internal fun SessionStatsScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 24.dp, vertical = 32.dp),
+                                .padding(horizontal = 24.dp, vertical = 36.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(48.dp)
+                                    .size(52.dp)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.surfaceContainerHigh),
                                 contentAlignment = Alignment.Center
@@ -917,19 +763,19 @@ internal fun SessionStatsScreen(
                                     imageVector = Icons.Rounded.SportsEsports,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(26.dp)
                                 )
                             }
                             Text(
-                                text = localizedLabel("Belum Ada Sesi Terekam", "No Sessions Recorded"),
+                                text = localizedLabel("Belum Ada Hasil Rekaman", "No Recorded Sessions"),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = localizedLabel(
-                                    "Aktifkan toggle rekam pada aplikasi pilihan lalu jalankan permainannya.",
-                                    "Enable the record toggle on chosen apps and play a session."
+                                    "Aktifkan sakelar rekam di halaman Profil Aplikasi pilihan Anda, lalu mainkan permainannya.",
+                                    "Enable the recording toggle inside your chosen App Profile, then play a session."
                                 ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -937,27 +783,17 @@ internal fun SessionStatsScreen(
                             TextButton(
                                 onClick = {
                                     scope.launch {
-                                        sessions = SessionStatsRepository.restoreMockPreview(context)
-                                        isMockData = true
+                                        sessions = SessionStatsRepository.restoreSamplePreview(context)
+                                        isSampleData = true
                                     }
                                 }
                             ) {
-                                Text(localizedLabel("Muat Contoh Data", "Load Sample Data"))
+                                Text(localizedLabel("Tampilkan Contoh Data", "Show Sample Data"))
                             }
                         }
                     }
                 }
             } else {
-                item(key = "history_header") {
-                    Text(
-                        text = localizedLabel("RIWAYAT SESI (${sessions.size})", "SESSION HISTORY (${sessions.size})"),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
-
                 items(sessions, key = { it.id }) { session ->
                     SessionHistoryCard(
                         session = session,
@@ -966,176 +802,6 @@ internal fun SessionStatsScreen(
                             selectedSession = session
                         }
                     )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PerAppRecordToggleScreen(
-    recordedPackages: Set<String>,
-    onToggleApp: (String, Boolean) -> Unit,
-    onBack: () -> Unit
-) {
-    val context = LocalContext.current
-    var allApps by remember { mutableStateOf<List<RecordableAppEntry>>(emptyList()) }
-    var query by remember { mutableStateOf("") }
-
-    LaunchedEffect(Unit) {
-        allApps = SessionStatsRepository.loadRecordableApps(context)
-    }
-
-    val filteredApps = remember(allApps, query, recordedPackages) {
-        val q = query.trim().lowercase(Locale.getDefault())
-        allApps.filter {
-            q.isEmpty() || it.appName.lowercase(Locale.getDefault()).contains(q) ||
-                it.packageName.lowercase(Locale.getDefault()).contains(q)
-        }.sortedWith(
-            compareByDescending<RecordableAppEntry> { it.packageName in recordedPackages }
-                .thenByDescending { it.isInGameList }
-                .thenBy { it.appName.lowercase(Locale.getDefault()) }
-        )
-    }
-
-    val innerRadius = (LocalCornerRadius.current * 0.78f).coerceIn(16.dp, 24.dp)
-    val bottomPadding = 24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = localizedLabel("Toggle Rekam Per App", "Per-App Record Toggles"),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(imageVector = Icons.Rounded.ArrowBack, contentDescription = null)
-                    }
-                },
-                windowInsets = WindowInsets.statusBars,
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
-            )
-        }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding() + 6.dp,
-                bottom = bottomPadding,
-                start = 16.dp,
-                end = 16.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            item(key = "search_bar") {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    singleLine = true,
-                    shape = CircleShape,
-                    placeholder = {
-                        Text(localizedLabel("Cari aplikasi atau paket...", "Search app or package..."))
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            items(filteredApps, key = { it.packageName }) { app ->
-                val isEnabled = app.packageName in recordedPackages
-                val appIcon by produceState<ImageBitmap?>(initialValue = null, app.packageName) {
-                    value = withContext(Dispatchers.IO) {
-                        runCatching {
-                            drawableToImageBitmap(context.packageManager.getApplicationIcon(app.packageName))
-                        }.getOrNull()
-                    }
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(innerRadius),
-                    color = MaterialTheme.colorScheme.surfaceContainer,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(innerRadius))
-                        .clickable { onToggleApp(app.packageName, !isEnabled) }
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        if (appIcon != null) {
-                            Image(
-                                bitmap = appIcon!!,
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                            )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.SportsEsports,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = app.appName,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f, fill = false)
-                                )
-                                if (app.isInGameList) {
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Surface(
-                                        shape = CircleShape,
-                                        color = MaterialTheme.colorScheme.primaryContainer
-                                    ) {
-                                        Text(
-                                            text = "GAME",
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                                        )
-                                    }
-                                }
-                            }
-                            Text(
-                                text = app.packageName,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-
-                        Switch(
-                            checked = isEnabled,
-                            onCheckedChange = { checked -> onToggleApp(app.packageName, checked) }
-                        )
-                    }
                 }
             }
         }
@@ -1190,13 +856,13 @@ private fun SessionHistoryCard(
                         bitmap = appIcon!!,
                         contentDescription = null,
                         modifier = Modifier
-                            .size(42.dp)
+                            .size(44.dp)
                             .clip(RoundedCornerShape(12.dp))
                     )
                 } else {
                     Box(
                         modifier = Modifier
-                            .size(42.dp)
+                            .size(44.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(MaterialTheme.colorScheme.primaryContainer),
                         contentAlignment = Alignment.Center
@@ -1261,7 +927,7 @@ private fun SessionHistoryCard(
                             color = fpsColor
                         )
                         Text(
-                            text = "Average FPS",
+                            text = localizedLabel("Rata-rata FPS", "Average FPS"),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1283,7 +949,7 @@ private fun SessionHistoryCard(
 
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
-                            text = "${session.avgPowerMw} mW",
+                            text = String.format(Locale.US, "%.2f W", session.avgPowerMw / 1000f),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -1303,15 +969,24 @@ private fun SessionHistoryCard(
 @Composable
 private fun SessionDetailScreen(
     session: GameSessionRecord,
-    isMockData: Boolean,
+    isSampleData: Boolean,
     onBack: () -> Unit,
     onExportCsv: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val context = LocalContext.current
     val outerRadius = LocalCornerRadius.current.coerceAtLeast(26.dp)
     val innerRadius = (LocalCornerRadius.current * 0.78f).coerceIn(16.dp, 24.dp)
     val bottomPadding = 24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     var scrubbedIndex by remember { mutableIntStateOf(-1) }
+
+    val appIcon by produceState<ImageBitmap?>(initialValue = null, session.packageName) {
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                drawableToImageBitmap(context.packageManager.getApplicationIcon(session.packageName))
+            }.getOrNull()
+        }
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
@@ -1336,7 +1011,7 @@ private fun SessionDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
-                            imageVector = Icons.Rounded.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                             contentDescription = null
                         )
                     }
@@ -1345,7 +1020,7 @@ private fun SessionDetailScreen(
                     IconButton(onClick = onExportCsv) {
                         Icon(
                             imageVector = Icons.Rounded.FileDownload,
-                            contentDescription = localizedLabel("Simpan CSV", "Export CSV"),
+                            contentDescription = localizedLabel("Simpan CSV", "Save CSV"),
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -1374,7 +1049,8 @@ private fun SessionDetailScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item(key = "session_meta_card") {
+            // 1. Header Identitas Sesi (Ringkas & Bersih)
+            item(key = "session_identity_card") {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(outerRadius),
@@ -1387,137 +1063,84 @@ private fun SessionDetailScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(18.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text(
-                            text = session.packageName,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        val modeTag = if (isMockData) "${session.stopReason} · sample" else session.stopReason
-                        Text(
-                            text = "duration ${formatClockDuration(session.durationSec)} · profile ${session.profile} · display ${session.displayHz} Hz · stopped: $modeTag",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            if (appIcon != null) {
+                                Image(
+                                    bitmap = appIcon!!,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(MaterialTheme.colorScheme.primaryContainer),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.SportsEsports,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = session.appName,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = session.packageName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            SessionTagChip(
+                                text = session.profile.replaceFirstChar { it.uppercase() },
+                                highlighted = true
+                            )
+                            SessionTagChip(text = "${session.displayHz} Hz")
+                            SessionTagChip(text = formatClockDuration(session.durationSec))
+                            if (isSampleData) {
+                                SessionTagChip(text = "Sample")
+                            }
+                        }
                     }
                 }
             }
 
-            item(key = "eight_metrics_grid") {
-                val deltaTemp = session.peakBatteryTempC - session.startBatteryTempC
-                val deltaFormatted = String.format(
-                    Locale.US,
-                    "Δ %s%.1f",
-                    if (deltaTemp >= 0f) "+" else "",
-                    deltaTemp
-                )
-
-                NestedTweakCardGroup(
-                    headerIcon = Icons.Rounded.DeveloperBoard,
-                    headerTitle = localizedLabel("Ringkasan Telemetri Sesi", "Session Telemetry Summary")
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        SessionDetailTile(
-                            icon = Icons.Rounded.Speed,
-                            label = "Average FPS",
-                            value = String.format(Locale.US, "%.1f", session.avgFps),
-                            supporting = "Peak ${session.maxFps} FPS",
-                            accent = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f)
-                        )
-                        SessionDetailTile(
-                            icon = Icons.Rounded.Insights,
-                            label = "Min FPS",
-                            value = "${session.minFps}",
-                            supporting = String.format(Locale.US, "StdDev %.2f ms", session.framePacingStdDevMs),
-                            accent = MaterialTheme.colorScheme.tertiary,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        SessionDetailTile(
-                            icon = Icons.Rounded.Timeline,
-                            label = "1% low",
-                            value = String.format(Locale.US, "%.0f", session.onePercentLowFps),
-                            supporting = "99th percentile",
-                            accent = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.weight(1f)
-                        )
-                        SessionDetailTile(
-                            icon = Icons.Rounded.Timeline,
-                            label = "0.1% low",
-                            value = String.format(Locale.US, "%.0f", session.zeroPointOnePercentLowFps),
-                            supporting = "Worst frame floor",
-                            accent = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        SessionDetailTile(
-                            icon = Icons.Rounded.CheckCircle,
-                            label = "Jank (frames)",
-                            value = "${session.jankCount}",
-                            supporting = localizedLabel("Frame melewati target", "Missed frame budget"),
-                            accent = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.weight(1f)
-                        )
-                        SessionDetailTile(
-                            icon = Icons.Rounded.Thermostat,
-                            label = "Max CPU temp",
-                            value = String.format(Locale.US, "%.1f °C", session.maxCpuTempC),
-                            supporting = localizedLabel("Suhu puncak SoC", "Peak SoC junction"),
-                            accent = MaterialTheme.colorScheme.tertiary,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        SessionDetailTile(
-                            icon = Icons.Rounded.Thermostat,
-                            label = "Battery temp ($deltaFormatted)",
-                            value = String.format(Locale.US, "%.0f → %.0f °C", session.startBatteryTempC, session.peakBatteryTempC),
-                            supporting = localizedLabel("Awal → Puncak", "Start → Peak"),
-                            accent = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f)
-                        )
-                        SessionDetailTile(
-                            icon = Icons.Rounded.Bolt,
-                            label = "Average power",
-                            value = "${session.avgPowerMw} mW",
-                            supporting = String.format(Locale.US, "%.2f W rata-rata", session.avgPowerMw / 1000f),
-                            accent = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-
+            // 2. KARTU UTAMA ATAS: Grafik Performa FPS (Ditempatkan di atas Ringkasan Telemetri)
             if (session.samples.size >= 2) {
-                item(key = "interactive_fps_chart") {
+                item(key = "fps_performance_chart") {
                     val avgColor = MaterialTheme.colorScheme.primary
                     val minColor = MaterialTheme.colorScheme.tertiary
                     val activePoint = session.samples.getOrNull(scrubbedIndex)
 
                     NestedTweakCardGroup(
                         headerIcon = Icons.Rounded.Timeline,
-                        headerTitle = "FPS"
+                        headerTitle = localizedLabel("Performa Frame", "Frame Performance")
                     ) {
                         Surface(
                             shape = RoundedCornerShape(innerRadius),
@@ -1528,18 +1151,9 @@ private fun SessionDetailScreen(
                                 modifier = Modifier.padding(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Text(
-                                    text = localizedLabel(
-                                        "Whole session · sentuh atau geser grafik untuk detail",
-                                        "Whole session · touch or drag the chart for details"
-                                    ),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-
                                 if (activePoint != null) {
                                     Surface(
-                                        shape = RoundedCornerShape(12.dp),
+                                        shape = RoundedCornerShape(14.dp),
                                         color = MaterialTheme.colorScheme.primaryContainer
                                     ) {
                                         Row(
@@ -1550,7 +1164,10 @@ private fun SessionDetailScreen(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Text(
-                                                text = formatClockDuration(activePoint.offsetSec),
+                                                text = localizedLabel(
+                                                    "Menit ${formatClockDuration(activePoint.offsetSec)}",
+                                                    "At ${formatClockDuration(activePoint.offsetSec)}"
+                                                ),
                                                 style = MaterialTheme.typography.labelLarge,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -1558,11 +1175,10 @@ private fun SessionDetailScreen(
                                             Text(
                                                 text = String.format(
                                                     Locale.US,
-                                                    "Avg %.0f · Min %.0f FPS · CPU %.0f°C · Bat %.1f°C",
+                                                    "Avg %.0f · Min %.0f FPS · CPU %.0f°C",
                                                     activePoint.avgFps,
                                                     activePoint.minFps,
-                                                    activePoint.cpuTempC,
-                                                    activePoint.batteryTempC
+                                                    activePoint.cpuTempC
                                                 ),
                                                 style = MaterialTheme.typography.labelMedium,
                                                 fontWeight = FontWeight.Bold,
@@ -1573,24 +1189,24 @@ private fun SessionDetailScreen(
                                 } else {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        ChartLegendItem(
+                                        ChartLegendPill(
                                             color = avgColor,
-                                            title = "Average",
-                                            value = "avg ${session.avgFps.roundToInt()} FPS",
+                                            label = localizedLabel("Rata-rata", "Average"),
+                                            value = String.format(Locale.US, "%.1f FPS", session.avgFps),
                                             dashed = false
                                         )
-                                        ChartLegendItem(
+                                        ChartLegendPill(
                                             color = minColor,
-                                            title = "Min",
-                                            value = "min ${session.minFps} FPS",
+                                            label = localizedLabel("Terendah", "Minimum"),
+                                            value = "${session.minFps} FPS",
                                             dashed = false
                                         )
-                                        ChartLegendItem(
+                                        ChartLegendPill(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            title = "Refresh rate",
+                                            label = localizedLabel("Layar", "Display"),
                                             value = "${session.displayHz} Hz",
                                             dashed = true
                                         )
@@ -1607,7 +1223,7 @@ private fun SessionDetailScreen(
                                     onScrubIndexChange = { scrubbedIndex = it },
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(172.dp)
+                                        .height(176.dp)
                                 )
 
                                 val midSec = session.durationSec / 2
@@ -1631,7 +1247,158 @@ private fun SessionDetailScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
+
+                                Text(
+                                    text = localizedLabel(
+                                        "Geser jari di atas grafik untuk melihat detail tiap titik waktu",
+                                        "Slide finger across the chart to inspect individual timestamps"
+                                    ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
+                        }
+                    }
+                }
+            }
+
+            // 3. KARTU BAWAH FPS: Ringkasan Telemetri (Baris Bento MD3E Penuh Tanpa Teks Terpotong)
+            item(key = "telemetry_summary_section") {
+                val deltaTemp = session.peakBatteryTempC - session.startBatteryTempC
+                val deltaText = String.format(
+                    Locale.US,
+                    "%s%.1f°C",
+                    if (deltaTemp >= 0f) "+" else "",
+                    deltaTemp
+                )
+
+                NestedTweakCardGroup(
+                    headerIcon = Icons.Rounded.DeveloperBoard,
+                    headerTitle = localizedLabel("Ringkasan Telemetri", "Telemetry Summary")
+                ) {
+                    // Blok A: 3 Kolom Utama FPS (Tanpa ikon di dalam kolom sehingga label 100% utuh)
+                    Surface(
+                        shape = RoundedCornerShape(innerRadius),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = String.format(Locale.US, "%.1f", session.avgFps),
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = localizedLabel("Rata-rata FPS", "Average FPS"),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "${session.onePercentLowFps.roundToInt()} FPS",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "1% Low",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = "${session.zeroPointOnePercentLowFps.roundToInt()} FPS",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "0.1% Low",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    // Blok B: Rincian Frame & Pacing
+                    Surface(
+                        shape = RoundedCornerShape(innerRadius),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            TelemetryMetricRow(
+                                icon = Icons.Rounded.Speed,
+                                label = localizedLabel("Rentang FPS", "FPS Range"),
+                                value = "${session.minFps} – ${session.maxFps} FPS"
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                            TelemetryMetricRow(
+                                icon = Icons.Rounded.Timeline,
+                                label = localizedLabel("Frame Tersendat", "Stutter Frames"),
+                                value = "${session.jankCount} frame · ${String.format(Locale.US, "%.2f ms", session.framePacingStdDevMs)}"
+                            )
+                        }
+                    }
+
+                    // Blok C: Rincian Termal & Konsumsi Daya
+                    Surface(
+                        shape = RoundedCornerShape(innerRadius),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            TelemetryMetricRow(
+                                icon = Icons.Rounded.Thermostat,
+                                label = localizedLabel("Suhu Puncak CPU", "Peak CPU Temp"),
+                                value = String.format(Locale.US, "%.1f °C", session.maxCpuTempC)
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                            TelemetryMetricRow(
+                                icon = Icons.Rounded.Thermostat,
+                                label = localizedLabel("Suhu Baterai", "Battery Temp"),
+                                value = String.format(
+                                    Locale.US,
+                                    "%.1f → %.1f °C (%s)",
+                                    session.startBatteryTempC,
+                                    session.peakBatteryTempC,
+                                    deltaText
+                                )
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                            TelemetryMetricRow(
+                                icon = Icons.Rounded.Bolt,
+                                label = localizedLabel("Rata-rata Daya", "Average Power"),
+                                value = String.format(
+                                    Locale.US,
+                                    "%.2f W (%d mW)",
+                                    session.avgPowerMw / 1000f,
+                                    session.avgPowerMw
+                                )
+                            )
                         }
                     }
                 }
@@ -1641,9 +1408,72 @@ private fun SessionDetailScreen(
 }
 
 @Composable
-private fun ChartLegendItem(
+private fun SessionTagChip(
+    text: String,
+    highlighted: Boolean = false
+) {
+    Surface(
+        shape = CircleShape,
+        color = if (highlighted) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHighest
+        }
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = if (highlighted) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
+        )
+    }
+}
+
+@Composable
+private fun TelemetryMetricRow(
+    icon: ImageVector,
+    label: String,
+    value: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+@Composable
+private fun ChartLegendPill(
     color: Color,
-    title: String,
+    label: String,
     value: String,
     dashed: Boolean
 ) {
@@ -1663,7 +1493,7 @@ private fun ChartLegendItem(
         }
         Column {
             Text(
-                text = title,
+                text = label,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -1700,7 +1530,7 @@ private fun InteractiveDualFpsChart(
     ) {
         Column(
             modifier = Modifier
-                .height(172.dp)
+                .height(176.dp)
                 .padding(end = 8.dp),
             verticalArrangement = Arrangement.SpaceBetween,
             horizontalAlignment = Alignment.End
@@ -1725,7 +1555,7 @@ private fun InteractiveDualFpsChart(
         Canvas(
             modifier = Modifier
                 .weight(1f)
-                .height(172.dp)
+                .height(176.dp)
                 .pointerInput(samples.size) {
                     detectTapGestures(
                         onPress = { offset ->
@@ -1764,7 +1594,6 @@ private fun InteractiveDualFpsChart(
                 return size.height * (1f - norm * 0.88f - 0.06f)
             }
 
-            // Horizontal reference grid lines
             for (step in 0..2) {
                 val y = size.height * (0.06f + step * 0.44f)
                 drawLine(
@@ -1775,7 +1604,6 @@ private fun InteractiveDualFpsChart(
                 )
             }
 
-            // Refresh rate dashed line
             val hzY = yForFps(targetHz.toFloat())
             drawLine(
                 color = gridColor.copy(alpha = 0.9f),
@@ -1853,67 +1681,6 @@ private fun InteractiveDualFpsChart(
                     center = Offset(sx, yForFps(pt.minFps))
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun SessionDetailTile(
-    icon: ImageVector,
-    label: String,
-    value: String,
-    supporting: String,
-    accent: Color,
-    modifier: Modifier = Modifier
-) {
-    val innerRadius = (LocalCornerRadius.current * 0.78f).coerceIn(16.dp, 24.dp)
-    Surface(
-        shape = RoundedCornerShape(innerRadius),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        modifier = modifier
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(accent.copy(alpha = 0.16f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = accent,
-                        modifier = Modifier.size(15.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Text(
-                text = value,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1
-            )
-            Text(
-                text = supporting,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
         }
     }
 }

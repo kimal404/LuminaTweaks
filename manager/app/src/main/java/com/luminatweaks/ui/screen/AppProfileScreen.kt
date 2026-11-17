@@ -93,6 +93,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material.icons.rounded.FiberManualRecord
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -178,6 +181,14 @@ fun AppProfileScreen(
     var showRefreshRateSheet by remember { mutableStateOf(false) }
     var showRendererSheet by remember { mutableStateOf(false) }
     var showDndSheet by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    var isSessionRecordEnabled by remember(app.packageName) {
+        mutableStateOf(SessionStatsRepository.getRecordedPackages(context).contains(app.packageName))
+    }
+
+    LaunchedEffect(app.packageName) {
+        isSessionRecordEnabled = SessionStatsRepository.getRecordedPackages(context).contains(app.packageName)
+    }
 
     LaunchedEffect(Unit) {
         rrModes = ConfigRepository.getRefreshRateModes()
@@ -514,6 +525,23 @@ fun AppProfileScreen(
                             headerIcon = Icons.Rounded.Tune,
                             headerTitle = stringResource(R.string.profile_section_additional)
                         ) {
+                            NestedProfileSwitchItem(
+                                icon = Icons.Rounded.FiberManualRecord,
+                                title = localizedLabel("Rekam Statistik Sesi", "Record Session Stats"),
+                                subtitle = localizedLabel(
+                                    "Simpan riwayat FPS, suhu & daya saat aplikasi berjalan",
+                                    "Log FPS, temperature & power while this app runs"
+                                ),
+                                checked = isSessionRecordEnabled,
+                                onCheckedChange = { enabled ->
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    isSessionRecordEnabled = enabled
+                                    scope.launch {
+                                        SessionStatsRepository.setAppRecordEnabled(context, app.packageName, enabled)
+                                    }
+                                }
+                            )
+
                             NestedProfileActionItem(
                                 icon = Icons.Rounded.NotificationsOff,
                                 title = stringResource(R.string.profile_dnd),
@@ -645,6 +673,73 @@ private fun NestedProfileCardGroup(
             }
 
             content()
+        }
+    }
+}
+
+@Composable
+private fun NestedProfileSwitchItem(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    val innerRadius = (LocalCornerRadius.current * 0.78f).coerceIn(16.dp, 24.dp)
+
+    Surface(
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onCheckedChange(!checked)
+        },
+        shape = RoundedCornerShape(innerRadius),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                thumbContent = {
+                    Icon(
+                        imageVector = if (checked) Icons.Rounded.Check else Icons.Rounded.Close,
+                        contentDescription = null,
+                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                    )
+                }
+            )
         }
     }
 }
