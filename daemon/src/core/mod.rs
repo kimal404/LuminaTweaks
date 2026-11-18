@@ -1,5 +1,6 @@
 #[macro_use]
 pub mod logger;
+pub mod angle;
 pub mod detector;
 pub mod ipc;
 pub mod perf;

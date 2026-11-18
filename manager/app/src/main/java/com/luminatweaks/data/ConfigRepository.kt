@@ -40,6 +40,20 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 data class DisplayRrMode(val id: Int, val hz: Int)
 
+/**
+ * Whether this ROM can actually honour ANGLE per-app driver overrides.
+ * `usable == false` means texture settings are written but the target keeps
+ * rendering with the vendor GLES driver, so the UI must warn the user.
+ */
+data class AngleStatus(
+    val libraries: Boolean = false,
+    val declared: Boolean = false,
+    val packageInstalled: Boolean = false,
+    val settingsKeys: Boolean = false,
+    val usable: Boolean = false,
+    val detail: String = ""
+)
+
 data class DetectedGame(val packageName: String, val label: String)
 
 data class TweaksUiState(
@@ -121,6 +135,9 @@ object ConfigRepository {
 
     @Volatile
     private var appContext: Context? = null
+
+    @Volatile
+    private var cachedAngleStatus: AngleStatus? = null
 
     /**
      * Called once from the Activity on startup. Remembers the application
@@ -783,6 +800,35 @@ object ConfigRepository {
 
     private fun recordAppsPrefs(context: Context) =
         context.getSharedPreferences(RECORD_PREFS_NAME, Context.MODE_PRIVATE)
+
+    /**
+     * Asks the daemon whether ANGLE is usable on this ROM. Falls back to
+     * "unsupported" when the bridge is unreachable so the UI warns rather than
+     * silently promising an effect that will not happen.
+     */
+    suspend fun getAngleStatus(context: Context): AngleStatus = withContext(Dispatchers.IO) {
+        cachedAngleStatus?.let { return@withContext it }
+
+        val raw = runCatching { LuminaBridge.readAngleStatus(context) }.getOrNull()
+        val parsed = if (raw.isNullOrBlank()) {
+            AngleStatus()
+        } else {
+            runCatching {
+                val obj = JSONObject(raw)
+                AngleStatus(
+                    libraries = obj.optBoolean("libraries", false),
+                    declared = obj.optBoolean("declared", false),
+                    packageInstalled = obj.optBoolean("package", false),
+                    settingsKeys = obj.optBoolean("settingsKeys", false),
+                    usable = obj.optBoolean("usable", false),
+                    detail = obj.optString("detail", "")
+                )
+            }.getOrElse { AngleStatus() }
+        }
+
+        cachedAngleStatus = parsed
+        parsed
+    }
 
     suspend fun recordEnabled(context: Context, packageName: String): Boolean =
         withContext(Dispatchers.IO) {

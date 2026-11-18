@@ -74,6 +74,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -94,6 +95,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import com.luminatweaks.R
+import com.luminatweaks.data.AngleStatus
 import com.luminatweaks.data.AppProfileConfig
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.ui.theme.LocalCornerRadius
@@ -380,11 +382,20 @@ fun TeksturRinganScreen(
     BackHandler(onBack = onBack)
 
     val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
     val primaryAccent = MaterialTheme.colorScheme.primary
     val currentLod = profile.textureLod.coerceIn(0, 4)
     val isTweakActive = currentLod > 0
     val isFloating = LocalFloatingNavBar.current
     val outerRadius = LocalCornerRadius.current.coerceAtLeast(26.dp)
+
+    // Texture overrides only take effect when the ROM can actually switch the
+    // target to ANGLE. Probe once per screen and warn instead of letting the
+    // user assume the setting worked.
+    var angleStatus by remember { mutableStateOf<AngleStatus?>(null) }
+    LaunchedEffect(Unit) {
+        angleStatus = ConfigRepository.getAngleStatus(context)
+    }
 
     val bottomPadding = if (isFloating) {
         116.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -435,6 +446,40 @@ fun TeksturRinganScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            item(key = "angle_warning") {
+                val status = angleStatus
+                if (status != null && !status.usable) {
+                    Surface(
+                        shape = RoundedCornerShape(outerRadius),
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = textureLocalizedLabel(
+                                    "ROM ini tidak mendukung ANGLE. Pengaturan tekstur tetap tersimpan tetapi tidak akan mengubah tampilan game.",
+                                    "This ROM does not support ANGLE. Texture settings are saved but will not change the game's rendering."
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                }
+            }
+
             item(key = "preview") {
                 TextureComparisonPreview(
                     packageName = profile.pkg,

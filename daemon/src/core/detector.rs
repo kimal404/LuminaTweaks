@@ -966,6 +966,47 @@ pub fn is_process_alive(pkg: &str) -> bool {
     running_packages().contains(target)
 }
 
+/// Returns the PID of the main process for `pkg` (the entry whose cmdline is
+/// the bare package name, not a `:sub` process).
+pub fn find_pid_for_pkg(pkg: &str) -> Option<i32> {
+    let target = sanitize_pkg_name(pkg);
+    let entries = std::fs::read_dir("/proc").ok()?;
+    let mut fallback: Option<i32> = None;
+
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(pid_str) = name.to_str() else {
+            continue;
+        };
+        let Ok(pid) = pid_str.parse::<i32>() else {
+            continue;
+        };
+
+        let Ok(cmd) = std::fs::read(entry.path().join("cmdline")) else {
+            continue;
+        };
+        let Some(first) = cmd.split(|&b| b == 0).next() else {
+            continue;
+        };
+        let Ok(raw) = std::str::from_utf8(first) else {
+            continue;
+        };
+        let proc_name = sanitize_pkg_name(raw);
+        if proc_name == target {
+            return Some(pid);
+        }
+        if fallback.is_none() {
+            if let Some(rest) = proc_name.strip_prefix(&target) {
+                if rest.starts_with(':') {
+                    fallback = Some(pid);
+                }
+            }
+        }
+    }
+
+    fallback
+}
+
 fn focused_package_uncached() -> Option<String> {
     for &cgroup_path in CGROUP_TOP_APP_CANDIDATES {
         if !Path::new(cgroup_path).exists() {

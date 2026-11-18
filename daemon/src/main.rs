@@ -741,6 +741,9 @@ fn main() {
             if target != last_pkg_for_texture {
                 if let Some(ref pkg) = target {
                     TextureController::apply_foreground(pkg);
+                    if TextureController::is_angle_active_for(pkg) {
+                        TextureController::verify_runtime_driver(pkg);
+                    }
                 } else {
                     TextureController::sync_config(None);
                 }

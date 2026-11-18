@@ -161,6 +161,18 @@ fn serve(stream: UnixStream) -> bool {
             "SESSION_READ" => respond_file(&mut writer, SESSIONS_FILE),
             "RECORD_APPS_READ" => respond_file(&mut writer, RECORD_APPS_FILE),
             "SESSION_WRITE" => write_json(&mut writer, SESSIONS_FILE, &payload),
+            "ANGLE_STATUS" => {
+                let support = crate::core::angle::detect_angle_support();
+                let json = serde_json::json!({
+                    "libraries": support.libraries,
+                    "declared": support.declared,
+                    "package": support.package,
+                    "settingsKeys": support.settings_keys,
+                    "usable": support.usable(),
+                    "detail": support.describe(),
+                });
+                respond_ok(&mut writer, json.to_string().as_bytes())
+            }
             "RECORD_APPS_WRITE" => {
                 // Drop the recorder's mtime cache so a freshly armed package is
                 // picked up on the next tick (~400 ms) instead of after the

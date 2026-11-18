@@ -88,6 +88,9 @@ object LuminaBridge {
     suspend fun writeRecordApps(context: Context, json: String): Boolean =
         request(context, "RECORD_APPS_WRITE", json.toByteArray(Charsets.UTF_8)) != null
 
+    suspend fun readAngleStatus(context: Context): String? =
+        request(context, "ANGLE_STATUS")?.toString(Charsets.UTF_8)
+
     private suspend fun request(
         context: Context,
         command: String,

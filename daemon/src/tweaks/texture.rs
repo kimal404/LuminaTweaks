@@ -24,6 +24,22 @@ use std::sync::Mutex;
 const ANGLE_BACKUP_PATH: &str = "/data/adb/.config/lumina/angle_backup.json";
 static ANGLE_APPLIED: AtomicBool = AtomicBool::new(false);
 static LAST_SYNC_STATE: Mutex<Option<String>> = Mutex::new(None);
+pub use crate::core::angle::AngleSupport;
+
+/// Logs the one-shot probe result the first time ANGLE is consulted.
+pub fn detect_angle_support() -> AngleSupport {
+    let support = crate::core::angle::detect_angle_support();
+    if !support.usable() {
+        log!(
+            "[TEXTURE] WARNING: ANGLE unavailable on this ROM ({}). Texture override will not render; \
+             the driver-selection settings will be written but the ROM will fall back to the native GLES driver.",
+            support.describe()
+        );
+    } else {
+        log!("[TEXTURE] ANGLE support detected ({})", support.describe());
+    }
+    support
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextureDriver {
@@ -72,16 +88,39 @@ fn get_global_setting(key: &str) -> Option<String> {
     }
 }
 
-fn set_global_setting(key: &str, value: &str) {
-    let _ = Command::new("settings")
+fn set_global_setting(key: &str, value: &str) -> bool {
+    let status = Command::new("settings")
         .args(["put", "global", key, value])
         .status();
+
+    let ok = matches!(status, Ok(s) if s.success());
+    if !ok {
+        log!(
+            "[TEXTURE] settings put global {} failed (SELinux or permission denied)",
+            key
+        );
+        return false;
+    }
+
+    // Verify the write actually landed: under Enforcing the command can exit 0
+    // while the value is silently rejected by the settings provider.
+    if get_global_setting(key).as_deref() != Some(value) {
+        log!(
+            "[TEXTURE] settings put global {} did not persist (expected '{}', readback differs)",
+            key,
+            value
+        );
+        return false;
+    }
+
+    true
 }
 
-fn delete_global_setting(key: &str) {
-    let _ = Command::new("settings")
+fn delete_global_setting(key: &str) -> bool {
+    let status = Command::new("settings")
         .args(["delete", "global", key])
         .status();
+    matches!(status, Ok(s) if s.success())
 }
 
 fn save_angle_backup() {
@@ -97,6 +136,7 @@ fn save_angle_backup() {
     let backup = serde_json::json!({
         "pkgs": get_global_setting("angle_gl_driver_selection_pkgs"),
         "values": get_global_setting("angle_gl_driver_selection_values"),
+        "egl_features": get_global_setting("angle_egl_features"),
         "features": crate::core::detector::get_system_prop("debug.angle.feature_overrides_enabled"),
     });
     let _ = fs::write(ANGLE_BACKUP_PATH, backup.to_string());
@@ -155,8 +195,12 @@ fn merge_with_user_angle_settings(lumina_pkgs: &[String]) -> (String, String) {
 
 fn restore_global_setting(key: &str, value: Option<&str>) {
     match value {
-        Some(v) if !v.is_empty() => set_global_setting(key, v),
-        _ => delete_global_setting(key),
+        Some(v) if !v.is_empty() => {
+            let _ = set_global_setting(key, v);
+        }
+        _ => {
+            let _ = delete_global_setting(key);
+        }
     }
 }
 
@@ -176,6 +220,14 @@ fn restore_angle_backup() {
     restore_global_setting(
         "angle_gl_driver_selection_values",
         backup.get("values").and_then(|v| v.as_str()),
+    );
+
+    // `angle_egl_features` is new in Android 14 and was never backed up by
+    // older builds; clear it so stale per-package features cannot survive a
+    // disable. When the original value is known, restore it instead.
+    restore_global_setting(
+        "angle_egl_features",
+        backup.get("egl_features").and_then(|v| v.as_str()),
     );
 
     let features = backup
@@ -218,6 +270,20 @@ impl TextureController {
         }
 
         features.join(":")
+    }
+
+    /// Builds the Android 14 `angle_egl_features` Global setting value:
+    /// `<pkg>:<feat1>;<feat2>,<pkg2>:<feat1>`.
+    ///
+    /// Packages without any feature are omitted, matching the framework parser
+    /// which expects every entry to carry at least one `;`-separated feature.
+    fn build_egl_features_setting(entries: &[(String, String)]) -> String {
+        entries
+            .iter()
+            .filter(|(_, feats)| !feats.trim().is_empty())
+            .map(|(pkg, feats)| format!("{}:{}", pkg, feats.trim()))
+            .collect::<Vec<_>>()
+            .join(",")
     }
 
     fn parse_angle_entry(key_opt: Option<String>, item: &Value) -> Option<(String, String)> {
@@ -329,7 +395,7 @@ impl TextureController {
             }
         };
 
-        let mut active_pkgs: Vec<String> = Vec::new();
+        let mut active: Vec<(String, String)> = Vec::new();
         let mut target_features: Option<String> = None;
         let mut fallback_features: Option<String> = None;
 
@@ -346,35 +412,41 @@ impl TextureController {
 
         for (key_opt, item) in items {
             if let Some((pkg, feat)) = Self::parse_angle_entry(key_opt, item) {
-                active_pkgs.push(pkg.clone());
-
                 if let Some(f_pkg) = focused_pkg {
                     if pkg == f_pkg {
                         target_features = Some(feat.clone());
                     }
                 }
                 if fallback_features.is_none() {
-                    fallback_features = Some(feat);
+                    fallback_features = Some(feat.clone());
                 }
+                active.push((pkg, feat));
             }
         }
 
-        if active_pkgs.is_empty() {
+        if active.is_empty() {
             Self::restore();
             return;
         }
 
+        let support = detect_angle_support();
+
         save_angle_backup();
 
+        let active_pkgs: Vec<String> = active.iter().map(|(p, _)| p.clone()).collect();
         let (pkgs_joined, values_joined) = merge_with_user_angle_settings(&active_pkgs);
+        let egl_features = Self::build_egl_features_setting(&active);
 
         let applied_features = if focused_pkg.is_some() {
-            target_features.unwrap_or_else(|| fallback_features.unwrap_or_default())
+            target_features.unwrap_or_else(|| fallback_features.clone().unwrap_or_default())
         } else {
             fallback_features.unwrap_or_default()
         };
 
-        let next_state = format!("{}|{}|{}", pkgs_joined, values_joined, applied_features);
+        let next_state = format!(
+            "{}|{}|{}|{}",
+            pkgs_joined, values_joined, egl_features, applied_features
+        );
         if let Ok(mut state_guard) = LAST_SYNC_STATE.lock() {
             if ANGLE_APPLIED.load(Ordering::Relaxed)
                 && state_guard.as_deref() == Some(next_state.as_str())
@@ -384,23 +456,93 @@ impl TextureController {
             *state_guard = Some(next_state);
         }
 
-        set_global_setting("angle_gl_driver_selection_pkgs", &pkgs_joined);
-        set_global_setting("angle_gl_driver_selection_values", &values_joined);
-
-        let _ = Command::new("setprop")
-            .args(["debug.angle.feature_overrides_enabled", &applied_features])
-            .status();
+        // The package list and the matching value list must land together: the
+        // framework drops the whole selection when their sizes differ
+        // ("size does not equal ... will be ignored"). Features travel
+        // separately through `angle_egl_features`, keyed by package, so apps
+        // with different LOD levels never overwrite each other.
+        let pkgs_ok = set_global_setting("angle_gl_driver_selection_pkgs", &pkgs_joined);
+        let values_ok = set_global_setting("angle_gl_driver_selection_values", &values_joined);
+        let features_ok = set_global_setting("angle_egl_features", &egl_features);
         ANGLE_APPLIED.store(true, Ordering::Relaxed);
 
-        log!(
-            "[TEXTURE] Synced ANGLE pkgs: [{}] -> Overrides: [{}]",
-            pkgs_joined,
-            applied_features
-        );
+        if !(pkgs_ok && values_ok && features_ok) {
+            log!(
+                "[TEXTURE] WARNING: ANGLE settings applied partially for [{}] (pkgs={} values={} egl_features={}). \
+                 Textures may not change until the failing key is written successfully.",
+                pkgs_joined,
+                pkgs_ok,
+                values_ok,
+                features_ok
+            );
+        }
+
+        if !support.usable() {
+            log!(
+                "[TEXTURE] ANGLE overrides written for [{}] -> [{}] but this ROM cannot honour them ({}); \
+                 expect no visual effect.",
+                pkgs_joined,
+                applied_features,
+                support.describe()
+            );
+        } else {
+            log!(
+                "[TEXTURE] Synced ANGLE pkgs: [{}] -> Overrides: [{}] | egl_features: [{}]",
+                pkgs_joined,
+                applied_features,
+                egl_features
+            );
+        }
     }
 
     pub fn apply_foreground(pkg: &str) {
         Self::sync_config(Some(pkg));
+    }
+
+    /// Verifies which GLES driver a running process actually loaded. ANGLE
+    /// overrides only take effect if the target maps `libGLESv2_angle.so`
+    /// instead of the vendor driver (`libGLESv2_adreno.so`, `libGLES_mali.so`,
+    /// ...). Logged when a recorded/texture target launches so a silent
+    /// fallback is visible in `lumina.log` instead of guessed at.
+    pub fn verify_runtime_driver(pkg: &str) {
+        let Some(pid) = crate::core::detector::find_pid_for_pkg(pkg) else {
+            return;
+        };
+
+        let maps_path = format!("/proc/{}/maps", pid);
+        let Ok(maps) = fs::read_to_string(&maps_path) else {
+            return;
+        };
+
+        let mut angle = false;
+        let mut native = false;
+        let mut vulkan = false;
+        for line in maps.lines() {
+            if line.contains("libGLESv2_angle.so") || line.contains("libEGL_angle.so") {
+                angle = true;
+            } else if line.contains("libGLESv2_") || line.contains("libGLES_mali.so") {
+                native = true;
+            } else if line.contains("libvulkan") {
+                vulkan = true;
+            }
+        }
+
+        if angle {
+            log!(
+                "[TEXTURE] Runtime driver verified for {} (pid {}): ANGLE loaded",
+                pkg,
+                pid
+            );
+        } else if native || vulkan {
+            log!(
+                "[TEXTURE] Runtime driver for {} (pid {}) is NOT ANGLE (native={} vulkan={}); \
+                 texture overrides are inert",
+                pkg,
+                pid,
+                native,
+                vulkan
+            );
+        }
     }
 
     pub fn restore() {
