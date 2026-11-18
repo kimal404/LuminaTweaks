@@ -121,23 +121,6 @@ object SessionDeviceInfo {
     }
 }
 
-object SessionNoteStore {
-    private const val PREFS = "lumina_active_session_notes"
-
-    fun read(context: Context, key: String): String {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(key, "")
-            .orEmpty()
-    }
-
-    fun write(context: Context, key: String, note: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putString(key, note.trim())
-            .apply()
-    }
-}
-
 internal data class CpuTimes(val total: Long, val idle: Long)
 
 /**

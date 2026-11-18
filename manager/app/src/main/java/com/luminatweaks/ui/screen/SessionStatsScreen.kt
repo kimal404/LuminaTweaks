@@ -169,7 +169,6 @@ internal data class SessionLoadResult(
 
 internal object SessionStatsRepository {
     private const val PREFS_NAME = "lumina_session_stats"
-    private const val KEY_RECORD_PACKAGES = "record_packages_set"
     private const val KEY_SAMPLE_DISMISSED = "sample_dismissed"
     private val PACKAGE_NAME_REGEX = Regex("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)+$")
 
@@ -195,44 +194,17 @@ internal object SessionStatsRepository {
         runCatching { File(context.filesDir, localName).writeText(json) }
     }
 
+    /** Reads go through [ConfigRepository] so every screen shares one cache. */
     suspend fun getRecordedPackages(context: Context): Set<String> = withContext(Dispatchers.IO) {
-        val raw = readConfig(context, "record_apps.json") {
-            LuminaBridge.readRecordApps(context)
-        }
-        if (raw != null) {
-            val parsed = runCatching {
-                val arr = JSONArray(raw.trim().ifEmpty { "[]" })
-                buildSet {
-                    for (i in 0 until arr.length()) {
-                        val pkg = arr.optString(i).trim()
-                        if (pkg.isNotEmpty()) add(pkg)
-                    }
-                }
-            }.getOrNull()
-            if (parsed != null) return@withContext parsed
-        }
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getStringSet(KEY_RECORD_PACKAGES, emptySet())
-            .orEmpty()
+        ConfigRepository.getRecordedPackages(context)
     }
 
-    suspend fun setAppRecordEnabled(context: Context, packageName: String, enabled: Boolean): Set<String> {
-        return withContext(Dispatchers.IO) {
-            val current = getRecordedPackages(context).toMutableSet()
-            if (enabled) current.add(packageName) else current.remove(packageName)
-            val snapshot = current.toSet()
-
-            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .edit()
-                .putStringSet(KEY_RECORD_PACKAGES, snapshot)
-                .apply()
-
-            val json = JSONArray(snapshot.sorted()).toString()
-            mirrorLocally(context, "record_apps.json", "$json\n")
-            runCatching { LuminaBridge.writeRecordApps(context, json) }
-            snapshot
-        }
-    }
+    /** Single writer for the recording opt-in; see [ConfigRepository]. */
+    suspend fun setAppRecordEnabled(
+        context: Context,
+        packageName: String,
+        enabled: Boolean
+    ): Set<String> = ConfigRepository.setRecordEnabled(context, packageName, enabled)
 
     suspend fun loadSessions(context: Context): SessionLoadResult = withContext(Dispatchers.IO) {
         val raw = readConfig(context, "sessions.json") {
@@ -509,18 +481,12 @@ internal fun SessionStatsScreen(
     var isLoading by remember { mutableStateOf(true) }
     var selectedSession by remember { mutableStateOf<GameSessionRecord?>(null) }
     var showClearDialog by remember { mutableStateOf(false) }
-    var showLiveSession by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         val result = SessionStatsRepository.loadSessions(context)
         sessions = result.sessions
         isSampleData = result.isSampleData
         isLoading = false
-    }
-
-    if (showLiveSession) {
-        ActiveSessionScreen(onBack = { showLiveSession = false })
-        return
     }
 
     if (showClearDialog) {
@@ -637,12 +603,6 @@ internal fun SessionStatsScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { showLiveSession = true }) {
-                        Icon(
-                            imageVector = Icons.Rounded.Speed,
-                            contentDescription = localizedLabel("Sesi aktif", "Active session")
-                        )
-                    }
                     if (sessions.isNotEmpty()) {
                         IconButton(onClick = { showClearDialog = true }) {
                             Icon(
@@ -669,19 +629,6 @@ internal fun SessionStatsScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item(key = "active_session_entry") {
-                NestedTweakActionItem(
-                    icon = Icons.Rounded.Speed,
-                    title = localizedLabel("Sesi Aktif", "Active Session"),
-                    subtitle = localizedLabel(
-                        "Pantau FPS, frame time & suhu secara real-time saat bermain",
-                        "Track FPS, frame time & thermals live during gameplay"
-                    ),
-                    onClick = {
-                        showLiveSession = true
-                    }
-                )
-            }
             when {
                 isLoading -> {
                     item(key = "loading_state") {

@@ -148,14 +148,18 @@ impl RecordApps {
     }
 
     fn refresh(&mut self, force: bool) {
-        if !force && self.last_check.elapsed() < CONFIG_POLL_INTERVAL {
+        // A bridge write (user flipping the toggle) supersedes both the poll
+        // interval and the mtime shortcut, so the recorder reacts on the next
+        // tick instead of up to two seconds later.
+        let invalidated = crate::core::take_record_apps_stale();
+        if !force && !invalidated && self.last_check.elapsed() < CONFIG_POLL_INTERVAL {
             return;
         }
         self.last_check = Instant::now();
 
         let path = config_path(RECORD_APPS_FILE);
         let mtime = fs::metadata(&path).ok().and_then(|meta| meta.modified().ok());
-        if !force && mtime == self.mtime {
+        if !force && !invalidated && mtime == self.mtime {
             return;
         }
         self.mtime = mtime;

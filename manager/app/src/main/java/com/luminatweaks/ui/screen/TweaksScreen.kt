@@ -31,12 +31,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -547,20 +549,33 @@ fun TweaksScreen(pagerState: PagerState? = null, onOpenFloatingHud: (() -> Unit)
                         }
                     )
 
-                    NestedTweakActionItem(
-                        icon = Icons.Rounded.Speed,
-                        title = stringResource(R.string.tweaks_refresh_rate),
-                        subtitle = currentRrText,
-                        onClick = { showRefreshRateSheet = true }
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Max),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        NestedTweakCompactCard(
+                            icon = Icons.Rounded.Speed,
+                            title = stringResource(R.string.tweaks_refresh_rate),
+                            value = currentRrText,
+                            onClick = { showRefreshRateSheet = true },
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                        )
 
-                    NestedTweakActionItem(
-                        icon = if (isGlobalTextureEnabled) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
-                        title = stringResource(R.string.tweaks_renderer),
-                        subtitle = effectiveRendererText,
-                        enabled = !isGlobalTextureEnabled,
-                        onClick = { showRenderSheet = true }
-                    )
+                        NestedTweakCompactCard(
+                            icon = if (isGlobalTextureEnabled) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
+                            title = stringResource(R.string.tweaks_renderer),
+                            value = effectiveRendererText,
+                            enabled = !isGlobalTextureEnabled,
+                            onClick = { showRenderSheet = true },
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                        )
+                    }
                 }
             }
 
@@ -842,6 +857,101 @@ internal fun NestedTweakActionItem(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
                 modifier = Modifier.size(if (enabled) 20.dp else 18.dp)
             )
+        }
+    }
+}
+
+@Composable
+internal fun NestedTweakCompactCard(
+    icon: ImageVector,
+    title: String,
+    value: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
+    val haptic = LocalHapticFeedback.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed && enabled) 0.97f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "nestedCompactCardScale"
+    )
+    val innerRadius = (LocalCornerRadius.current * 0.78f).coerceIn(16.dp, 24.dp)
+
+    Surface(
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onClick()
+        },
+        enabled = enabled,
+        shape = RoundedCornerShape(innerRadius),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        interactionSource = interactionSource,
+        modifier = modifier.graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .alpha(if (enabled) 1f else 0.55f)
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(17.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                Icon(
+                    imageVector = if (enabled) Icons.Rounded.ChevronRight else Icons.Rounded.Lock,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                    modifier = Modifier.size(if (enabled) 17.dp else 15.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }

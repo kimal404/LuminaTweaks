@@ -89,6 +89,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -112,6 +113,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.luminatweaks.R
@@ -184,8 +188,25 @@ fun AppProfileScreen(
     val scope = rememberCoroutineScope()
     var isSessionRecordEnabled by remember(app.packageName) { mutableStateOf(false) }
 
-    LaunchedEffect(app.packageName) {
-        isSessionRecordEnabled = SessionStatsRepository.getRecordedPackages(context).contains(app.packageName)
+    // Re-read on entry and on resume: the toggle must stay ON after leaving
+    // and reopening the app, and the state may change while this screen is
+    // paused (e.g. another app profile screen or a daemon-side reset).
+    DisposableEffect(context, app.packageName) {
+        val lifecycleOwner = context as? LifecycleOwner
+        var observer: LifecycleEventObserver? = null
+        fun refreshRecordingState() {
+            scope.launch {
+                isSessionRecordEnabled = ConfigRepository.recordEnabled(context, app.packageName)
+            }
+        }
+        refreshRecordingState()
+
+        if (lifecycleOwner != null) {
+            observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) refreshRecordingState()
+            }.also { lifecycleOwner.lifecycle.addObserver(it) }
+        }
+        onDispose { observer?.let { lifecycleOwner?.lifecycle?.removeObserver(it) } }
     }
 
     LaunchedEffect(Unit) {
@@ -535,7 +556,11 @@ fun AppProfileScreen(
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     isSessionRecordEnabled = enabled
                                     scope.launch {
-                                        SessionStatsRepository.setAppRecordEnabled(context, app.packageName, enabled)
+                                        ConfigRepository.setRecordEnabled(
+                                            context,
+                                            app.packageName,
+                                            enabled
+                                        )
                                     }
                                 }
                             )

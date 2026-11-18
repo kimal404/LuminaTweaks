@@ -16,6 +16,7 @@
 
 package com.luminatweaks.data
 
+import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
@@ -32,6 +33,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -61,6 +63,9 @@ object ConfigRepository {
     private const val IPC_SOCKET_PRIMARY = "$CONFIG_DIR/lumina.sock"
     private const val IPC_SOCKET_FALLBACK = "/data/local/tmp/lumina_ipc.sock"
     private const val BATCH_SEP = "___LUMINA_SEP___"
+    private const val RECORD_PREFS_NAME = "lumina_session_stats"
+    private const val RECORD_APPS_KEY = "record_packages_set"
+    private const val RECORD_APPS_MIRROR = "record_apps.json"
 
     private val GAMELIST_JSON_CANDIDATES = listOf(
         "/data/adb/.config/lumina/gamelist.json",
@@ -106,6 +111,13 @@ object ConfigRepository {
 
     @Volatile
     var customGames: Set<String> = emptySet()
+
+    // Session-stats recording opt-in. Persisted in SharedPreferences (always
+    // readable, even while the privileged helper is restarting), mirrored to
+    // `record_apps.json` locally and pushed to the daemon through the bridge so
+    // the background recorder arms the target package.
+    @Volatile
+    private var cachedRecordApps: Set<String>? = null
 
     private fun runSuCmd(cmd: String, timeoutSeconds: Long = 6): String {
         return try {
@@ -731,5 +743,89 @@ object ConfigRepository {
         }
         runSuCmd(cmds.joinToString(" && "), 5)
         notifyDaemonReload()
+    }
+
+    // -----------------------------------------------------------------------
+    // Session-stats recording opt-in
+    // -----------------------------------------------------------------------
+
+    private fun recordAppsPrefs(context: Context) =
+        context.getSharedPreferences(RECORD_PREFS_NAME, Context.MODE_PRIVATE)
+
+    fun recordEnabled(context: Context, packageName: String): Boolean {
+        val pkg = packageName.substringBefore(':').trim()
+        if (pkg.isEmpty()) return false
+        return readRecordApps(context).contains(pkg)
+    }
+
+    /**
+     * Persists the toggle immediately (prefs + local mirror) so it survives
+     * leaving/reopening the app, then pushes it to the daemon through the
+     * bridge so the background recorder arms the package.
+     */
+    suspend fun setRecordEnabled(
+        context: Context,
+        packageName: String,
+        enabled: Boolean
+    ): Set<String> = withContext(Dispatchers.IO) {
+        val pkg = packageName.substringBefore(':').trim()
+        if (pkg.isEmpty()) return@withContext readRecordApps(context)
+
+        fileMutex.withLock {
+            val current = readRecordApps(context).toMutableSet()
+            if (enabled) current.add(pkg) else current.remove(pkg)
+            val snapshot = current.toSet()
+            cachedRecordApps = snapshot
+
+            recordAppsPrefs(context)
+                .edit()
+                .putStringSet(RECORD_APPS_KEY, snapshot)
+                .apply()
+
+            val json = JSONArray(snapshot.sorted()).toString()
+            runCatching { File(context.filesDir, RECORD_APPS_MIRROR).writeText("$json\n") }
+            runCatching { LuminaBridge.writeRecordApps(context, json) }
+            snapshot
+        }
+    }
+
+    /**
+     * Daemon-side source of truth first (survives an app data wipe), then the
+     * local mirror, then the preference cache.  Never spawns `su`.
+     */
+    suspend fun getRecordedPackages(context: Context): Set<String> = withContext(Dispatchers.IO) {
+        readRecordApps(context)
+    }
+
+    private suspend fun readRecordApps(context: Context): Set<String> {
+        cachedRecordApps?.let { return it }
+
+        val bridged = runCatching { LuminaBridge.readRecordApps(context) }
+            .getOrNull()
+            ?.takeIf { it.isNotBlank() }
+        parseRecordApps(bridged)?.let { return it }
+
+        val mirror = runCatching {
+            File(context.filesDir, RECORD_APPS_MIRROR).takeIf { it.canRead() }?.readText()
+        }.getOrNull()
+        parseRecordApps(mirror)?.let { return it }
+
+        return recordAppsPrefs(context)
+            .getStringSet(RECORD_APPS_KEY, emptySet())
+            .orEmpty()
+            .toSet()
+    }
+
+    private fun parseRecordApps(raw: String?): Set<String>? {
+        if (raw.isNullOrBlank()) return null
+        return runCatching {
+            val arr = JSONArray(raw.trim())
+            buildSet {
+                for (index in 0 until arr.length()) {
+                    val pkg = arr.optString(index).substringBefore(':').trim()
+                    if (pkg.isNotEmpty()) add(pkg)
+                }
+            }
+        }.getOrNull()
     }
 }

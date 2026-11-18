@@ -48,23 +48,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Android
 import androidx.compose.material.icons.rounded.DeveloperBoard
-import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.Timeline
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -73,7 +69,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -89,10 +84,8 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -103,7 +96,6 @@ import com.luminatweaks.data.ActiveSessionPoint
 import com.luminatweaks.data.ActiveSessionSnapshot
 import com.luminatweaks.data.SessionDeviceContext
 import com.luminatweaks.data.SessionDeviceInfo
-import com.luminatweaks.data.SessionNoteStore
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -113,7 +105,6 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private enum class TelemetrySeries(val label: String) {
@@ -128,19 +119,13 @@ private data class AppBadge(val icon: ImageBitmap?, val label: String)
 @Composable
 internal fun ActiveSessionScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val haptic = LocalHapticFeedback.current
-    val scope = rememberCoroutineScope()
     val localView = LocalView.current
 
     var snapshot by remember { mutableStateOf(ActiveSessionSnapshot()) }
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
-    var showNoteDialog by remember { mutableStateOf(false) }
-    var noteDraft by remember { mutableStateOf("") }
-    var note by remember { mutableStateOf("") }
 
     val monitor = remember { ActiveSessionMonitor(context) }
     val device = remember { SessionDeviceInfo.read(context) }
-    val noteKey = snapshot.packageName ?: "active"
     val refreshHz = remember {
         localView.display?.refreshRate?.roundToInt()?.coerceIn(24, 240) ?: 60
     }
@@ -168,71 +153,7 @@ internal fun ActiveSessionScreen(onBack: () -> Unit) {
         }
     }
 
-    LaunchedEffect(noteKey) {
-        note = withContext(Dispatchers.IO) { SessionNoteStore.read(context, noteKey) }
-    }
-
     BackHandler(onBack = onBack)
-
-    if (showNoteDialog) {
-        AlertDialog(
-            onDismissRequest = { showNoteDialog = false },
-            title = {
-                Text(
-                    text = localizedLabel("Catatan Sesi", "Session Note"),
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = localizedLabel(
-                            "Catatan ini disimpan untuk aplikasi yang sedang dipantau.",
-                            "This note is stored for the app currently being monitored."
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    OutlinedTextField(
-                        value = noteDraft,
-                        onValueChange = { noteDraft = it.take(280) },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 3,
-                        maxLines = 5,
-                        placeholder = {
-                            Text(
-                                localizedLabel(
-                                    "Contoh: Frame drop di awal match",
-                                    "Example: Frame drops at match start"
-                                )
-                            )
-                        }
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showNoteDialog = false
-                        val saved = noteDraft.trim()
-                        note = saved
-                        scope.launch {
-                            withContext(Dispatchers.IO) {
-                                SessionNoteStore.write(context, noteKey, saved)
-                            }
-                        }
-                    }
-                ) {
-                    Text(localizedLabel("Simpan", "Save"), fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showNoteDialog = false }) {
-                    Text(localizedLabel("Batal", "Cancel"))
-                }
-            }
-        )
-    }
 
     val outerRadius = LocalCornerRadius.current.coerceAtLeast(22.dp)
     val bottomPadding = 24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -279,15 +200,7 @@ internal fun ActiveSessionScreen(onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item(key = "device_context") {
-                DeviceContextSection(
-                    device = device,
-                    note = note,
-                    onEditNote = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        noteDraft = note
-                        showNoteDialog = true
-                    }
-                )
+                DeviceContextSection(device = device)
             }
 
             item(key = "active_summary") {
@@ -342,13 +255,8 @@ private fun LiveBadge(active: Boolean) {
 }
 
 @Composable
-private fun DeviceContextSection(
-    device: SessionDeviceContext,
-    note: String,
-    onEditNote: () -> Unit
-) {
+private fun DeviceContextSection(device: SessionDeviceContext) {
     val outerRadius = LocalCornerRadius.current.coerceAtLeast(22.dp)
-    val innerRadius = (LocalCornerRadius.current * 0.75f).coerceIn(14.dp, 20.dp)
 
     Surface(
         shape = RoundedCornerShape(outerRadius),
@@ -389,44 +297,6 @@ private fun DeviceContextSection(
                     value = device.profile.replaceFirstChar { it.uppercase() },
                     modifier = Modifier.weight(1f)
                 )
-            }
-
-            Surface(
-                onClick = onEditNote,
-                shape = RoundedCornerShape(innerRadius),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 11.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.EditNote,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(19.dp)
-                    )
-                    Text(
-                        text = note.ifBlank {
-                            localizedLabel(
-                                "Catatan belum diisi, ketuk untuk menulis",
-                                "Note not set, click here to enter"
-                            )
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (note.isBlank()) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        },
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
             }
         }
     }

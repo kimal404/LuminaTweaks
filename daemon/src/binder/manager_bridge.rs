@@ -161,7 +161,16 @@ fn serve(stream: UnixStream) -> bool {
             "SESSION_READ" => respond_file(&mut writer, SESSIONS_FILE),
             "RECORD_APPS_READ" => respond_file(&mut writer, RECORD_APPS_FILE),
             "SESSION_WRITE" => write_json(&mut writer, SESSIONS_FILE, &payload),
-            "RECORD_APPS_WRITE" => write_json(&mut writer, RECORD_APPS_FILE, &payload),
+            "RECORD_APPS_WRITE" => {
+                // Drop the recorder's mtime cache so a freshly armed package is
+                // picked up on the next tick (~400 ms) instead of after the
+                // 2 s config poll.
+                let written = write_json(&mut writer, RECORD_APPS_FILE, &payload);
+                if written.is_ok() {
+                    crate::core::mark_record_apps_stale();
+                }
+                written
+            }
             other => {
                 let reason = format!("unknown {}", other);
                 respond_error(&mut writer, &reason)
