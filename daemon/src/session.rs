@@ -51,7 +51,10 @@ const LABEL_CACHE_FILES: &[&str] = &[
 const CONFIG_POLL_INTERVAL: Duration = Duration::from_secs(2);
 const SENSOR_INTERVAL: Duration = Duration::from_secs(1);
 const GRACE_PERIOD: Duration = Duration::from_secs(10);
-const MIN_SESSION: Duration = Duration::from_secs(20);
+/// Anything shorter is noise (a stray focus bounce). Ten seconds is the floor
+/// at which a session is still worth keeping even when the frame source never
+/// attached: `finalize` degrades FPS to `0.0` instead of dropping the record.
+const MIN_SESSION: Duration = Duration::from_secs(10);
 const IDLE_TAP_CLEAR_INTERVAL: Duration = Duration::from_secs(5);
 const MAX_SESSIONS: usize = 25;
 const MAX_SAMPLE_POINTS: usize = 50;
@@ -946,7 +949,7 @@ fn read_sessions() -> Vec<StoredSession> {
     }
 }
 
-fn persist_session(session: StoredSession) {
+fn persist_session(session: StoredSession) -> std::io::Result<String> {
     let mut sessions = read_sessions();
     sessions.retain(|existing| existing.id != session.id);
     sessions.push(session);
@@ -954,13 +957,10 @@ fn persist_session(session: StoredSession) {
     sessions.truncate(MAX_SESSIONS);
 
     let path = config_path(SESSIONS_FILE);
-    let result = serde_json::to_string(&sessions)
-        .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))
-        .and_then(|json| write_atomic(&path, &json));
-
-    if let Err(error) = result {
-        log!("[SESSION] Failed to write {}: {}", path, error);
-    }
+    let json = serde_json::to_string(&sessions)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
+    write_atomic(&path, &json)?;
+    Ok(path)
 }
 
 fn write_atomic(path: &str, content: &str) -> std::io::Result<()> {
@@ -1131,7 +1131,7 @@ impl SessionRecorder {
         let app_name = self.labels.resolve(package);
         let session = ActiveSession::new(package, app_name, profile, &self.sensors);
         log!(
-            "[SESSION] Recording: {} | {}Hz | {}",
+            "[RECORD] Started session for {} | {}Hz | {}",
             package,
             session.display_hz,
             profile
@@ -1153,23 +1153,117 @@ impl SessionRecorder {
         let elapsed = active.started_at.elapsed();
         if elapsed < MIN_SESSION {
             log!(
-                "[SESSION] Discarded short session: {} ({}s)",
+                "[RECORD] Discarded short session for {} ({}s < {}s)",
                 package,
-                elapsed.as_secs()
+                elapsed.as_secs(),
+                MIN_SESSION.as_secs()
             );
             self.tap.clear();
             return;
         }
 
-        if let Some(session) = active.finalize() {
-            log!(
-                "[SESSION] Saved: {} | {}s | {:.1} FPS",
-                session.package_name,
-                session.duration_sec,
-                session.avg_fps
-            );
-            persist_session(session);
+        match active.finalize() {
+            Some(session) => {
+                let duration_sec = session.duration_sec;
+                let avg_fps = session.avg_fps;
+                match persist_session(session) {
+                    Ok(path) => log!(
+                        "[RECORD] Saved session to {} | {} | {}s | {:.1} FPS",
+                        path,
+                        package,
+                        duration_sec,
+                        avg_fps
+                    ),
+                    Err(error) => log!("[RECORD] Save error for {}: {}", package, error),
+                }
+            }
+            None => log!(
+                "[RECORD] Nothing to save for {} (finalize returned no record)",
+                package
+            ),
         }
         self.tap.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    /// A dead frame source (SurfaceFlinger/eBPF never attached) must still
+    /// produce a persisted record once the session clears the floor; FPS
+    /// degrades to 0.0 instead of cancelling the save.
+    fn dead_frame_source_session(elapsed: Duration) -> ActiveSession {
+        let now = Instant::now();
+        ActiveSession {
+            package: "com.example.game".to_string(),
+            app_name: "Example".to_string(),
+            profile: "Performance".to_string(),
+            display_hz: 120,
+            start_epoch_ms: 1_700_000_000_000,
+            started_at: now - elapsed,
+            last_tick: now - elapsed,
+            left_at: None,
+            active_time: elapsed,
+            last_sensor_at: now - elapsed,
+            start_battery_temp: None,
+            peak_battery_temp: 0.0,
+            max_cpu_temp: 0.0,
+            power_sum: 0.0,
+            power_samples: 0,
+            total_frames: 0,
+            pacing_count: 0,
+            pacing_mean: 0.0,
+            pacing_m2: 0.0,
+            histogram: vec![0; HIST_BINS],
+            jank_count: 0,
+            buckets: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn zero_frame_source_still_saves_at_ten_seconds() {
+        let session = dead_frame_source_session(Duration::from_secs(10));
+        let stored = session.finalize().expect("10s session must still save");
+        assert_eq!(stored.avg_fps, 0.0);
+        assert_eq!(stored.min_fps, 0);
+        assert_eq!(stored.max_fps, 0);
+        assert!(stored.samples.is_empty());
+        assert_eq!(stored.duration_sec, 10);
+    }
+
+    #[test]
+    fn zero_frame_source_saves_with_some_sensor_points() {
+        let mut session = dead_frame_source_session(Duration::from_secs(12));
+        session.max_cpu_temp = 41.5;
+        session.buckets.push(Bucket {
+            offset_sec: 0,
+            cpu_temp: 41.5,
+            battery_temp: 33.0,
+            power_mw: 2500.0,
+            ..Bucket::default()
+        });
+        let stored = session.finalize().expect("12s session must still save");
+        assert_eq!(stored.avg_fps, 0.0);
+        assert!(stored.max_cpu_temp_c >= 41.5);
+        assert_eq!(stored.avg_power_mw, 0);
+    }
+
+    #[test]
+    fn session_below_floor_is_rejected() {
+        let session = dead_frame_source_session(Duration::from_secs(9));
+        assert!(session.finalize().is_none());
+    }
+
+    #[test]
+    fn stored_session_round_trips_through_json() {
+        let session = dead_frame_source_session(Duration::from_secs(10));
+        let stored = session.finalize().unwrap();
+        let json = serde_json::to_string(&stored).unwrap();
+        let parsed: StoredSession = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.package_name, "com.example.game");
+        assert_eq!(parsed.duration_sec, 10);
+        assert!(json.contains("\"packageName\""));
     }
 }
