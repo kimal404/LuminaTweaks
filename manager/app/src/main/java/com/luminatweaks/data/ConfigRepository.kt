@@ -849,7 +849,7 @@ object ConfigRepository {
      * with the same persistent record used by "Saklar Utama".
      * Caller must hold [fileMutex].
      */
-    private fun persistRecordAppsLocked(context: Context, snapshot: Set<String>) {
+    private suspend fun persistRecordAppsLocked(context: Context, snapshot: Set<String>) {
         val json = JSONArray(snapshot.sorted()).toString()
 
         cachedAppConfigs?.let { cached ->
