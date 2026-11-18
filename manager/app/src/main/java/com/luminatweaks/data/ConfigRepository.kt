@@ -752,11 +752,12 @@ object ConfigRepository {
     private fun recordAppsPrefs(context: Context) =
         context.getSharedPreferences(RECORD_PREFS_NAME, Context.MODE_PRIVATE)
 
-    fun recordEnabled(context: Context, packageName: String): Boolean {
-        val pkg = packageName.substringBefore(':').trim()
-        if (pkg.isEmpty()) return false
-        return readRecordApps(context).contains(pkg)
-    }
+    suspend fun recordEnabled(context: Context, packageName: String): Boolean =
+        withContext(Dispatchers.IO) {
+            val pkg = packageName.substringBefore(':').trim()
+            if (pkg.isEmpty()) return@withContext false
+            readRecordApps(context).contains(pkg)
+        }
 
     /**
      * Persists the toggle immediately (prefs + local mirror) so it survives

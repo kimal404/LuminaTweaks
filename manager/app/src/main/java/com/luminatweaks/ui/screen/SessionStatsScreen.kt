@@ -114,6 +114,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.LuminaBridge
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import java.io.File
