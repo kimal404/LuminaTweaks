@@ -54,6 +54,7 @@ class MainActivity : ComponentActivity() {
         // Warm the root bridge once so Session Stats screens never wait for a
         // connection and never shell out to `su`.
         LuminaBridge.start(applicationContext)
+        com.luminatweaks.data.ConfigRepository.initialize(applicationContext)
 
         lifecycleScope.launch(Dispatchers.IO) {
             val pkg = packageName

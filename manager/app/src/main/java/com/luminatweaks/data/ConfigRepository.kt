@@ -119,6 +119,26 @@ object ConfigRepository {
     @Volatile
     private var cachedRecordApps: Set<String>? = null
 
+    @Volatile
+    private var appContext: Context? = null
+
+    /**
+     * Called once from the Activity on startup. Remembers the application
+     * context and re-arms the daemon with the persisted record set, so the
+     * background recorder keeps working after the UI process is killed from
+     * Recents (the daemon outlives it).
+     */
+    fun initialize(context: Context) {
+        val app = context.applicationContext
+        appContext = app
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            fileMutex.withLock {
+                val snapshot = readRecordApps(app)
+                persistRecordAppsLocked(app, snapshot)
+            }
+        }
+    }
+
     private fun runSuCmd(cmd: String, timeoutSeconds: Long = 6): String {
         return try {
             val process = ProcessBuilder("su", "-c", cmd)
@@ -438,7 +458,8 @@ object ConfigRepository {
                         textureEnabled = resolvedTextureEnabled,
                         textureDetail = resolvedLod,
                         pixelSharp = obj.optBoolean("pixel_sharp", false),
-                        hardDistance = obj.optBoolean("hard_distance", false)
+                        hardDistance = obj.optBoolean("hard_distance", false),
+                        recordSession = obj.optBoolean("record_session", false)
                     )
                 }
             }
@@ -453,6 +474,16 @@ object ConfigRepository {
             }
             val loaded = loadAppConfigsInternal()
             cachedAppConfigs = loaded
+            if (appContext != null) {
+                // Re-derive the blind recorder set from the durable profile
+                // flags, so opted-in packages survive a UI process kill.
+                val fromProfiles = loaded.values.filter { it.recordSession }.map { it.pkg }.toSet()
+                if (fromProfiles.isNotEmpty()) {
+                    val merged = readRecordApps(appContext!!) + fromProfiles
+                    cachedRecordApps = merged
+                    persistRecordAppsLocked(appContext!!, merged)
+                }
+            }
             refreshGameSets(loaded)
             loaded
         }
@@ -485,6 +516,7 @@ object ConfigRepository {
                 put("texture_detail", normalizedLod)
                 put("pixel_sharp", item.pixelSharp)
                 put("hard_distance", item.hardDistance)
+                put("record_session", item.recordSession)
             }
             arr.put(obj)
         }
@@ -756,7 +788,16 @@ object ConfigRepository {
         withContext(Dispatchers.IO) {
             val pkg = packageName.substringBefore(':').trim()
             if (pkg.isEmpty()) return@withContext false
-            readRecordApps(context).contains(pkg)
+            if (readRecordApps(context).contains(pkg)) return@withContext true
+            // Cold start: the record set may be empty while the profile entry
+            // still carries the flag, so consult app_config.json as well.
+            val fromProfile = (cachedAppConfigs ?: getAppConfigs())[pkg]?.recordSession
+            if (fromProfile == true) {
+                cachedRecordApps = (cachedRecordApps.orEmpty() + pkg)
+                true
+            } else {
+                false
+            }
         }
 
     /**
@@ -773,21 +814,58 @@ object ConfigRepository {
         if (pkg.isEmpty()) return@withContext readRecordApps(context)
 
         fileMutex.withLock {
+            // Keep the per-app profile field in the same durable record as
+            // "Saklar Utama" so a cold start can restore it from app_config.json.
+            val configs = (cachedAppConfigs ?: loadAppConfigsInternal()).toMutableMap()
+            val existing = configs[pkg]
+            val updatedProfile = (existing ?: AppProfileConfig(pkg = pkg))
+                .copy(recordSession = enabled)
+            if (existing != updatedProfile) {
+                configs[pkg] = updatedProfile
+                cachedAppConfigs = configs
+                runCatching { persistAppConfigsInternal(configs) }
+            }
+
             val current = readRecordApps(context).toMutableSet()
             if (enabled) current.add(pkg) else current.remove(pkg)
             val snapshot = current.toSet()
             cachedRecordApps = snapshot
 
+            // `commit()` (not `apply()`): a Recents swipe can kill the process
+            // before the async write lands, which used to reset the toggle.
             recordAppsPrefs(context)
                 .edit()
                 .putStringSet(RECORD_APPS_KEY, snapshot)
-                .apply()
+                .commit()
 
-            val json = JSONArray(snapshot.sorted()).toString()
-            runCatching { File(context.filesDir, RECORD_APPS_MIRROR).writeText("$json\n") }
-            runCatching { LuminaBridge.writeRecordApps(context, json) }
+            persistRecordAppsLocked(context, snapshot)
             snapshot
         }
+    }
+
+    /**
+     * Durably stores the record set to the local mirror and the daemon, and
+     * refreshes the per-app profile entries so `recordSession` stays in sync
+     * with the same persistent record used by "Saklar Utama".
+     * Caller must hold [fileMutex].
+     */
+    private fun persistRecordAppsLocked(context: Context, snapshot: Set<String>) {
+        val json = JSONArray(snapshot.sorted()).toString()
+
+        cachedAppConfigs?.let { cached ->
+            val next = cached.mapValues { (pkg, profile) ->
+                val wanted = snapshot.contains(pkg)
+                if (profile.recordSession == wanted) profile else profile.copy(recordSession = wanted)
+            }
+            cachedAppConfigs = next
+        }
+
+        // Write-and-sync the mirror before touching the bridge, so a bridge
+        // hiccup still leaves a readable copy on disk.
+        runCatching {
+            File(context.filesDir, RECORD_APPS_MIRROR).writeText("$json\n")
+        }
+        runCatching { LuminaBridge.writeRecordApps(context, json) }
     }
 
     /**
