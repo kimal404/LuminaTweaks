@@ -22,6 +22,7 @@ import android.graphics.Canvas as AndroidCanvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.os.Environment
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Spring
@@ -171,6 +172,7 @@ internal data class SessionLoadResult(
 internal object SessionStatsRepository {
     private const val PREFS_NAME = "lumina_session_stats"
     private const val KEY_SAMPLE_DISMISSED = "sample_dismissed"
+    private const val TAG = "SessionStats"
     private val PACKAGE_NAME_REGEX = Regex("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)+$")
 
     /**
@@ -208,12 +210,27 @@ internal object SessionStatsRepository {
     ): Set<String> = ConfigRepository.setRecordEnabled(context, packageName, enabled)
 
     suspend fun loadSessions(context: Context): SessionLoadResult = withContext(Dispatchers.IO) {
-        val raw = readConfig(context, "sessions.json") {
-            LuminaBridge.readSessions(context)
+        val raw = try {
+            readConfig(context, "sessions.json") {
+                LuminaBridge.readSessions(context)
+            }
+        } catch (error: Exception) {
+            Log.e(TAG, "Failed to read sessions.json over IPC", error)
+            null
         }
-        if (raw != null) {
-            val parsed = runCatching { parseSessionsJson(context, raw) }.getOrNull()
+        if (raw == null) {
+            Log.w(TAG, "No sessions.json payload from the daemon or local mirror")
+        } else {
+            val parsed = try {
+                parseSessionsJson(context, raw)
+            } catch (error: Exception) {
+                Log.e(TAG, "Failed to parse sessions.json (${raw.length} chars)", error)
+                null
+            }
             if (parsed != null) {
+                if (parsed.isEmpty() && raw.trim() != "[]" && raw.isNotBlank()) {
+                    Log.w(TAG, "sessions.json parsed to zero entries (${raw.length} chars)")
+                }
                 return@withContext SessionLoadResult(sessions = parsed, isSampleData = false)
             }
         }
@@ -337,63 +354,89 @@ internal object SessionStatsRepository {
     }
 
     private fun parseSessionsJson(context: Context, raw: String): List<GameSessionRecord> {
-        val arr = JSONArray(raw.trim().ifEmpty { "[]" })
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return emptyList()
+
+        val arr = try {
+            JSONArray(trimmed)
+        } catch (error: Exception) {
+            // A truncated or malformed payload used to surface as an empty
+            // list ("Belum Ada Hasil Rekaman") with no trace. Log the byte
+            // count so a mid-JSON cut from the IPC layer is obvious.
+            Log.e(TAG, "sessions.json is not a valid JSON array (${trimmed.length} chars)", error)
+            return emptyList()
+        }
+
         val list = ArrayList<GameSessionRecord>(arr.length())
         for (i in 0 until arr.length()) {
             val obj = arr.optJSONObject(i) ?: continue
-            val samplesArr = obj.optJSONArray("samples")
-            val samples = if (samplesArr != null) {
-                List(samplesArr.length()) { idx ->
-                    val s = samplesArr.optJSONObject(idx)
-                    SessionSamplePoint(
-                        offsetSec = s?.optInt("offsetSec", idx * 10) ?: (idx * 10),
-                        avgFps = s?.optDouble("avgFps", 60.0)?.toFloat() ?: 60f,
-                        minFps = s?.optDouble("minFps", 50.0)?.toFloat() ?: 50f,
-                        onePercentLow = s?.optDouble("onePercentLow", 45.0)?.toFloat() ?: 45f,
-                        zeroPointOnePercentLow = s?.optDouble("zeroPointOnePercentLow", 35.0)?.toFloat() ?: 35f,
-                        jankFrames = s?.optInt("jankFrames", 0) ?: 0,
-                        cpuTempC = s?.optDouble("cpuTempC", 55.0)?.toFloat() ?: 55f,
-                        batteryTempC = s?.optDouble("batteryTempC", 38.0)?.toFloat() ?: 38f,
-                        powerMw = s?.optInt("powerMw", 3000) ?: 3000
-                    )
-                }
-            } else {
-                emptyList()
+            try {
+                list.add(parseSessionObject(context, obj, i))
+            } catch (error: Exception) {
+                Log.e(TAG, "Skipping unreadable session entry at index $i", error)
             }
-            val packageName = obj.optString("packageName", "unknown.app")
-                .substringBefore(':')
-                .trim()
-                .ifEmpty { "unknown.app" }
-            list.add(
-                GameSessionRecord(
-                    id = obj.optString("id", i.toString()),
-                    packageName = packageName,
-                    appName = resolveAppLabel(
-                        context,
-                        packageName,
-                        obj.optString("appName", "")
-                    ),
-                    profile = obj.optString("profile", "Balanced"),
-                    displayHz = obj.optInt("displayHz", 120),
-                    stopReason = obj.optString("stopReason", "auto"),
-                    startTimeMs = obj.optLong("startTimeMs", System.currentTimeMillis()),
-                    durationSec = obj.optInt("durationSec", 0),
-                    avgFps = obj.optDouble("avgFps", 0.0).toFloat(),
-                    minFps = obj.optInt("minFps", 0),
-                    maxFps = obj.optInt("maxFps", 0),
-                    onePercentLowFps = obj.optDouble("onePercentLowFps", 0.0).toFloat(),
-                    zeroPointOnePercentLowFps = obj.optDouble("zeroPointOnePercentLowFps", 0.0).toFloat(),
-                    framePacingStdDevMs = obj.optDouble("framePacingStdDevMs", 0.0).toFloat(),
-                    jankCount = obj.optInt("jankCount", 0),
-                    maxCpuTempC = obj.optDouble("maxCpuTempC", 55.0).toFloat(),
-                    startBatteryTempC = obj.optDouble("startBatteryTempC", 36.0).toFloat(),
-                    peakBatteryTempC = obj.optDouble("peakBatteryTempC", 39.0).toFloat(),
-                    avgPowerMw = obj.optInt("avgPowerMw", 0),
-                    samples = samples
+        }
+        return list.sortedByDescending { it.startTimeMs }
+    }
+
+    private fun parseSessionObject(
+        context: Context,
+        obj: JSONObject,
+        index: Int
+    ): GameSessionRecord {
+        val samples = parseSamples(obj.optJSONArray("samples"))
+
+        val packageName = obj.optString("packageName", "unknown.app")
+            .substringBefore(':')
+            .trim()
+            .ifEmpty { "unknown.app" }
+
+        return GameSessionRecord(
+            id = obj.optString("id", index.toString()),
+            packageName = packageName,
+            appName = resolveAppLabel(context, packageName, obj.optString("appName", "")),
+            profile = obj.optString("profile", "Balanced"),
+            displayHz = obj.optInt("displayHz", 120),
+            stopReason = obj.optString("stopReason", "auto"),
+            startTimeMs = obj.optLong("startTimeMs", System.currentTimeMillis()),
+            durationSec = obj.optInt("durationSec", 0),
+            avgFps = obj.optDouble("avgFps", 0.0).toFloat(),
+            minFps = obj.optInt("minFps", 0),
+            maxFps = obj.optInt("maxFps", 0),
+            onePercentLowFps = obj.optDouble("onePercentLowFps", 0.0).toFloat(),
+            zeroPointOnePercentLowFps = obj.optDouble("zeroPointOnePercentLowFps", 0.0).toFloat(),
+            framePacingStdDevMs = obj.optDouble("framePacingStdDevMs", 0.0).toFloat(),
+            jankCount = obj.optInt("jankCount", 0),
+            maxCpuTempC = obj.optDouble("maxCpuTempC", 0.0).toFloat(),
+            startBatteryTempC = obj.optDouble("startBatteryTempC", 0.0).toFloat(),
+            peakBatteryTempC = obj.optDouble("peakBatteryTempC", 0.0).toFloat(),
+            avgPowerMw = obj.optInt("avgPowerMw", 0),
+            samples = samples
+        )
+    }
+
+    private fun parseSamples(samplesArr: JSONArray?): List<SessionSamplePoint> {
+        if (samplesArr == null) return emptyList()
+        val points = ArrayList<SessionSamplePoint>(samplesArr.length())
+        for (idx in 0 until samplesArr.length()) {
+            // optJSONObject already tolerates non-objects; a malformed entry is
+            // skipped instead of aborting the whole time series.
+            val s = samplesArr.optJSONObject(idx) ?: continue
+            points.add(
+                SessionSamplePoint(
+                    offsetSec = s.optInt("offsetSec", idx),
+                    avgFps = s.optDouble("avgFps", 0.0).toFloat(),
+                    minFps = s.optDouble("minFps", 0.0).toFloat(),
+                    onePercentLow = s.optDouble("onePercentLow", 0.0).toFloat(),
+                    zeroPointOnePercentLow = s.optDouble("zeroPointOnePercentLow", 0.0).toFloat(),
+                    jankFrames = s.optInt("jankFrames", 0),
+                    cpuTempC = s.optDouble("cpuTempC", 0.0).toFloat(),
+                    batteryTempC = s.optDouble("batteryTempC", 0.0).toFloat(),
+                    powerMw = s.optInt("powerMw", 0)
                 )
             )
         }
-        return list.sortedByDescending { it.startTimeMs }
+        return points
     }
 
     private fun serializeSessionsJson(list: List<GameSessionRecord>): String {

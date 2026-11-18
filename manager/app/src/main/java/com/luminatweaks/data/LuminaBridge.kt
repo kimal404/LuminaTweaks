@@ -52,8 +52,11 @@ import kotlinx.coroutines.withTimeoutOrNull
 object LuminaBridge {
     const val SOCKET_FILE_NAME = "lumina_bridge.sock"
 
-    private const val REQUEST_TIMEOUT_MS = 2_000L
-    private const val SOCKET_TIMEOUT_MS = 1_500
+    // A single SESSION_READ can return several hundred KB of JSON. The local
+    // socket is fast, but a busy device or a cold helper can still take longer
+    // than a couple of seconds end to end, and a timeout reads as "no data".
+    private const val REQUEST_TIMEOUT_MS = 8_000L
+    private const val SOCKET_TIMEOUT_MS = 8_000
     private const val HEADER_LIMIT = 256
     private const val MAX_PAYLOAD = 4 * 1024 * 1024
     private const val RECONNECT_DELAY_MS = 120L

@@ -57,7 +57,10 @@ const RECORD_APPS_FILE: &str = "record_apps.json";
 
 const POLL_INTERVAL: Duration = Duration::from_millis(400);
 const READ_TIMEOUT: Duration = Duration::from_secs(2);
-const WRITE_TIMEOUT: Duration = Duration::from_secs(2);
+// A SESSION_READ response can carry the whole sessions.json (hundreds of KB).
+// Give the write side enough headroom that a busy app thread cannot turn a
+// complete payload into a partial one.
+const WRITE_TIMEOUT: Duration = Duration::from_secs(8);
 const MAX_PAYLOAD: usize = 4 * 1024 * 1024;
 
 /// Starts the bridge thread once. `lumina-binder` calls this before entering

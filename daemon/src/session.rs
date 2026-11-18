@@ -57,7 +57,11 @@ const GRACE_PERIOD: Duration = Duration::from_secs(10);
 const MIN_SESSION: Duration = Duration::from_secs(10);
 const IDLE_TAP_CLEAR_INTERVAL: Duration = Duration::from_secs(5);
 const MAX_SESSIONS: usize = 25;
-const MAX_SAMPLE_POINTS: usize = 50;
+/// Time-series points stored per session. Buckets are already one per second,
+/// so a normal session keeps its natural resolution; longer sessions are
+/// grouped down to this many entries. The stored JSON therefore grows with
+/// duration only until the cap, keeping SESSION_READ payloads bounded.
+const MAX_SAMPLE_POINTS: usize = 300;
 const JANK_FRAME_FACTOR: f32 = 1.5;
 const HIST_BIN_MS: f32 = 0.1;
 const HIST_BINS: usize = 20_000;
@@ -1265,5 +1269,38 @@ mod tests {
         assert_eq!(parsed.package_name, "com.example.game");
         assert_eq!(parsed.duration_sec, 10);
         assert!(json.contains("\"packageName\""));
+    }
+
+    /// One bucket per second is the natural sampling rate; the cap only kicks
+    /// in for very long sessions, keeping the stored JSON a bounded size.
+    #[test]
+    fn samples_are_capped_for_long_sessions() {
+        let mut buckets = Vec::with_capacity(2_000);
+        for sec in 0..2_000u32 {
+            buckets.push(Bucket {
+                offset_sec: sec,
+                frames: vec![16.6],
+                ..Bucket::default()
+            });
+        }
+        let samples = build_samples(&buckets, 120.0);
+        assert_eq!(samples.len(), MAX_SAMPLE_POINTS);
+        // Offsets stay monotonically increasing after grouping.
+        assert!(samples.windows(2).all(|pair| pair[0].offset_sec <= pair[1].offset_sec));
+    }
+
+    /// A short session keeps one point per second instead of being padded up
+    /// to the cap.
+    #[test]
+    fn short_sessions_keep_one_point_per_second() {
+        let mut buckets = Vec::with_capacity(30);
+        for sec in 0..30u32 {
+            buckets.push(Bucket {
+                offset_sec: sec,
+                frames: vec![16.6],
+                ..Bucket::default()
+            });
+        }
+        assert_eq!(build_samples(&buckets, 120.0).len(), 30);
     }
 }
