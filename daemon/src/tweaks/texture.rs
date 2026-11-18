@@ -31,8 +31,16 @@ pub fn detect_angle_support() -> AngleSupport {
     let support = crate::core::angle::detect_angle_support();
     if !support.usable() {
         log!(
-            "[TEXTURE] WARNING: ANGLE unavailable on this ROM ({}). Texture override will not render; \
-             the driver-selection settings will be written but the ROM will fall back to the native GLES driver.",
+            "[TEXTURE] WARNING: no ANGLE driver found on this ROM ({}). Texture override is written but \
+             the target will keep rendering with the vendor GLES driver.",
+            support.describe()
+        );
+    } else if !support.settings_keys {
+        // ANGLE exists, but the `settings` provider did not round-trip from the
+        // daemon context. Overrides may still land (the write path retries and
+        // verifies), so log it as informational rather than a missing driver.
+        log!(
+            "[TEXTURE] ANGLE detected ({}) but the `settings` write probe failed; writes will be retried and verified.",
             support.describe()
         );
     } else {
@@ -477,9 +485,16 @@ impl TextureController {
             );
         }
 
-        if !support.usable() {
+        if !(pkgs_ok && values_ok && features_ok) {
+            // ANGLE itself is fine; this is a privilege/provider problem, so
+            // say exactly that instead of blaming the ROM's ANGLE support.
             log!(
-                "[TEXTURE] ANGLE overrides written for [{}] -> [{}] but this ROM cannot honour them ({}); \
+                "[TEXTURE] ANGLE present but settings write failed ({}); retried on the next sync.",
+                support.describe()
+            );
+        } else if !support.usable() {
+            log!(
+                "[TEXTURE] ANGLE overrides written for [{}] -> [{}] but no ANGLE driver was detected ({}); \
                  expect no visual effect.",
                 pkgs_joined,
                 applied_features,

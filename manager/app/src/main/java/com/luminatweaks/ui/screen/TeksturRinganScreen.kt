@@ -448,7 +448,7 @@ fun TeksturRinganScreen(
         ) {
             item(key = "angle_warning") {
                 val status = angleStatus
-                if (status != null && !status.usable) {
+                if (status != null && status.known && !status.usable) {
                     Surface(
                         shape = RoundedCornerShape(outerRadius),
                         color = MaterialTheme.colorScheme.errorContainer,

@@ -36,10 +36,13 @@ pub struct AngleSupport {
 }
 
 impl AngleSupport {
-    /// Only claim support when the libraries exist *and* the framework is able
-    /// to persist per-app driver selection.
+    /// A ROM can honour per-app ANGLE overrides as long as an ANGLE driver is
+    /// actually shipped. The `settings` round-trip probe is deliberately NOT
+    /// part of this check: it only reports whether the current shell context
+    /// can write that provider, and a failed probe would otherwise veto a ROM
+    /// that does have working ANGLE (false negative).
     pub fn usable(&self) -> bool {
-        self.libraries && self.settings_keys
+        self.libraries || self.package || self.declared
     }
 
     pub fn describe(&self) -> String {
@@ -51,23 +54,64 @@ impl AngleSupport {
 }
 
 fn angle_lib_present() -> bool {
-    const LIB_DIRS: [&str; 6] = [
+    const LIB_DIRS: [&str; 10] = [
         "/system/lib64",
         "/system/lib64/egl",
+        "/system/lib64/hw",
         "/vendor/lib64",
         "/vendor/lib64/egl",
+        "/vendor/lib64/hw",
         "/system/lib",
+        "/system/lib/egl",
         "/vendor/lib",
+        "/vendor/lib/egl",
     ];
-    const ANGLE_LIBS: [&str; 3] = [
+    // Different ROMs bundle ANGLE under slightly different names; any of them
+    // means the driver is shipped.
+    const ANGLE_LIBS: [&str; 5] = [
         "libGLESv2_angle.so",
         "libEGL_angle.so",
         "libGLESv1_CM_angle.so",
+        "libGLESv2_angle.so.1",
+        "libEGL_angle.so.1",
     ];
 
-    LIB_DIRS
+    let direct = LIB_DIRS
         .iter()
-        .any(|dir| ANGLE_LIBS.iter().any(|lib| Path::new(dir).join(lib).exists()))
+        .any(|dir| ANGLE_LIBS.iter().any(|lib| Path::new(dir).join(lib).exists()));
+
+    if direct {
+        return true;
+    }
+
+    // Updatable / APEX-provided ANGLE (Android 14 AOSP layout).
+    const EXTRA_LIBS: [&str; 5] = [
+        "/apex/com.android.angle/lib64/libGLESv2_angle.so",
+        "/apex/com.android.angle/lib64/libEGL_angle.so",
+        "/system/apex/com.android.angle/lib64/libGLESv2_angle.so",
+        "/vendor/lib64/libGLESv2_angle.so",
+        "/odm/lib64/libGLESv2_angle.so",
+    ];
+    EXTRA_LIBS.iter().any(|path| Path::new(path).exists())
+}
+
+fn angle_package_installed() -> bool {
+    // The updatable driver ships inside the `com.android.angle` package; the
+    // property is set on most OEM ROMs that bundle ANGLE this way.
+    if get_system_prop("ro.gfx.driver.0").eq_ignore_ascii_case("com.android.angle") {
+        return true;
+    }
+
+    Command::new("pm")
+        .args(["path", "com.android.angle"])
+        .output()
+        .ok()
+        .filter(|out| out.status.success())
+        .map(|out| {
+            let text = String::from_utf8_lossy(&out.stdout);
+            text.contains("package:")
+        })
+        .unwrap_or(false)
 }
 
 fn settings_writable() -> bool {
@@ -109,7 +153,7 @@ pub fn detect_angle_support() -> AngleSupport {
     let support = AngleSupport {
         libraries: angle_lib_present(),
         declared: !get_system_prop("ro.gfx.angle.supported").is_empty(),
-        package: get_system_prop("ro.gfx.driver.0").eq_ignore_ascii_case("com.android.angle"),
+        package: angle_package_installed(),
         settings_keys: settings_writable(),
     };
 

@@ -51,7 +51,13 @@ data class AngleStatus(
     val packageInstalled: Boolean = false,
     val settingsKeys: Boolean = false,
     val usable: Boolean = false,
-    val detail: String = ""
+    val detail: String = "",
+    /**
+     * `false` when the daemon could not be queried at all. The UI must not
+     * claim "no ANGLE support" for an unknown result, otherwise a transient
+     * bridge failure looks like a missing driver.
+     */
+    val known: Boolean = false
 )
 
 data class DetectedGame(val packageName: String, val label: String)
@@ -802,29 +808,32 @@ object ConfigRepository {
         context.getSharedPreferences(RECORD_PREFS_NAME, Context.MODE_PRIVATE)
 
     /**
-     * Asks the daemon whether ANGLE is usable on this ROM. Falls back to
-     * "unsupported" when the bridge is unreachable so the UI warns rather than
-     * silently promising an effect that will not happen.
+     * Asks the daemon whether ANGLE is usable on this ROM.
+     *
+     * A failed bridge request returns [AngleStatus.known] == false and is not
+     * cached, so a transient failure never masquerades as "no ANGLE support"
+     * and the next screen entry retries.
      */
     suspend fun getAngleStatus(context: Context): AngleStatus = withContext(Dispatchers.IO) {
         cachedAngleStatus?.let { return@withContext it }
 
         val raw = runCatching { LuminaBridge.readAngleStatus(context) }.getOrNull()
-        val parsed = if (raw.isNullOrBlank()) {
-            AngleStatus()
-        } else {
-            runCatching {
-                val obj = JSONObject(raw)
-                AngleStatus(
-                    libraries = obj.optBoolean("libraries", false),
-                    declared = obj.optBoolean("declared", false),
-                    packageInstalled = obj.optBoolean("package", false),
-                    settingsKeys = obj.optBoolean("settingsKeys", false),
-                    usable = obj.optBoolean("usable", false),
-                    detail = obj.optString("detail", "")
-                )
-            }.getOrElse { AngleStatus() }
+        if (raw.isNullOrBlank()) {
+            return@withContext AngleStatus(known = false)
         }
+
+        val parsed = runCatching {
+            val obj = JSONObject(raw)
+            AngleStatus(
+                libraries = obj.optBoolean("libraries", false),
+                declared = obj.optBoolean("declared", false),
+                packageInstalled = obj.optBoolean("package", false),
+                settingsKeys = obj.optBoolean("settingsKeys", false),
+                usable = obj.optBoolean("usable", false),
+                detail = obj.optString("detail", ""),
+                known = true
+            )
+        }.getOrNull() ?: return@withContext AngleStatus(known = false)
 
         cachedAngleStatus = parsed
         parsed
