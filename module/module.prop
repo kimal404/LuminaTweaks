@@ -4,3 +4,4 @@ version=v2.3
 versionCode=230
 author=kimal
 description=Event-driven gaming performance optimizer and hardware governor daemon.
+banner=banner.png
