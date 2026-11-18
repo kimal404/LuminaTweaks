@@ -509,12 +509,18 @@ internal fun SessionStatsScreen(
     var isLoading by remember { mutableStateOf(true) }
     var selectedSession by remember { mutableStateOf<GameSessionRecord?>(null) }
     var showClearDialog by remember { mutableStateOf(false) }
+    var showLiveSession by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         val result = SessionStatsRepository.loadSessions(context)
         sessions = result.sessions
         isSampleData = result.isSampleData
         isLoading = false
+    }
+
+    if (showLiveSession) {
+        ActiveSessionScreen(onBack = { showLiveSession = false })
+        return
     }
 
     if (showClearDialog) {
@@ -631,6 +637,12 @@ internal fun SessionStatsScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showLiveSession = true }) {
+                        Icon(
+                            imageVector = Icons.Rounded.Speed,
+                            contentDescription = localizedLabel("Sesi aktif", "Active session")
+                        )
+                    }
                     if (sessions.isNotEmpty()) {
                         IconButton(onClick = { showClearDialog = true }) {
                             Icon(
@@ -657,6 +669,19 @@ internal fun SessionStatsScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            item(key = "active_session_entry") {
+                NestedTweakActionItem(
+                    icon = Icons.Rounded.Speed,
+                    title = localizedLabel("Sesi Aktif", "Active Session"),
+                    subtitle = localizedLabel(
+                        "Pantau FPS, frame time & suhu secara real-time saat bermain",
+                        "Track FPS, frame time & thermals live during gameplay"
+                    ),
+                    onClick = {
+                        showLiveSession = true
+                    }
+                )
+            }
             when {
                 isLoading -> {
                     item(key = "loading_state") {

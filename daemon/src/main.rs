@@ -576,7 +576,7 @@ fn main() {
                 }
             } else {
                 log!("[POWER]  Screen OFF \u{2794} Background workers paused");
-                fps_monitor.observe(None, false, 0);
+                fps_monitor.observe(None, false, 0, None);
             }
             last_screen_state = Some(screen_awake);
         }
@@ -643,7 +643,7 @@ fn main() {
                 runtime.left_foreground_at = None;
                 runtime.target_game_pid = 0;
                 runtime.reset_to_balance_triggered("Died 0ms", &mut binder_client);
-                fps_monitor.observe(None, false, 0);
+                fps_monitor.observe(None, false, 0, None);
                 TextureController::sync_config(None);
                 last_pkg_for_texture = None;
                 suppress_fallback = true;
@@ -784,13 +784,22 @@ fn main() {
         } else {
             active_pid
         };
-        fps_monitor.observe(fps_package.as_deref(), fps_game_active, fps_pid);
 
         let profile_label = runtime
             .current_profile
             .unwrap_or(Profile::Balance)
             .as_str();
         session_recorder.tick(screen_awake, focused.as_deref(), profile_label);
+        let session_start_ms = session_recorder
+            .active_start_ms()
+            .filter(|(package, _)| fps_package.as_deref() == Some(package.as_str()))
+            .map(|(_, start)| start);
+        fps_monitor.observe(
+            fps_package.as_deref(),
+            fps_game_active,
+            fps_pid,
+            session_start_ms,
+        );
 
         let sleep_ms = if binder_client.is_push() {
             250

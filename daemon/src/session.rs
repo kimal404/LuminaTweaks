@@ -80,6 +80,50 @@ fn round2(value: f32) -> f32 {
     (value * 100.0).round() / 100.0
 }
 
+/// Whether any live process still belongs to `package`.
+///
+/// Android names app processes after the package (`com.foo.bar`) or a private
+/// suffix (`com.foo.bar:remote`), so `/proc/<pid>/cmdline` is matched against
+/// the package and its `:`-separated children.  The scan is intentionally
+/// uncached: a Recents swipe must be detected on the same tick that leaves the
+/// foreground, not up to a cache TTL later.  Zombies and kernel threads expose
+/// an empty cmdline and are ignored, and unreadable `/proc` entries are skipped.
+/// When `/proc` itself cannot be listed the caller keeps the regular grace
+/// period instead of finalizing on a transient read failure.
+fn game_process_alive(package: &str) -> bool {
+    let Ok(entries) = fs::read_dir("/proc") else {
+        return true;
+    };
+
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(pid) = name.to_str() else {
+            continue;
+        };
+        if !pid.bytes().all(|byte| byte.is_ascii_digit()) {
+            continue;
+        }
+
+        let Ok(cmdline) = fs::read(entry.path().join("cmdline")) else {
+            continue;
+        };
+        let Some(first) = cmdline.split(|byte| *byte == 0).next() else {
+            continue;
+        };
+        let Ok(proc_name) = std::str::from_utf8(first) else {
+            continue;
+        };
+
+        if let Some(rest) = proc_name.strip_prefix(package) {
+            if rest.is_empty() || rest.starts_with(':') {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
 // ---------------------------------------------------------------------------
 // record_apps.json
 // ---------------------------------------------------------------------------
@@ -1019,18 +1063,30 @@ impl SessionRecorder {
                     active.ingest(&frames, offset_sec);
                     false
                 } else {
+                    let process_alive = game_process_alive(&active.package);
                     if active.left_at.is_none() {
                         active.left_at = Some(now);
-                        log!(
-                            "[SESSION] Paused (grace 10s): {}",
-                            active.package
-                        );
+                        if process_alive {
+                            log!(
+                                "[SESSION] Paused (grace 10s): {}",
+                                active.package
+                            );
+                        } else {
+                            log!(
+                                "[SESSION] Process gone; finalizing now: {}",
+                                active.package
+                            );
+                        }
                     }
                     self.tap.clear();
-                    active
-                        .left_at
-                        .map(|left| left.elapsed() >= GRACE_PERIOD)
-                        .unwrap_or(false)
+                    if !process_alive {
+                        true
+                    } else {
+                        active
+                            .left_at
+                            .map(|left| left.elapsed() >= GRACE_PERIOD)
+                            .unwrap_or(false)
+                    }
                 }
             };
 
@@ -1058,6 +1114,13 @@ impl SessionRecorder {
         if self.active.is_some() {
             self.finish_active();
         }
+    }
+
+    /// Package and epoch start of the session currently being recorded.
+    pub fn active_start_ms(&self) -> Option<(String, u64)> {
+        self.active
+            .as_ref()
+            .map(|session| (session.package.clone(), session.start_epoch_ms))
     }
 
     fn start_session(&mut self, package: &str, profile: &str) {

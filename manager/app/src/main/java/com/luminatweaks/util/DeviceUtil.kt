@@ -69,6 +69,9 @@ object DeviceUtil {
         }
     }
 
+    /** Reads a system property through reflection only, never spawning a shell. */
+    fun readSystemProperty(key: String): String? = getSystemProperty(key, allowGetpropFallback = false)
+
     fun getMarketDeviceName(context: Context): String {
         val marketProps = listOf(
             "ro.product.marketname",
