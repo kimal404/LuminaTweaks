@@ -17,12 +17,18 @@
 //! Zero-root bridge between the Manager app and the privileged helper.
 //!
 //! `/data/adb` is `0700 root:root` and `adb_data_file` is unreachable from
-//! `untrusted_app`, so the app cannot open the daemon sockets directly and
-//! historically shelled out to `su` for every read and write. Instead the
-//! Manager hosts a `LocalServerSocket` inside its own private directory and
-//! the helper (root) connects *out* to it. SELinux allows a privileged domain
-//! to connect to an app-owned socket, while the app never needs any permission
-//! it does not already have.
+//! `untrusted_app`, so the app cannot open the daemon config files directly.
+//!
+//! The socket is hosted by the **daemon** under `/dev/socket`, the same layout
+//! that is known to work on shipping Android 14/15 devices: a root domain may
+//! bind a `sock_file` in `socket_device`, while the app only has to *connect*
+//! as a client, which needs no extra privilege inside its own process.
+//!
+//! An earlier revision flipped this around and had the app host a
+//! `LocalServerSocket` in `filesDir`. On device that server socket was never
+//! created (no `Manager bridge linked` line ever appeared, and it still failed
+//! with SELinux permissive), so every `SESSION_READ` silently fell back to an
+//! empty local mirror. Hosting here removes that failure mode entirely.
 //!
 //! Requests are framed so multi-kilobyte JSON survives an arbitrary poll
 //! boundary:
@@ -41,27 +47,33 @@
 use std::fs;
 use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
 use std::os::unix::fs::PermissionsExt;
-use std::os::unix::net::UnixStream;
+use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
+use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 
 use crate::core::detector::CONFIG_DIR;
 
-const APP_SOCKETS: [&str; 2] = [
-    "/data/user/0/com.luminatweaks/files/lumina_bridge.sock",
-    "/data/data/com.luminatweaks/files/lumina_bridge.sock",
+/// Primary endpoint: the standard socket namespace is reachable from both the
+/// root daemon and `untrusted_app` once the module's sepolicy rules are in
+/// place. The runtime-directory path is kept as a fallback for ROMs that keep
+/// `/dev/socket` locked down.
+const BRIDGE_SOCKETS: [&str; 2] = [
+    "/dev/socket/lumina_bridge.sock",
+    "/data/adb/.config/lumina/lumina_bridge.sock",
 ];
 const SESSIONS_FILE: &str = "sessions.json";
 const RECORD_APPS_FILE: &str = "record_apps.json";
 
-const POLL_INTERVAL: Duration = Duration::from_millis(400);
 const READ_TIMEOUT: Duration = Duration::from_secs(2);
 // A SESSION_READ response can carry the whole sessions.json (hundreds of KB).
 // Give the write side enough headroom that a busy app thread cannot turn a
 // complete payload into a partial one.
 const WRITE_TIMEOUT: Duration = Duration::from_secs(8);
 const MAX_PAYLOAD: usize = 4 * 1024 * 1024;
+
+static LISTEN_PATH: Mutex<Option<String>> = Mutex::new(None);
 
 /// Starts the bridge thread once. `lumina-binder` calls this before entering
 /// its blocking socket loop.
@@ -74,35 +86,69 @@ pub fn start() {
     }
 }
 
-fn run() {
-    let mut connected_once = false;
-
-    loop {
-        let Some(stream) = connect() else {
-            thread::sleep(POLL_INTERVAL);
-            continue;
-        };
-
-        if !connected_once {
-            connected_once = true;
-            log!("[SYSTEM] Manager bridge linked");
-        }
-
-        if !serve(stream) {
-            thread::sleep(POLL_INTERVAL);
-        }
-    }
+/// Path the daemon ended up listening on, once bound.
+pub fn listen_path() -> Option<String> {
+    LISTEN_PATH.lock().ok().and_then(|path| path.clone())
 }
 
-fn connect() -> Option<UnixStream> {
-    for path in APP_SOCKETS {
-        if let Ok(stream) = UnixStream::connect(path) {
-            let _ = stream.set_read_timeout(Some(READ_TIMEOUT));
-            let _ = stream.set_write_timeout(Some(WRITE_TIMEOUT));
-            return Some(stream);
+fn bind_listener() -> Option<(UnixListener, String)> {
+    for path in BRIDGE_SOCKETS {
+        if let Some(parent) = Path::new(path).parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+
+        // A stale socket from a previous boot blocks bind(); remove it first.
+        if let Ok(meta) = fs::symlink_metadata(path) {
+            if !meta.is_dir() {
+                let _ = fs::remove_file(path);
+            }
+        }
+
+        match UnixListener::bind(path) {
+            Ok(listener) => {
+                // 0666 so a differently-policed app domain can still open the
+                // node; SELinux, not the mode bits, is the real gate.
+                let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o666));
+                return Some((listener, path.to_string()));
+            }
+            Err(error) => {
+                log!("[WARN] Manager bridge bind {} failed: {}", path, error);
+            }
         }
     }
     None
+}
+
+fn run() {
+    let (listener, path) = match bind_listener() {
+        Some(bound) => bound,
+        None => {
+            log!("[WARN] Manager bridge unavailable: no socket path could be bound");
+            return;
+        }
+    };
+
+    if let Ok(mut slot) = LISTEN_PATH.lock() {
+        *slot = Some(path.clone());
+    }
+    log!("[SYSTEM] Manager bridge listening on {}", path);
+
+    for incoming in listener.incoming() {
+        match incoming {
+            Ok(stream) => {
+                let _ = stream.set_read_timeout(Some(READ_TIMEOUT));
+                let _ = stream.set_write_timeout(Some(WRITE_TIMEOUT));
+                thread::spawn(move || {
+                    if serve(stream) {
+                        log!("[SYSTEM] Manager bridge linked");
+                    }
+                });
+            }
+            Err(error) => {
+                log!("[SYSTEM] Manager bridge accept error: {}", error);
+            }
+        }
+    }
 }
 
 fn serve(stream: UnixStream) -> bool {
@@ -112,10 +158,11 @@ fn serve(stream: UnixStream) -> bool {
     let mut reader = BufReader::new(reader_stream);
     let mut writer = stream;
     let mut header = String::new();
+    let mut served_any = false;
 
     loop {
         match reader.read_line(&mut header) {
-            Ok(0) => return false,
+            Ok(0) => return served_any,
             Ok(_) => {}
             Err(error)
                 if matches!(
@@ -123,13 +170,12 @@ fn serve(stream: UnixStream) -> bool {
                     ErrorKind::WouldBlock | ErrorKind::TimedOut | ErrorKind::Interrupted
                 ) =>
             {
-                // An idle screen keeps the connection open; the app may send a
-                // request at any moment. Re-arm the timeout implicitly by
-                // looping instead of tearing the socket down. Keep the buffer
-                // so a partially delivered header is not discarded.
+                // An idle connection may sit between screen visits; a read
+                // timeout is not a disconnect, so re-arm and keep any partial
+                // header that is already buffered.
                 continue;
             }
-            Err(_) => return false,
+            Err(_) => return served_any,
         }
 
         let (command, payload_len) = {
@@ -150,12 +196,12 @@ fn serve(stream: UnixStream) -> bool {
 
         if payload_len > MAX_PAYLOAD {
             let _ = respond_error(&mut writer, "payload too large");
-            return false;
+            return served_any;
         }
 
         let mut payload = vec![0u8; payload_len];
         if payload_len > 0 && reader.read_exact(&mut payload).is_err() {
-            return false;
+            return served_any;
         }
         header.clear();
 
@@ -193,8 +239,9 @@ fn serve(stream: UnixStream) -> bool {
         };
 
         if handled.is_err() {
-            return false;
+            return served_any;
         }
+        served_any = true;
     }
 }
 

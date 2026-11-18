@@ -1,0 +1,56 @@
+# LuminaTweaks Manager bridge SELinux rules.
+#
+# The privileged daemon hosts the bridge at /dev/socket/lumina_bridge.sock and
+# the Manager connects as a plain client. This is the direction that is known
+# to work on shipping Android 14/15 builds: a root domain may bind a sock_file
+# in socket_device, and an untrusted_app only needs connectto.
+#
+# The previous layout (app hosting a LocalServerSocket in filesDir) could never
+# create the server socket on device, even with SELinux permissive, so it was
+# abandoned.
+
+# Treat the shared socket node as reachable across MLS categories.
+typeattribute socket_device mlstrustedobject;
+
+# Root daemon side: create/bind the socket node and listen on it.
+allow ksu socket_device dir { search getattr add_name write };
+allow magisk socket_device dir { search getattr add_name write };
+allow su socket_device dir { search getattr add_name write };
+allow rootfs socket_device dir { search getattr add_name write };
+
+allow ksu socket_device sock_file { create write read open getattr setattr unlink };
+allow magisk socket_device sock_file { create write read open getattr setattr unlink };
+allow su socket_device sock_file { create write read open getattr setattr unlink };
+allow rootfs socket_device sock_file { create write read open getattr setattr unlink };
+
+allow ksu socket_device unix_stream_socket { create bind listen accept read write getattr setopt };
+allow magisk socket_device unix_stream_socket { create bind listen accept read write getattr setopt };
+allow su socket_device unix_stream_socket { create bind listen accept read write getattr setopt };
+allow rootfs socket_device unix_stream_socket { create bind listen accept read write getattr setopt };
+
+# App side: reach the daemon socket and talk to it.
+allow untrusted_app socket_device dir { search getattr };
+allow untrusted_app_all socket_device dir { search getattr };
+allow untrusted_app socket_device sock_file { read write open getattr };
+allow untrusted_app_all socket_device sock_file { read write open getattr };
+
+allow untrusted_app ksu unix_stream_socket connectto;
+allow untrusted_app magisk unix_stream_socket connectto;
+allow untrusted_app su unix_stream_socket connectto;
+allow untrusted_app rootfs unix_stream_socket connectto;
+
+allow untrusted_app_all ksu unix_stream_socket connectto;
+allow untrusted_app_all magisk unix_stream_socket connectto;
+allow untrusted_app_all su unix_stream_socket connectto;
+allow untrusted_app_all rootfs unix_stream_socket connectto;
+
+# Keep the fallback path usable if a ROM points the bridge at the module dir.
+allow ksu app_data_file sock_file { read write open getattr };
+allow magisk app_data_file sock_file { read write open getattr };
+allow su app_data_file sock_file { read write open getattr };
+
+# Silence benign framework probes that used to spam the audit log.
+dontaudit untrusted_app proc_filesystems file { read open getattr };
+dontaudit untrusted_app_all proc_filesystems file { read open getattr };
+dontaudit untrusted_app incremental_prop file { read open getattr };
+dontaudit untrusted_app_all incremental_prop file { read open getattr };

@@ -96,6 +96,14 @@ pub fn cleanup_socket() {
     for path in [IPC_SOCKET_PRIMARY, IPC_SOCKET_FALLBACK] {
         let _ = fs::remove_file(path);
     }
+    // The Manager bridge now listens from the daemon side; drop the node so a
+    // restart never inherits a stale, unbindable socket.
+    for path in [
+        "/dev/socket/lumina_bridge.sock",
+        "/data/adb/.config/lumina/lumina_bridge.sock",
+    ] {
+        let _ = fs::remove_file(path);
+    }
 }
 
 fn bind_socket() -> Option<(UnixListener, String)> {

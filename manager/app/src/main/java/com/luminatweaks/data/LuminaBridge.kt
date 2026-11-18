@@ -17,10 +17,10 @@
 package com.luminatweaks.data
 
 import android.content.Context
-import android.net.LocalServerSocket
+import android.net.LocalSocketAddress
 import android.net.LocalSocket
+import android.util.Log
 import java.io.BufferedInputStream
-import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -41,25 +41,32 @@ import kotlinx.coroutines.withTimeoutOrNull
  * Zero-root transport for the two session files.
  *
  * The Manager cannot open `/data/adb` (mode `0700`, `adb_data_file`), and
- * spawning `su` for every read and write is expensive. This bridge flips the
- * connection direction: the app hosts a `LocalServerSocket` inside its own
- * private directory, while the root `lumina-binder` helper connects out to it
- * and performs the privileged file I/O on the app's behalf.
+ * spawning `su` for every read and write is expensive. The privileged
+ * `lumina-binder` helper now **hosts** the bridge at `/dev/socket` and this
+ * object connects as a plain client. That direction is the one that works on
+ * shipping Android 14/15: an `untrusted_app` may connect to a root-owned
+ * socket, while hosting a `LocalServerSocket` from inside the app process
+ * silently failed (the server socket was never created, even permissive).
  *
- * The socket is opened once per process and kept warm, so screen entry and
- * every interaction cost a single write/read pair instead of a shell fork.
+ * One connection is kept warm and serialised by a single coroutine, so a
+ * screen visit costs a write/read pair instead of a shell fork.
  */
 object LuminaBridge {
-    const val SOCKET_FILE_NAME = "lumina_bridge.sock"
+    /** Must match `BRIDGE_SOCKETS` in `daemon/src/binder/manager_bridge.rs`. */
+    private val SOCKET_PATHS = listOf(
+        "/dev/socket/lumina_bridge.sock",
+        "/data/adb/.config/lumina/lumina_bridge.sock"
+    )
 
     // A single SESSION_READ can return several hundred KB of JSON. The local
     // socket is fast, but a busy device or a cold helper can still take longer
     // than a couple of seconds end to end, and a timeout reads as "no data".
     private const val REQUEST_TIMEOUT_MS = 8_000L
     private const val SOCKET_TIMEOUT_MS = 8_000
+    private const val CONNECT_RETRY_DELAY_MS = 150L
     private const val HEADER_LIMIT = 256
     private const val MAX_PAYLOAD = 4 * 1024 * 1024
-    private const val RECONNECT_DELAY_MS = 120L
+    private const val TAG = "LuminaBridge"
 
     private val EMPTY = ByteArray(0)
     private val started = AtomicBoolean(false)
@@ -73,9 +80,8 @@ object LuminaBridge {
 
     fun start(context: Context) {
         if (!started.compareAndSet(false, true)) return
-        val appContext = context.applicationContext
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-            acceptLoop(File(appContext.filesDir, SOCKET_FILE_NAME))
+            clientLoop()
         }
     }
 
@@ -105,56 +111,67 @@ object LuminaBridge {
         return withTimeoutOrNull(REQUEST_TIMEOUT_MS) { pending.result.await() }
     }
 
-    private suspend fun acceptLoop(file: File) {
+    private suspend fun connectClient(): LocalSocket? {
+        for (path in SOCKET_PATHS) {
+            val socket = LocalSocket()
+            try {
+                socket.connect(LocalSocketAddress(path, LocalSocketAddress.Namespace.FILESYSTEM))
+                socket.soTimeout = SOCKET_TIMEOUT_MS
+                return socket
+            } catch (error: Throwable) {
+                runCatching { socket.close() }
+            }
+        }
+        return null
+    }
+
+    private suspend fun clientLoop() {
+        var loggedFailure = false
+
         while (currentCoroutineContext().isActive) {
-            val server = try {
-                if (file.exists()) file.delete()
-                LocalServerSocket(file.absolutePath)
-            } catch (_: Throwable) {
-                delay(500)
+            val socket = connectClient()
+            if (socket == null) {
+                // Only log the transition, not every retry, so a daemon that is
+                // still starting does not flood logcat.
+                if (!loggedFailure) {
+                    loggedFailure = true
+                    Log.e(TAG, "Bridge socket not reachable at ${SOCKET_PATHS.joinToString()}")
+                }
+                delay(CONNECT_RETRY_DELAY_MS)
                 continue
             }
 
+            loggedFailure = false
             try {
-                val client = server.accept()
-                serve(client)
+                serveClient(socket)
             } catch (cancel: CancellationException) {
-                runCatching { server.close() }
+                runCatching { socket.close() }
                 throw cancel
-            } catch (_: Throwable) {
+            } catch (error: Throwable) {
+                Log.e(TAG, "Bridge connection failed", error)
             } finally {
-                runCatching { server.close() }
-                runCatching { file.delete() }
+                runCatching { socket.close() }
                 failPending()
             }
 
-            // A peer that disconnects immediately must not spin the loop.
-            delay(RECONNECT_DELAY_MS)
+            delay(CONNECT_RETRY_DELAY_MS)
         }
     }
 
-    private suspend fun serve(client: LocalSocket) {
-        try {
-            runCatching { client.soTimeout = SOCKET_TIMEOUT_MS }
-            val input = BufferedInputStream(client.inputStream)
-            val output = client.outputStream
+    private suspend fun serveClient(socket: LocalSocket) {
+        val input = BufferedInputStream(socket.inputStream)
+        val output = socket.outputStream
 
-            while (currentCoroutineContext().isActive) {
-                val pending = requests.receive()
-                if (pending.result.isCompleted) continue
-                try {
-                    writeRequest(output, pending)
-                    pending.result.complete(readResponse(input))
-                } catch (failure: Throwable) {
-                    pending.result.complete(null)
-                    throw failure
-                }
+        while (currentCoroutineContext().isActive) {
+            val pending = requests.receive()
+            if (pending.result.isCompleted) continue
+            try {
+                writeRequest(output, pending)
+                pending.result.complete(readResponse(input))
+            } catch (failure: Throwable) {
+                pending.result.complete(null)
+                throw failure
             }
-        } catch (cancel: CancellationException) {
-            throw cancel
-        } catch (_: Throwable) {
-        } finally {
-            runCatching { client.close() }
         }
     }
 
