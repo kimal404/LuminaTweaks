@@ -250,7 +250,7 @@ internal object SessionStatsRepository {
             return@withContext SessionLoadResult(sessions = emptyList(), isSampleData = false)
         }
 
-        SessionLoadResult(sessions = defaultSampleSessions(), isSampleData = true)
+        SessionLoadResult(sessions = emptyList(), isSampleData = false)
     }
 
     suspend fun exportSessionCsv(session: GameSessionRecord): Result<File> = withContext(Dispatchers.IO) {
@@ -340,14 +340,6 @@ internal object SessionStatsRepository {
         }
         mirrorLocally(context, "sessions.json", "[]\n")
         runCatching { LuminaBridge.writeSessions(context, "[]") }
-    }
-
-    suspend fun restoreSamplePreview(context: Context): List<GameSessionRecord> = withContext(Dispatchers.IO) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_SAMPLE_DISMISSED, false)
-            .apply()
-        defaultSampleSessions()
     }
 
     private fun escapeCsv(value: String): String {
@@ -477,87 +469,6 @@ internal object SessionStatsRepository {
         return arr.toString()
     }
 
-    private fun defaultSampleSessions(): List<GameSessionRecord> {
-        val now = System.currentTimeMillis()
-        val mlbbAvg = listOf(115f, 118f, 112f, 119f, 116f, 108f, 114f, 117f, 104f, 111f, 118f, 115f, 98f, 109f, 116f, 118f, 112f, 117f, 106f, 114f, 119f, 116f, 110f, 115f)
-        val mlbbMin = listOf(96f, 104f, 88f, 108f, 94f, 76f, 92f, 101f, 64f, 84f, 103f, 95f, 52f, 79f, 98f, 105f, 86f, 99f, 72f, 91f, 107f, 97f, 81f, 94f)
-        val mlbbSamples = mlbbAvg.indices.map { i ->
-            SessionSamplePoint(
-                offsetSec = i * 50,
-                avgFps = mlbbAvg[i],
-                minFps = mlbbMin[i],
-                onePercentLow = (mlbbMin[i] - 8f).coerceAtLeast(35f),
-                zeroPointOnePercentLow = (mlbbMin[i] - 18f).coerceAtLeast(22f),
-                jankFrames = if (mlbbMin[i] < 75f) 18 else 4,
-                cpuTempC = 64f + (i * 0.9f),
-                batteryTempC = 38.2f + (i * 0.16f),
-                powerMw = 3850 + (i * 42)
-            )
-        }
-
-        val pubgAvg = listOf(90f, 89f, 90f, 88f, 87f, 89f, 86f, 88f, 84f, 87f, 89f, 88f, 85f, 89f, 90f, 87f, 86f, 88f, 89f, 88f)
-        val pubgMin = listOf(84f, 82f, 85f, 79f, 77f, 83f, 74f, 80f, 68f, 76f, 82f, 80f, 71f, 81f, 84f, 78f, 75f, 80f, 82f, 79f)
-        val pubgSamples = pubgAvg.indices.map { i ->
-            SessionSamplePoint(
-                offsetSec = i * 95,
-                avgFps = pubgAvg[i],
-                minFps = pubgMin[i],
-                onePercentLow = (pubgMin[i] - 6f).coerceAtLeast(45f),
-                zeroPointOnePercentLow = (pubgMin[i] - 14f).coerceAtLeast(35f),
-                jankFrames = if (pubgMin[i] < 72f) 11 else 2,
-                cpuTempC = 68f + (i * 1.1f),
-                batteryTempC = 37.5f + (i * 0.21f),
-                powerMw = 4420 + (i * 55)
-            )
-        }
-
-        return listOf(
-            GameSessionRecord(
-                id = "1794594124635",
-                packageName = "com.mobile.legends",
-                appName = "Mobile Legends: Bang Bang",
-                profile = "Performance",
-                displayHz = 120,
-                stopReason = "Otomatis",
-                startTimeMs = now - 3_600_000L,
-                durationSec = 1157,
-                avgFps = 113.4f,
-                minFps = 52,
-                maxFps = 120,
-                onePercentLowFps = 64.0f,
-                zeroPointOnePercentLowFps = 41.0f,
-                framePacingStdDevMs = 1.84f,
-                jankCount = 148,
-                maxCpuTempC = 84.7f,
-                startBatteryTempC = 38.2f,
-                peakBatteryTempC = 41.9f,
-                avgPowerMw = 4320,
-                samples = mlbbSamples
-            ),
-            GameSessionRecord(
-                id = "1794594209677",
-                packageName = "com.tencent.ig",
-                appName = "PUBG Mobile",
-                profile = "Performance",
-                displayHz = 90,
-                stopReason = "Otomatis",
-                startTimeMs = now - 18_000_000L,
-                durationSec = 1900,
-                avgFps = 87.9f,
-                minFps = 68,
-                maxFps = 90,
-                onePercentLowFps = 71.0f,
-                zeroPointOnePercentLowFps = 56.0f,
-                framePacingStdDevMs = 1.12f,
-                jankCount = 62,
-                maxCpuTempC = 88.9f,
-                startBatteryTempC = 37.5f,
-                peakBatteryTempC = 41.5f,
-                avgPowerMw = 4940,
-                samples = pubgSamples
-            )
-        )
-    }
 }
 
 private fun drawableToImageBitmap(drawable: Drawable, sizePx: Int = 96): ImageBitmap {
@@ -709,21 +620,6 @@ internal fun SessionStatsScreen(
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold
                         )
-                        if (isSampleData && sessions.isNotEmpty()) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.secondaryContainer
-                            ) {
-                                Text(
-                                    text = "SAMPLE",
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                                )
-                            }
-                        }
                     }
                 },
                 navigationIcon = {
@@ -810,22 +706,12 @@ internal fun SessionStatsScreen(
                             )
                             Text(
                                 text = localizedLabel(
-                                    "Aktifkan sakelar rekam di halaman Profil Aplikasi pilihan Anda, lalu mainkan permainannya.",
+                                    "Aktifkan sakelar Rekam Statistik Sesi di Profil Aplikasi, lalu mainkan game untuk mulai mencatat.",
                                     "Enable the recording toggle inside your chosen App Profile, then play a session."
                                 ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            TextButton(
-                                onClick = {
-                                    scope.launch {
-                                        sessions = SessionStatsRepository.restoreSamplePreview(context)
-                                        isSampleData = true
-                                    }
-                                }
-                            ) {
-                                Text(localizedLabel("Tampilkan Contoh Data", "Show Sample Data"))
-                            }
                         }
                     }
                 }
@@ -1185,9 +1071,6 @@ private fun SessionDetailScreen(
                             )
                             SessionTagChip(text = "${session.displayHz} Hz")
                             SessionTagChip(text = formatClockDuration(session.durationSec))
-                            if (isSampleData) {
-                                SessionTagChip(text = "Sample")
-                            }
                         }
                     }
                 }

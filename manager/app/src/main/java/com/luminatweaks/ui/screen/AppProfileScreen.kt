@@ -95,7 +95,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.material.icons.rounded.FiberManualRecord
+import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -524,7 +524,7 @@ fun AppProfileScreen(
                             headerTitle = stringResource(R.string.profile_section_additional)
                         ) {
                             NestedProfileSwitchItem(
-                                icon = Icons.Rounded.FiberManualRecord,
+                                icon = Icons.Rounded.Insights,
                                 title = localizedLabel("Rekam Statistik Sesi", "Record Session Stats"),
                                 subtitle = localizedLabel(
                                     "Simpan riwayat FPS, suhu & daya saat aplikasi berjalan",
