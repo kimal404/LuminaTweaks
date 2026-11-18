@@ -144,10 +144,11 @@ internal fun ActiveSessionScreen(onBack: () -> Unit) {
     val refreshHz = remember {
         localView.display?.refreshRate?.roundToInt()?.coerceIn(24, 240) ?: 60
     }
+    val idleLabel = localizedLabel("Aplikasi aktif", "Active app")
     val badge by produceState(initialValue = AppBadge(null, ""), snapshot.packageName) {
         val pkg = snapshot.packageName
         value = if (pkg == null) {
-            AppBadge(null, localizedLabel("Aplikasi aktif", "Active app"))
+            AppBadge(null, idleLabel)
         } else {
             withContext(Dispatchers.IO) {
                 runCatching {
