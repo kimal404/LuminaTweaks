@@ -881,7 +881,7 @@ fun HomeDashboardContent(
             }
 
             item(key = "metrics") {
-                HomeSectionHeader(title = stringResource(R.string.aosp_section_hardware))
+                Spacer(modifier = Modifier.height(16.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -915,7 +915,7 @@ fun HomeDashboardContent(
 
             item(key = "support") {
                 val uriHandler = LocalUriHandler.current
-                HomeSectionHeader(title = stringResource(R.string.aosp_section_support))
+                Spacer(modifier = Modifier.height(16.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     HomeActionRow(
                         index = 0,
@@ -1077,34 +1077,6 @@ private fun AZenithDeviceInfoCard(
 
 private suspend fun rootReboot(mode: String) {
     RootUtil.rebootDevice(mode)
-}
-
-@Composable
-private fun HomeSectionHeader(
-    title: String,
-    trailing: (@Composable () -> Unit)? = null
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(
-                start = 12.dp,
-                end = 4.dp,
-                top = 16.dp,
-                bottom = 8.dp
-            ),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        trailing?.invoke()
-    }
 }
 
 @Composable
