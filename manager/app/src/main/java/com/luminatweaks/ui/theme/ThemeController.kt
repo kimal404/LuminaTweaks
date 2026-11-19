@@ -1,21 +1,3 @@
-/*
- * Copyright (C) 2026-2027 KowX
- * Copyright (C) 2026-2027 Zexshia
- * Copyright (C) 2026 kimal
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.luminatweaks.ui.theme
 
 import android.content.Context
@@ -87,10 +69,10 @@ enum class AccentIntensity(val label: String) {
 
     val saturationFactor: Float
         get() = when (this) {
-            Neutral -> 0.14f
-            Balanced -> 0.68f
-            Bright -> 1.0f
-            Vibrant -> 1.32f
+            Neutral -> 0.72f
+            Balanced -> 1.0f
+            Bright -> 1.28f
+            Vibrant -> 1.55f
         }
 
     companion object {
@@ -243,33 +225,33 @@ fun ColorScheme.withAccentIntensity(
     val f = intensity.saturationFactor
     val tintedPrimary = primary.scaledSaturation(f)
     val tintScale = when (intensity) {
-        AccentIntensity.Neutral -> 0.14f
-        AccentIntensity.Balanced -> 0.65f
-        AccentIntensity.Bright -> 1.0f
-        AccentIntensity.Vibrant -> 1.32f
+        AccentIntensity.Neutral -> 0.55f
+        AccentIntensity.Balanced -> 0.90f
+        AccentIntensity.Bright -> 1.15f
+        AccentIntensity.Vibrant -> 1.40f
     }
 
     val tintedScheme = if (isDark && isAmoled) {
         copy(
             background = Color.Black,
             surface = Color.Black,
-            surfaceVariant = lerp(Color(0xFF181A1C), tintedPrimary, 0.10f * tintScale),
+            surfaceVariant = lerp(Color(0xFF15191C), tintedPrimary, 0.12f * tintScale),
             surfaceContainerLowest = Color.Black,
-            surfaceContainerLow = lerp(Color(0xFF0A0C0E), tintedPrimary, 0.05f * tintScale),
-            surfaceContainer = lerp(Color(0xFF101316), tintedPrimary, 0.075f * tintScale),
-            surfaceContainerHigh = lerp(Color(0xFF161A1E), tintedPrimary, 0.095f * tintScale),
-            surfaceContainerHighest = lerp(Color(0xFF1D2227), tintedPrimary, 0.115f * tintScale)
+            surfaceContainerLow = lerp(Color(0xFF080B0E), tintedPrimary, 0.06f * tintScale),
+            surfaceContainer = lerp(Color(0xFF0E1317), tintedPrimary, 0.09f * tintScale),
+            surfaceContainerHigh = lerp(Color(0xFF141B20), tintedPrimary, 0.115f * tintScale),
+            surfaceContainerHighest = lerp(Color(0xFF1B232A), tintedPrimary, 0.14f * tintScale)
         )
     } else if (isDark) {
         copy(
-            background = lerp(Color(0xFF0B0E11), tintedPrimary, 0.065f * tintScale),
-            surface = lerp(Color(0xFF0B0E11), tintedPrimary, 0.065f * tintScale),
-            surfaceVariant = lerp(Color(0xFF1B2024), tintedPrimary, 0.12f * tintScale),
-            surfaceContainerLowest = lerp(Color(0xFF080A0D), tintedPrimary, 0.05f * tintScale),
-            surfaceContainerLow = lerp(Color(0xFF0E1216), tintedPrimary, 0.075f * tintScale),
-            surfaceContainer = lerp(Color(0xFF11161B), tintedPrimary, 0.095f * tintScale),
-            surfaceContainerHigh = lerp(Color(0xFF161C22), tintedPrimary, 0.115f * tintScale),
-            surfaceContainerHighest = lerp(Color(0xFF1C232A), tintedPrimary, 0.135f * tintScale)
+            background = lerp(Color(0xFF090D10), tintedPrimary, 0.08f * tintScale),
+            surface = lerp(Color(0xFF090D10), tintedPrimary, 0.08f * tintScale),
+            surfaceVariant = lerp(Color(0xFF182026), tintedPrimary, 0.14f * tintScale),
+            surfaceContainerLowest = lerp(Color(0xFF06090B), tintedPrimary, 0.06f * tintScale),
+            surfaceContainerLow = lerp(Color(0xFF0C1216), tintedPrimary, 0.09f * tintScale),
+            surfaceContainer = lerp(Color(0xFF10171D), tintedPrimary, 0.11f * tintScale),
+            surfaceContainerHigh = lerp(Color(0xFF151E26), tintedPrimary, 0.135f * tintScale),
+            surfaceContainerHighest = lerp(Color(0xFF1B2630), tintedPrimary, 0.16f * tintScale)
         )
     } else {
         copy(
@@ -309,11 +291,6 @@ data class OverlayPalette(
 
 private const val OVERLAY_FALLBACK_SEED = 0xFFE91E63.toInt()
 
-/**
- * Framework-only palette for the floating FPS window. The overlay is a plain
- * Android View, so it cannot read MaterialTheme; derive the same seed, dark
- * mode, AMOLED and accent intensity rules here instead of duplicating colors.
- */
 fun ThemeController.overlayPalette(context: Context): OverlayPalette {
     val settings = getAppSettings(context)
     val systemNight = (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==

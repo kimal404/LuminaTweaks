@@ -105,6 +105,7 @@ import com.luminatweaks.R
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DisplayRrMode
 import com.luminatweaks.service.FloatingFpsService
+import com.luminatweaks.ui.component.appBarFade
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.DeviceUtil
 import java.util.Locale
@@ -669,9 +670,11 @@ private fun TweaksFlexibleTopBar(
     title: String,
     scrollBehavior: TopAppBarScrollBehavior
 ) {
+    val fadeSurface = MaterialTheme.colorScheme.background
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .appBarFade(fadeSurface, scrollBehavior.state.overlappedFraction)
             .statusBarsPadding()
     ) {
         LargeFlexibleTopAppBar(

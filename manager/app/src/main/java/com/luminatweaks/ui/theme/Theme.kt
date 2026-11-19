@@ -1,33 +1,13 @@
-/*
- * Copyright (C) 2026-2027 KowX
- * Copyright (C) 2026-2027 Zexshia
- * Copyright (C) 2026 kimal
- *
- * Adapted from KOWX712/KernelSU (KowSU) UI, Apache License 2.0.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.luminatweaks.ui.theme
 
 import android.app.Activity
+import android.app.UiModeManager
+import android.content.Context
+import android.content.res.Configuration
+import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
-import android.app.UiModeManager
-import android.content.res.Configuration
-import android.content.Context
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialExpressiveTheme
@@ -52,52 +32,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsControllerCompat
 import com.materialkolor.PaletteStyle
 import com.materialkolor.rememberDynamicColorScheme
-
-private val FallbackDarkColorScheme = darkColorScheme(
-    primary = PinkPrimary,
-    onPrimary = PinkOnPrimary,
-    primaryContainer = PinkPrimaryContainer,
-    onPrimaryContainer = PinkOnPrimaryContainer,
-    secondary = RoseSecondary,
-    onSecondary = RoseOnSecondary,
-    secondaryContainer = RoseSecondaryContainer,
-    onSecondaryContainer = RoseOnSecondaryContainer,
-    tertiary = AccentEyeBlue,
-    background = DarkBackground,
-    onBackground = DarkOnBackground,
-    surface = DarkSurface,
-    onSurface = DarkOnSurface,
-    surfaceVariant = DarkSurfaceVariant,
-    onSurfaceVariant = DarkOnSurfaceVariant,
-    surfaceContainerLowest = DarkSurfaceContainerLowest,
-    surfaceContainerLow = DarkSurfaceContainerLow,
-    surfaceContainer = DarkSurfaceContainer,
-    surfaceContainerHigh = DarkSurfaceContainerHigh,
-    surfaceContainerHighest = DarkSurfaceContainerHighest,
-    outline = DarkOutline,
-    outlineVariant = DarkOutlineVariant
-)
-
-private val FallbackLightColorScheme = lightColorScheme(
-    primary = LightPrimary,
-    onPrimary = LightOnPrimary,
-    primaryContainer = LightPrimaryContainer,
-    onPrimaryContainer = LightOnPrimaryContainer,
-    secondary = LightSecondary,
-    onSecondary = LightOnSecondary,
-    secondaryContainer = LightSecondaryContainer,
-    onSecondaryContainer = LightOnSecondaryContainer,
-    tertiary = AccentStarYellow,
-    background = LightBackground,
-    onBackground = LightOnBackground,
-    surface = LightSurface,
-    onSurface = LightOnSurface,
-    surfaceContainerLowest = LightSurfaceContainerLowest,
-    surfaceContainerLow = LightSurfaceContainerLow,
-    surfaceContainer = LightSurfaceContainer,
-    surfaceContainerHigh = LightSurfaceContainerHigh,
-    surfaceContainerHighest = LightSurfaceContainerHighest
-)
 
 @Composable
 fun LuminaTheme(
@@ -138,33 +72,46 @@ fun LuminaTheme(
     val amoledMode = themeState.colorMode == ColorMode.DARKAMOLED
     val isDynamic = themeState.keyColor == 0
     val colorSpec = themeState.colorSpec.librarySpec
-    val paletteStyle: PaletteStyle = when (themeState.colorSpec) {
-        ColorEngine.MaterialYou -> PaletteStyle.TonalSpot
-        ColorEngine.MaterialExpressive -> PaletteStyle.Vibrant
+    val paletteStyle: PaletteStyle = when (themeState.colorStyle) {
+        ColorStyle.TonalSpot -> PaletteStyle.TonalSpot
+        ColorStyle.Vibrant -> PaletteStyle.Vibrant
+        ColorStyle.Expressive -> PaletteStyle.Expressive
+        ColorStyle.Spritz -> PaletteStyle.Spritz
+        ColorStyle.Rainbow -> PaletteStyle.Rainbow
+        ColorStyle.FruitSalad -> PaletteStyle.FruitSalad
+        ColorStyle.Content -> PaletteStyle.Content
+        ColorStyle.Monochrome -> PaletteStyle.Monochrome
     }
 
-    val resolvedSeedColor: Color = if (isDynamic) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            runCatching {
-                Color(context.getColor(android.R.color.system_accent1_500))
-            }.getOrElse {
-                val nativeDynamic = if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-                nativeDynamic.primary
-            }
-        } else {
-            if (isDark) PinkPrimary else LightPrimary
+    val baseScheme: ColorScheme = if (isDynamic) {
+        val nativeScheme = when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+                if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            else ->
+                if (isDark) darkColorScheme() else lightColorScheme()
         }
+        rememberDynamicColorScheme(
+            seedColor = nativeScheme.primary,
+            isDark = isDark,
+            isAmoled = amoledMode,
+            specVersion = colorSpec,
+            style = paletteStyle,
+            primary = nativeScheme.primary,
+            secondary = nativeScheme.secondary,
+            tertiary = nativeScheme.tertiary,
+            neutral = nativeScheme.surface,
+            neutralVariant = nativeScheme.surfaceVariant,
+            error = nativeScheme.error
+        )
     } else {
-        Color(themeState.keyColor)
+        rememberDynamicColorScheme(
+            seedColor = Color(themeState.keyColor),
+            isDark = isDark,
+            isAmoled = amoledMode,
+            specVersion = colorSpec,
+            style = paletteStyle
+        )
     }
-
-    val baseScheme: ColorScheme = rememberDynamicColorScheme(
-        seedColor = resolvedSeedColor,
-        isDark = isDark,
-        isAmoled = amoledMode,
-        specVersion = colorSpec,
-        style = paletteStyle
-    )
 
     val animatedColorScheme = animateColorSchemeAsState(
         targetColorScheme = baseScheme.withAccentIntensity(
