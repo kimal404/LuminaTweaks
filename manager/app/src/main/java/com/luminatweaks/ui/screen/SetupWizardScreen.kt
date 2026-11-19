@@ -59,6 +59,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Palette
@@ -978,7 +979,7 @@ private fun ToggleHeroCard(
                 onCheckedChange = onCheckedChange,
                 thumbContent = {
                     Icon(
-                        imageVector = if (checked) Icons.Rounded.Check else null,
+                        imageVector = if (checked) Icons.Rounded.Check else Icons.Rounded.Close,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp)
                     )

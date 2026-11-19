@@ -538,7 +538,7 @@ typealias RowScope = androidx.compose.foundation.layout.RowScope
 fun LuminaBackButton(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    contentDescription: String = stringResource(R.string.action_back)
+    contentDescription: String? = stringResource(R.string.action_back)
 ) {
     IconButton(
         onClick = onBack,

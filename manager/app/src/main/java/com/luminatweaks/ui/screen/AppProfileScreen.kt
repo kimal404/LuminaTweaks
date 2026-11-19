@@ -45,6 +45,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.Brush
@@ -281,7 +285,7 @@ fun AppProfileScreen(
                         navigationIcon = {
                             IconButton(onClick = onBack) {
                                 Icon(
-                                    imageVector = androidx.compose.material.icons.automirrored.rounded.ArrowBack,
+                                    imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                                     contentDescription = stringResource(R.string.action_back),
                                     tint = MaterialTheme.colorScheme.onBackground
                                 )
@@ -440,9 +444,9 @@ fun AppProfileScreen(
                                             thumbContent = {
                                                 Icon(
                                                     imageVector = if (isMasterEnabled) {
-                                                        androidx.compose.material.icons.Icons.Rounded.Check
+                                                        Icons.Rounded.Check
                                                     } else {
-                                                        androidx.compose.material.icons.Icons.Rounded.Close
+                                                        Icons.Rounded.Close
                                                     },
                                                     contentDescription = null,
                                                     modifier = Modifier.size(SwitchDefaults.IconSize)
