@@ -13,6 +13,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -112,6 +113,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
@@ -462,7 +464,8 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
             ) {
                 LuminaTabPager(
                     pagerState = pagerState,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    userScrollEnabled = currentSubscreen == null
                 ) { tab ->
                     when (tab) {
                         0 -> HomeDashboardContent(
@@ -536,7 +539,8 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                     pagerState = pagerState,
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(innerPadding)
+                        .padding(innerPadding),
+                    userScrollEnabled = currentSubscreen == null
                 ) { tab ->
                     when (tab) {
                         0 -> HomeDashboardContent(
@@ -580,6 +584,7 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
 internal fun LuminaTabPager(
     pagerState: PagerState,
     modifier: Modifier = Modifier,
+    userScrollEnabled: Boolean = true,
     pageContent: @Composable (Int) -> Unit
 ) {
     HorizontalPager(
@@ -587,6 +592,7 @@ internal fun LuminaTabPager(
         modifier = modifier,
         beyondViewportPageCount = 1,
         pageSpacing = 12.dp,
+        userScrollEnabled = userScrollEnabled,
         key = { it }
     ) { page ->
         Box(modifier = Modifier.fillMaxSize()) {
@@ -651,6 +657,10 @@ internal fun LuminaTabTransition(
     }
 }
 
+private val DrillEmphasizedDecelerate = CubicBezierEasing(0.2f, 0.85f, 0.7f, 1f)
+private val DrillEmphasizedAccelerate = CubicBezierEasing(0.3f, 0f, 0.8f, 0.15f)
+private const val DRILL_TRANSITION_DURATION = 420
+
 @Composable
 internal fun <T> LuminaDrillTransition(
     targetState: T,
@@ -659,9 +669,7 @@ internal fun <T> LuminaDrillTransition(
     contentKey: (T) -> Any = { it ?: "root_state" },
     content: @Composable (T) -> Unit
 ) {
-    val spatialOffset = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
-    val spatialFloat = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
-    val effectsFloat = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+    val backgroundColor = MaterialTheme.colorScheme.background
 
     AnimatedContent(
         targetState = targetState,
@@ -670,25 +678,33 @@ internal fun <T> LuminaDrillTransition(
         transitionSpec = {
             val forward = isForward(initialState, targetState)
             val transform = if (forward) {
-                (slideInHorizontally(animationSpec = spatialOffset) { w -> (w * 0.16f).toInt() } +
-                    fadeIn(animationSpec = effectsFloat) +
-                    scaleIn(initialScale = 0.96f, animationSpec = spatialFloat)) togetherWith
-                    (slideOutHorizontally(animationSpec = spatialOffset) { w -> -(w * 0.08f).toInt() } +
-                        fadeOut(animationSpec = effectsFloat) +
-                        scaleOut(targetScale = 0.98f, animationSpec = spatialFloat))
+                slideInHorizontally(
+                    animationSpec = tween(DRILL_TRANSITION_DURATION, easing = DrillEmphasizedDecelerate)
+                ) { it } togetherWith
+                    slideOutHorizontally(
+                        animationSpec = tween(DRILL_TRANSITION_DURATION, easing = DrillEmphasizedAccelerate)
+                    ) { w -> -(w * 0.25f).toInt() }
             } else {
-                (slideInHorizontally(animationSpec = spatialOffset) { w -> -(w * 0.08f).toInt() } +
-                    fadeIn(animationSpec = effectsFloat) +
-                    scaleIn(initialScale = 0.98f, animationSpec = spatialFloat)) togetherWith
-                    (slideOutHorizontally(animationSpec = spatialOffset) { w -> (w * 0.16f).toInt() } +
-                        fadeOut(animationSpec = effectsFloat) +
-                        scaleOut(targetScale = 0.96f, animationSpec = spatialFloat))
+                slideInHorizontally(
+                    animationSpec = tween(DRILL_TRANSITION_DURATION, easing = DrillEmphasizedDecelerate)
+                ) { w -> -(w * 0.25f).toInt() } togetherWith
+                    slideOutHorizontally(
+                        animationSpec = tween(DRILL_TRANSITION_DURATION, easing = DrillEmphasizedAccelerate)
+                    ) { it }
             }
-            transform.using(SizeTransform(clip = false))
+            transform
         },
         label = "subscreenDrillTransition"
     ) { state ->
-        content(state)
+        val isTopLayer = isForward(targetState, state)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(if (isTopLayer) 1f else 0f)
+                .background(backgroundColor)
+        ) {
+            content(state)
+        }
     }
 }
 
