@@ -1,17 +1,3 @@
-// Copyright (C) 2026 kimal
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 @file:OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 
 package com.luminatweaks.ui.screen
@@ -31,14 +17,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -65,12 +49,12 @@ import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Storage
-import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -83,7 +67,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -100,14 +83,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.luminatweaks.R
 import com.luminatweaks.data.ConfigRepository
@@ -124,10 +110,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-// ---------------------------------------------------------------------------
-// Renderer catalog
-// ---------------------------------------------------------------------------
 
 data class RendererItem(
     val id: String,
@@ -178,14 +160,6 @@ private data class TweakOption<T>(
     val label: String
 )
 
-// ---------------------------------------------------------------------------
-// Floating FPS Monitor configuration state (ready for live service binding)
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 @Composable
 internal fun localizedLabel(id: String, en: String): String {
     val isIndonesian = remember {
@@ -219,17 +193,17 @@ private suspend fun applyTweakChange(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Screen
-// ---------------------------------------------------------------------------
-
 private suspend fun awaitPagerSettled(pagerState: PagerState?) {
     pagerState ?: return
     snapshotFlow { pagerState.isScrollInProgress }.first { !it }
 }
 
 @Composable
-fun TweaksScreen(pagerState: PagerState? = null, onOpenFloatingHud: (() -> Unit)? = null, onOpenSessionStats: (() -> Unit)? = null) {
+fun TweaksScreen(
+    pagerState: PagerState? = null,
+    onOpenFloatingHud: (() -> Unit)? = null,
+    onOpenSessionStats: (() -> Unit)? = null
+) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
@@ -363,12 +337,11 @@ fun TweaksScreen(pagerState: PagerState? = null, onOpenFloatingHud: (() -> Unit)
             .distinct()
     }
 
-    // ---- Subpages ----------------------------------------------------------
-
     if (inSessionStatsSubpage) {
         SessionStatsScreen(onBack = { inSessionStatsSubpage = false })
         return
     }
+
     if (inFloatingFpsSubpage) {
         BackHandler { inFloatingFpsSubpage = false }
         TelemetryOverlayScreen(
@@ -397,8 +370,6 @@ fun TweaksScreen(pagerState: PagerState? = null, onOpenFloatingHud: (() -> Unit)
         MemoryZramScreen(onBack = { inMemoryZramSubpage = false })
         return
     }
-
-    // ---- Bottom Sheets -----------------------------------------------------
 
     if (showRefreshRateSheet) {
         val rrSubtitle = if (currentRrId == null) {
@@ -472,7 +443,7 @@ fun TweaksScreen(pagerState: PagerState? = null, onOpenFloatingHud: (() -> Unit)
         )
     }
 
-    // ---- Main layout ---------------------------------------------------------
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     val isFloating = LocalFloatingNavBar.current
     val bottomPadding = if (isFloating) {
@@ -482,19 +453,25 @@ fun TweaksScreen(pagerState: PagerState? = null, onOpenFloatingHud: (() -> Unit)
     }
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         contentWindowInsets = WindowInsets(0.dp),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
+            LargeTopAppBar(
                 title = {
                     Text(
                         text = stringResource(R.string.tweaks_title),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 },
                 windowInsets = WindowInsets.statusBars,
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
+                scrollBehavior = scrollBehavior,
+                colors = TopAppBarDefaults.largeTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.onBackground
                 )
             )
         },
@@ -515,19 +492,20 @@ fun TweaksScreen(pagerState: PagerState? = null, onOpenFloatingHud: (() -> Unit)
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding() + 6.dp,
+                top = innerPadding.calculateTopPadding() + 4.dp,
                 bottom = bottomPadding,
                 start = 16.dp,
                 end = 16.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             item(key = "display_performance") {
-                NestedTweakCardGroup(
-                    headerIcon = Icons.Rounded.Tune,
-                    headerTitle = localizedLabel("Perf & Layar", "Perf & Display")
+                ConnectedSectionGroup(
+                    title = localizedLabel("Performa & Layar", "Perf & Display")
                 ) {
-                    NestedTweakSwitchItem(
+                    ConnectedTweakSwitchRow(
+                        index = 0,
+                        count = 3,
                         icon = Icons.Rounded.BatterySaver,
                         title = stringResource(R.string.tweaks_lite_mode),
                         subtitle = localizedLabel(
@@ -549,52 +527,49 @@ fun TweaksScreen(pagerState: PagerState? = null, onOpenFloatingHud: (() -> Unit)
                         }
                     )
 
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(IntrinsicSize.Max),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        NestedTweakCompactCard(
-                            icon = Icons.Rounded.Speed,
-                            title = stringResource(R.string.tweaks_refresh_rate),
-                            value = currentRrText,
-                            onClick = { showRefreshRateSheet = true },
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                        )
+                    ConnectedTweakActionRow(
+                        index = 1,
+                        count = 3,
+                        icon = Icons.Rounded.Speed,
+                        title = stringResource(R.string.tweaks_refresh_rate),
+                        subtitle = currentRrText,
+                        highlightSubtitle = true,
+                        onClick = { showRefreshRateSheet = true }
+                    )
 
-                        NestedTweakCompactCard(
-                            icon = if (isGlobalTextureEnabled) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
-                            title = stringResource(R.string.tweaks_renderer),
-                            value = effectiveRendererText,
-                            enabled = !isGlobalTextureEnabled,
-                            onClick = { showRenderSheet = true },
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                        )
-                    }
+                    ConnectedTweakActionRow(
+                        index = 2,
+                        count = 3,
+                        icon = if (isGlobalTextureEnabled) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
+                        title = stringResource(R.string.tweaks_renderer),
+                        subtitle = effectiveRendererText,
+                        highlightSubtitle = !isGlobalTextureEnabled,
+                        enabled = !isGlobalTextureEnabled,
+                        onClick = { showRenderSheet = true }
+                    )
                 }
             }
 
             item(key = "additional") {
-                NestedTweakCardGroup(
-                    headerIcon = Icons.Rounded.Memory,
-                    headerTitle = stringResource(R.string.section_additional_tweaks)
+                ConnectedSectionGroup(
+                    title = stringResource(R.string.section_additional_tweaks)
                 ) {
-                    NestedTweakActionItem(
+                    ConnectedTweakActionRow(
+                        index = 0,
+                        count = 2,
                         icon = Icons.Rounded.Memory,
                         title = stringResource(R.string.tweak_memory_zram),
                         subtitle = stringResource(R.string.tweak_memory_zram_desc),
                         onClick = { inMemoryZramSubpage = true }
                     )
 
-                    NestedTweakActionItem(
+                    ConnectedTweakActionRow(
+                        index = 1,
+                        count = 2,
                         icon = Icons.Rounded.Storage,
                         title = stringResource(R.string.tweak_io_scheduler),
                         subtitle = currentIoScheduler,
+                        highlightSubtitle = true,
                         onClick = { showIoSchedulerSheet = true }
                     )
                 }
@@ -614,35 +589,55 @@ fun TweaksScreen(pagerState: PagerState? = null, onOpenFloatingHud: (() -> Unit)
                     )
                 }
 
-                NestedTweakCardGroup(
-                    headerIcon = Icons.Rounded.Widgets,
-                    headerTitle = stringResource(R.string.section_utility_diagnostics)
+                ConnectedSectionGroup(
+                    title = stringResource(R.string.section_utility_diagnostics)
                 ) {
-                    NestedTweakActionItem(
+                    ConnectedTweakActionRow(
+                        index = 0,
+                        count = 4,
                         icon = Icons.Rounded.Speed,
                         title = "Floating HUD",
                         subtitle = telemetrySubtitle,
-                        onClick = { if (onOpenFloatingHud != null) onOpenFloatingHud() else inFloatingFpsSubpage = true }
+                        highlightSubtitle = fpsConfig.enabled,
+                        onClick = {
+                            if (onOpenFloatingHud != null) {
+                                onOpenFloatingHud()
+                            } else {
+                                inFloatingFpsSubpage = true
+                            }
+                        }
                     )
 
-                    NestedTweakActionItem(
+                    ConnectedTweakActionRow(
+                        index = 1,
+                        count = 4,
                         icon = Icons.Rounded.Insights,
                         title = localizedLabel("Statistik Sesi", "Session Stats"),
                         subtitle = localizedLabel(
                             "Riwayat FPS, stabilitas frame & suhu saat bermain",
                             "FPS history, frame stability & thermal logs during gameplay"
                         ),
-                        onClick = { if (onOpenSessionStats != null) onOpenSessionStats() else inSessionStatsSubpage = true }
+                        onClick = {
+                            if (onOpenSessionStats != null) {
+                                onOpenSessionStats()
+                            } else {
+                                inSessionStatsSubpage = true
+                            }
+                        }
                     )
 
-                    NestedTweakActionItem(
+                    ConnectedTweakActionRow(
+                        index = 2,
+                        count = 4,
                         icon = Icons.Rounded.DeveloperBoard,
                         title = stringResource(R.string.hardware_diag_title),
                         subtitle = stringResource(R.string.hardware_diag_desc),
                         onClick = { inHardwareDiagnosticSubpage = true }
                     )
 
-                    NestedTweakActionItem(
+                    ConnectedTweakActionRow(
+                        index = 3,
+                        count = 4,
                         icon = Icons.Rounded.Widgets,
                         title = stringResource(R.string.utility_screen_title),
                         subtitle = stringResource(R.string.utility_screen_desc),
@@ -654,84 +649,71 @@ fun TweaksScreen(pagerState: PagerState? = null, onOpenFloatingHud: (() -> Unit)
     }
 }
 
-// ---------------------------------------------------------------------------
-// Floating FPS Monitor Section & Live Preview
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Nested Bento Card Container & Inner Items (MD3E)
-// ---------------------------------------------------------------------------
-
 @Composable
-internal fun NestedTweakCardGroup(
-    headerIcon: ImageVector,
-    headerTitle: String,
-    modifier: Modifier = Modifier,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    val outerRadius = LocalCornerRadius.current.coerceAtLeast(26.dp)
-
-    Surface(
-        shape = RoundedCornerShape(outerRadius),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 2.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = headerIcon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = headerTitle,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            content()
-        }
+internal fun connectedContainerShape(
+    index: Int,
+    count: Int,
+    outerRadius: Dp = LocalCornerRadius.current.coerceIn(20.dp, 26.dp),
+    innerRadius: Dp = 4.dp
+): Shape {
+    return when {
+        count <= 1 -> RoundedCornerShape(outerRadius)
+        index <= 0 -> RoundedCornerShape(
+            topStart = outerRadius,
+            topEnd = outerRadius,
+            bottomStart = innerRadius,
+            bottomEnd = innerRadius
+        )
+        index >= count - 1 -> RoundedCornerShape(
+            topStart = innerRadius,
+            topEnd = innerRadius,
+            bottomStart = outerRadius,
+            bottomEnd = outerRadius
+        )
+        else -> RoundedCornerShape(innerRadius)
     }
 }
 
 @Composable
-internal fun NestedTweakSwitchItem(
+internal fun ConnectedSectionGroup(
+    title: String,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 4.dp, bottom = 10.dp)
+        )
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            content = content
+        )
+    }
+}
+
+@Composable
+internal fun ConnectedTweakSwitchRow(
+    index: Int,
+    count: Int,
     icon: ImageVector,
     title: String,
     subtitle: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    val innerRadius = (LocalCornerRadius.current * 0.78f).coerceIn(16.dp, 24.dp)
-
     Surface(
         onClick = { onCheckedChange(!checked) },
-        shape = RoundedCornerShape(innerRadius),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = connectedContainerShape(index = index, count = count),
+        color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -740,18 +722,16 @@ internal fun NestedTweakSwitchItem(
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(22.dp)
+            TweakLeadingIconBadge(
+                icon = icon,
+                active = checked
             )
             Spacer(modifier = Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -782,25 +762,27 @@ internal fun NestedTweakSwitchItem(
 }
 
 @Composable
-internal fun NestedTweakActionItem(
+internal fun ConnectedTweakActionRow(
+    index: Int,
+    count: Int,
     icon: ImageVector,
     title: String,
     subtitle: String,
     onClick: () -> Unit,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    highlightSubtitle: Boolean = false
 ) {
     val haptic = LocalHapticFeedback.current
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed && enabled) 0.98f else 1f,
+        targetValue = if (pressed && enabled) 0.985f else 1f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessMediumLow
         ),
-        label = "nestedItemScale"
+        label = "connectedRowScale"
     )
-    val innerRadius = (LocalCornerRadius.current * 0.78f).coerceIn(16.dp, 24.dp)
 
     Surface(
         onClick = {
@@ -808,8 +790,8 @@ internal fun NestedTweakActionItem(
             onClick()
         },
         enabled = enabled,
-        shape = RoundedCornerShape(innerRadius),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = connectedContainerShape(index = index, count = count),
+        color = MaterialTheme.colorScheme.surfaceContainer,
         interactionSource = interactionSource,
         modifier = Modifier
             .fillMaxWidth()
@@ -825,18 +807,16 @@ internal fun NestedTweakActionItem(
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(22.dp)
+            TweakLeadingIconBadge(
+                icon = icon,
+                active = highlightSubtitle && enabled
             )
             Spacer(modifier = Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -845,7 +825,12 @@ internal fun NestedTweakActionItem(
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = if (highlightSubtitle) FontWeight.Medium else FontWeight.Normal,
+                    color = if (highlightSubtitle) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -854,11 +839,95 @@ internal fun NestedTweakActionItem(
             Icon(
                 imageVector = if (enabled) Icons.Rounded.ChevronRight else Icons.Rounded.Lock,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                 modifier = Modifier.size(if (enabled) 20.dp else 18.dp)
             )
         }
     }
+}
+
+@Composable
+private fun TweakLeadingIconBadge(
+    icon: ImageVector,
+    active: Boolean
+) {
+    val containerColor = if (active) {
+        MaterialTheme.colorScheme.secondaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerHigh
+    }
+    val iconTint = if (active) {
+        MaterialTheme.colorScheme.onSecondaryContainer
+    } else {
+        MaterialTheme.colorScheme.primary
+    }
+
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(containerColor),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = iconTint,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+@Composable
+internal fun NestedTweakCardGroup(
+    headerIcon: ImageVector,
+    headerTitle: String,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    ConnectedSectionGroup(
+        title = headerTitle,
+        modifier = modifier,
+        content = content
+    )
+}
+
+@Composable
+internal fun NestedTweakSwitchItem(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    ConnectedTweakSwitchRow(
+        index = 0,
+        count = 1,
+        icon = icon,
+        title = title,
+        subtitle = subtitle,
+        checked = checked,
+        onCheckedChange = onCheckedChange
+    )
+}
+
+@Composable
+internal fun NestedTweakActionItem(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true
+) {
+    ConnectedTweakActionRow(
+        index = 0,
+        count = 1,
+        icon = icon,
+        title = title,
+        subtitle = subtitle,
+        onClick = onClick,
+        enabled = enabled
+    )
 }
 
 @Composable
@@ -870,95 +939,19 @@ internal fun NestedTweakCompactCard(
     modifier: Modifier = Modifier,
     enabled: Boolean = true
 ) {
-    val haptic = LocalHapticFeedback.current
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed && enabled) 0.97f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
-        label = "nestedCompactCardScale"
-    )
-    val innerRadius = (LocalCornerRadius.current * 0.78f).coerceIn(16.dp, 24.dp)
-
-    Surface(
-        onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-            onClick()
-        },
-        enabled = enabled,
-        shape = RoundedCornerShape(innerRadius),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        interactionSource = interactionSource,
-        modifier = modifier.graphicsLayer {
-            scaleX = scale
-            scaleY = scale
-        }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .alpha(if (enabled) 1f else 0.55f)
-                .padding(horizontal = 14.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(30.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceContainer),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(17.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                Icon(
-                    imageVector = if (enabled) Icons.Rounded.ChevronRight else Icons.Rounded.Lock,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
-                    modifier = Modifier.size(if (enabled) 17.dp else 15.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(3.dp))
-                Text(
-                    text = value,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
+    Box(modifier = modifier) {
+        ConnectedTweakActionRow(
+            index = 0,
+            count = 1,
+            icon = icon,
+            title = title,
+            subtitle = value,
+            onClick = onClick,
+            enabled = enabled,
+            highlightSubtitle = enabled
+        )
     }
 }
-
-// ---------------------------------------------------------------------------
-// Option bottom sheet (MD3E segmented list)
-// ---------------------------------------------------------------------------
 
 @Composable
 private fun <T> TweakOptionBottomSheet(
