@@ -395,16 +395,6 @@ fun PersonalisasiScreen(
                             }
                         }
                     )
-
-                    Text(
-                        text = persLocalizedLabel(
-                            "Mesin warna berbasis AZenith \u00A9 2025\u20132026 Zexshia \u00B7 Apache License 2.0",
-                            "Color engine based on AZenith \u00A9 2025\u20132026 Zexshia \u00B7 Apache License 2.0"
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        modifier = Modifier.padding(start = 12.dp, end = 12.dp)
-                    )
                 }
             }
 

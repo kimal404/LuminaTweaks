@@ -10,6 +10,8 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
@@ -673,21 +675,16 @@ internal fun <T> LuminaDrillTransition(
 
     AnimatedContent(
         targetState = targetState,
-        modifier = modifier,
+        modifier = modifier.background(backgroundColor),
         contentKey = contentKey,
         transitionSpec = {
             val forward = isForward(initialState, targetState)
             val transform = if (forward) {
                 slideInHorizontally(
                     animationSpec = tween(DRILL_TRANSITION_DURATION, easing = DrillEmphasizedDecelerate)
-                ) { it } togetherWith
-                    slideOutHorizontally(
-                        animationSpec = tween(DRILL_TRANSITION_DURATION, easing = DrillEmphasizedAccelerate)
-                    ) { w -> -(w * 0.25f).toInt() }
+                ) { it } togetherWith ExitTransition.None
             } else {
-                slideInHorizontally(
-                    animationSpec = tween(DRILL_TRANSITION_DURATION, easing = DrillEmphasizedDecelerate)
-                ) { w -> -(w * 0.25f).toInt() } togetherWith
+                EnterTransition.None togetherWith
                     slideOutHorizontally(
                         animationSpec = tween(DRILL_TRANSITION_DURATION, easing = DrillEmphasizedAccelerate)
                     ) { it }
