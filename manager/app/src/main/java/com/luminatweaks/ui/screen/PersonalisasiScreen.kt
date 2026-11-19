@@ -64,7 +64,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
-import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -274,10 +273,7 @@ fun PersonalisasiScreen(
                                     0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
                                     ColorEngine.entries.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
                                     else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
-                                },
-                                colors = ToggleButtonDefaults.toggleButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
-                                )
+                                }
                             ) {
                                 Text(
                                     text = if (spec == ColorEngine.MaterialYou) {
@@ -366,10 +362,7 @@ fun PersonalisasiScreen(
                                     0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
                                     modes.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
                                     else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
-                                },
-                                colors = ToggleButtonDefaults.toggleButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
-                                )
+                                }
                             ) {
                                 Icon(
                                     imageVector = when (mode) {
