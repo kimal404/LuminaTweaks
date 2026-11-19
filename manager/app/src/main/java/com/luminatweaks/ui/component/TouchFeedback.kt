@@ -164,6 +164,19 @@ fun Modifier.pressScale(
 }
 
 @Composable
+fun pressScale(
+    interactionSource: MutableInteractionSource,
+    pressedScale: Float = 0.96f,
+    enabled: Boolean = true
+): Modifier {
+    val scale = rememberPressScale(interactionSource, pressedScale, enabled)
+    return Modifier.graphicsLayer {
+        scaleX = scale
+        scaleY = scale
+    }
+}
+
+@Composable
 fun Modifier.bouncyClickable(
     enabled: Boolean = true,
     pressedScale: Float = 0.96f,
