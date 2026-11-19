@@ -1,17 +1,3 @@
-// Copyright (C) 2026 kimal
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 @file:OptIn(
     androidx.compose.foundation.ExperimentalFoundationApi::class,
     ExperimentalMaterial3ExpressiveApi::class,
@@ -26,7 +12,14 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -38,13 +31,9 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,6 +48,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
@@ -67,7 +57,9 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.ErrorOutline
@@ -81,7 +73,6 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.Speed
-import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularWavyProgressIndicator
@@ -89,12 +80,15 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -106,43 +100,42 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import com.luminatweaks.R
 import com.luminatweaks.data.DaemonManager
 import com.luminatweaks.service.FloatingFpsService
-import com.luminatweaks.ui.component.AospChevron
-import com.luminatweaks.ui.component.AospConnectedGroup
-import com.luminatweaks.ui.component.AospMetricTile
-import com.luminatweaks.ui.component.AospPreferenceItem
-import com.luminatweaks.ui.component.AospSectionHeader
 import com.luminatweaks.ui.component.AospStatusPill
 import com.luminatweaks.ui.component.LuminaBottomBar
-import com.luminatweaks.ui.component.AospTopBar
+import com.luminatweaks.ui.component.appBarFade
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.ui.theme.LocalPageTransition
 import com.luminatweaks.ui.theme.PageTransition
 import com.luminatweaks.util.DeviceUtil
 import com.luminatweaks.util.RootUtil
-import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.sin
@@ -154,15 +147,6 @@ import kotlinx.coroutines.withContext
 
 enum class ContainerPosition {
     Top, Middle, Bottom, Single
-}
-
-@Composable
-private fun homeLocalizedLabel(id: String, en: String): String {
-    val isIndonesian = remember {
-        val lang = Locale.getDefault().language.lowercase(Locale.ROOT)
-        lang == "in" || lang == "id"
-    }
-    return if (isIndonesian) id else en
 }
 
 private fun readSystemProperty(key: String): String? {
@@ -179,8 +163,8 @@ private fun readSystemProperty(key: String): String? {
 @Composable
 fun getConnectedContainerShape(
     position: ContainerPosition,
-    outerRadius: androidx.compose.ui.unit.Dp = LocalCornerRadius.current,
-    innerRadius: androidx.compose.ui.unit.Dp = if (outerRadius <= 4.dp) outerRadius else 4.dp
+    outerRadius: Dp = LocalCornerRadius.current,
+    innerRadius: Dp = if (outerRadius <= 4.dp) outerRadius else 4.dp
 ): RoundedCornerShape {
     return when (position) {
         ContainerPosition.Top -> RoundedCornerShape(
@@ -774,9 +758,11 @@ fun HomeDashboardContent(
             text = {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     PowerActionRow(
+                        index = 0,
+                        count = 3,
                         icon = Icons.Rounded.Refresh,
                         title = stringResource(R.string.power_action_reboot),
                         onClick = {
@@ -787,6 +773,8 @@ fun HomeDashboardContent(
                         }
                     )
                     PowerActionRow(
+                        index = 1,
+                        count = 3,
                         icon = Icons.Rounded.Memory,
                         title = stringResource(R.string.power_action_recovery),
                         onClick = {
@@ -797,6 +785,8 @@ fun HomeDashboardContent(
                         }
                     )
                     PowerActionRow(
+                        index = 2,
+                        count = 3,
                         icon = Icons.Rounded.PowerSettingsNew,
                         title = stringResource(R.string.power_action_restart_service),
                         onClick = {
@@ -823,115 +813,122 @@ fun HomeDashboardContent(
 
     val isFloating = LocalFloatingNavBar.current
     val bottomPadding = if (isFloating) {
-        104.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        112.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     } else {
-        24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        28.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     }
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    val fadeSurface = MaterialTheme.colorScheme.background
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         contentWindowInsets = WindowInsets(0.dp),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            AospTopBar(
-                title = stringResource(R.string.app_name),
-                subtitle = homeLocalizedLabel("Dasbor performa", "Performance dashboard"),
-                scrollBehavior = scrollBehavior,
-                actions = {
-                    if (isRunning && !isRestarting) {
-                        IconButton(onClick = { launchRestart() }) {
-                            Icon(
-                                imageVector = Icons.Rounded.Refresh,
-                                contentDescription = stringResource(R.string.power_action_restart_service),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .appBarFade(fadeSurface, scrollBehavior.state.overlappedFraction)
+                    .statusBarsPadding()
+            ) {
+                LargeFlexibleTopAppBar(
+                    title = {
+                        Text(
+                            text = stringResource(R.string.app_name),
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    actions = {
+                        if (isRunning && !isRestarting) {
+                            IconButton(onClick = { launchRestart() }) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Refresh,
+                                    contentDescription = stringResource(R.string.power_action_restart_service),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
-                    }
-                    CoreStatusIndicator(
-                        isChecking = isChecking,
-                        isRestarting = isRestarting,
-                        isRunning = isRunning,
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            showPowerDialog = true
-                        }
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                }
-            )
+                        CoreStatusIndicator(
+                            isChecking = isChecking,
+                            isRestarting = isRestarting,
+                            isRunning = isRunning,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                showPowerDialog = true
+                            }
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent
+                    ),
+                    scrollBehavior = scrollBehavior,
+                    windowInsets = WindowInsets(0, 0, 0, 0)
+                )
+            }
         }
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding() + 4.dp,
+                top = innerPadding.calculateTopPadding(),
                 bottom = bottomPadding,
-                start = 0.dp,
-                end = 0.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                start = 16.dp,
+                end = 16.dp
+            )
         ) {
             item(key = "status") {
-                Column {
-                    AospSectionHeader(title = stringResource(R.string.aosp_section_status))
-                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        CoreStatusHero(
-                            isChecking = isChecking,
-                            isRestarting = isRestarting,
-                            isRunning = isRunning,
-                            isModuleInstalled = isModuleInstalled,
-                            isRebootRequired = isRebootRequired,
-                            daemonPid = daemonPid,
-                            onStart = {
-                                when {
-                                    isChecking || isRestarting -> Unit
-                                    isRunning -> {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        showPowerDialog = true
-                                    }
-                                    isRebootRequired -> onRequestRebootDialog()
-                                    else -> launchRestart()
-                                }
+                Spacer(modifier = Modifier.height(12.dp))
+                CoreStatusHero(
+                    isChecking = isChecking,
+                    isRestarting = isRestarting,
+                    isRunning = isRunning,
+                    isModuleInstalled = isModuleInstalled,
+                    isRebootRequired = isRebootRequired,
+                    daemonPid = daemonPid,
+                    onStart = {
+                        when {
+                            isChecking || isRestarting -> Unit
+                            isRunning -> {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                showPowerDialog = true
                             }
-                        )
+                            isRebootRequired -> onRequestRebootDialog()
+                            else -> launchRestart()
+                        }
                     }
-                }
+                )
             }
 
             item(key = "metrics") {
-                Column {
-                    AospSectionHeader(title = stringResource(R.string.aosp_section_hardware))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        AospMetricTile(
-                            label = stringResource(R.string.home_thermal),
-                            value = batteryTemp,
-                            icon = Icons.Rounded.Thermostat,
-                            modifier = Modifier.weight(1f)
-                        )
-                        AospMetricTile(
-                            label = stringResource(R.string.home_profile),
-                            value = currentProfile,
-                            icon = Icons.Rounded.Speed,
-                            valueColor = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                HomeSectionHeader(title = stringResource(R.string.aosp_section_hardware))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    HomeHardwareTile(
+                        label = stringResource(R.string.home_thermal),
+                        value = batteryTemp,
+                        icon = Icons.Rounded.Thermostat,
+                        highlight = false,
+                        modifier = Modifier.weight(1f)
+                    )
+                    HomeHardwareTile(
+                        label = stringResource(R.string.home_profile),
+                        value = currentProfile,
+                        icon = Icons.Rounded.Speed,
+                        highlight = true,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
 
             item(key = "quick") {
-                Column {
-                    AospSectionHeader(title = stringResource(R.string.aosp_section_quick_actions))
-                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        QuickActionRow(onPersonalize = onNavigateToPersonalisasi)
-                    }
-                }
+                HomeSectionHeader(title = stringResource(R.string.aosp_section_quick_actions))
+                QuickActionRow(onPersonalize = onNavigateToPersonalisasi)
             }
 
             item(key = "device") {
@@ -941,96 +938,88 @@ fun HomeDashboardContent(
                     animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
                     label = "deviceInfoArrowRotation"
                 )
-                val spatialSpec = MaterialTheme.motionScheme.defaultSpatialSpec<androidx.compose.ui.unit.IntSize>()
+                val spatialSpec = MaterialTheme.motionScheme.defaultSpatialSpec<IntSize>()
                 val effectsSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
-                val baseRows = 3
-                val extraRows = if (isDeviceExpanded) 2 else 0
-                val totalRows = baseRows + extraRows
+                val totalRows = if (isDeviceExpanded) 5 else 3
 
-                Column {
-                    AospSectionHeader(
-                        title = stringResource(R.string.aosp_section_device),
-                        trailing = {
-                            Surface(
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    isDeviceExpanded = !isDeviceExpanded
-                                },
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                modifier = Modifier.size(30.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.KeyboardArrowDown,
-                                        contentDescription = if (isDeviceExpanded) {
-                                            stringResource(R.string.aosp_action_collapse)
-                                        } else {
-                                            stringResource(R.string.aosp_action_expand)
-                                        },
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier
-                                            .size(20.dp)
-                                            .rotate(arrowRotation)
-                                    )
-                                }
+                HomeSectionHeader(
+                    title = stringResource(R.string.aosp_section_device),
+                    trailing = {
+                        Surface(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                isDeviceExpanded = !isDeviceExpanded
+                            },
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            modifier = Modifier.size(30.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Rounded.KeyboardArrowDown,
+                                    contentDescription = if (isDeviceExpanded) {
+                                        stringResource(R.string.aosp_action_collapse)
+                                    } else {
+                                        stringResource(R.string.aosp_action_expand)
+                                    },
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .rotate(arrowRotation)
+                                )
                             }
                         }
+                    }
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    HomeInfoRow(
+                        index = 0,
+                        count = totalRows,
+                        icon = Icons.Rounded.DeveloperBoard,
+                        title = stringResource(R.string.home_manager_version),
+                        subtitle = stringResource(
+                            R.string.home_version_release_format,
+                            com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")
+                        )
                     )
-                    AospConnectedGroup(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        AospPreferenceItem(
-                            index = 0,
-                            count = totalRows,
-                            icon = Icons.Rounded.DeveloperBoard,
-                            title = stringResource(R.string.home_manager_version),
-                            subtitle = stringResource(
-                                R.string.home_version_release_format,
-                                com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")
-                            ),
-                            onClick = {}
-                        )
-                        AospPreferenceItem(
-                            index = 1,
-                            count = totalRows,
-                            icon = Icons.Rounded.Memory,
-                            title = stringResource(R.string.home_kernel_version),
-                            subtitle = kernelVersion,
-                            onClick = {}
-                        )
-                        AospPreferenceItem(
-                            index = 2,
-                            count = totalRows,
-                            icon = Icons.Rounded.Smartphone,
-                            title = stringResource(R.string.home_device_model),
-                            subtitle = deviceModel,
-                            onClick = {}
-                        )
-                        AnimatedVisibility(
-                            visible = isDeviceExpanded,
-                            enter = expandVertically(animationSpec = spatialSpec) + fadeIn(animationSpec = effectsSpec),
-                            exit = shrinkVertically(animationSpec = spatialSpec) + fadeOut(animationSpec = effectsSpec)
-                        ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                AospPreferenceItem(
-                                    index = 3,
-                                    count = totalRows,
-                                    icon = Icons.Rounded.Security,
-                                    title = stringResource(R.string.home_root_access),
-                                    subtitle = stringResource(
-                                        if (isRootGranted) R.string.home_root_granted else R.string.home_root_denied
-                                    ),
-                                    highlightSubtitle = isRootGranted,
-                                    onClick = {}
-                                )
-                                AospPreferenceItem(
-                                    index = 4,
-                                    count = totalRows,
-                                    icon = Icons.Rounded.Security,
-                                    title = stringResource(R.string.home_selinux_status),
-                                    subtitle = selinuxStatus,
-                                    onClick = {}
-                                )
-                            }
+                    HomeInfoRow(
+                        index = 1,
+                        count = totalRows,
+                        icon = Icons.Rounded.Memory,
+                        title = stringResource(R.string.home_kernel_version),
+                        subtitle = kernelVersion
+                    )
+                    HomeInfoRow(
+                        index = 2,
+                        count = totalRows,
+                        icon = Icons.Rounded.Smartphone,
+                        title = stringResource(R.string.home_device_model),
+                        subtitle = deviceModel
+                    )
+                    AnimatedVisibility(
+                        visible = isDeviceExpanded,
+                        enter = expandVertically(animationSpec = spatialSpec) + fadeIn(animationSpec = effectsSpec),
+                        exit = shrinkVertically(animationSpec = spatialSpec) + fadeOut(animationSpec = effectsSpec)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            HomeInfoRow(
+                                index = 3,
+                                count = totalRows,
+                                icon = Icons.Rounded.Security,
+                                title = stringResource(R.string.home_root_access),
+                                subtitle = stringResource(
+                                    if (isRootGranted) R.string.home_root_granted else R.string.home_root_denied
+                                ),
+                                highlightSubtitle = isRootGranted
+                            )
+                            HomeInfoRow(
+                                index = 4,
+                                count = totalRows,
+                                icon = Icons.Rounded.Security,
+                                title = stringResource(R.string.home_selinux_status),
+                                subtitle = selinuxStatus
+                            )
                         }
                     }
                 }
@@ -1038,33 +1027,25 @@ fun HomeDashboardContent(
 
             item(key = "support") {
                 val uriHandler = LocalUriHandler.current
-                Column {
-                    AospSectionHeader(title = stringResource(R.string.aosp_section_support))
-                    AospConnectedGroup(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        AospPreferenceItem(
-                            index = 0,
-                            count = 2,
-                            icon = Icons.Rounded.Favorite,
-                            title = stringResource(R.string.home_support_us),
-                            subtitle = stringResource(R.string.home_support_us_desc),
-                            onClick = { uriHandler.openUri("https://sociabuzz.com/kimal404") },
-                            trailing = { AospChevron() }
-                        )
-                        AospPreferenceItem(
-                            index = 1,
-                            count = 2,
-                            icon = Icons.Rounded.MenuBook,
-                            title = stringResource(R.string.home_learn_more),
-                            subtitle = stringResource(R.string.home_learn_more_desc),
-                            onClick = { uriHandler.openUri("https://github.com/kimal404/LuminaTweaks") },
-                            trailing = { AospChevron() }
-                        )
-                    }
+                HomeSectionHeader(title = stringResource(R.string.aosp_section_support))
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    HomeActionRow(
+                        index = 0,
+                        count = 2,
+                        icon = Icons.Rounded.Favorite,
+                        title = stringResource(R.string.home_support_us),
+                        subtitle = stringResource(R.string.home_support_us_desc),
+                        onClick = { uriHandler.openUri("https://sociabuzz.com/kimal404") }
+                    )
+                    HomeActionRow(
+                        index = 1,
+                        count = 2,
+                        icon = Icons.Rounded.MenuBook,
+                        title = stringResource(R.string.home_learn_more),
+                        subtitle = stringResource(R.string.home_learn_more_desc),
+                        onClick = { uriHandler.openUri("https://github.com/kimal404/LuminaTweaks") }
+                    )
                 }
-            }
-
-            item(key = "footer") {
-                Spacer(modifier = Modifier.height(12.dp))
             }
         }
     }
@@ -1075,39 +1056,276 @@ private suspend fun rootReboot(mode: String) {
 }
 
 @Composable
+private fun HomeSectionHeader(
+    title: String,
+    trailing: (@Composable () -> Unit)? = null
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                start = 12.dp,
+                end = 4.dp,
+                top = 16.dp,
+                bottom = 8.dp
+            ),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        trailing?.invoke()
+    }
+}
+
+@Composable
+private fun HomeSquircleIcon(
+    icon: ImageVector,
+    tint: Color = MaterialTheme.colorScheme.primary,
+    containerColor: Color = tint.copy(alpha = 0.12f)
+) {
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(containerColor),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(22.dp)
+        )
+    }
+}
+
+@Composable
+private fun HomeHardwareTile(
+    label: String,
+    value: String,
+    icon: ImageVector,
+    highlight: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    val iconBoxBgColor by animateColorAsState(
+        targetValue = if (highlight) {
+            colorScheme.primaryContainer
+        } else {
+            colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        },
+        animationSpec = tween(350),
+        label = "homeTileBg"
+    )
+    val iconColor by animateColorAsState(
+        targetValue = if (highlight) {
+            colorScheme.onPrimaryContainer
+        } else {
+            colorScheme.onSurfaceVariant
+        },
+        animationSpec = tween(350),
+        label = "homeTileIcon"
+    )
+
+    Surface(
+        shape = RoundedCornerShape(26.dp),
+        color = colorScheme.surfaceColorAtElevation(1.dp),
+        modifier = modifier
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(74.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(iconBoxBgColor),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconColor,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Column(modifier = Modifier.padding(horizontal = 4.dp)) {
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeInfoRow(
+    index: Int,
+    count: Int,
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    highlightSubtitle: Boolean = false
+) {
+    val shape = connectedContainerShape(index = index, count = count)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.padding(end = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            HomeSquircleIcon(icon = icon)
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 8.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (highlightSubtitle) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeActionRow(
+    index: Int,
+    count: Int,
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true
+) {
+    val haptic = LocalHapticFeedback.current
+    val shape = connectedContainerShape(index = index, count = count)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .clickable(enabled = enabled) {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClick()
+            }
+            .alpha(if (enabled) 1f else 0.55f)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.padding(end = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            HomeSquircleIcon(icon = icon)
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 8.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Box(
+            modifier = Modifier.padding(start = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
 private fun PowerActionRow(
+    index: Int,
+    count: Int,
     icon: ImageVector,
     title: String,
     onClick: () -> Unit
 ) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier.fillMaxWidth()
+    val shape = connectedContainerShape(
+        index = index,
+        count = count,
+        outerRadius = 20.dp,
+        innerRadius = 4.dp
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(22.dp)
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            Text(
-                text = title,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f)
-            )
-            AospChevron()
-        }
+        HomeSquircleIcon(icon = icon)
+        Spacer(modifier = Modifier.width(14.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        Icon(
+            imageVector = Icons.Rounded.ChevronRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -1141,9 +1359,7 @@ private fun CoreStatusIndicator(
         onClick = onClick,
         shape = CircleShape,
         color = containerColor,
-        modifier = Modifier
-            .padding(end = 4.dp)
-            .size(40.dp)
+        modifier = Modifier.size(40.dp)
     ) {
         Box(contentAlignment = Alignment.Center) {
             if (isChecking || isRestarting) {
@@ -1176,8 +1392,8 @@ private fun CoreStatusHero(
 ) {
     val containerColor by animateColorAsState(
         targetValue = when {
-            isChecking || isRestarting -> MaterialTheme.colorScheme.surfaceContainer
-            isRunning -> MaterialTheme.colorScheme.surfaceContainer
+            isChecking || isRestarting -> MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
+            isRunning -> MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
             isRebootRequired -> MaterialTheme.colorScheme.tertiaryContainer
             else -> MaterialTheme.colorScheme.errorContainer
         },
@@ -1219,15 +1435,15 @@ private fun CoreStatusHero(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2600, easing = androidx.compose.animation.core.LinearEasing),
-            repeatMode = androidx.compose.animation.core.RepeatMode.Restart
+            animation = tween(durationMillis = 2600, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
         ),
         label = "coreWave"
     )
 
     Surface(
         onClick = onStart,
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(26.dp),
         color = containerColor,
         contentColor = contentColor,
         modifier = Modifier.fillMaxWidth()
@@ -1240,35 +1456,29 @@ private fun CoreStatusHero(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .height(30.dp)
+                        .height(28.dp)
                 )
             }
 
             Row(
                 modifier = Modifier.padding(
-                    start = 20.dp,
-                    top = 20.dp,
-                    end = 20.dp,
-                    bottom = if (isAlive) 30.dp else 20.dp
+                    start = 18.dp,
+                    top = 18.dp,
+                    end = 18.dp,
+                    bottom = if (isAlive) 28.dp else 18.dp
                 ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
                     modifier = Modifier
-                        .size(52.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(
-                            if (isRunning && !isRestarting) {
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-                            } else {
-                                contentColor.copy(alpha = 0.14f)
-                            }
-                        ),
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(contentColor.copy(alpha = 0.14f)),
                     contentAlignment = Alignment.Center
                 ) {
                     when {
                         isChecking || isRestarting -> CircularWavyProgressIndicator(
-                            modifier = Modifier.size(26.dp),
+                            modifier = Modifier.size(22.dp),
                             color = contentColor,
                             trackColor = contentColor.copy(alpha = 0.24f)
                         )
@@ -1276,19 +1486,19 @@ private fun CoreStatusHero(
                             imageVector = Icons.Rounded.Check,
                             contentDescription = null,
                             tint = contentColor,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(24.dp)
                         )
                         isRebootRequired -> Icon(
                             imageVector = Icons.Rounded.Refresh,
                             contentDescription = null,
                             tint = contentColor,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(24.dp)
                         )
                         else -> Icon(
                             imageVector = Icons.Rounded.ErrorOutline,
                             contentDescription = null,
                             tint = contentColor,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 }
@@ -1298,15 +1508,16 @@ private fun CoreStatusHero(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleLargeEmphasized,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
                         color = contentColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Spacer(modifier = Modifier.height(3.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = subtitle,
-                        fontSize = 13.5.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = contentColor.copy(alpha = 0.8f),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
@@ -1339,7 +1550,7 @@ private fun LiveWave(
     Canvas(modifier = modifier) {
         if (size.width <= 0f || size.height <= 0f) return@Canvas
 
-        val path = androidx.compose.ui.graphics.Path()
+        val path = Path()
         val amplitude = size.height * 0.22f
         val cycles = 2.2f
         val step = size.width / 72f
@@ -1358,9 +1569,9 @@ private fun LiveWave(
         drawPath(
             path = path,
             color = color.copy(alpha = 0.35f),
-            style = androidx.compose.ui.graphics.drawscope.Stroke(
+            style = Stroke(
                 width = 2.dp.toPx(),
-                cap = androidx.compose.ui.graphics.StrokeCap.Round
+                cap = StrokeCap.Round
             )
         )
     }
@@ -1424,44 +1635,41 @@ private fun QuickActionRow(
         }
     }
 
-    AospConnectedGroup {
-        AospPreferenceItem(
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        HomeActionRow(
             index = 0,
             count = 3,
             icon = Icons.Rounded.AutoFixHigh,
             title = stringResource(R.string.home_quick_trim),
-            subtitle = homeLocalizedLabel(
+            subtitle = localizedLabel(
                 "Keluarkan blok penyimpanan yang tidak terpakai",
                 "Release unused storage blocks"
             ),
             onClick = runTrim,
-            enabled = !isTrimming,
-            trailing = { AospChevron() }
+            enabled = !isTrimming
         )
-        AospPreferenceItem(
+        HomeActionRow(
             index = 1,
             count = 3,
             icon = Icons.Rounded.CleaningServices,
             title = stringResource(R.string.home_quick_cache),
-            subtitle = homeLocalizedLabel(
+            subtitle = localizedLabel(
                 "Kosongkan cache RAM dan berkas sementara",
                 "Flush RAM cache and temporary files"
             ),
             onClick = runCache,
-            enabled = !isClearing,
-            trailing = { AospChevron() }
+            enabled = !isClearing
         )
-        AospPreferenceItem(
+        HomeActionRow(
             index = 2,
             count = 3,
             icon = Icons.Rounded.Palette,
             title = stringResource(R.string.home_quick_personalize),
-            subtitle = homeLocalizedLabel(
+            subtitle = localizedLabel(
                 "Buka personalisasi warna dan tema",
                 "Open colour and theme personalisation"
             ),
-            onClick = { onPersonalize() },
-            trailing = { AospChevron() }
+            onClick = { onPersonalize() }
         )
     }
 }
@@ -1473,51 +1681,41 @@ fun ConnectedCardRow(
     subtitle: String,
     position: ContainerPosition,
     modifier: Modifier = Modifier,
-    iconContainer: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
-    iconTint: Color = MaterialTheme.colorScheme.onSurface
+    iconContainer: Color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+    iconTint: Color = MaterialTheme.colorScheme.primary
 ) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = getConnectedContainerShape(position),
-        color = MaterialTheme.colorScheme.surfaceContainer
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(getConnectedContainerShape(position, outerRadius = 26.dp))
+            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier.padding(end = 16.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(13.dp))
-                    .background(iconContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = iconTint,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = subtitle,
-                    fontSize = 13.5.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            HomeSquircleIcon(icon = icon, tint = iconTint, containerColor = iconContainer)
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 8.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -1530,54 +1728,52 @@ fun ConnectedActionCardRow(
     position: ContainerPosition,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    iconContainer: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
-    iconTint: Color = MaterialTheme.colorScheme.onSurface
+    iconContainer: Color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+    iconTint: Color = MaterialTheme.colorScheme.primary
 ) {
-    Surface(
-        onClick = onClick,
-        modifier = modifier.fillMaxWidth(),
-        shape = getConnectedContainerShape(position),
-        color = MaterialTheme.colorScheme.surfaceContainer
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(getConnectedContainerShape(position, outerRadius = 26.dp))
+            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier.padding(end = 16.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(13.dp))
-                    .background(iconContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = iconTint,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = subtitle,
-                    fontSize = 13.5.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            AospChevron()
+            HomeSquircleIcon(icon = icon, tint = iconTint, containerColor = iconContainer)
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 8.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Box(
+            modifier = Modifier.padding(start = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

@@ -1,17 +1,3 @@
-// Copyright (C) 2026 kimal
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 @file:OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 
 package com.luminatweaks.ui.screen
@@ -22,21 +8,34 @@ import android.content.Context
 import android.os.Build
 import android.os.LocaleList
 import android.widget.Toast
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoFixHigh
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Info
@@ -46,41 +45,57 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.luminatweaks.R
-import com.luminatweaks.ui.component.AospChevron
-import com.luminatweaks.ui.component.AospConnectedGroup
-import com.luminatweaks.ui.component.AospOptionBottomSheet
-import com.luminatweaks.ui.component.AospPreferenceItem
-import com.luminatweaks.ui.component.AospSectionHeader
-import com.luminatweaks.ui.component.AospSheetOption
-import com.luminatweaks.ui.component.AospTopBar
+import com.luminatweaks.ui.component.appBarFade
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.LogUtil
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+private data class SettingsSheetOption<T>(
+    val value: T,
+    val label: String,
+    val supporting: String? = null
+)
 
 @Composable
 fun SettingsScreen(
@@ -121,142 +136,143 @@ fun SettingsScreen(
             "personalisasi" -> PersonalisasiScreen(onBackClick = { showPersonalisasiScreen = false })
             else -> {
                 val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-                val bottomPadding = if (isFloating) 100.dp + navInset else 24.dp + navInset
-                val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+                val bottomPadding = if (isFloating) 112.dp + navInset else 28.dp + navInset
+                val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+                val fadeSurface = MaterialTheme.colorScheme.background
 
                 Scaffold(
                     modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
                     contentWindowInsets = WindowInsets(0.dp),
                     containerColor = MaterialTheme.colorScheme.background,
                     topBar = {
-                        AospTopBar(
-                            title = stringResource(R.string.title_settings),
-                            subtitle = stringResource(R.string.settings_personalization_desc),
-                            scrollBehavior = scrollBehavior
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .appBarFade(fadeSurface, scrollBehavior.state.overlappedFraction)
+                                .statusBarsPadding()
+                        ) {
+                            LargeFlexibleTopAppBar(
+                                title = {
+                                    Text(
+                                        text = stringResource(R.string.title_settings),
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                },
+                                colors = TopAppBarDefaults.topAppBarColors(
+                                    containerColor = Color.Transparent,
+                                    scrolledContainerColor = Color.Transparent
+                                ),
+                                scrollBehavior = scrollBehavior,
+                                windowInsets = WindowInsets(0, 0, 0, 0)
+                            )
+                        }
                     }
                 ) { innerPadding ->
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
-                            top = innerPadding.calculateTopPadding() + 4.dp,
+                            top = innerPadding.calculateTopPadding(),
                             bottom = bottomPadding,
-                            start = 0.dp,
-                            end = 0.dp
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                            start = 16.dp,
+                            end = 16.dp
+                        )
                     ) {
                         item(key = "personalization") {
-                            Column {
-                                AospSectionHeader(title = stringResource(R.string.section_personalization))
-                                AospConnectedGroup(modifier = Modifier.padding(horizontal = 16.dp)) {
-                                    AospPreferenceItem(
-                                        index = 0,
-                                        count = 1,
-                                        icon = Icons.Rounded.Palette,
-                                        title = stringResource(R.string.personalization_title),
-                                        subtitle = stringResource(R.string.settings_personalization_desc),
-                                        onClick = {
-                                            if (onNavigateToPersonalisasi != null) {
-                                                onNavigateToPersonalisasi()
-                                            } else {
-                                                showPersonalisasiScreen = true
-                                            }
-                                        },
-                                        trailing = { AospChevron() }
-                                    )
-                                }
+                            SettingsSectionHeader(title = stringResource(R.string.section_personalization))
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                SettingsActionRow(
+                                    index = 0,
+                                    count = 1,
+                                    icon = Icons.Rounded.Palette,
+                                    title = stringResource(R.string.personalization_title),
+                                    subtitle = stringResource(R.string.settings_personalization_desc),
+                                    onClick = {
+                                        if (onNavigateToPersonalisasi != null) {
+                                            onNavigateToPersonalisasi()
+                                        } else {
+                                            showPersonalisasiScreen = true
+                                        }
+                                    }
+                                )
                             }
                         }
 
                         item(key = "others") {
-                            Column {
-                                AospSectionHeader(title = stringResource(R.string.section_others))
-                                AospConnectedGroup(modifier = Modifier.padding(horizontal = 16.dp)) {
-                                    AospPreferenceItem(
-                                        index = 0,
-                                        count = 3,
-                                        icon = Icons.Rounded.Description,
-                                        title = stringResource(R.string.settings_save_log),
-                                        subtitle = if (isGeneratingLog) {
-                                            stringResource(R.string.settings_save_log_bundling)
-                                        } else {
-                                            stringResource(R.string.settings_save_log_desc)
-                                        },
-                                        enabled = !isGeneratingLog,
-                                        isLoading = isGeneratingLog,
-                                        onClick = { showLogBottomSheet = true },
-                                        trailing = { AospChevron() }
-                                    )
+                            SettingsSectionHeader(title = stringResource(R.string.section_others))
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                SettingsActionRow(
+                                    index = 0,
+                                    count = 3,
+                                    icon = Icons.Rounded.Description,
+                                    title = stringResource(R.string.settings_save_log),
+                                    subtitle = if (isGeneratingLog) {
+                                        stringResource(R.string.settings_save_log_bundling)
+                                    } else {
+                                        stringResource(R.string.settings_save_log_desc)
+                                    },
+                                    enabled = !isGeneratingLog,
+                                    onClick = { showLogBottomSheet = true }
+                                )
 
-                                    AospPreferenceItem(
-                                        index = 1,
-                                        count = 3,
-                                        icon = Icons.Rounded.Language,
-                                        title = stringResource(R.string.settings_language),
-                                        subtitle = if (currentLanguage == "en") {
-                                            stringResource(R.string.language_english)
-                                        } else {
-                                            stringResource(R.string.language_indonesian)
-                                        },
-                                        onClick = { showLanguageSheet = true },
-                                        trailing = { AospChevron() }
-                                    )
+                                SettingsActionRow(
+                                    index = 1,
+                                    count = 3,
+                                    icon = Icons.Rounded.Language,
+                                    title = stringResource(R.string.settings_language),
+                                    subtitle = if (currentLanguage == "en") {
+                                        stringResource(R.string.language_english)
+                                    } else {
+                                        stringResource(R.string.language_indonesian)
+                                    },
+                                    highlightSubtitle = true,
+                                    onClick = { showLanguageSheet = true }
+                                )
 
-                                    AospPreferenceItem(
-                                        index = 2,
-                                        count = 3,
-                                        icon = Icons.Rounded.AutoFixHigh,
-                                        title = stringResource(R.string.settings_setup_wizard),
-                                        subtitle = stringResource(R.string.settings_setup_wizard_desc),
-                                        onClick = onOpenSetupWizard,
-                                        trailing = { AospChevron() }
-                                    )
-                                }
+                                SettingsActionRow(
+                                    index = 2,
+                                    count = 3,
+                                    icon = Icons.Rounded.AutoFixHigh,
+                                    title = stringResource(R.string.settings_setup_wizard),
+                                    subtitle = stringResource(R.string.settings_setup_wizard_desc),
+                                    onClick = onOpenSetupWizard
+                                )
                             }
                         }
 
                         item(key = "about_and_module") {
-                            Column {
-                                AospSectionHeader(title = stringResource(R.string.section_about))
-                                AospConnectedGroup(modifier = Modifier.padding(horizontal = 16.dp)) {
-                                    AospPreferenceItem(
-                                        index = 0,
-                                        count = 2,
-                                        icon = Icons.Rounded.Info,
-                                        title = stringResource(R.string.settings_about),
-                                        subtitle = stringResource(
-                                            R.string.settings_version_format,
-                                            com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")
-                                        ),
-                                        onClick = {
-                                            if (onNavigateToAbout != null) {
-                                                onNavigateToAbout()
-                                            } else {
-                                                showAboutScreen = true
-                                            }
-                                        },
-                                        trailing = { AospChevron() }
-                                    )
+                            SettingsSectionHeader(title = stringResource(R.string.section_about))
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                SettingsActionRow(
+                                    index = 0,
+                                    count = 2,
+                                    icon = Icons.Rounded.Info,
+                                    title = stringResource(R.string.settings_about),
+                                    subtitle = stringResource(
+                                        R.string.settings_version_format,
+                                        com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")
+                                    ),
+                                    onClick = {
+                                        if (onNavigateToAbout != null) {
+                                            onNavigateToAbout()
+                                        } else {
+                                            showAboutScreen = true
+                                        }
+                                    }
+                                )
 
-                                    AospPreferenceItem(
-                                        index = 1,
-                                        count = 2,
-                                        icon = Icons.Rounded.DeleteForever,
-                                        title = stringResource(R.string.settings_module_uninstall_title),
-                                        subtitle = stringResource(R.string.settings_module_uninstall_desc),
-                                        enabled = !isUninstalling,
-                                        titleColor = MaterialTheme.colorScheme.error,
-                                        iconTint = MaterialTheme.colorScheme.error,
-                                        onClick = { showUninstallDialog = true },
-                                        trailing = { AospChevron(tint = MaterialTheme.colorScheme.error) }
-                                    )
-                                }
+                                SettingsActionRow(
+                                    index = 1,
+                                    count = 2,
+                                    icon = Icons.Rounded.DeleteForever,
+                                    title = stringResource(R.string.settings_module_uninstall_title),
+                                    subtitle = stringResource(R.string.settings_module_uninstall_desc),
+                                    enabled = !isUninstalling,
+                                    accentColor = MaterialTheme.colorScheme.error,
+                                    onClick = { showUninstallDialog = true }
+                                )
                             }
-                        }
-
-                        item(key = "footer") {
-                            Spacer(modifier = Modifier.height(8.dp))
                         }
                     }
                 }
@@ -324,84 +340,360 @@ fun SettingsScreen(
                     )
                 }
 
-                if (showLanguageSheet) {
-                    val languages = listOf(
-                        "id" to stringResource(R.string.language_indonesian),
-                        "en" to stringResource(R.string.language_english)
-                    )
-                    AospOptionBottomSheet(
-                        title = stringResource(R.string.dialog_select_language),
-                        options = languages.map { AospSheetOption(it.first, it.second) },
-                        isSelected = { it == currentLanguage },
-                        onSelect = { tag ->
-                            showLanguageSheet = false
-                            if (currentLanguage != tag) {
-                                currentLanguage = tag
-                                coroutineScope.launch {
-                                    delay(120L)
-                                    setAppLanguage(context, tag)
-                                }
-                            }
-                        },
-                        onDismiss = { showLanguageSheet = false }
-                    )
-                }
-
-                if (showLogBottomSheet) {
-                    AospOptionBottomSheet(
-                        title = stringResource(R.string.dialog_log_subsystem),
-                        options = listOf(
-                            AospSheetOption(
-                                value = "save",
-                                label = stringResource(R.string.settings_save_log),
-                                supporting = stringResource(R.string.log_option_save_desc)
-                            ),
-                            AospSheetOption(
-                                value = "share",
-                                label = stringResource(R.string.log_option_share),
-                                supporting = stringResource(R.string.log_option_share_desc)
-                            )
-                        ),
-                        isSelected = { false },
-                        onSelect = { action ->
-                            showLogBottomSheet = false
-                            isGeneratingLog = true
+                val languages = listOf(
+                    "id" to stringResource(R.string.language_indonesian),
+                    "en" to stringResource(R.string.language_english)
+                )
+                SettingsOptionSheet(
+                    show = showLanguageSheet,
+                    title = stringResource(R.string.dialog_select_language),
+                    selectable = true,
+                    options = languages.map { SettingsSheetOption(it.first, it.second) },
+                    isSelected = { it == currentLanguage },
+                    onSelect = { tag ->
+                        if (currentLanguage != tag) {
+                            currentLanguage = tag
                             coroutineScope.launch {
-                                if (action == "save") {
-                                    val file = LogUtil.dumpDiagnosticLogs(context, saveToDownloads = true)
-                                    isGeneratingLog = false
-                                    if (file != null) {
-                                        Toast.makeText(
-                                            context,
-                                            context.getString(R.string.toast_log_saved, file.name),
-                                            Toast.LENGTH_LONG
-                                        ).show()
-                                    } else {
-                                        Toast.makeText(
-                                            context,
-                                            context.getString(R.string.toast_log_export_failed),
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
+                                delay(120L)
+                                setAppLanguage(context, tag)
+                            }
+                        }
+                    },
+                    onDismiss = { showLanguageSheet = false }
+                )
+
+                SettingsOptionSheet(
+                    show = showLogBottomSheet,
+                    title = stringResource(R.string.dialog_log_subsystem),
+                    selectable = false,
+                    options = listOf(
+                        SettingsSheetOption(
+                            value = "save",
+                            label = stringResource(R.string.settings_save_log),
+                            supporting = stringResource(R.string.log_option_save_desc)
+                        ),
+                        SettingsSheetOption(
+                            value = "share",
+                            label = stringResource(R.string.log_option_share),
+                            supporting = stringResource(R.string.log_option_share_desc)
+                        )
+                    ),
+                    isSelected = { false },
+                    onSelect = { action ->
+                        isGeneratingLog = true
+                        coroutineScope.launch {
+                            if (action == "save") {
+                                val file = LogUtil.dumpDiagnosticLogs(context, saveToDownloads = true)
+                                isGeneratingLog = false
+                                if (file != null) {
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.toast_log_saved, file.name),
+                                        Toast.LENGTH_LONG
+                                    ).show()
                                 } else {
-                                    val file = LogUtil.dumpDiagnosticLogs(context, saveToDownloads = false)
-                                    isGeneratingLog = false
-                                    if (file != null) {
-                                        val intent = LogUtil.getShareLogIntent(context, file)
-                                        context.startActivity(intent)
-                                    } else {
-                                        Toast.makeText(
-                                            context,
-                                            context.getString(R.string.toast_log_share_failed),
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.toast_log_export_failed),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            } else {
+                                val file = LogUtil.dumpDiagnosticLogs(context, saveToDownloads = false)
+                                isGeneratingLog = false
+                                if (file != null) {
+                                    val intent = LogUtil.getShareLogIntent(context, file)
+                                    context.startActivity(intent)
+                                } else {
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.toast_log_share_failed),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
                                 }
                             }
-                        },
-                        onDismiss = { showLogBottomSheet = false }
-                    )
+                        }
+                    },
+                    onDismiss = { showLogBottomSheet = false }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsSectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(
+            start = 12.dp,
+            end = 12.dp,
+            top = 16.dp,
+            bottom = 8.dp
+        )
+    )
+}
+
+@Composable
+private fun SettingsActionRow(
+    index: Int,
+    count: Int,
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    highlightSubtitle: Boolean = false,
+    accentColor: Color = MaterialTheme.colorScheme.primary
+) {
+    val haptic = LocalHapticFeedback.current
+    val shape = connectedContainerShape(index = index, count = count)
+    val titleColor = if (accentColor == MaterialTheme.colorScheme.error) {
+        MaterialTheme.colorScheme.error
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .clickable(enabled = enabled) {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClick()
+            }
+            .alpha(if (enabled) 1f else 0.55f)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.padding(end = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(accentColor.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = accentColor,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 8.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = titleColor
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (highlightSubtitle) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Box(
+            modifier = Modifier.padding(start = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.ChevronRight,
+                contentDescription = null,
+                tint = if (accentColor == MaterialTheme.colorScheme.error) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
                 }
+            )
+        }
+    }
+}
+
+@Composable
+private fun <T> SettingsOptionSheet(
+    show: Boolean,
+    title: String,
+    selectable: Boolean,
+    options: List<SettingsSheetOption<T>>,
+    isSelected: (T) -> Boolean,
+    onSelect: (T) -> Unit,
+    onDismiss: () -> Unit
+) {
+    if (!show) return
+
+    val scope = rememberCoroutineScope()
+    val sheetState = rememberModalBottomSheetState()
+    val currentOnDismiss by rememberUpdatedState(onDismiss)
+    val scheme = MaterialTheme.colorScheme
+
+    val hideSheet: (() -> Unit) -> Unit = { afterHide ->
+        scope.launch {
+            try {
+                sheetState.hide()
+            } catch (_: CancellationException) {
+                return@launch
+            }
+            if (!sheetState.isVisible) {
+                currentOnDismiss()
+                afterHide()
+            }
+        }
+    }
+
+    val sheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+
+    ModalBottomSheet(
+        onDismissRequest = currentOnDismiss,
+        sheetState = sheetState,
+        containerColor = Color.Transparent,
+        scrimColor = if (scheme.surfaceContainerLowest == Color.Black) {
+            Color.Black.copy(alpha = 0.5f)
+        } else {
+            scheme.scrim.copy(alpha = 0.32f)
+        },
+        shape = sheetShape,
+        dragHandle = null,
+        contentWindowInsets = { WindowInsets(0.dp) }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(sheetShape)
+                .background(scheme.surfaceContainerLow)
+                .navigationBarsPadding()
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(top = 12.dp, bottom = 4.dp)
+                    .width(32.dp)
+                    .height(4.dp)
+                    .background(scheme.onSurfaceVariant.copy(alpha = 0.4f), CircleShape)
+            )
+
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineSmall,
+                color = scheme.onSurface,
+                modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 4.dp)
+            )
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 520.dp),
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 8.dp,
+                    bottom = 16.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                itemsIndexed(options) { index, option ->
+                    val selected = selectable && isSelected(option.value)
+                    val rowShape = RoundedCornerShape(
+                        topStart = if (index == 0) 20.dp else 0.dp,
+                        topEnd = if (index == 0) 20.dp else 0.dp,
+                        bottomStart = if (index == options.lastIndex) 20.dp else 0.dp,
+                        bottomEnd = if (index == options.lastIndex) 20.dp else 0.dp
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(rowShape)
+                            .background(
+                                if (selected) scheme.secondaryContainer else scheme.surfaceContainer
+                            )
+                            .clickable {
+                                hideSheet {}
+                                onSelect(option.value)
+                            }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = option.label,
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal
+                                ),
+                                color = if (selected) scheme.onSecondaryContainer else scheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (option.supporting != null) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = option.supporting,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = scheme.onSurfaceVariant,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        if (selectable) {
+                            SettingsRadioRing(selected = selected)
+                        } else {
+                            Icon(
+                                imageVector = Icons.Rounded.ChevronRight,
+                                contentDescription = null,
+                                tint = scheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsRadioRing(selected: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    val ringColor = if (selected) scheme.primary else scheme.onSurfaceVariant
+
+    Box(
+        modifier = Modifier.size(20.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.size(20.dp)) {
+            val stroke = 2.dp.toPx()
+            val radius = (size.width / 2f) - (stroke / 2f)
+            drawCircle(
+                color = ringColor,
+                radius = radius,
+                style = Stroke(width = stroke)
+            )
+            if (selected) {
+                drawCircle(
+                    color = scheme.primary,
+                    radius = (size.width / 2f) * 0.3f
+                )
             }
         }
     }

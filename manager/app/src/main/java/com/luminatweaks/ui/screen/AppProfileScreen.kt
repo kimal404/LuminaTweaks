@@ -1,17 +1,3 @@
-// Copyright (C) 2026 kimal
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 @file:OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 
 package com.luminatweaks.ui.screen
@@ -26,7 +12,9 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,20 +26,25 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.Brush
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.NotificationsOff
@@ -62,13 +55,17 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -76,10 +73,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
@@ -89,7 +91,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
@@ -100,15 +101,10 @@ import com.luminatweaks.data.AppProfileConfig
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DisplayRrMode
 import com.luminatweaks.model.AppItem
-import com.luminatweaks.ui.component.AospChevron
-import com.luminatweaks.ui.component.AospConnectedGroup
-import com.luminatweaks.ui.component.AospOptionBottomSheet
-import com.luminatweaks.ui.component.AospPreferenceItem
-import com.luminatweaks.ui.component.AospPreferenceSwitch
-import com.luminatweaks.ui.component.AospSectionHeader
-import com.luminatweaks.ui.component.AospSheetOption
-import com.luminatweaks.ui.component.AospTopBar
+import com.luminatweaks.ui.component.LuminaBackButton
+import com.luminatweaks.ui.component.appBarFade
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 enum class OptionItem(val value: String) {
@@ -129,6 +125,11 @@ fun OptionItem.getLabel(): String = when (this) {
 }
 
 data class RendererOption(val id: String, val label: String)
+
+private data class ProfileSheetOption<T>(
+    val value: T,
+    val label: String
+)
 
 @Composable
 fun AppProfileScreen(
@@ -251,8 +252,9 @@ fun AppProfileScreen(
             val isMasterEnabled = !profile.disabled && profile.saklarUtama
 
             val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-            val bottomPadding = if (isFloating) 100.dp + navInset else 24.dp + navInset
-            val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+            val bottomPadding = if (isFloating) 112.dp + navInset else 28.dp + navInset
+            val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+            val fadeSurface = MaterialTheme.colorScheme.background
 
             fun toggleMaster(nextEnabled: Boolean) {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -278,215 +280,162 @@ fun AppProfileScreen(
                 contentWindowInsets = WindowInsets(0.dp),
                 containerColor = MaterialTheme.colorScheme.background,
                 topBar = {
-                    AospTopBar(
-                        title = app.name,
-                        subtitle = stringResource(R.string.profile_title),
-                        scrollBehavior = scrollBehavior,
-                        navigationIcon = {
-                            IconButton(onClick = onBack) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                                    contentDescription = stringResource(R.string.action_back),
-                                    tint = MaterialTheme.colorScheme.onBackground
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .appBarFade(fadeSurface, scrollBehavior.state.overlappedFraction)
+                            .statusBarsPadding()
+                    ) {
+                        LargeFlexibleTopAppBar(
+                            navigationIcon = {
+                                LuminaBackButton(
+                                    onBack = onBack,
+                                    contentDescription = stringResource(R.string.action_back)
                                 )
-                            }
-                        },
-                        actions = {
-                            IconButton(
-                                onClick = {
-                                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                        data = Uri.fromParts("package", app.packageName, null)
-                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            },
+                            title = {
+                                Text(
+                                    text = app.name,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            actions = {
+                                IconButton(
+                                    onClick = {
+                                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                            data = Uri.fromParts("package", app.packageName, null)
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        }
+                                        context.startActivity(intent)
                                     }
-                                    context.startActivity(intent)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Info,
+                                        contentDescription = stringResource(R.string.profile_app_info),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Info,
-                                    contentDescription = stringResource(R.string.profile_app_info),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    )
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(
+                                containerColor = Color.Transparent,
+                                scrolledContainerColor = Color.Transparent
+                            ),
+                            scrollBehavior = scrollBehavior,
+                            windowInsets = WindowInsets(0, 0, 0, 0)
+                        )
+                    }
                 }
             ) { innerPadding ->
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        top = innerPadding.calculateTopPadding() + 4.dp,
+                        top = innerPadding.calculateTopPadding(),
                         bottom = bottomPadding,
-                        start = 0.dp,
-                        end = 0.dp
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                        start = 16.dp,
+                        end = 16.dp
+                    )
                 ) {
                     item(key = "app_header") {
-                        Surface(
-                            shape = RoundedCornerShape(24.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainer,
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp)
+                                .clip(RoundedCornerShape(26.dp))
+                                .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
+                            AsyncImage(
+                                model = ImageRequest.Builder(context)
+                                    .data(remember(app.packageName) {
+                                        try {
+                                            packageManager.getApplicationIcon(app.packageName)
+                                        } catch (_: Exception) {
+                                            null
+                                        }
+                                    })
+                                    .crossfade(true)
+                                    .build(),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                AsyncImage(
-                                    model = ImageRequest.Builder(context)
-                                        .data(remember(app.packageName) {
-                                            try {
-                                                packageManager.getApplicationIcon(app.packageName)
-                                            } catch (_: Exception) {
-                                                null
-                                            }
-                                        })
-                                        .crossfade(true)
-                                        .build(),
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .size(52.dp)
-                                        .clip(RoundedCornerShape(16.dp))
+                                    .size(50.dp)
+                                    .clip(RoundedCornerShape(15.dp))
+                            )
+
+                            Spacer(modifier = Modifier.width(16.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = app.name,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
-
-                                Spacer(modifier = Modifier.width(16.dp))
-
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = app.name,
-                                        style = MaterialTheme.typography.titleMediumEmphasized,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = "$versionName ($versionCode)",
-                                        fontSize = 13.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Spacer(modifier = Modifier.height(1.dp))
-                                    Text(
-                                        text = app.packageName,
-                                        fontSize = 12.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "$versionName ($versionCode)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.height(1.dp))
+                                Text(
+                                    text = app.packageName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
                         }
                     }
 
                     item(key = "master_switch") {
-                        Column {
-                            AospSectionHeader(title = stringResource(R.string.aosp_section_override))
-                            AospConnectedGroup(modifier = Modifier.padding(horizontal = 16.dp)) {
-                                Surface(
-                                    onClick = { toggleMaster(!isMasterEnabled) },
-                                    shape = RoundedCornerShape(24.dp),
-                                    color = MaterialTheme.colorScheme.surfaceContainer,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(start = 16.dp, top = 14.dp, end = 12.dp, bottom = 14.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(42.dp)
-                                                .clip(RoundedCornerShape(13.dp))
-                                                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.PowerSettingsNew,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.onSurface,
-                                                modifier = Modifier.size(22.dp)
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.width(16.dp))
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = stringResource(R.string.profile_master_switch),
-                                                fontSize = 17.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Spacer(modifier = Modifier.height(2.dp))
-                                            Text(
-                                                text = if (isMasterEnabled) {
-                                                    localizedLabel(
-                                                        "Profil khusus aktif untuk aplikasi ini",
-                                                        "Custom profile is active for this app"
-                                                    )
-                                                } else {
-                                                    localizedLabel(
-                                                        "Mengikuti pengaturan global",
-                                                        "Follows global settings"
-                                                    )
-                                                },
-                                                fontSize = 13.5.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Switch(
-                                            checked = isMasterEnabled,
-                                            onCheckedChange = { toggleMaster(it) },
-                                            thumbContent = {
-                                                Icon(
-                                                    imageVector = if (isMasterEnabled) {
-                                                        Icons.Rounded.Check
-                                                    } else {
-                                                        Icons.Rounded.Close
-                                                    },
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(SwitchDefaults.IconSize)
-                                                )
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        }
+                        ProfileSectionHeader(title = stringResource(R.string.aosp_section_override))
+                        ProfileSwitchRow(
+                            index = 0,
+                            count = 1,
+                            icon = Icons.Rounded.PowerSettingsNew,
+                            title = stringResource(R.string.profile_master_switch),
+                            subtitle = if (isMasterEnabled) {
+                                localizedLabel(
+                                    "Profil khusus aktif untuk aplikasi ini",
+                                    "Custom profile is active for this app"
+                                )
+                            } else {
+                                localizedLabel(
+                                    "Mengikuti pengaturan global",
+                                    "Follows global settings"
+                                )
+                            },
+                            checked = isMasterEnabled,
+                            onCheckedChange = { toggleMaster(it) }
+                        )
                     }
 
                     item(key = "override_notice") {
                         if (!isMasterEnabled) {
-                            Surface(
-                                shape = RoundedCornerShape(18.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainer,
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp)
+                                    .clip(RoundedCornerShape(26.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Info,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Text(
-                                        text = stringResource(R.string.profile_override_notice),
-                                        fontSize = 12.5.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
+                                ProfileSquircleIcon(icon = Icons.Rounded.Info)
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Text(
+                                    text = stringResource(R.string.profile_override_notice),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.weight(1f)
+                                )
                             }
                         }
                     }
@@ -497,164 +446,470 @@ fun AppProfileScreen(
                             enter = fadeIn() + expandVertically(),
                             exit = fadeOut() + shrinkVertically()
                         ) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Column {
-                                    AospSectionHeader(title = stringResource(R.string.profile_section_performance))
-                                    AospConnectedGroup(modifier = Modifier.padding(horizontal = 16.dp)) {
-                                        AospPreferenceItem(
-                                            index = 0,
-                                            count = 1,
-                                            icon = Icons.Rounded.BatterySaver,
-                                            title = stringResource(R.string.profile_lite_mode),
-                                            subtitle = OptionItem.fromValue(profile.liteMode).getLabel(),
-                                            onClick = { showLiteModeSheet = true },
-                                            trailing = { AospChevron() }
-                                        )
-                                    }
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                ProfileSectionHeader(title = stringResource(R.string.profile_section_performance))
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    ProfileActionRow(
+                                        index = 0,
+                                        count = 1,
+                                        icon = Icons.Rounded.BatterySaver,
+                                        title = stringResource(R.string.profile_lite_mode),
+                                        subtitle = OptionItem.fromValue(profile.liteMode).getLabel(),
+                                        onClick = { showLiteModeSheet = true }
+                                    )
                                 }
 
-                                Column {
-                                    AospSectionHeader(title = stringResource(R.string.profile_section_display_render))
-                                    AospConnectedGroup(modifier = Modifier.padding(horizontal = 16.dp)) {
-                                        AospPreferenceItem(
-                                            index = 0,
-                                            count = 3,
-                                            icon = Icons.Rounded.Tune,
-                                            title = stringResource(R.string.profile_texture),
-                                            subtitle = currentTextureLabel,
-                                            onClick = { inTeksturRinganScreen = true },
-                                            trailing = { AospChevron() }
-                                        )
-                                        AospPreferenceItem(
-                                            index = 1,
-                                            count = 3,
-                                            icon = Icons.Rounded.Speed,
-                                            title = stringResource(R.string.profile_refresh_rate),
-                                            subtitle = currentHzLabel,
-                                            highlightSubtitle = true,
-                                            onClick = { showRefreshRateSheet = true },
-                                            trailing = { AospChevron() }
-                                        )
-                                        AospPreferenceItem(
-                                            index = 2,
-                                            count = 3,
-                                            icon = if (isTextureLocked) Icons.Rounded.Lock else Icons.Rounded.Brush,
-                                            title = stringResource(R.string.profile_renderer),
-                                            subtitle = currentRendererLabel,
-                                            enabled = !isTextureLocked,
-                                            onClick = { showRendererSheet = true },
-                                            trailing = { AospChevron() }
-                                        )
-                                    }
+                                ProfileSectionHeader(title = stringResource(R.string.profile_section_display_render))
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    ProfileActionRow(
+                                        index = 0,
+                                        count = 3,
+                                        icon = Icons.Rounded.Tune,
+                                        title = stringResource(R.string.profile_texture),
+                                        subtitle = currentTextureLabel,
+                                        onClick = { inTeksturRinganScreen = true }
+                                    )
+                                    ProfileActionRow(
+                                        index = 1,
+                                        count = 3,
+                                        icon = Icons.Rounded.Speed,
+                                        title = stringResource(R.string.profile_refresh_rate),
+                                        subtitle = currentHzLabel,
+                                        highlightSubtitle = true,
+                                        onClick = { showRefreshRateSheet = true }
+                                    )
+                                    ProfileActionRow(
+                                        index = 2,
+                                        count = 3,
+                                        icon = if (isTextureLocked) Icons.Rounded.Lock else Icons.Rounded.Brush,
+                                        title = stringResource(R.string.profile_renderer),
+                                        subtitle = currentRendererLabel,
+                                        enabled = !isTextureLocked,
+                                        onClick = { showRendererSheet = true }
+                                    )
                                 }
 
-                                Column {
-                                    AospSectionHeader(title = stringResource(R.string.profile_section_additional))
-                                    AospConnectedGroup(modifier = Modifier.padding(horizontal = 16.dp)) {
-                                        AospPreferenceSwitch(
-                                            index = 0,
-                                            count = 2,
-                                            icon = Icons.Rounded.Insights,
-                                            title = localizedLabel("Rekam Statistik Sesi", "Record Session Stats"),
-                                            subtitle = localizedLabel(
-                                                "Simpan riwayat FPS, suhu & daya saat aplikasi berjalan",
-                                                "Log FPS, temperature & power while this app runs"
-                                            ),
-                                            checked = isSessionRecordEnabled,
-                                            onCheckedChange = { enabled ->
-                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                isSessionRecordEnabled = enabled
-                                                scope.launch {
-                                                    ConfigRepository.setRecordEnabled(
-                                                        context,
-                                                        app.packageName,
-                                                        enabled
-                                                    )
-                                                }
+                                ProfileSectionHeader(title = stringResource(R.string.profile_section_additional))
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    ProfileSwitchRow(
+                                        index = 0,
+                                        count = 2,
+                                        icon = Icons.Rounded.Insights,
+                                        title = localizedLabel("Rekam Statistik Sesi", "Record Session Stats"),
+                                        subtitle = localizedLabel(
+                                            "Simpan riwayat FPS, suhu & daya saat aplikasi berjalan",
+                                            "Log FPS, temperature & power while this app runs"
+                                        ),
+                                        checked = isSessionRecordEnabled,
+                                        onCheckedChange = { enabled ->
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            isSessionRecordEnabled = enabled
+                                            scope.launch {
+                                                ConfigRepository.setRecordEnabled(
+                                                    context,
+                                                    app.packageName,
+                                                    enabled
+                                                )
                                             }
-                                        )
-                                        AospPreferenceItem(
-                                            index = 1,
-                                            count = 2,
-                                            icon = Icons.Rounded.NotificationsOff,
-                                            title = stringResource(R.string.profile_dnd),
-                                            subtitle = OptionItem.fromValue(profile.dnd).getLabel(),
-                                            onClick = { showDndSheet = true },
-                                            trailing = { AospChevron() }
-                                        )
-                                    }
+                                        }
+                                    )
+                                    ProfileActionRow(
+                                        index = 1,
+                                        count = 2,
+                                        icon = Icons.Rounded.NotificationsOff,
+                                        title = stringResource(R.string.profile_dnd),
+                                        subtitle = OptionItem.fromValue(profile.dnd).getLabel(),
+                                        onClick = { showDndSheet = true }
+                                    )
                                 }
                             }
                         }
                     }
-
-                    item(key = "footer") {
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
                 }
             }
 
-            if (showLiteModeSheet) {
-                AospOptionBottomSheet(
-                    title = stringResource(R.string.dialog_select_lite_mode),
-                    options = triStateOptions.map { AospSheetOption(it.value, it.getLabel()) },
-                    isSelected = { it == profile.liteMode },
-                    onSelect = { value ->
-                        onProfileChanged(profile.copy(liteMode = value))
-                        showLiteModeSheet = false
-                    },
-                    onDismiss = { showLiteModeSheet = false }
-                )
-            }
+            ProfileOptionSheet(
+                show = showLiteModeSheet,
+                title = stringResource(R.string.dialog_select_lite_mode),
+                options = triStateOptions.map { ProfileSheetOption(it.value, it.getLabel()) },
+                isSelected = { it == profile.liteMode },
+                onSelect = { value ->
+                    onProfileChanged(profile.copy(liteMode = value))
+                },
+                onDismiss = { showLiteModeSheet = false }
+            )
 
-            if (showRefreshRateSheet) {
-                val defaultOpt = listOf(AospSheetOption("default", stringResource(R.string.opt_default)))
-                val modeOpts = rrModes.map { AospSheetOption(it.id.toString(), "${it.hz} Hz") }
-                AospOptionBottomSheet(
-                    title = stringResource(R.string.dialog_select_refresh_rate),
-                    options = defaultOpt + modeOpts,
-                    isSelected = { value ->
-                        if (value == "default") {
-                            profile.refreshRate == "default" || profile.refreshRate.isBlank()
-                        } else {
-                            profile.refreshRate == value ||
-                                rrModes.find { it.id.toString() == value }?.hz?.toString() == profile.refreshRate
-                        }
-                    },
-                    onSelect = { value ->
-                        onProfileChanged(profile.copy(refreshRate = value))
-                        showRefreshRateSheet = false
-                    },
-                    onDismiss = { showRefreshRateSheet = false }
-                )
-            }
+            val defaultOpt = listOf(ProfileSheetOption("default", stringResource(R.string.opt_default)))
+            val modeOpts = rrModes.map { ProfileSheetOption(it.id.toString(), "${it.hz} Hz") }
+            ProfileOptionSheet(
+                show = showRefreshRateSheet,
+                title = stringResource(R.string.dialog_select_refresh_rate),
+                options = defaultOpt + modeOpts,
+                isSelected = { value ->
+                    if (value == "default") {
+                        profile.refreshRate == "default" || profile.refreshRate.isBlank()
+                    } else {
+                        profile.refreshRate == value ||
+                            rrModes.find { it.id.toString() == value }?.hz?.toString() == profile.refreshRate
+                    }
+                },
+                onSelect = { value ->
+                    onProfileChanged(profile.copy(refreshRate = value))
+                },
+                onDismiss = { showRefreshRateSheet = false }
+            )
 
-            if (showRendererSheet && !isTextureLocked) {
-                AospOptionBottomSheet(
-                    title = stringResource(R.string.dialog_select_renderer),
-                    options = rendererOptions.map { AospSheetOption(it.id, it.label) },
-                    isSelected = { it.equals(profile.renderer, ignoreCase = true) },
-                    onSelect = { id ->
-                        onProfileChanged(profile.copy(renderer = id))
-                        showRendererSheet = false
-                    },
-                    onDismiss = { showRendererSheet = false }
-                )
-            }
+            ProfileOptionSheet(
+                show = showRendererSheet && !isTextureLocked,
+                title = stringResource(R.string.dialog_select_renderer),
+                options = rendererOptions.map { ProfileSheetOption(it.id, it.label) },
+                isSelected = { it.equals(profile.renderer, ignoreCase = true) },
+                onSelect = { id ->
+                    onProfileChanged(profile.copy(renderer = id))
+                },
+                onDismiss = { showRendererSheet = false }
+            )
 
-            if (showDndSheet) {
-                AospOptionBottomSheet(
-                    title = stringResource(R.string.dialog_select_dnd),
-                    options = triStateOptions.map { AospSheetOption(it.value, it.getLabel()) },
-                    isSelected = { it == profile.dnd },
-                    onSelect = { value ->
-                        onProfileChanged(profile.copy(dnd = value))
-                        showDndSheet = false
-                    },
-                    onDismiss = { showDndSheet = false }
+            ProfileOptionSheet(
+                show = showDndSheet,
+                title = stringResource(R.string.dialog_select_dnd),
+                options = triStateOptions.map { ProfileSheetOption(it.value, it.getLabel()) },
+                isSelected = { it == profile.dnd },
+                onSelect = { value ->
+                    onProfileChanged(profile.copy(dnd = value))
+                },
+                onDismiss = { showDndSheet = false }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProfileSectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(
+            start = 12.dp,
+            end = 12.dp,
+            top = 16.dp,
+            bottom = 8.dp
+        )
+    )
+}
+
+@Composable
+private fun ProfileSquircleIcon(
+    icon: ImageVector,
+    enabled: Boolean = true
+) {
+    val contentColor = if (enabled) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+    }
+
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = contentColor,
+            modifier = Modifier.size(22.dp)
+        )
+    }
+}
+
+@Composable
+private fun ProfileSwitchRow(
+    index: Int,
+    count: Int,
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    val shape = connectedContainerShape(index = index, count = count)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .clickable { onCheckedChange(!checked) }
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.padding(end = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            ProfileSquircleIcon(icon = icon)
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 8.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Box(
+            modifier = Modifier.padding(start = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                thumbContent = {
+                    if (checked) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(SwitchDefaults.IconSize)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            modifier = Modifier.size(SwitchDefaults.IconSize)
+                        )
+                    }
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProfileActionRow(
+    index: Int,
+    count: Int,
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    highlightSubtitle: Boolean = false
+) {
+    val haptic = LocalHapticFeedback.current
+    val shape = connectedContainerShape(index = index, count = count)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .clickable(enabled = enabled) {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClick()
+            }
+            .alpha(if (enabled) 1f else 0.55f)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.padding(end = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            ProfileSquircleIcon(icon = icon, enabled = enabled)
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 8.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (highlightSubtitle) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
+        }
+        Box(
+            modifier = Modifier.padding(start = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = if (enabled) Icons.Rounded.ChevronRight else Icons.Rounded.Lock,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun <T> ProfileOptionSheet(
+    show: Boolean,
+    title: String,
+    options: List<ProfileSheetOption<T>>,
+    isSelected: (T) -> Boolean,
+    onSelect: (T) -> Unit,
+    onDismiss: () -> Unit
+) {
+    if (!show) return
+
+    val scope = rememberCoroutineScope()
+    val sheetState = rememberModalBottomSheetState()
+    val currentOnDismiss by rememberUpdatedState(onDismiss)
+    val scheme = MaterialTheme.colorScheme
+
+    val hideSheet: (() -> Unit) -> Unit = { afterHide ->
+        scope.launch {
+            try {
+                sheetState.hide()
+            } catch (_: CancellationException) {
+                return@launch
+            }
+            if (!sheetState.isVisible) {
+                currentOnDismiss()
+                afterHide()
+            }
+        }
+    }
+
+    val sheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+
+    ModalBottomSheet(
+        onDismissRequest = currentOnDismiss,
+        sheetState = sheetState,
+        containerColor = Color.Transparent,
+        scrimColor = if (scheme.surfaceContainerLowest == Color.Black) {
+            Color.Black.copy(alpha = 0.5f)
+        } else {
+            scheme.scrim.copy(alpha = 0.32f)
+        },
+        shape = sheetShape,
+        dragHandle = null,
+        contentWindowInsets = { WindowInsets(0.dp) }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(sheetShape)
+                .background(scheme.surfaceContainerLow)
+                .navigationBarsPadding()
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(top = 12.dp, bottom = 4.dp)
+                    .width(32.dp)
+                    .height(4.dp)
+                    .background(scheme.onSurfaceVariant.copy(alpha = 0.4f), CircleShape)
+            )
+
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineSmall,
+                color = scheme.onSurface,
+                modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 4.dp)
+            )
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 520.dp),
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 8.dp,
+                    bottom = 16.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                itemsIndexed(options) { index, option ->
+                    val selected = isSelected(option.value)
+                    val rowShape = RoundedCornerShape(
+                        topStart = if (index == 0) 20.dp else 0.dp,
+                        topEnd = if (index == 0) 20.dp else 0.dp,
+                        bottomStart = if (index == options.lastIndex) 20.dp else 0.dp,
+                        bottomEnd = if (index == options.lastIndex) 20.dp else 0.dp
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(rowShape)
+                            .background(
+                                if (selected) scheme.secondaryContainer else scheme.surfaceContainer
+                            )
+                            .clickable {
+                                hideSheet {}
+                                onSelect(option.value)
+                            }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = option.label,
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal
+                            ),
+                            color = if (selected) scheme.onSecondaryContainer else scheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        ProfileRadioRing(selected = selected)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileRadioRing(selected: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    val ringColor = if (selected) scheme.primary else scheme.onSurfaceVariant
+
+    Box(
+        modifier = Modifier.size(20.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.size(20.dp)) {
+            val stroke = 2.dp.toPx()
+            val radius = (size.width / 2f) - (stroke / 2f)
+            drawCircle(
+                color = ringColor,
+                radius = radius,
+                style = Stroke(width = stroke)
+            )
+            if (selected) {
+                drawCircle(
+                    color = scheme.primary,
+                    radius = (size.width / 2f) * 0.3f
                 )
             }
         }
@@ -664,27 +919,15 @@ fun AppProfileScreen(
 @Composable
 fun ProfileSectionTitle(
     title: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     modifier: Modifier = Modifier
 ) {
-    Row(
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
         modifier = modifier
             .fillMaxWidth()
-            .padding(start = 20.dp, top = 6.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(16.dp)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = title,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.primary
-        )
-    }
+            .padding(start = 12.dp, end = 12.dp, top = 16.dp, bottom = 8.dp)
+    )
 }
