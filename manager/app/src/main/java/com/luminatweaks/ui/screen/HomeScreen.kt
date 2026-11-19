@@ -12,20 +12,21 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -57,12 +58,13 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.PowerSettingsNew
@@ -99,11 +101,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -116,7 +118,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -922,119 +923,13 @@ fun HomeDashboardContent(
             }
 
             item(key = "device") {
-                var isDeviceExpanded by remember { mutableStateOf(false) }
-                val arrowRotation by animateFloatAsState(
-                    targetValue = if (isDeviceExpanded) 180f else 0f,
-                    animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
-                    label = "deviceInfoArrowRotation"
+                Spacer(modifier = Modifier.height(16.dp))
+                AZenithDeviceInfoCard(
+                    kernelVersion = kernelVersion,
+                    deviceModel = deviceModel,
+                    isRootGranted = isRootGranted,
+                    selinuxStatus = selinuxStatus
                 )
-                val spatialSpec = MaterialTheme.motionScheme.defaultSpatialSpec<IntSize>()
-                val effectsSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
-                val totalRows = if (isDeviceExpanded) 5 else 3
-                val innerRowColor = MaterialTheme.colorScheme.surfaceContainerHigh
-
-                HomeSectionHeader(
-                    title = stringResource(R.string.aosp_section_device),
-                    trailing = {
-                        Surface(
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                isDeviceExpanded = !isDeviceExpanded
-                            },
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            modifier = Modifier.size(30.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Rounded.KeyboardArrowDown,
-                                    contentDescription = if (isDeviceExpanded) {
-                                        stringResource(R.string.aosp_action_collapse)
-                                    } else {
-                                        stringResource(R.string.aosp_action_expand)
-                                    },
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier
-                                        .size(20.dp)
-                                        .rotate(arrowRotation)
-                                )
-                            }
-                        }
-                    }
-                )
-
-                Surface(
-                    shape = RoundedCornerShape(26.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainer,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        HomeInfoRow(
-                            index = 0,
-                            count = totalRows,
-                            icon = Icons.Rounded.DeveloperBoard,
-                            title = stringResource(R.string.home_manager_version),
-                            subtitle = stringResource(
-                                R.string.home_version_release_format,
-                                com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")
-                            ),
-                            containerColor = innerRowColor,
-                            outerRadius = 18.dp
-                        )
-                        HomeInfoRow(
-                            index = 1,
-                            count = totalRows,
-                            icon = Icons.Rounded.Memory,
-                            title = stringResource(R.string.home_kernel_version),
-                            subtitle = kernelVersion,
-                            containerColor = innerRowColor,
-                            outerRadius = 18.dp
-                        )
-                        HomeInfoRow(
-                            index = 2,
-                            count = totalRows,
-                            icon = Icons.Rounded.Smartphone,
-                            title = stringResource(R.string.home_device_model),
-                            subtitle = deviceModel,
-                            containerColor = innerRowColor,
-                            outerRadius = 18.dp
-                        )
-                        AnimatedVisibility(
-                            visible = isDeviceExpanded,
-                            enter = expandVertically(animationSpec = spatialSpec) + fadeIn(animationSpec = effectsSpec),
-                            exit = shrinkVertically(animationSpec = spatialSpec) + fadeOut(animationSpec = effectsSpec)
-                        ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                HomeInfoRow(
-                                    index = 3,
-                                    count = totalRows,
-                                    icon = Icons.Rounded.Security,
-                                    title = stringResource(R.string.home_root_access),
-                                    subtitle = stringResource(
-                                        if (isRootGranted) R.string.home_root_granted else R.string.home_root_denied
-                                    ),
-                                    highlightSubtitle = isRootGranted,
-                                    containerColor = innerRowColor,
-                                    outerRadius = 18.dp
-                                )
-                                HomeInfoRow(
-                                    index = 4,
-                                    count = totalRows,
-                                    icon = Icons.Rounded.Security,
-                                    title = stringResource(R.string.home_selinux_status),
-                                    subtitle = selinuxStatus,
-                                    containerColor = innerRowColor,
-                                    outerRadius = 18.dp
-                                )
-                            }
-                        }
-                    }
-                }
             }
 
             item(key = "support") {
@@ -1056,6 +951,142 @@ fun HomeDashboardContent(
                         title = stringResource(R.string.home_learn_more),
                         subtitle = stringResource(R.string.home_learn_more_desc),
                         onClick = { uriHandler.openUri("https://github.com/kimal404/LuminaTweaks") }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AZenithDeviceInfoCard(
+    kernelVersion: String,
+    deviceModel: String,
+    isRootGranted: Boolean,
+    selinuxStatus: String
+) {
+    val haptic = LocalHapticFeedback.current
+    val colorScheme = MaterialTheme.colorScheme
+    var isExpanded by remember { mutableStateOf(false) }
+
+    val rotationAngle by animateFloatAsState(
+        targetValue = if (isExpanded) 180f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "expandArrowRotation"
+    )
+
+    val totalRows = if (isExpanded) 5 else 3
+    val innerRowColor = colorScheme.surfaceVariant.copy(alpha = 0.5f)
+
+    Surface(
+        shape = RoundedCornerShape(26.dp),
+        color = colorScheme.surfaceColorAtElevation(1.dp),
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            isExpanded = !isExpanded
+        },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(vertical = 16.dp)
+                .animateContentSize(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioLowBouncy,
+                        stiffness = Spring.StiffnessLow
+                    )
+                )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                HomeSquircleIcon(icon = Icons.Outlined.Info)
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = stringResource(R.string.aosp_section_device),
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colorScheme.onSurface
+                )
+                Icon(
+                    imageVector = Icons.Rounded.ExpandMore,
+                    contentDescription = if (isExpanded) {
+                        stringResource(R.string.aosp_action_collapse)
+                    } else {
+                        stringResource(R.string.aosp_action_expand)
+                    },
+                    tint = colorScheme.onSurfaceVariant,
+                    modifier = Modifier.graphicsLayer {
+                        rotationZ = rotationAngle
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                HomeInfoRow(
+                    index = 0,
+                    count = totalRows,
+                    icon = Icons.Rounded.DeveloperBoard,
+                    title = stringResource(R.string.home_manager_version),
+                    subtitle = stringResource(
+                        R.string.home_version_release_format,
+                        com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")
+                    ),
+                    containerColor = innerRowColor,
+                    outerRadius = 18.dp
+                )
+                HomeInfoRow(
+                    index = 1,
+                    count = totalRows,
+                    icon = Icons.Rounded.Memory,
+                    title = stringResource(R.string.home_kernel_version),
+                    subtitle = kernelVersion,
+                    containerColor = innerRowColor,
+                    outerRadius = 18.dp
+                )
+                HomeInfoRow(
+                    index = 2,
+                    count = totalRows,
+                    icon = Icons.Rounded.Smartphone,
+                    title = stringResource(R.string.home_device_model),
+                    subtitle = deviceModel,
+                    containerColor = innerRowColor,
+                    outerRadius = 18.dp
+                )
+
+                if (isExpanded) {
+                    HomeInfoRow(
+                        index = 3,
+                        count = totalRows,
+                        icon = Icons.Rounded.Security,
+                        title = stringResource(R.string.home_root_access),
+                        subtitle = stringResource(
+                            if (isRootGranted) R.string.home_root_granted else R.string.home_root_denied
+                        ),
+                        highlightSubtitle = isRootGranted,
+                        containerColor = innerRowColor,
+                        outerRadius = 18.dp
+                    )
+                    HomeInfoRow(
+                        index = 4,
+                        count = totalRows,
+                        icon = Icons.Rounded.Security,
+                        title = stringResource(R.string.home_selinux_status),
+                        subtitle = selinuxStatus,
+                        containerColor = innerRowColor,
+                        outerRadius = 18.dp
                     )
                 }
             }
