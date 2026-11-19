@@ -14,7 +14,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.toArgb
 
 enum class ColorMode(val value: Int) {
@@ -70,13 +69,13 @@ enum class AccentIntensity(val label: String) {
     val saturationFactor: Float
         get() = when (this) {
             Neutral -> 0.72f
-            Balanced -> 1.0f
+            Balanced -> 1f
             Bright -> 1.28f
             Vibrant -> 1.55f
         }
 
     companion object {
-        fun fromValue(value: Int): AccentIntensity = entries.getOrElse(value) { Vibrant }
+        fun fromValue(value: Int): AccentIntensity = entries.getOrElse(value) { Balanced }
     }
 }
 
@@ -107,7 +106,7 @@ object ThemeController {
         val colorSpec = ColorEngine.fromPersisted(prefs.getString("color_spec", null))
         val accentIntensity = AccentIntensity.fromValue(
             prefs.getString("pers_accent_intensity", null)?.toIntOrNull()
-                ?: prefs.getInt("pers_accent_intensity", AccentIntensity.Vibrant.ordinal)
+                ?: prefs.getInt("pers_accent_intensity", AccentIntensity.Balanced.ordinal)
         )
         val cornerRadius = prefs.getInt("ui_corner_radius", DEFAULT_CORNER_RADIUS)
             .coerceIn(MIN_CORNER_RADIUS, MAX_CORNER_RADIUS)
@@ -222,51 +221,9 @@ fun ColorScheme.withAccentIntensity(
     isDark: Boolean = true,
     isAmoled: Boolean = false
 ): ColorScheme {
+    if (intensity == AccentIntensity.Balanced) return this
     val f = intensity.saturationFactor
-    val tintedPrimary = primary.scaledSaturation(f)
-    val tintScale = when (intensity) {
-        AccentIntensity.Neutral -> 0.55f
-        AccentIntensity.Balanced -> 0.90f
-        AccentIntensity.Bright -> 1.15f
-        AccentIntensity.Vibrant -> 1.40f
-    }
-
-    val tintedScheme = if (isDark && isAmoled) {
-        copy(
-            background = Color.Black,
-            surface = Color.Black,
-            surfaceVariant = lerp(Color(0xFF15191C), tintedPrimary, 0.12f * tintScale),
-            surfaceContainerLowest = Color.Black,
-            surfaceContainerLow = lerp(Color(0xFF080B0E), tintedPrimary, 0.06f * tintScale),
-            surfaceContainer = lerp(Color(0xFF0E1317), tintedPrimary, 0.09f * tintScale),
-            surfaceContainerHigh = lerp(Color(0xFF141B20), tintedPrimary, 0.115f * tintScale),
-            surfaceContainerHighest = lerp(Color(0xFF1B232A), tintedPrimary, 0.14f * tintScale)
-        )
-    } else if (isDark) {
-        copy(
-            background = lerp(Color(0xFF090D10), tintedPrimary, 0.08f * tintScale),
-            surface = lerp(Color(0xFF090D10), tintedPrimary, 0.08f * tintScale),
-            surfaceVariant = lerp(Color(0xFF182026), tintedPrimary, 0.14f * tintScale),
-            surfaceContainerLowest = lerp(Color(0xFF06090B), tintedPrimary, 0.06f * tintScale),
-            surfaceContainerLow = lerp(Color(0xFF0C1216), tintedPrimary, 0.09f * tintScale),
-            surfaceContainer = lerp(Color(0xFF10171D), tintedPrimary, 0.11f * tintScale),
-            surfaceContainerHigh = lerp(Color(0xFF151E26), tintedPrimary, 0.135f * tintScale),
-            surfaceContainerHighest = lerp(Color(0xFF1B2630), tintedPrimary, 0.16f * tintScale)
-        )
-    } else {
-        copy(
-            background = lerp(Color(0xFFF8FAFC), tintedPrimary, 0.04f * tintScale),
-            surface = lerp(Color(0xFFF8FAFC), tintedPrimary, 0.04f * tintScale),
-            surfaceVariant = lerp(Color(0xFFE6ECF0), tintedPrimary, 0.08f * tintScale),
-            surfaceContainerLowest = Color.White,
-            surfaceContainerLow = lerp(Color(0xFFF2F5F8), tintedPrimary, 0.05f * tintScale),
-            surfaceContainer = lerp(Color(0xFFECF1F5), tintedPrimary, 0.065f * tintScale),
-            surfaceContainerHigh = lerp(Color(0xFFE5ECF1), tintedPrimary, 0.08f * tintScale),
-            surfaceContainerHighest = lerp(Color(0xFFDEE6EC), tintedPrimary, 0.095f * tintScale)
-        )
-    }
-
-    return tintedScheme.copy(
+    return copy(
         primary = primary.scaledSaturation(f),
         onPrimary = onPrimary.scaledSaturation(f),
         primaryContainer = primaryContainer.scaledSaturation(f),
@@ -274,7 +231,6 @@ fun ColorScheme.withAccentIntensity(
         secondary = secondary.scaledSaturation(f),
         onSecondary = onSecondary.scaledSaturation(f),
         secondaryContainer = secondaryContainer.scaledSaturation(f),
-        onSecondaryContainer = onSecondaryContainer.scaledSaturation(f),
         tertiary = tertiary.scaledSaturation(f),
         tertiaryContainer = tertiaryContainer.scaledSaturation(f)
     )
@@ -319,9 +275,9 @@ fun ThemeController.overlayPalette(context: Context): OverlayPalette {
         AndroidColor.BLACK
     } else {
         blendOverlayColor(
-            if (dark) 0xFF101418.toInt() else 0xFFF5F7F9.toInt(),
+            if (dark) 0xFF141218.toInt() else 0xFFF5F7F9.toInt(),
             seed,
-            if (dark) 0.10f else 0.05f
+            if (dark) 0.06f else 0.04f
         )
     }
     val onSurface = if (dark) 0xFFF2F4F7.toInt() else 0xFF11161B.toInt()

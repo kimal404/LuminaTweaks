@@ -15,7 +15,7 @@ import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.expressiveLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -30,7 +30,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsControllerCompat
-import com.materialkolor.PaletteStyle
 import com.materialkolor.rememberDynamicColorScheme
 
 @Composable
@@ -72,53 +71,62 @@ fun LuminaTheme(
     val amoledMode = themeState.colorMode == ColorMode.DARKAMOLED
     val isDynamic = themeState.keyColor == 0
     val colorSpec = themeState.colorSpec.librarySpec
-    val paletteStyle: PaletteStyle = when (themeState.colorStyle) {
-        ColorStyle.TonalSpot -> PaletteStyle.TonalSpot
-        ColorStyle.Vibrant -> PaletteStyle.Vibrant
-        ColorStyle.Expressive -> PaletteStyle.Expressive
-        ColorStyle.Spritz -> PaletteStyle.Neutral
-        ColorStyle.Rainbow -> PaletteStyle.Rainbow
-        ColorStyle.FruitSalad -> PaletteStyle.FruitSalad
-        ColorStyle.Content -> PaletteStyle.Content
-        ColorStyle.Monochrome -> PaletteStyle.Monochrome
-    }
 
-    val baseScheme: ColorScheme = if (isDynamic) {
-        val nativeScheme = when {
+    val rawColorScheme: ColorScheme = if (isDynamic) {
+        val baseScheme = when {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
                 if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
             else ->
-                if (isDark) darkColorScheme() else lightColorScheme()
+                if (isDark) darkColorScheme() else expressiveLightColorScheme()
         }
         rememberDynamicColorScheme(
-            seedColor = nativeScheme.primary,
+            seedColor = baseScheme.primary,
             isDark = isDark,
             isAmoled = amoledMode,
             specVersion = colorSpec,
-            style = paletteStyle,
-            primary = nativeScheme.primary,
-            secondary = nativeScheme.secondary,
-            tertiary = nativeScheme.tertiary,
-            neutral = nativeScheme.surface,
-            neutralVariant = nativeScheme.surfaceVariant,
-            error = nativeScheme.error
+            primary = baseScheme.primary,
+            secondary = baseScheme.secondary,
+            tertiary = baseScheme.tertiary,
+            neutral = baseScheme.surface,
+            neutralVariant = baseScheme.surfaceVariant,
+            error = baseScheme.error
         )
     } else {
         rememberDynamicColorScheme(
             seedColor = Color(themeState.keyColor),
             isDark = isDark,
             isAmoled = amoledMode,
-            specVersion = colorSpec,
-            style = paletteStyle
+            specVersion = colorSpec
         )
     }
 
-    val animatedColorScheme = animateColorSchemeAsState(
-        targetColorScheme = baseScheme.withAccentIntensity(
-            intensity = themeState.accentIntensity,
-            isDark = isDark,
-            isAmoled = amoledMode
+    val colorScheme = if (amoledMode) {
+        rawColorScheme.copy(
+            background = Color.Black,
+            surface = Color.Black,
+            surfaceDim = Color.Black,
+            surfaceContainerLowest = Color.Black,
+            surfaceContainerLow = Color(0xFF0A0A0A)
         )
+    } else {
+        if (darkTheme && (rawColorScheme.surfaceContainerLowest == Color.Black || rawColorScheme.surface == Color.Black || rawColorScheme.background == Color.Black)) {
+            val safeSurface = if (rawColorScheme.surface == Color.Black) Color(0xFF141218) else rawColorScheme.surface
+            val safeLowest = if (rawColorScheme.surfaceContainerLowest == Color.Black) Color(0xFF0F0D13) else rawColorScheme.surfaceContainerLowest
+            val safeBackground = if (rawColorScheme.background == Color.Black) safeSurface else rawColorScheme.background
+            val safeDim = if (rawColorScheme.surfaceDim == Color.Black) safeSurface else rawColorScheme.surfaceDim
+            rawColorScheme.copy(
+                background = safeBackground,
+                surface = safeSurface,
+                surfaceDim = safeDim,
+                surfaceContainerLowest = safeLowest
+            )
+        } else {
+            rawColorScheme
+        }
+    }
+
+    val animatedColorScheme = animateColorSchemeAsState(
+        targetColorScheme = colorScheme.withAccentIntensity(themeState.accentIntensity)
     )
 
     val dynamicShapes = remember(themeState.cornerRadius) {
