@@ -6,22 +6,44 @@ import android.content.Context
 import android.os.Build
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BatterySaver
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.Lock
@@ -29,15 +51,24 @@ import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Widgets
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,30 +79,27 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.luminatweaks.R
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DisplayRrMode
 import com.luminatweaks.service.FloatingFpsService
-import com.luminatweaks.ui.component.AospChevron
-import com.luminatweaks.ui.component.AospConnectedGroup
-import com.luminatweaks.ui.component.AospOptionBottomSheet
-import com.luminatweaks.ui.component.AospPreferenceItem
-import com.luminatweaks.ui.component.AospPreferenceSwitch
-import com.luminatweaks.ui.component.AospSectionHeader
-import com.luminatweaks.ui.component.AospSheetOption
-import com.luminatweaks.ui.component.AospTopBar
-import com.luminatweaks.ui.component.aospConnectedShape
-import com.luminatweaks.ui.component.aospGroupOuterRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.DeviceUtil
 import java.util.Locale
@@ -126,6 +154,11 @@ fun getRendererShortLabel(id: String, defaultLabel: String): String {
         else -> id
     }
 }
+
+private data class TweakSheetOption<T>(
+    val value: T,
+    val label: String
+)
 
 @Composable
 internal fun localizedLabel(id: String, en: String): String {
@@ -294,7 +327,7 @@ fun TweaksScreen(
 
     val rendererOptions = remember(defaultRendererLabel) {
         RENDERER_OPTIONS.map {
-            AospSheetOption(it.id, getRendererDisplayLabel(it.id, defaultRendererLabel))
+            TweakSheetOption(it.id, getRendererDisplayLabel(it.id, defaultRendererLabel))
         }
     }
 
@@ -347,10 +380,10 @@ fun TweaksScreen(
                 "Current display: $liveRefreshRate Hz"
             )
         }
-        AospOptionBottomSheet(
+        TweakSelectionBottomSheet(
             title = stringResource(R.string.tweaks_dialog_select_rr),
             subtitle = rrSubtitle,
-            options = rrModes.map { AospSheetOption(it.id, "${it.hz} Hz") },
+            options = rrModes.map { TweakSheetOption(it.id, "${it.hz} Hz") },
             isSelected = { it == currentRrId },
             onSelect = { id ->
                 val previous = currentRrId
@@ -369,7 +402,7 @@ fun TweaksScreen(
     }
 
     if (showRenderSheet) {
-        AospOptionBottomSheet(
+        TweakSelectionBottomSheet(
             title = stringResource(R.string.tweaks_dialog_select_renderer),
             options = rendererOptions,
             isSelected = { it.equals(currentRendererId, ignoreCase = true) },
@@ -390,9 +423,9 @@ fun TweaksScreen(
     }
 
     if (showIoSchedulerSheet) {
-        AospOptionBottomSheet(
+        TweakSelectionBottomSheet(
             title = stringResource(R.string.dialog_select_io_scheduler),
-            options = ioSchedulerOptions.map { AospSheetOption(it, it) },
+            options = ioSchedulerOptions.map { TweakSheetOption(it, it) },
             isSelected = { it.equals(currentIoScheduler, ignoreCase = true) },
             onSelect = { scheduler ->
                 val previous = currentIoScheduler
@@ -414,9 +447,9 @@ fun TweaksScreen(
 
     val isFloating = LocalFloatingNavBar.current
     val bottomPadding = if (isFloating) {
-        104.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        112.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     } else {
-        24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        28.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     }
 
     Scaffold(
@@ -424,12 +457,8 @@ fun TweaksScreen(
         contentWindowInsets = WindowInsets(0.dp),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            AospTopBar(
+            TweaksCollapsingTopBar(
                 title = stringResource(R.string.tweaks_title),
-                subtitle = localizedLabel(
-                    "Sesuaikan performa dan tampilan",
-                    "Fine-tune performance and display"
-                ),
                 scrollBehavior = scrollBehavior
             )
         },
@@ -452,103 +481,84 @@ fun TweaksScreen(
             contentPadding = PaddingValues(
                 top = innerPadding.calculateTopPadding() + 4.dp,
                 bottom = bottomPadding,
-                start = 0.dp,
-                end = 0.dp
+                start = 16.dp,
+                end = 16.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(22.dp)
         ) {
             item(key = "display_performance") {
-                Column {
-                    AospSectionHeader(
-                        title = localizedLabel("Performa & Layar", "Performance & Display")
+                ConnectedSectionGroup(
+                    title = localizedLabel("Performa & Layar", "Performance & Display")
+                ) {
+                    ConnectedTweakSwitchRow(
+                        index = 0,
+                        count = 3,
+                        icon = Icons.Rounded.BatterySaver,
+                        title = stringResource(R.string.tweaks_lite_mode),
+                        subtitle = localizedLabel(
+                            "Batasi clock CPU untuk suhu lebih adem dan hemat daya",
+                            "Limit CPU clock for cooler thermals and power saving"
+                        ),
+                        checked = isGlobalLiteMode,
+                        onCheckedChange = { newState ->
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            val previous = isGlobalLiteMode
+                            isGlobalLiteMode = newState
+                            coroutineScope.launch {
+                                applyTweakChange(
+                                    snackbarHostState = snackbarHostState,
+                                    errorMessage = applyFailedText,
+                                    revert = { isGlobalLiteMode = previous }
+                                ) { ConfigRepository.setGlobalLiteMode(newState) }
+                            }
+                        }
                     )
-                    AospConnectedGroup(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        AospPreferenceSwitch(
-                            index = 0,
-                            count = 3,
-                            icon = Icons.Rounded.BatterySaver,
-                            title = stringResource(R.string.tweaks_lite_mode),
-                            subtitle = localizedLabel(
-                                "Batasi clock CPU untuk suhu lebih adem dan hemat daya",
-                                "Limit CPU clock for cooler thermals and power saving"
-                            ),
-                            checked = isGlobalLiteMode,
-                            onCheckedChange = { newState ->
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                val previous = isGlobalLiteMode
-                                isGlobalLiteMode = newState
-                                coroutineScope.launch {
-                                    applyTweakChange(
-                                        snackbarHostState = snackbarHostState,
-                                        errorMessage = applyFailedText,
-                                        revert = { isGlobalLiteMode = previous }
-                                    ) { ConfigRepository.setGlobalLiteMode(newState) }
-                                }
-                            }
-                        )
 
-                        AospPreferenceItem(
-                            index = 1,
-                            count = 3,
-                            icon = Icons.Rounded.Speed,
-                            title = stringResource(R.string.tweaks_refresh_rate),
-                            subtitle = currentRrText,
-                            highlightSubtitle = true,
-                            onClick = { showRefreshRateSheet = true },
-                            trailing = { AospChevron() }
-                        )
+                    ConnectedTweakActionRow(
+                        index = 1,
+                        count = 3,
+                        icon = Icons.Rounded.Speed,
+                        title = stringResource(R.string.tweaks_refresh_rate),
+                        subtitle = currentRrText,
+                        highlightSubtitle = true,
+                        onClick = { showRefreshRateSheet = true }
+                    )
 
-                        AospPreferenceItem(
-                            index = 2,
-                            count = 3,
-                            icon = if (isGlobalTextureEnabled) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
-                            title = stringResource(R.string.tweaks_renderer),
-                            subtitle = effectiveRendererText,
-                            highlightSubtitle = !isGlobalTextureEnabled,
-                            enabled = !isGlobalTextureEnabled,
-                            onClick = { showRenderSheet = true },
-                            trailing = {
-                                if (!isGlobalTextureEnabled) {
-                                    AospChevron()
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Lock,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-                        )
-                    }
+                    ConnectedTweakActionRow(
+                        index = 2,
+                        count = 3,
+                        icon = if (isGlobalTextureEnabled) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
+                        title = stringResource(R.string.tweaks_renderer),
+                        subtitle = effectiveRendererText,
+                        highlightSubtitle = !isGlobalTextureEnabled,
+                        enabled = !isGlobalTextureEnabled,
+                        onClick = { showRenderSheet = true }
+                    )
                 }
             }
 
             item(key = "additional") {
-                Column {
-                    AospSectionHeader(title = stringResource(R.string.section_additional_tweaks))
-                    AospConnectedGroup(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        AospPreferenceItem(
-                            index = 0,
-                            count = 2,
-                            icon = Icons.Rounded.Memory,
-                            title = stringResource(R.string.tweak_memory_zram),
-                            subtitle = stringResource(R.string.tweak_memory_zram_desc),
-                            onClick = { inMemoryZramSubpage = true },
-                            trailing = { AospChevron() }
-                        )
+                ConnectedSectionGroup(
+                    title = stringResource(R.string.section_additional_tweaks)
+                ) {
+                    ConnectedTweakActionRow(
+                        index = 0,
+                        count = 2,
+                        icon = Icons.Rounded.Memory,
+                        title = stringResource(R.string.tweak_memory_zram),
+                        subtitle = stringResource(R.string.tweak_memory_zram_desc),
+                        onClick = { inMemoryZramSubpage = true }
+                    )
 
-                        AospPreferenceItem(
-                            index = 1,
-                            count = 2,
-                            icon = Icons.Rounded.Storage,
-                            title = stringResource(R.string.tweak_io_scheduler),
-                            subtitle = currentIoScheduler,
-                            highlightSubtitle = true,
-                            onClick = { showIoSchedulerSheet = true },
-                            trailing = { AospChevron() }
-                        )
-                    }
+                    ConnectedTweakActionRow(
+                        index = 1,
+                        count = 2,
+                        icon = Icons.Rounded.Storage,
+                        title = stringResource(R.string.tweak_io_scheduler),
+                        subtitle = currentIoScheduler,
+                        highlightSubtitle = true,
+                        onClick = { showIoSchedulerSheet = true }
+                    )
                 }
             }
 
@@ -566,64 +576,280 @@ fun TweaksScreen(
                     )
                 }
 
-                Column {
-                    AospSectionHeader(title = stringResource(R.string.section_utility_diagnostics))
-                    AospConnectedGroup(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        AospPreferenceItem(
-                            index = 0,
-                            count = 4,
-                            icon = Icons.Rounded.Speed,
-                            title = "Floating HUD",
-                            subtitle = telemetrySubtitle,
-                            highlightSubtitle = fpsConfig.enabled,
-                            onClick = {
-                                if (onOpenFloatingHud != null) {
-                                    onOpenFloatingHud()
-                                } else {
-                                    inFloatingFpsSubpage = true
-                                }
-                            },
-                            trailing = { AospChevron() }
-                        )
+                ConnectedSectionGroup(
+                    title = stringResource(R.string.section_utility_diagnostics)
+                ) {
+                    ConnectedTweakActionRow(
+                        index = 0,
+                        count = 4,
+                        icon = Icons.Rounded.Speed,
+                        title = "Floating HUD",
+                        subtitle = telemetrySubtitle,
+                        highlightSubtitle = fpsConfig.enabled,
+                        onClick = {
+                            if (onOpenFloatingHud != null) {
+                                onOpenFloatingHud()
+                            } else {
+                                inFloatingFpsSubpage = true
+                            }
+                        }
+                    )
 
-                        AospPreferenceItem(
-                            index = 1,
-                            count = 4,
-                            icon = Icons.Rounded.Insights,
-                            title = localizedLabel("Statistik Sesi", "Session Stats"),
-                            subtitle = localizedLabel(
-                                "Riwayat FPS, stabilitas frame & suhu saat bermain",
-                                "FPS history, frame stability & thermal logs during gameplay"
+                    ConnectedTweakActionRow(
+                        index = 1,
+                        count = 4,
+                        icon = Icons.Rounded.Insights,
+                        title = localizedLabel("Statistik Sesi", "Session Stats"),
+                        subtitle = localizedLabel(
+                            "Riwayat FPS, stabilitas frame & suhu saat bermain",
+                            "FPS history, frame stability & thermal logs during gameplay"
+                        ),
+                        onClick = {
+                            if (onOpenSessionStats != null) {
+                                onOpenSessionStats()
+                            } else {
+                                inSessionStatsSubpage = true
+                            }
+                        }
+                    )
+
+                    ConnectedTweakActionRow(
+                        index = 2,
+                        count = 4,
+                        icon = Icons.Rounded.DeveloperBoard,
+                        title = stringResource(R.string.hardware_diag_title),
+                        subtitle = stringResource(R.string.hardware_diag_desc),
+                        onClick = { inHardwareDiagnosticSubpage = true }
+                    )
+
+                    ConnectedTweakActionRow(
+                        index = 3,
+                        count = 4,
+                        icon = Icons.Rounded.Widgets,
+                        title = stringResource(R.string.utility_screen_title),
+                        subtitle = stringResource(R.string.utility_screen_desc),
+                        onClick = { inUtilitySubpage = true }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TweaksCollapsingTopBar(
+    title: String,
+    scrollBehavior: TopAppBarScrollBehavior
+) {
+    val collapsedFraction = scrollBehavior.state.collapsedFraction
+    val titleSize = (30f - (9f * collapsedFraction)).sp
+
+    LargeTopAppBar(
+        title = {
+            Text(
+                text = title,
+                fontSize = titleSize,
+                letterSpacing = (-0.3).sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
+        collapsedHeight = 56.dp,
+        expandedHeight = 96.dp,
+        windowInsets = WindowInsets.statusBars,
+        scrollBehavior = scrollBehavior,
+        colors = TopAppBarDefaults.largeTopAppBarColors(
+            containerColor = MaterialTheme.colorScheme.background,
+            scrolledContainerColor = MaterialTheme.colorScheme.background,
+            titleContentColor = MaterialTheme.colorScheme.onBackground
+        )
+    )
+}
+
+@Composable
+private fun TweakLeadingSquircle(
+    icon: ImageVector,
+    active: Boolean
+) {
+    val containerColor = if (active) {
+        MaterialTheme.colorScheme.secondaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerHigh
+    }
+    val iconTint = if (active) {
+        MaterialTheme.colorScheme.onSecondaryContainer
+    } else {
+        MaterialTheme.colorScheme.primary
+    }
+
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(RoundedCornerShape(13.dp))
+            .background(containerColor),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = iconTint,
+            modifier = Modifier.size(22.dp)
+        )
+    }
+}
+
+@Composable
+private fun <T> TweakSelectionBottomSheet(
+    title: String,
+    options: List<TweakSheetOption<T>>,
+    isSelected: (T) -> Boolean,
+    onSelect: (T) -> Unit,
+    onDismiss: () -> Unit,
+    subtitle: String? = null
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentWindowInsets = { WindowInsets(0.dp) },
+        dragHandle = {
+            BottomSheetDefaults.DragHandle(
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+            )
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = title,
+                    fontSize = 21.sp,
+                    lineHeight = 26.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                if (subtitle != null) {
+                    Text(
+                        text = subtitle,
+                        fontSize = 13.5.sp,
+                        lineHeight = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 440.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                if (options.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 28.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = localizedLabel(
+                                "Belum ada opsi tersedia",
+                                "No options available yet"
                             ),
-                            onClick = {
-                                if (onOpenSessionStats != null) {
-                                    onOpenSessionStats()
-                                } else {
-                                    inSessionStatsSubpage = true
+                            fontSize = 15.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    options.forEachIndexed { index, option ->
+                        val selected = isSelected(option.value)
+                        val rowContainer = if (selected) {
+                            MaterialTheme.colorScheme.secondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainer
+                        }
+                        val rowTextColor = if (selected) {
+                            MaterialTheme.colorScheme.onSecondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        }
+
+                        Surface(
+                            onClick = { onSelect(option.value) },
+                            shape = connectedContainerShape(
+                                index = index,
+                                count = options.size,
+                                outerRadius = 20.dp,
+                                innerRadius = 5.dp
+                            ),
+                            color = rowContainer,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .defaultMinSize(minHeight = 58.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 18.dp, vertical = 15.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier.size(24.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (selected) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(24.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.primary),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Check,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onPrimary,
+                                                modifier = Modifier.size(15.dp)
+                                            )
+                                        }
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(22.dp)
+                                                .border(
+                                                    width = 1.75.dp,
+                                                    color = MaterialTheme.colorScheme.outlineVariant,
+                                                    shape = CircleShape
+                                                )
+                                        )
+                                    }
                                 }
-                            },
-                            trailing = { AospChevron() }
-                        )
-
-                        AospPreferenceItem(
-                            index = 2,
-                            count = 4,
-                            icon = Icons.Rounded.DeveloperBoard,
-                            title = stringResource(R.string.hardware_diag_title),
-                            subtitle = stringResource(R.string.hardware_diag_desc),
-                            onClick = { inHardwareDiagnosticSubpage = true },
-                            trailing = { AospChevron() }
-                        )
-
-                        AospPreferenceItem(
-                            index = 3,
-                            count = 4,
-                            icon = Icons.Rounded.Widgets,
-                            title = stringResource(R.string.utility_screen_title),
-                            subtitle = stringResource(R.string.utility_screen_desc),
-                            onClick = { inUtilitySubpage = true },
-                            trailing = { AospChevron() }
-                        )
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Text(
+                                    text = option.label,
+                                    fontSize = 16.5.sp,
+                                    lineHeight = 22.sp,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    color = rowTextColor,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -635,9 +861,26 @@ fun TweaksScreen(
 internal fun connectedContainerShape(
     index: Int,
     count: Int,
-    outerRadius: Dp = aospGroupOuterRadius(),
+    outerRadius: Dp = 24.dp,
     innerRadius: Dp = 5.dp
-): Shape = aospConnectedShape(index = index, count = count, outerRadius = outerRadius)
+): Shape {
+    return when {
+        count <= 1 -> RoundedCornerShape(outerRadius)
+        index <= 0 -> RoundedCornerShape(
+            topStart = outerRadius,
+            topEnd = outerRadius,
+            bottomStart = innerRadius,
+            bottomEnd = innerRadius
+        )
+        index >= count - 1 -> RoundedCornerShape(
+            topStart = innerRadius,
+            topEnd = innerRadius,
+            bottomStart = outerRadius,
+            bottomEnd = outerRadius
+        )
+        else -> RoundedCornerShape(innerRadius)
+    }
+}
 
 @Composable
 internal fun ConnectedSectionGroup(
@@ -646,8 +889,22 @@ internal fun ConnectedSectionGroup(
     content: @Composable ColumnScope.() -> Unit
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
-        AospSectionHeader(title = title)
-        AospConnectedGroup(content = content)
+        Text(
+            text = title,
+            fontSize = 14.sp,
+            lineHeight = 18.sp,
+            letterSpacing = 0.2.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 6.dp, bottom = 10.dp)
+        )
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+            content = content
+        )
     }
 }
 
@@ -661,15 +918,59 @@ internal fun ConnectedTweakSwitchRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    AospPreferenceSwitch(
-        index = index,
-        count = count,
-        icon = icon,
-        title = title,
-        subtitle = subtitle,
-        checked = checked,
-        onCheckedChange = onCheckedChange
-    )
+    Surface(
+        onClick = { onCheckedChange(!checked) },
+        shape = connectedContainerShape(index = index, count = count),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 74.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TweakLeadingSquircle(
+                icon = icon,
+                active = checked
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontSize = 17.sp,
+                    lineHeight = 22.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = subtitle,
+                    fontSize = 13.5.sp,
+                    lineHeight = 18.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                thumbContent = {
+                    Icon(
+                        imageVector = if (checked) Icons.Rounded.Check else Icons.Rounded.Close,
+                        contentDescription = null,
+                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                    )
+                }
+            )
+        }
+    }
 }
 
 @Composable
@@ -683,17 +984,81 @@ internal fun ConnectedTweakActionRow(
     enabled: Boolean = true,
     highlightSubtitle: Boolean = false
 ) {
-    AospPreferenceItem(
-        index = index,
-        count = count,
-        icon = icon,
-        title = title,
-        subtitle = subtitle,
-        onClick = onClick,
-        enabled = enabled,
-        highlightSubtitle = highlightSubtitle,
-        trailing = { AospChevron() }
+    val haptic = LocalHapticFeedback.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed && enabled) 0.985f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "tweakActionRowScale"
     )
+
+    Surface(
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onClick()
+        },
+        enabled = enabled,
+        shape = connectedContainerShape(index = index, count = count),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        interactionSource = interactionSource,
+        modifier = Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 74.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .alpha(if (enabled) 1f else 0.55f)
+                .padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TweakLeadingSquircle(
+                icon = icon,
+                active = highlightSubtitle && enabled
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontSize = 17.sp,
+                    lineHeight = 22.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = subtitle,
+                    fontSize = 13.5.sp,
+                    lineHeight = 18.sp,
+                    fontWeight = if (highlightSubtitle) FontWeight.Medium else FontWeight.Normal,
+                    color = if (highlightSubtitle) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Icon(
+                imageVector = if (enabled) Icons.Rounded.ChevronRight else Icons.Rounded.Lock,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                modifier = Modifier.size(if (enabled) 22.dp else 20.dp)
+            )
+        }
+    }
 }
 
 @Composable
@@ -703,10 +1068,11 @@ internal fun NestedTweakCardGroup(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        AospSectionHeader(title = headerTitle)
-        AospConnectedGroup(content = content)
-    }
+    ConnectedSectionGroup(
+        title = headerTitle,
+        modifier = modifier,
+        content = content
+    )
 }
 
 @Composable
@@ -756,16 +1122,16 @@ internal fun NestedTweakCompactCard(
     modifier: Modifier = Modifier,
     enabled: Boolean = true
 ) {
-    AospPreferenceItem(
-        index = 0,
-        count = 1,
-        icon = icon,
-        title = title,
-        subtitle = value,
-        onClick = onClick,
-        enabled = enabled,
-        highlightSubtitle = enabled,
-        modifier = modifier,
-        trailing = { AospChevron() }
-    )
+    Box(modifier = modifier) {
+        ConnectedTweakActionRow(
+            index = 0,
+            count = 1,
+            icon = icon,
+            title = title,
+            subtitle = value,
+            onClick = onClick,
+            enabled = enabled,
+            highlightSubtitle = enabled
+        )
+    }
 }
