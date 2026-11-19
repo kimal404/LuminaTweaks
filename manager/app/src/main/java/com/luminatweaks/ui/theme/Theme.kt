@@ -69,6 +69,8 @@ private val FallbackDarkColorScheme = darkColorScheme(
     onSurface = DarkOnSurface,
     surfaceVariant = DarkSurfaceVariant,
     onSurfaceVariant = DarkOnSurfaceVariant,
+    surfaceContainerLowest = DarkSurfaceContainerLowest,
+    surfaceContainerLow = DarkSurfaceContainerLow,
     surfaceContainer = DarkSurfaceContainer,
     surfaceContainerHigh = DarkSurfaceContainerHigh,
     surfaceContainerHighest = DarkSurfaceContainerHighest,
@@ -90,6 +92,10 @@ private val FallbackLightColorScheme = lightColorScheme(
     onBackground = LightOnBackground,
     surface = LightSurface,
     onSurface = LightOnSurface,
+    surfaceContainerLowest = LightSurfaceContainerLowest,
+    surfaceContainerLow = LightSurfaceContainerLow,
+    surfaceContainer = LightSurfaceContainer,
+    surfaceContainerHigh = LightSurfaceContainerHigh,
     surfaceContainerHighest = LightSurfaceContainerHighest
 )
 

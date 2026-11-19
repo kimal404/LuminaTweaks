@@ -20,7 +20,6 @@ import android.content.Context
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,13 +36,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Memory
@@ -62,7 +59,6 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -85,13 +81,19 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.luminatweaks.R
-import com.luminatweaks.ui.theme.LocalCornerRadius
+import com.luminatweaks.ui.component.AospConnectedGroup
+import com.luminatweaks.ui.component.AospPreferenceSwitch
+import com.luminatweaks.ui.component.AospSectionHeader
+import com.luminatweaks.ui.component.LuminaBackButton
+import com.luminatweaks.ui.component.AospTopBar
 import java.util.Locale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -259,15 +261,13 @@ private fun FpsViewportStage(
     heightDp: Int
 ) {
     val gridColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
-    val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(heightDp.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.background)
-            .border(1.dp, borderColor, RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clipToBounds()
             .padding(12.dp)
     ) {
@@ -317,7 +317,7 @@ private fun FpsOverlayPreviewBadge(
         label = "fpsStatusColor"
     )
     val isMinimal = config.style == FpsOverlayStyle.MINIMAL
-    val containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(
+    val containerColor = MaterialTheme.colorScheme.surface.copy(
         alpha = if (isMinimal) (config.bgAlpha * 0.80f).coerceIn(0.25f, 0.92f) else config.bgAlpha
     )
     val textColor = MaterialTheme.colorScheme.onSurface
@@ -336,7 +336,8 @@ private fun FpsOverlayPreviewBadge(
 
     Surface(
         shape = cardShape,
-        color = containerColor
+        color = containerColor,
+        shadowElevation = 3.dp
     ) {
         Column(
             modifier = Modifier.padding(
@@ -357,8 +358,7 @@ private fun FpsOverlayPreviewBadge(
                         Spacer(modifier = Modifier.width(7.dp))
                         Text(
                             text = "${telemetry.fps}",
-                            style = if (isMinimal) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.ExtraBold,
+                            style = if (isMinimal) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLargeEmphasized,
                             color = statusColor,
                             maxLines = 1
                         )
@@ -392,8 +392,8 @@ private fun FpsOverlayPreviewBadge(
             lines.forEach { itemText ->
                 Text(
                     text = itemText,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
                     color = textColor,
                     maxLines = 1
                 )
@@ -465,161 +465,167 @@ internal fun TelemetryOverlayScreen(
         intervalMs = config.intervalMs,
         active = true
     )
-    val innerRadius = (LocalCornerRadius.current * 0.78f).coerceIn(16.dp, 24.dp)
     var scaleDraft by remember(config.scale) { mutableFloatStateOf(config.scale) }
     var alphaDraft by remember(config.bgAlpha) { mutableFloatStateOf(config.bgAlpha) }
 
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         contentWindowInsets = WindowInsets(0.dp),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Floating HUD",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                navigationIcon = {
-                    Surface(
-                        onClick = onBack,
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        modifier = Modifier
-                            .padding(start = 12.dp, end = 6.dp)
-                            .size(40.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Rounded.ArrowBack,
-                                contentDescription = stringResource(R.string.setup_back),
-                                modifier = Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                },
-                windowInsets = WindowInsets.statusBars,
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
+            AospTopBar(
+                title = "Floating HUD",
+                subtitle = localizedLabel("Overlay metrik real-time", "Real-time metrics overlay"),
+                scrollBehavior = scrollBehavior,
+                navigationIcon = { LuminaBackButton(onBack = onBack, contentDescription = stringResource(R.string.setup_back)) }
             )
         }
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding() + 6.dp,
-                bottom = 32.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
-                start = 16.dp,
-                end = 16.dp
+                top = innerPadding.calculateTopPadding() + 4.dp,
+                bottom = 24.dp + navInset,
+                start = 0.dp,
+                end = 0.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item(key = "preview_stage") {
-                NestedTweakCardGroup(
-                    headerIcon = Icons.Rounded.Speed,
-                    headerTitle = localizedLabel("Pratinjau & Gaya", "Preview & Style")
-                ) {
-                    FpsViewportStage(
-                        config = config,
-                        telemetry = telemetry,
-                        heightDp = 156
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FpsOverlayStyle.entries.forEachIndexed { index, style ->
-                            val shapes = when (index) {
-                                0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
-                                FpsOverlayStyle.entries.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
-                                else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
-                            }
-                            ToggleButton(
-                                checked = config.style == style,
-                                onCheckedChange = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    onConfigChange(config.copy(style = style))
-                                },
-                                shapes = shapes,
-                                modifier = Modifier.weight(1f)
+                Column {
+                    AospSectionHeader(title = localizedLabel("Pratinjau & Gaya", "Preview & Style"))
+                    AospConnectedGroup(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        Surface(
+                            shape = RoundedCornerShape(22.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainer,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Text(
-                                    text = fpsStyleLabel(style),
-                                    style = MaterialTheme.typography.labelLarge,
-                                    maxLines = 1
+                                FpsViewportStage(
+                                    config = config,
+                                    telemetry = telemetry,
+                                    heightDp = 150
                                 )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    FpsOverlayStyle.entries.forEachIndexed { index, style ->
+                                        val shapes = when (index) {
+                                            0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                                            FpsOverlayStyle.entries.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                                            else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
+                                        }
+                                        ToggleButton(
+                                            checked = config.style == style,
+                                            onCheckedChange = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                onConfigChange(config.copy(style = style))
+                                            },
+                                            shapes = shapes,
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text(
+                                                text = fpsStyleLabel(style),
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+                                }
                             }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(5.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainer,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            AospPreferenceSwitch(
+                                index = 0,
+                                count = 1,
+                                icon = Icons.Rounded.Speed,
+                                title = localizedLabel("Aktifkan Floating HUD", "Enable Floating HUD"),
+                                subtitle = if (config.enabled) {
+                                    localizedLabel("Tampilkan overlay di atas aplikasi", "Display overlay above apps")
+                                } else {
+                                    localizedLabel("Nonaktif", "Disabled")
+                                },
+                                checked = config.enabled,
+                                onCheckedChange = { enabled ->
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onConfigChange(config.copy(enabled = enabled))
+                                }
+                            )
                         }
                     }
-
-                    NestedTweakSwitchItem(
-                        icon = Icons.Rounded.Speed,
-                        title = localizedLabel("Aktifkan Floating HUD", "Enable Floating HUD"),
-                        subtitle = if (config.enabled) {
-                            localizedLabel("Tampilkan overlay di atas aplikasi", "Display overlay above apps")
-                        } else {
-                            localizedLabel("Nonaktif", "Disabled")
-                        },
-                        checked = config.enabled,
-                        onCheckedChange = { enabled ->
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            onConfigChange(config.copy(enabled = enabled))
-                        }
-                    )
                 }
             }
 
             item(key = "automation_position") {
-                NestedTweakCardGroup(
-                    headerIcon = Icons.Rounded.SportsEsports,
-                    headerTitle = localizedLabel("Otomatisasi & Posisi", "Automation & Position")
-                ) {
-                    NestedTweakSwitchItem(
-                        icon = Icons.Rounded.SportsEsports,
-                        title = localizedLabel("Deteksi Game Otomatis", "Automatic Game Detection"),
-                        subtitle = localizedLabel(
-                            "Aktif otomatis saat menjalankan aplikasi dalam daftar game",
-                            "Activate automatically when running apps in the game list"
-                        ),
-                        checked = config.autoGame,
-                        onCheckedChange = { autoGame ->
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            onConfigChange(config.copy(autoGame = autoGame))
-                        }
-                    )
+                Column {
+                    AospSectionHeader(title = localizedLabel("Otomatisasi & Posisi", "Automation & Position"))
+                    AospConnectedGroup(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        AospPreferenceSwitch(
+                            index = 0,
+                            count = 2,
+                            icon = Icons.Rounded.SportsEsports,
+                            title = localizedLabel("Deteksi Game Otomatis", "Automatic Game Detection"),
+                            subtitle = localizedLabel(
+                                "Aktif otomatis saat menjalankan aplikasi dalam daftar game",
+                                "Activate automatically when running apps in the game list"
+                            ),
+                            checked = config.autoGame,
+                            onCheckedChange = { autoGame ->
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onConfigChange(config.copy(autoGame = autoGame))
+                            }
+                        )
 
-                    NestedTweakSwitchItem(
-                        icon = Icons.Rounded.Lock,
-                        title = localizedLabel("Kunci Sentuhan", "Touch Pass-Through"),
-                        subtitle = localizedLabel(
-                            "Teruskan sentuhan ke layar di bawah overlay",
-                            "Pass touch input through to the screen beneath"
-                        ),
-                        checked = config.touchLock,
-                        onCheckedChange = { touchLock ->
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            onConfigChange(config.copy(touchLock = touchLock))
-                        }
-                    )
+                        AospPreferenceSwitch(
+                            index = 1,
+                            count = 2,
+                            icon = Icons.Rounded.Lock,
+                            title = localizedLabel("Kunci Sentuhan", "Touch Pass-Through"),
+                            subtitle = localizedLabel(
+                                "Teruskan sentuhan ke layar di bawah overlay",
+                                "Pass touch input through to the screen beneath"
+                            ),
+                            checked = config.touchLock,
+                            onCheckedChange = { touchLock ->
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onConfigChange(config.copy(touchLock = touchLock))
+                            }
+                        )
+                    }
 
                     Surface(
-                        shape = RoundedCornerShape(innerRadius),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        modifier = Modifier.fillMaxWidth()
+                        shape = RoundedCornerShape(24.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Text(
                                 text = localizedLabel("Posisi Awal", "Initial Anchor"),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             FlowRow(
@@ -636,7 +642,8 @@ internal fun TelemetryOverlayScreen(
                                         label = {
                                             Text(
                                                 text = fpsCornerLabel(corner),
-                                                style = MaterialTheme.typography.labelLarge
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Medium
                                             )
                                         }
                                     )
@@ -648,25 +655,25 @@ internal fun TelemetryOverlayScreen(
             }
 
             item(key = "appearance_metrics") {
-                NestedTweakCardGroup(
-                    headerIcon = Icons.Rounded.Palette,
-                    headerTitle = localizedLabel("Tampilan & Metrik", "Appearance & Metrics")
-                ) {
+                Column {
+                    AospSectionHeader(title = localizedLabel("Tampilan & Metrik", "Appearance & Metrics"))
                     Surface(
-                        shape = RoundedCornerShape(innerRadius),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        modifier = Modifier.fillMaxWidth()
+                        shape = RoundedCornerShape(24.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Text(
                                 text = localizedLabel("Metrik Aktif", "Active Metrics"),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             FlowRow(
@@ -759,85 +766,111 @@ internal fun TelemetryOverlayScreen(
                     }
 
                     Surface(
-                        shape = RoundedCornerShape(innerRadius),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        modifier = Modifier.fillMaxWidth()
+                        shape = RoundedCornerShape(24.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            FpsSliderRow(
-                                label = localizedLabel("Skala HUD", "HUD Scale"),
-                                valueText = "${(scaleDraft * 100).roundToInt()}%",
-                                value = scaleDraft,
-                                valueRange = 0.8f..1.3f,
-                                onValueChange = { scaleDraft = it },
-                                onValueChangeFinished = {
-                                    onConfigChange(config.copy(scale = scaleDraft))
-                                }
-                            )
-
-                            FpsSliderRow(
-                                label = localizedLabel("Opasitas Latar", "Background Opacity"),
-                                valueText = "${(alphaDraft * 100).roundToInt()}%",
-                                value = alphaDraft,
-                                valueRange = 0.25f..1.0f,
-                                onValueChange = { alphaDraft = it },
-                                onValueChangeFinished = {
-                                    onConfigChange(config.copy(bgAlpha = alphaDraft))
-                                }
-                            )
-
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Palette,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
                                     Text(
-                                        text = localizedLabel("Interval Sampling", "Sampling Interval"),
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
+                                        text = localizedLabel("Ukuran & Opasitas", "Size & Opacity"),
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
-                                    Text(
-                                        text = "${config.intervalMs} ms",
-                                        style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
                                 }
-                                val intervals = listOf(250, 500, 1000)
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    intervals.forEachIndexed { index, ms ->
-                                        val shapes = when (index) {
-                                            0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
-                                            intervals.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
-                                            else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
-                                        }
-                                        ToggleButton(
-                                            checked = config.intervalMs == ms,
-                                            onCheckedChange = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                onConfigChange(config.copy(intervalMs = ms))
-                                            },
-                                            shapes = shapes,
-                                            modifier = Modifier.weight(1f)
-                                        ) {
-                                            Text(
-                                                text = "$ms ms",
-                                                style = MaterialTheme.typography.labelMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                maxLines = 1,
-                                                softWrap = false,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
+
+                                FpsSliderRow(
+                                    label = localizedLabel("Skala HUD", "HUD Scale"),
+                                    valueText = "${(scaleDraft * 100).roundToInt()}%",
+                                    value = scaleDraft,
+                                    valueRange = 0.8f..1.3f,
+                                    onValueChange = { scaleDraft = it },
+                                    onValueChangeFinished = {
+                                        onConfigChange(config.copy(scale = scaleDraft))
+                                    }
+                                )
+
+                                FpsSliderRow(
+                                    label = localizedLabel("Opasitas Latar", "Background Opacity"),
+                                    valueText = "${(alphaDraft * 100).roundToInt()}%",
+                                    value = alphaDraft,
+                                    valueRange = 0.25f..1.0f,
+                                    onValueChange = { alphaDraft = it },
+                                    onValueChangeFinished = {
+                                        onConfigChange(config.copy(bgAlpha = alphaDraft))
+                                    }
+                                )
+
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = localizedLabel("Interval Sampling", "Sampling Interval"),
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "${config.intervalMs} ms",
+                                            fontSize = 13.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    val intervals = listOf(250, 500, 1000)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        intervals.forEachIndexed { index, ms ->
+                                            val shapes = when (index) {
+                                                0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                                                intervals.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                                                else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
+                                            }
+                                            ToggleButton(
+                                                checked = config.intervalMs == ms,
+                                                onCheckedChange = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                    onConfigChange(config.copy(intervalMs = ms))
+                                                },
+                                                shapes = shapes,
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Text(
+                                                    text = "$ms ms",
+                                                    fontSize = 13.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    maxLines = 1,
+                                                    softWrap = false,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -867,13 +900,13 @@ private fun FpsSliderRow(
         ) {
             Text(
                 text = label,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
                 text = valueText,
-                style = MaterialTheme.typography.labelLarge,
+                fontSize = 13.5.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )

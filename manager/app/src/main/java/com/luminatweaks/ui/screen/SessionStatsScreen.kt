@@ -30,9 +30,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -51,14 +49,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.DeleteSweep
@@ -82,7 +78,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -109,14 +104,20 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.LuminaBridge
+import com.luminatweaks.ui.component.AospSectionHeader
+import com.luminatweaks.ui.component.AospStatusPill
+import com.luminatweaks.ui.component.LuminaBackButton
+import com.luminatweaks.ui.component.AospTopBar
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import java.io.File
 import java.text.SimpleDateFormat
@@ -622,131 +623,129 @@ internal fun SessionStatsScreen(
                 }
             )
         } else {
-            val outerRadius = LocalCornerRadius.current.coerceAtLeast(24.dp)
-            val bottomPadding = 24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+            val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+            val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
             Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
-        topBar = {
-            TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = localizedLabel("Statistik Sesi", "Session Stats"),
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = null
-                        )
-                    }
-                },
-                actions = {
-                    if (sessions.isNotEmpty()) {
-                        IconButton(onClick = { showClearDialog = true }) {
-                            Icon(
-                                imageVector = Icons.Rounded.DeleteSweep,
-                                contentDescription = localizedLabel("Hapus riwayat", "Clear history")
-                            )
+                modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+                contentWindowInsets = WindowInsets(0.dp),
+                containerColor = MaterialTheme.colorScheme.background,
+                topBar = {
+                    AospTopBar(
+                        title = localizedLabel("Statistik Sesi", "Session Stats"),
+                        subtitle = localizedLabel("Riwayat performa permainan", "Gameplay performance history"),
+                        scrollBehavior = scrollBehavior,
+                        navigationIcon = {
+                            LuminaBackButton(onBack = onBack, contentDescription = null)
+                        },
+                        actions = {
+                            if (sessions.isNotEmpty()) {
+                                IconButton(onClick = { showClearDialog = true }) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.DeleteSweep,
+                                        contentDescription = localizedLabel("Hapus riwayat", "Clear history"),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
                         }
-                    }
-                },
-                windowInsets = WindowInsets.statusBars,
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
-            )
-        }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding() + 6.dp,
-                bottom = bottomPadding,
-                start = 16.dp,
-                end = 16.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            when {
-                isLoading -> {
-                    item(key = "loading_state") {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 48.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(strokeWidth = 2.5.dp)
-                        }
-                    }
+                    )
                 }
-                sessions.isEmpty() -> {
-                item(key = "empty_state") {
-                    Surface(
-                        shape = RoundedCornerShape(outerRadius),
-                        color = MaterialTheme.colorScheme.surfaceContainer,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 24.dp, vertical = 36.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(52.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.SportsEsports,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(26.dp)
+            ) { innerPadding ->
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        top = innerPadding.calculateTopPadding() + 4.dp,
+                        bottom = 24.dp + navInset,
+                        start = 0.dp,
+                        end = 0.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    when {
+                        isLoading -> {
+                            item(key = "loading_state") {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 48.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(strokeWidth = 2.5.dp)
+                                }
+                            }
+                        }
+                        sessions.isEmpty() -> {
+                            item(key = "empty_state") {
+                                Surface(
+                                    shape = RoundedCornerShape(24.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainer,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 24.dp, vertical = 36.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(52.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.primaryContainer),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.SportsEsports,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                modifier = Modifier.size(26.dp)
+                                            )
+                                        }
+                                        Text(
+                                            text = localizedLabel("Belum Ada Hasil Rekaman", "No Recorded Sessions"),
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = localizedLabel(
+                                                "Aktifkan sakelar Rekam Statistik Sesi di Profil Aplikasi, lalu mainkan game untuk mulai mencatat.",
+                                                "Enable the recording toggle inside your chosen App Profile, then play a session."
+                                            ),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        else -> {
+                            item(key = "history_header") {
+                                AospSectionHeader(
+                                    title = localizedLabel("Riwayat Sesi", "Session History")
                                 )
                             }
-                            Text(
-                                text = localizedLabel("Belum Ada Hasil Rekaman", "No Recorded Sessions"),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = localizedLabel(
-                                    "Aktifkan sakelar Rekam Statistik Sesi di Profil Aplikasi, lalu mainkan game untuk mulai mencatat.",
-                                    "Enable the recording toggle inside your chosen App Profile, then play a session."
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            items(sessions, key = { it.id }) { session ->
+                                SessionHistoryCard(
+                                    session = session,
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        selectedSession = session
+                                    },
+                                    modifier = Modifier
+                                        .padding(horizontal = 16.dp)
+                                        .animateItem()
+                                )
+                            }
                         }
                     }
-                }
-            } else -> {
-                items(sessions, key = { it.id }) { session ->
-                    SessionHistoryCard(
-                        session = session,
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            selectedSession = session
-                        },
-                        modifier = Modifier.animateItem()
-                    )
                 }
             }
         }
-        }
-    }
-    }
     }
 }
 
@@ -757,21 +756,6 @@ private fun SessionHistoryCard(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val outerRadius = LocalCornerRadius.current.coerceAtLeast(24.dp)
-    val innerRadius = (LocalCornerRadius.current * 0.75f).coerceIn(14.dp, 22.dp)
-
-    // Draw-phase press feedback: scaling through graphicsLayer never triggers
-    // recomposition or relayout, so the 120 Hz scroll stays untouched.
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val pressScale by animateFloatAsState(
-        targetValue = if (pressed) 0.975f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "sessionCardPress"
-    )
 
     val appIcon by produceState<ImageBitmap?>(initialValue = null, session.packageName) {
         value = withContext(Dispatchers.IO) {
@@ -789,25 +773,15 @@ private fun SessionHistoryCard(
     }
 
     Surface(
-        shape = RoundedCornerShape(outerRadius),
+        onClick = onClick,
+        shape = RoundedCornerShape(22.dp),
         color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = modifier
-            .fillMaxWidth()
-            .graphicsLayer {
-                scaleX = pressScale
-                scaleY = pressScale
-            }
-            .clip(RoundedCornerShape(outerRadius))
-            .clickable(
-                interactionSource = interactionSource,
-                indication = LocalIndication.current,
-                onClick = onClick
-            )
+        modifier = modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(start = 14.dp, top = 14.dp, end = 14.dp, bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
@@ -821,13 +795,13 @@ private fun SessionHistoryCard(
                         contentDescription = null,
                         modifier = Modifier
                             .size(44.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(14.dp))
                     )
                 } else {
                     Box(
                         modifier = Modifier
                             .size(44.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(14.dp))
                             .background(MaterialTheme.colorScheme.primaryContainer),
                         contentAlignment = Alignment.Center
                     ) {
@@ -843,87 +817,74 @@ private fun SessionHistoryCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = session.appName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.5.sp,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = "${formatSessionDate(session.startTimeMs)} · ${formatClockDuration(session.durationSec)}",
-                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 12.5.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1
                     )
                 }
 
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.secondaryContainer
-                ) {
-                    Text(
-                        text = session.profile.replaceFirstChar { it.uppercase() },
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                }
+                AospStatusPill(
+                    text = session.profile.replaceFirstChar { it.uppercase() },
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                )
             }
 
-            Surface(
-                shape = RoundedCornerShape(innerRadius),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                modifier = Modifier.fillMaxWidth()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = String.format(Locale.US, "%.1f", session.avgFps),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = fpsColor
-                        )
-                        Text(
-                            text = localizedLabel("Rata-rata FPS", "Average FPS"),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                Column {
+                    Text(
+                        text = String.format(Locale.US, "%.1f", session.avgFps),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = fpsColor
+                    )
+                    Text(
+                        text = localizedLabel("Rata-rata FPS", "Average FPS"),
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "${session.onePercentLowFps.roundToInt()} / ${session.minFps}",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "1% Low / Min",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "${session.onePercentLowFps.roundToInt()} / ${session.minFps}",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "1% Low / Min",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = String.format(Locale.US, "%.2f W", session.avgPowerMw / 1000f),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = String.format(Locale.US, "Bat %.1f°C", session.peakBatteryTempC),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = String.format(Locale.US, "%.2f W", session.avgPowerMw / 1000f),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = String.format(Locale.US, "Bat %.1f°C", session.peakBatteryTempC),
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -952,33 +913,19 @@ private fun SessionDetailScreen(
         }
     }
 
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         contentWindowInsets = WindowInsets(0.dp),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = session.appName,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = formatSessionDate(session.startTimeMs),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
+            AospTopBar(
+                title = session.appName,
+                subtitle = formatSessionDate(session.startTimeMs),
+                scrollBehavior = scrollBehavior,
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = null
-                        )
-                    }
+                    LuminaBackButton(onBack = onBack, contentDescription = null)
                 },
                 actions = {
                     PressableIconButton(onClick = onExportCsv) {
@@ -995,11 +942,7 @@ private fun SessionDetailScreen(
                             tint = MaterialTheme.colorScheme.error
                         )
                     }
-                },
-                windowInsets = WindowInsets.statusBars,
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
+                }
             )
         }
     ) { innerPadding ->

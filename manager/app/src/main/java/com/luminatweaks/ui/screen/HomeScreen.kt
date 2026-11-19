@@ -22,11 +22,11 @@ package com.luminatweaks.ui.screen
 
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
-import com.luminatweaks.service.FloatingFpsService
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -39,24 +39,15 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -68,7 +59,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
@@ -77,41 +67,33 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.MenuBook
+import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonGroupDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.ToggleButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -126,37 +108,34 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Outline
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.asComposePath
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.graphics.shapes.Morph
-import androidx.graphics.shapes.toPath
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import com.luminatweaks.R
 import com.luminatweaks.data.DaemonManager
+import com.luminatweaks.service.FloatingFpsService
+import com.luminatweaks.ui.component.AospChevron
+import com.luminatweaks.ui.component.AospConnectedGroup
+import com.luminatweaks.ui.component.AospMetricTile
+import com.luminatweaks.ui.component.AospPreferenceItem
+import com.luminatweaks.ui.component.AospSectionHeader
+import com.luminatweaks.ui.component.AospStatusPill
 import com.luminatweaks.ui.component.LuminaBottomBar
+import com.luminatweaks.ui.component.AospTopBar
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.ui.theme.LocalPageTransition
@@ -200,8 +179,8 @@ private fun readSystemProperty(key: String): String? {
 @Composable
 fun getConnectedContainerShape(
     position: ContainerPosition,
-    outerRadius: Dp = LocalCornerRadius.current,
-    innerRadius: Dp = if (outerRadius <= 4.dp) outerRadius else 4.dp
+    outerRadius: androidx.compose.ui.unit.Dp = LocalCornerRadius.current,
+    innerRadius: androidx.compose.ui.unit.Dp = if (outerRadius <= 4.dp) outerRadius else 4.dp
 ): RoundedCornerShape {
     return when (position) {
         ContainerPosition.Top -> RoundedCornerShape(
@@ -226,9 +205,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
     val context = LocalContext.current
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { 4 })
     val tabScope = rememberCoroutineScope()
-    // The bar indicator follows the tapped tab immediately. It is only synced
-    // back to the pager for manual swipes, so a far jump never lights up the
-    // tabs that are merely crossed by the scroll animation.
     var targetTab by remember { mutableIntStateOf(0) }
     var isNavigating by remember { mutableStateOf(false) }
     var navigationToken by remember { mutableIntStateOf(0) }
@@ -242,8 +218,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                 try {
                     val current = pagerState.currentPage
                     if (abs(index - current) > 1) {
-                        // Skip the intermediate page so a long jump does not
-                        // animate through the heavy apps list at full cost.
                         pagerState.scrollToPage(
                             if (index > current) index - 1 else index + 1
                         )
@@ -341,8 +315,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
         }
 
         withContext(Dispatchers.IO) {
-            // Never start root/su checks while a page transition is in
-            // flight; the pager may have just re-entered the dashboard.
             while (pagerState.isScrollInProgress && isActive) {
                 delay(100L)
             }
@@ -362,8 +334,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                 val currentTemp = DeviceUtil.getBatteryTemperature(context)
                 val propProfile = readSystemProperty("sys.lumina.profile")
                 val status = DaemonManager.getStatus()
-                // The stopped-daemon fallback shells out through su. Throttle it
-                // to every 4th poll instead of spawning su every 2.5s.
                 val checkFallback = status.pid == null && fallbackChecks % 4 == 0
                 fallbackChecks++
                 val rebootNeeded = when {
@@ -450,7 +420,7 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                     )
                 }
             },
-            shape = RoundedCornerShape(currentRadius.coerceAtLeast(16.dp)),
+            shape = RoundedCornerShape(currentRadius.coerceAtLeast(24.dp)),
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     }
@@ -764,18 +734,18 @@ fun HomeDashboardContent(
     onRestartDaemon: suspend () -> Unit,
     onNavigateToPersonalisasi: () -> Unit
 ) {
-    val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     var isRestarting by remember { mutableStateOf(false) }
     var showPowerDialog by remember { mutableStateOf(false) }
     val isRunning = daemonPid != null
 
+    val restartScope = rememberCoroutineScope()
     val launchRestart: () -> Unit = {
         if (!isRestarting) {
             isRestarting = true
             Toast.makeText(context, context.getString(R.string.toast_restarting_service), Toast.LENGTH_SHORT).show()
-            coroutineScope.launch {
+            restartScope.launch {
                 onRestartDaemon()
                 isRestarting = false
             }
@@ -804,42 +774,30 @@ fun HomeDashboardContent(
             text = {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    PowerMenuItem(
+                    PowerActionRow(
                         icon = Icons.Rounded.Refresh,
-                        iconBg = MaterialTheme.colorScheme.primary,
-                        iconTint = MaterialTheme.colorScheme.onPrimary,
                         title = stringResource(R.string.power_action_reboot),
                         onClick = {
                             showPowerDialog = false
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             Toast.makeText(context, context.getString(R.string.toast_rebooting_device), Toast.LENGTH_SHORT).show()
-                            coroutineScope.launch {
-                                RootUtil.rebootDevice("")
-                            }
+                            restartScope.launch { rootReboot("") }
                         }
                     )
-
-                    PowerMenuItem(
+                    PowerActionRow(
                         icon = Icons.Rounded.Memory,
-                        iconBg = MaterialTheme.colorScheme.secondaryContainer,
-                        iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
                         title = stringResource(R.string.power_action_recovery),
                         onClick = {
                             showPowerDialog = false
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             Toast.makeText(context, context.getString(R.string.toast_rebooting_recovery), Toast.LENGTH_SHORT).show()
-                            coroutineScope.launch {
-                                RootUtil.rebootDevice("recovery")
-                            }
+                            restartScope.launch { rootReboot("recovery") }
                         }
                     )
-
-                    PowerMenuItem(
+                    PowerActionRow(
                         icon = Icons.Rounded.PowerSettingsNew,
-                        iconBg = MaterialTheme.colorScheme.tertiaryContainer,
-                        iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
                         title = stringResource(R.string.power_action_restart_service),
                         onClick = {
                             showPowerDialog = false
@@ -858,30 +816,38 @@ fun HomeDashboardContent(
                     )
                 }
             },
-            shape = RoundedCornerShape(currentRadius.coerceAtLeast(22.dp)),
+            shape = RoundedCornerShape(currentRadius.coerceAtLeast(24.dp)),
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     }
 
     val isFloating = LocalFloatingNavBar.current
     val bottomPadding = if (isFloating) {
-        108.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        104.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     } else {
-        20.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     }
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         contentWindowInsets = WindowInsets(0.dp),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = stringResource(R.string.app_name),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
+            AospTopBar(
+                title = stringResource(R.string.app_name),
+                subtitle = homeLocalizedLabel("Dasbor performa", "Performance dashboard"),
+                scrollBehavior = scrollBehavior,
                 actions = {
+                    if (isRunning && !isRestarting) {
+                        IconButton(onClick = { launchRestart() }) {
+                            Icon(
+                                imageVector = Icons.Rounded.Refresh,
+                                contentDescription = stringResource(R.string.power_action_restart_service),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                     CoreStatusIndicator(
                         isChecking = isChecking,
                         isRestarting = isRestarting,
@@ -891,77 +857,81 @@ fun HomeDashboardContent(
                             showPowerDialog = true
                         }
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                },
-                windowInsets = WindowInsets.statusBars,
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
+                    Spacer(modifier = Modifier.width(4.dp))
+                }
             )
         }
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding() + 6.dp,
+                top = innerPadding.calculateTopPadding() + 4.dp,
                 bottom = bottomPadding,
-                start = 16.dp,
-                end = 16.dp
+                start = 0.dp,
+                end = 0.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            item(key = "hero") {
-                CoreStatusCard(
-                    isChecking = isChecking,
-                    isRestarting = isRestarting,
-                    isRunning = isRunning,
-                    isModuleInstalled = isModuleInstalled,
-                    isRebootRequired = isRebootRequired,
-                    daemonPid = daemonPid,
-                    onStart = {
-                        if (!isChecking && !isRunning && !isRestarting) {
-                            coroutineScope.launch {
-                                if (isRebootRequired || DaemonManager.isRebootRequired()) {
-                                    onRequestRebootDialog()
-                                } else if (isModuleInstalled || DaemonManager.isModuleInstalled()) {
-                                    launchRestart()
+            item(key = "status") {
+                Column {
+                    AospSectionHeader(title = stringResource(R.string.aosp_section_status))
+                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        CoreStatusHero(
+                            isChecking = isChecking,
+                            isRestarting = isRestarting,
+                            isRunning = isRunning,
+                            isModuleInstalled = isModuleInstalled,
+                            isRebootRequired = isRebootRequired,
+                            daemonPid = daemonPid,
+                            onStart = {
+                                when {
+                                    isChecking || isRestarting -> Unit
+                                    isRunning -> {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        showPowerDialog = true
+                                    }
+                                    isRebootRequired -> onRequestRebootDialog()
+                                    else -> launchRestart()
                                 }
                             }
-                        }
+                        )
                     }
-                )
+                }
             }
 
             item(key = "metrics") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    DashboardMetricCard(
-                        icon = Icons.Rounded.Thermostat,
-                        label = stringResource(R.string.home_thermal),
-                        value = batteryTemp,
-                        supporting = null,
-                        badgeBg = MaterialTheme.colorScheme.tertiaryContainer,
-                        badgeTint = MaterialTheme.colorScheme.onTertiaryContainer,
-                        modifier = Modifier.weight(1f)
-                    )
-                    DashboardMetricCard(
-                        icon = Icons.Rounded.Speed,
-                        label = stringResource(R.string.home_profile),
-                        value = currentProfile,
-                        supporting = null,
-                        badgeBg = MaterialTheme.colorScheme.primary,
-                        badgeTint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.weight(1f)
-                    )
+                Column {
+                    AospSectionHeader(title = stringResource(R.string.aosp_section_hardware))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        AospMetricTile(
+                            label = stringResource(R.string.home_thermal),
+                            value = batteryTemp,
+                            icon = Icons.Rounded.Thermostat,
+                            modifier = Modifier.weight(1f)
+                        )
+                        AospMetricTile(
+                            label = stringResource(R.string.home_profile),
+                            value = currentProfile,
+                            icon = Icons.Rounded.Speed,
+                            valueColor = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
 
             item(key = "quick") {
-                QuickActionRow(
-                    onPersonalize = onNavigateToPersonalisasi
-                )
+                Column {
+                    AospSectionHeader(title = stringResource(R.string.aosp_section_quick_actions))
+                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        QuickActionRow(onPersonalize = onNavigateToPersonalisasi)
+                    }
+                }
             }
 
             item(key = "device") {
@@ -973,86 +943,94 @@ fun HomeDashboardContent(
                 )
                 val spatialSpec = MaterialTheme.motionScheme.defaultSpatialSpec<androidx.compose.ui.unit.IntSize>()
                 val effectsSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+                val baseRows = 3
+                val extraRows = if (isDeviceExpanded) 2 else 0
+                val totalRows = baseRows + extraRows
 
-                HomeNestedCardGroup(
-                    headerIcon = Icons.Rounded.Smartphone,
-                    headerTitle = homeLocalizedLabel("Informasi Perangkat", "Device Information"),
-                    onHeaderClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        isDeviceExpanded = !isDeviceExpanded
-                    },
-                    headerTrailing = {
-                        Surface(
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                isDeviceExpanded = !isDeviceExpanded
-                            },
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            modifier = Modifier.size(34.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Rounded.KeyboardArrowDown,
-                                    contentDescription = if (isDeviceExpanded) {
-                                        homeLocalizedLabel("Sembunyikan", "Collapse")
-                                    } else {
-                                        homeLocalizedLabel("Tampilkan lainnya", "Expand")
-                                    },
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier
-                                        .size(20.dp)
-                                        .rotate(arrowRotation)
-                                )
+                Column {
+                    AospSectionHeader(
+                        title = stringResource(R.string.aosp_section_device),
+                        trailing = {
+                            Surface(
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    isDeviceExpanded = !isDeviceExpanded
+                                },
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                modifier = Modifier.size(30.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.KeyboardArrowDown,
+                                        contentDescription = if (isDeviceExpanded) {
+                                            stringResource(R.string.aosp_action_collapse)
+                                        } else {
+                                            stringResource(R.string.aosp_action_expand)
+                                        },
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .rotate(arrowRotation)
+                                    )
+                                }
                             }
                         }
-                    }
-                ) {
-                    HomeNestedItemCard(
-                        icon = Icons.Rounded.DeveloperBoard,
-                        title = stringResource(R.string.home_manager_version),
-                        subtitle = stringResource(
-                            R.string.home_version_release_format,
-                            com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")
+                    )
+                    AospConnectedGroup(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        AospPreferenceItem(
+                            index = 0,
+                            count = totalRows,
+                            icon = Icons.Rounded.DeveloperBoard,
+                            title = stringResource(R.string.home_manager_version),
+                            subtitle = stringResource(
+                                R.string.home_version_release_format,
+                                com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")
+                            ),
+                            onClick = {}
                         )
-                    )
-                    HomeNestedItemCard(
-                        icon = Icons.Rounded.Memory,
-                        title = stringResource(R.string.home_kernel_version),
-                        subtitle = kernelVersion
-                    )
-                    HomeNestedItemCard(
-                        icon = Icons.Rounded.Smartphone,
-                        title = stringResource(R.string.home_device_model),
-                        subtitle = deviceModel
-                    )
-
-                    AnimatedVisibility(
-                        visible = isDeviceExpanded,
-                        enter = expandVertically(animationSpec = spatialSpec) + fadeIn(animationSpec = effectsSpec),
-                        exit = shrinkVertically(animationSpec = spatialSpec) + fadeOut(animationSpec = effectsSpec)
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        AospPreferenceItem(
+                            index = 1,
+                            count = totalRows,
+                            icon = Icons.Rounded.Memory,
+                            title = stringResource(R.string.home_kernel_version),
+                            subtitle = kernelVersion,
+                            onClick = {}
+                        )
+                        AospPreferenceItem(
+                            index = 2,
+                            count = totalRows,
+                            icon = Icons.Rounded.Smartphone,
+                            title = stringResource(R.string.home_device_model),
+                            subtitle = deviceModel,
+                            onClick = {}
+                        )
+                        AnimatedVisibility(
+                            visible = isDeviceExpanded,
+                            enter = expandVertically(animationSpec = spatialSpec) + fadeIn(animationSpec = effectsSpec),
+                            exit = shrinkVertically(animationSpec = spatialSpec) + fadeOut(animationSpec = effectsSpec)
                         ) {
-                            HomeNestedItemCard(
-                                icon = Icons.Rounded.Security,
-                                title = stringResource(R.string.home_root_access),
-                                subtitle = stringResource(
-                                    if (isRootGranted) R.string.home_root_granted else R.string.home_root_denied
-                                ),
-                                subtitleColor = if (isRootGranted) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.error
-                                }
-                            )
-                            HomeNestedItemCard(
-                                icon = Icons.Rounded.Security,
-                                title = stringResource(R.string.home_selinux_status),
-                                subtitle = selinuxStatus
-                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                AospPreferenceItem(
+                                    index = 3,
+                                    count = totalRows,
+                                    icon = Icons.Rounded.Security,
+                                    title = stringResource(R.string.home_root_access),
+                                    subtitle = stringResource(
+                                        if (isRootGranted) R.string.home_root_granted else R.string.home_root_denied
+                                    ),
+                                    highlightSubtitle = isRootGranted,
+                                    onClick = {}
+                                )
+                                AospPreferenceItem(
+                                    index = 4,
+                                    count = totalRows,
+                                    icon = Icons.Rounded.Security,
+                                    title = stringResource(R.string.home_selinux_status),
+                                    subtitle = selinuxStatus,
+                                    onClick = {}
+                                )
+                            }
                         }
                     }
                 }
@@ -1060,28 +1038,75 @@ fun HomeDashboardContent(
 
             item(key = "support") {
                 val uriHandler = LocalUriHandler.current
-                HomeNestedCardGroup(
-                    headerIcon = Icons.Rounded.Favorite,
-                    headerTitle = homeLocalizedLabel("Dukungan", "Support")
-                ) {
-                    HomeNestedItemCard(
-                        icon = Icons.Rounded.Favorite,
-                        title = stringResource(R.string.home_support_us),
-                        subtitle = stringResource(R.string.home_support_us_desc),
-                        onClick = { uriHandler.openUri("https://sociabuzz.com/kimal404") }
-                    )
-                    HomeNestedItemCard(
-                        icon = Icons.Rounded.MenuBook,
-                        title = stringResource(R.string.home_learn_more),
-                        subtitle = stringResource(R.string.home_learn_more_desc),
-                        onClick = { uriHandler.openUri("https://github.com/kimal404/LuminaTweaks") }
-                    )
+                Column {
+                    AospSectionHeader(title = stringResource(R.string.aosp_section_support))
+                    AospConnectedGroup(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        AospPreferenceItem(
+                            index = 0,
+                            count = 2,
+                            icon = Icons.Rounded.Favorite,
+                            title = stringResource(R.string.home_support_us),
+                            subtitle = stringResource(R.string.home_support_us_desc),
+                            onClick = { uriHandler.openUri("https://sociabuzz.com/kimal404") },
+                            trailing = { AospChevron() }
+                        )
+                        AospPreferenceItem(
+                            index = 1,
+                            count = 2,
+                            icon = Icons.Rounded.MenuBook,
+                            title = stringResource(R.string.home_learn_more),
+                            subtitle = stringResource(R.string.home_learn_more_desc),
+                            onClick = { uriHandler.openUri("https://github.com/kimal404/LuminaTweaks") },
+                            trailing = { AospChevron() }
+                        )
+                    }
                 }
             }
 
             item(key = "footer") {
                 Spacer(modifier = Modifier.height(12.dp))
             }
+        }
+    }
+}
+
+private suspend fun rootReboot(mode: String) {
+    RootUtil.rebootDevice(mode)
+}
+
+@Composable
+private fun PowerActionRow(
+    icon: ImageVector,
+    title: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Text(
+                text = title,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+            AospChevron()
         }
     }
 }
@@ -1102,13 +1127,22 @@ private fun CoreStatusIndicator(
         animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
         label = "indicatorTint"
     )
+    val containerColor by animateColorAsState(
+        targetValue = when {
+            isChecking || isRestarting -> MaterialTheme.colorScheme.surfaceContainerHigh
+            isRunning -> MaterialTheme.colorScheme.primaryContainer
+            else -> MaterialTheme.colorScheme.errorContainer
+        },
+        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+        label = "indicatorContainer"
+    )
 
     Surface(
         onClick = onClick,
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = containerColor,
         modifier = Modifier
-            .padding(end = 6.dp)
+            .padding(end = 4.dp)
             .size(40.dp)
     ) {
         Box(contentAlignment = Alignment.Center) {
@@ -1123,7 +1157,7 @@ private fun CoreStatusIndicator(
                     imageVector = Icons.Rounded.PowerSettingsNew,
                     contentDescription = stringResource(R.string.power_menu_title),
                     tint = iconTint,
-                    modifier = Modifier.size(IconButtonDefaults.mediumIconSize)
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }
@@ -1131,7 +1165,7 @@ private fun CoreStatusIndicator(
 }
 
 @Composable
-private fun CoreStatusCard(
+private fun CoreStatusHero(
     isChecking: Boolean,
     isRestarting: Boolean,
     isRunning: Boolean,
@@ -1142,8 +1176,8 @@ private fun CoreStatusCard(
 ) {
     val containerColor by animateColorAsState(
         targetValue = when {
-            isChecking || isRestarting -> MaterialTheme.colorScheme.surfaceContainerHigh
-            isRunning -> MaterialTheme.colorScheme.primaryContainer
+            isChecking || isRestarting -> MaterialTheme.colorScheme.surfaceContainer
+            isRunning -> MaterialTheme.colorScheme.surfaceContainer
             isRebootRequired -> MaterialTheme.colorScheme.tertiaryContainer
             else -> MaterialTheme.colorScheme.errorContainer
         },
@@ -1153,9 +1187,9 @@ private fun CoreStatusCard(
     val contentColor by animateColorAsState(
         targetValue = when {
             isChecking || isRestarting -> MaterialTheme.colorScheme.onSurface
-            isRunning -> MaterialTheme.colorScheme.onPrimaryContainer
+            isRunning -> MaterialTheme.colorScheme.primary
             isRebootRequired -> MaterialTheme.colorScheme.onTertiaryContainer
-            else -> MaterialTheme.colorScheme.onErrorContainer
+            else -> MaterialTheme.colorScheme.error
         },
         animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
         label = "coreContent"
@@ -1185,25 +1219,18 @@ private fun CoreStatusCard(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2600, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
+            animation = tween(durationMillis = 2600, easing = androidx.compose.animation.core.LinearEasing),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Restart
         ),
         label = "coreWave"
     )
-    val morphProgress by animateFloatAsState(
-        targetValue = if (isAlive) 1f else 0f,
-        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
-        label = "coreMorph"
-    )
 
-    val outerRadius = LocalCornerRadius.current.coerceAtLeast(26.dp)
-
-    Card(
+    Surface(
         onClick = onStart,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(outerRadius),
-        colors = CardDefaults.cardColors(containerColor = containerColor, contentColor = contentColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        shape = RoundedCornerShape(24.dp),
+        color = containerColor,
+        contentColor = contentColor,
+        modifier = Modifier.fillMaxWidth()
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
             if (isAlive) {
@@ -1213,24 +1240,30 @@ private fun CoreStatusCard(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .height(32.dp)
+                        .height(30.dp)
                 )
             }
 
             Row(
                 modifier = Modifier.padding(
-                    start = 22.dp,
-                    top = 22.dp,
-                    end = 22.dp,
-                    bottom = if (isAlive) 34.dp else 22.dp
+                    start = 20.dp,
+                    top = 20.dp,
+                    end = 20.dp,
+                    bottom = if (isAlive) 30.dp else 20.dp
                 ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val iconMorph = remember { Morph(MaterialShapes.Circle, MaterialShapes.Cookie9Sided) }
                 Box(
                     modifier = Modifier
-                        .size(56.dp)
-                        .background(contentColor.copy(alpha = 0.14f), MorphShape(iconMorph, morphProgress)),
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(
+                            if (isRunning && !isRestarting) {
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                            } else {
+                                contentColor.copy(alpha = 0.14f)
+                            }
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     when {
@@ -1265,20 +1298,33 @@ private fun CoreStatusCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.headlineSmallEmphasized,
+                        style = MaterialTheme.typography.titleLargeEmphasized,
                         color = contentColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(modifier = Modifier.height(3.dp))
                     Text(
                         text = subtitle,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = contentColor.copy(alpha = 0.78f),
+                        fontSize = 13.5.sp,
+                        color = contentColor.copy(alpha = 0.8f),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                AospStatusPill(
+                    text = if (isAlive) {
+                        stringResource(R.string.aosp_label_online)
+                    } else {
+                        stringResource(R.string.aosp_label_offline)
+                    },
+                    containerColor = contentColor.copy(alpha = 0.14f),
+                    contentColor = contentColor,
+                    leadingDotColor = if (isAlive) contentColor else contentColor.copy(alpha = 0.5f)
+                )
             }
         }
     }
@@ -1293,7 +1339,7 @@ private fun LiveWave(
     Canvas(modifier = modifier) {
         if (size.width <= 0f || size.height <= 0f) return@Canvas
 
-        val path = Path()
+        val path = androidx.compose.ui.graphics.Path()
         val amplitude = size.height * 0.22f
         val cycles = 2.2f
         val step = size.width / 72f
@@ -1312,72 +1358,11 @@ private fun LiveWave(
         drawPath(
             path = path,
             color = color.copy(alpha = 0.35f),
-            style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
-        )
-    }
-}
-
-@Composable
-private fun DashboardMetricCard(
-    icon: ImageVector,
-    label: String,
-    value: String,
-    supporting: String?,
-    badgeBg: Color,
-    badgeTint: Color,
-    modifier: Modifier = Modifier
-) {
-    val cardRadius = LocalCornerRadius.current.coerceAtLeast(24.dp)
-
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(cardRadius),
-        color = MaterialTheme.colorScheme.surfaceContainer
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(30.dp)
-                        .clip(CircleShape)
-                        .background(badgeBg),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = badgeTint,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Spacer(modifier = Modifier.height(14.dp))
-            Text(
-                text = value,
-                style = MaterialTheme.typography.headlineSmallEmphasized,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                width = 2.dp.toPx(),
+                cap = androidx.compose.ui.graphics.StrokeCap.Round
             )
-            if (!supporting.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = supporting,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
+        )
     }
 }
 
@@ -1439,232 +1424,44 @@ private fun QuickActionRow(
         }
     }
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        ToggleButton(
-            checked = false,
-            onCheckedChange = { runTrim() },
-            shapes = ButtonGroupDefaults.connectedLeadingButtonShapes(),
+    AospConnectedGroup {
+        AospPreferenceItem(
+            index = 0,
+            count = 3,
+            icon = Icons.Rounded.AutoFixHigh,
+            title = stringResource(R.string.home_quick_trim),
+            subtitle = homeLocalizedLabel(
+                "Keluarkan blok penyimpanan yang tidak terpakai",
+                "Release unused storage blocks"
+            ),
+            onClick = runTrim,
             enabled = !isTrimming,
-            modifier = Modifier.weight(1f)
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.AutoFixHigh,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = stringResource(R.string.home_quick_trim),
-                style = MaterialTheme.typography.labelLarge,
-                maxLines = 1
-            )
-        }
-        ToggleButton(
-            checked = false,
-            onCheckedChange = { runCache() },
-            shapes = ButtonGroupDefaults.connectedMiddleButtonShapes(),
-            enabled = !isClearing,
-            modifier = Modifier.weight(1f)
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.CleaningServices,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = stringResource(R.string.home_quick_cache),
-                style = MaterialTheme.typography.labelLarge,
-                maxLines = 1
-            )
-        }
-        ToggleButton(
-            checked = false,
-            onCheckedChange = { onPersonalize() },
-            shapes = ButtonGroupDefaults.connectedTrailingButtonShapes(),
-            modifier = Modifier.weight(1f)
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.Palette,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = stringResource(R.string.home_quick_personalize),
-                style = MaterialTheme.typography.labelLarge,
-                maxLines = 1
-            )
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Nested Bento Card Container & Inner Items (MD3E)
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun HomeNestedCardGroup(
-    headerIcon: ImageVector,
-    headerTitle: String,
-    modifier: Modifier = Modifier,
-    onHeaderClick: (() -> Unit)? = null,
-    headerTrailing: (@Composable () -> Unit)? = null,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    val outerRadius = LocalCornerRadius.current.coerceAtLeast(26.dp)
-
-    Surface(
-        shape = RoundedCornerShape(outerRadius),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(CircleShape)
-                    .then(
-                        if (onHeaderClick != null) {
-                            Modifier.clickable(onClick = onHeaderClick)
-                        } else {
-                            Modifier
-                        }
-                    )
-                    .padding(start = 2.dp, end = 2.dp, top = 2.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = headerIcon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = headerTitle,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-                if (headerTrailing != null) {
-                    Spacer(modifier = Modifier.width(8.dp))
-                    headerTrailing()
-                }
-            }
-
-            content()
-        }
-    }
-}
-
-@Composable
-private fun HomeNestedItemCard(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    subtitleColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
-    onClick: (() -> Unit)? = null
-) {
-    val haptic = LocalHapticFeedback.current
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed && onClick != null) 0.98f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
-        label = "homeNestedItemScale"
-    )
-    val innerRadius = (LocalCornerRadius.current * 0.78f).coerceIn(16.dp, 24.dp)
-
-    val rowContent: @Composable () -> Unit = {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(22.dp)
-            )
-            Spacer(modifier = Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = subtitleColor,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            if (onClick != null) {
-                Spacer(modifier = Modifier.width(12.dp))
-                Icon(
-                    imageVector = Icons.Rounded.ChevronRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
-    }
-
-    if (onClick != null) {
-        Surface(
-            onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onClick()
-            },
-            shape = RoundedCornerShape(innerRadius),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            interactionSource = interactionSource,
-            modifier = Modifier
-                .fillMaxWidth()
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                },
-            content = rowContent
+            trailing = { AospChevron() }
         )
-    } else {
-        Surface(
-            shape = RoundedCornerShape(innerRadius),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            modifier = Modifier.fillMaxWidth(),
-            content = rowContent
+        AospPreferenceItem(
+            index = 1,
+            count = 3,
+            icon = Icons.Rounded.CleaningServices,
+            title = stringResource(R.string.home_quick_cache),
+            subtitle = homeLocalizedLabel(
+                "Kosongkan cache RAM dan berkas sementara",
+                "Flush RAM cache and temporary files"
+            ),
+            onClick = runCache,
+            enabled = !isClearing,
+            trailing = { AospChevron() }
+        )
+        AospPreferenceItem(
+            index = 2,
+            count = 3,
+            icon = Icons.Rounded.Palette,
+            title = stringResource(R.string.home_quick_personalize),
+            subtitle = homeLocalizedLabel(
+                "Buka personalisasi warna dan tema",
+                "Open colour and theme personalisation"
+            ),
+            onClick = { onPersonalize() },
+            trailing = { AospChevron() }
         )
     }
 }
@@ -1676,26 +1473,24 @@ fun ConnectedCardRow(
     subtitle: String,
     position: ContainerPosition,
     modifier: Modifier = Modifier,
-    iconContainer: Color = MaterialTheme.colorScheme.primaryContainer,
-    iconTint: Color = MaterialTheme.colorScheme.onPrimaryContainer
+    iconContainer: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    iconTint: Color = MaterialTheme.colorScheme.onSurface
 ) {
-    Card(
+    Surface(
         modifier = modifier.fillMaxWidth(),
         shape = getConnectedContainerShape(position),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
+        color = MaterialTheme.colorScheme.surfaceContainer
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 13.dp),
+                .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(13.dp))
                     .background(iconContainer),
                 contentAlignment = Alignment.Center
             ) {
@@ -1703,24 +1498,22 @@ fun ConnectedCardRow(
                     imageVector = icon,
                     contentDescription = null,
                     tint = iconTint,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(22.dp)
                 )
             }
-
-            Spacer(modifier = Modifier.width(14.dp))
-
+            Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                    fontSize = 13.5.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1737,16 +1530,14 @@ fun ConnectedActionCardRow(
     position: ContainerPosition,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    iconContainer: Color = MaterialTheme.colorScheme.primaryContainer,
-    iconTint: Color = MaterialTheme.colorScheme.onPrimaryContainer
+    iconContainer: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    iconTint: Color = MaterialTheme.colorScheme.onSurface
 ) {
-    Card(
+    Surface(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
         shape = getConnectedContainerShape(position),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
+        color = MaterialTheme.colorScheme.surfaceContainer
     ) {
         Row(
             modifier = Modifier
@@ -1756,8 +1547,8 @@ fun ConnectedActionCardRow(
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(13.dp))
                     .background(iconContainer),
                 contentAlignment = Alignment.Center
             ) {
@@ -1765,116 +1556,28 @@ fun ConnectedActionCardRow(
                     imageVector = icon,
                     contentDescription = null,
                     tint = iconTint,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(22.dp)
                 )
             }
-
-            Spacer(modifier = Modifier.width(14.dp))
-
+            Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                    fontSize = 13.5.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
             }
-
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.ChevronRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    modifier = Modifier.size(18.dp)
-                )
-            }
+            Spacer(modifier = Modifier.width(12.dp))
+            AospChevron()
         }
-    }
-}
-
-@Composable
-private fun PowerMenuItem(
-    icon: ImageVector,
-    iconBg: Color,
-    iconTint: Color,
-    title: String,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .clickable(onClick = onClick),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        shape = RoundedCornerShape(18.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .background(iconBg),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = iconTint,
-                    modifier = Modifier.size(19.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(14.dp))
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f)
-            )
-            Icon(
-                imageVector = Icons.Rounded.ChevronRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    }
-}
-
-private class MorphShape(
-    private val morph: Morph,
-    private val progress: Float
-) : Shape {
-    override fun createOutline(
-        size: Size,
-        layoutDirection: LayoutDirection,
-        density: Density
-    ): Outline {
-        val path = morph.toPath(progress = progress, path = android.graphics.Path())
-        path.transform(
-            android.graphics.Matrix().apply {
-                setScale(size.width, size.height)
-            }
-        )
-        return Outline.Generic(path.asComposePath())
     }
 }

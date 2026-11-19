@@ -19,12 +19,9 @@ package com.luminatweaks.ui.screen
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,7 +36,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -49,8 +45,6 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Insights
-import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Refresh
@@ -68,7 +62,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -83,8 +76,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -92,13 +85,15 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.luminatweaks.R
 import com.luminatweaks.data.AppProfileConfig
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.model.AppItem
-import com.luminatweaks.ui.theme.LocalCornerRadius
+import com.luminatweaks.ui.component.AospStatusPill
+import com.luminatweaks.ui.component.AospTopBar
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import java.util.Locale
 import kotlinx.coroutines.flow.first
@@ -134,8 +129,6 @@ fun AppsScreen(
     val coroutineScope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
-    // Start empty so a page that is pre-composed during a swipe does not
-    // decode dozens of icons until the pager has settled.
     var rawApps by remember { mutableStateOf(emptyList<AppItem>()) }
     var isLoading by remember { mutableStateOf(true) }
     var isScanningGames by remember { mutableStateOf(false) }
@@ -220,7 +213,6 @@ fun AppsScreen(
 
     val isFloating = LocalFloatingNavBar.current
     val navBottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val outerContainerRadius = LocalCornerRadius.current.coerceAtLeast(28.dp)
 
     LuminaDrillTransition(
         targetState = activeApp,
@@ -241,18 +233,19 @@ fun AppsScreen(
                 onBack = { selectedPackageName = null }
             )
         } else {
+            val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
             Scaffold(
-                modifier = modifier,
+                modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
                 contentWindowInsets = WindowInsets(0.dp),
+                containerColor = MaterialTheme.colorScheme.background,
                 topBar = {
-                    TopAppBar(
-                        title = {
-                            Text(
-                                text = stringResource(R.string.apps_title),
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                        },
+                    AospTopBar(
+                        title = stringResource(R.string.apps_title),
+                        subtitle = appsLocalizedLabel(
+                            "${visibleBaseApps.size} aplikasi terpasang",
+                            "${visibleBaseApps.size} installed apps"
+                        ),
+                        scrollBehavior = scrollBehavior,
                         actions = {
                             IconButton(
                                 onClick = {
@@ -277,13 +270,13 @@ fun AppsScreen(
                                     CircularProgressIndicator(
                                         modifier = Modifier.size(20.dp),
                                         strokeWidth = 2.dp,
-                                        color = MaterialTheme.colorScheme.onSurface
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 } else {
                                     Icon(
                                         imageVector = Icons.Rounded.Refresh,
                                         contentDescription = stringResource(R.string.apps_scan_games),
-                                        tint = MaterialTheme.colorScheme.onSurface
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -293,7 +286,7 @@ fun AppsScreen(
                                     Icon(
                                         imageVector = Icons.Rounded.MoreVert,
                                         contentDescription = stringResource(R.string.action_more),
-                                        tint = MaterialTheme.colorScheme.onSurface
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
 
@@ -318,11 +311,7 @@ fun AppsScreen(
                                     )
                                 }
                             }
-                        },
-                        windowInsets = WindowInsets.statusBars,
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.background
-                        )
+                        }
                     )
                 }
             ) { innerPadding ->
@@ -349,12 +338,7 @@ fun AppsScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(
-                                top = innerPadding.calculateTopPadding() + 4.dp,
-                                start = 16.dp,
-                                end = 16.dp,
-                                bottom = if (isFloating) 12.dp + navBottomInset else 12.dp
-                            )
+                            .padding(top = innerPadding.calculateTopPadding() + 2.dp)
                     ) {
                         TextField(
                             value = searchQuery,
@@ -387,34 +371,37 @@ fun AppsScreen(
                             singleLine = true,
                             shape = CircleShape,
                             colors = TextFieldDefaults.colors(
-                                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
                                 focusedIndicatorColor = Color.Transparent,
                                 unfocusedIndicatorColor = Color.Transparent,
                                 disabledIndicatorColor = Color.Transparent
                             ),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
                         )
 
                         LazyRow(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 12.dp, bottom = 14.dp),
+                                .padding(top = 12.dp, bottom = 4.dp),
+                            contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             items(filterChips, key = { it.first }) { (filter, label) ->
                                 val isSelected = selectedFilter == filter
                                 val chipBg by animateColorAsState(
                                     targetValue = if (isSelected) {
-                                        MaterialTheme.colorScheme.primaryContainer
+                                        MaterialTheme.colorScheme.primary
                                     } else {
-                                        MaterialTheme.colorScheme.surfaceContainerHigh
+                                        MaterialTheme.colorScheme.surfaceContainer
                                     },
                                     label = "filterChipBg"
                                 )
                                 val chipContent by animateColorAsState(
                                     targetValue = if (isSelected) {
-                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                        MaterialTheme.colorScheme.onPrimary
                                     } else {
                                         MaterialTheme.colorScheme.onSurfaceVariant
                                     },
@@ -433,7 +420,7 @@ fun AppsScreen(
                                 ) {
                                     Text(
                                         text = label,
-                                        style = MaterialTheme.typography.labelLarge,
+                                        fontSize = 13.5.sp,
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                         color = chipContent,
                                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -442,84 +429,75 @@ fun AppsScreen(
                             }
                         }
 
-                        Surface(
-                            shape = RoundedCornerShape(outerContainerRadius),
-                            color = MaterialTheme.colorScheme.surfaceContainer,
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(outerContainerRadius))
-                        ) {
-                            if (filteredApps.isEmpty()) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(20.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = appsLocalizedLabel(
-                                            "Tidak ada aplikasi yang cocok",
-                                            "No matching applications found"
-                                        ),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            } else {
-                                LazyColumn(
-                                    state = listState,
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentPadding = PaddingValues(
-                                        start = 12.dp,
-                                        end = 12.dp,
-                                        top = 12.dp,
-                                        bottom = if (isFloating) 84.dp else 12.dp
+                        if (filteredApps.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(20.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = appsLocalizedLabel(
+                                        "Tidak ada aplikasi yang cocok",
+                                        "No matching applications found"
                                     ),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    items(filteredApps, key = { it.packageName }) { appItem ->
-                                        val currentCfg = appConfigs[appItem.packageName]
-                                            ?: AppProfileConfig(pkg = appItem.packageName)
-                                        val isEnabled = if (appConfigs.containsKey(appItem.packageName)) {
-                                            !currentCfg.disabled && currentCfg.saklarUtama
-                                        } else {
-                                            ConfigRepository.isAppActive(appItem.packageName)
-                                        }
-
-                                        AppRowCard(
-                                            app = appItem,
-                                            isEnabled = isEnabled,
-                                            onClick = { selectedPackageName = appItem.packageName },
-                                            onToggleActive = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                val updated = if (!isEnabled) {
-                                                    currentCfg.copy(
-                                                        saklarUtama = true,
-                                                        disabled = false,
-                                                        custom = currentCfg.custom || !ConfigRepository.defaultGames.contains(appItem.packageName)
-                                                    )
-                                                } else {
-                                                    currentCfg.copy(
-                                                        saklarUtama = false,
-                                                        disabled = true,
-                                                        custom = false
-                                                    )
-                                                }
-                                                appConfigs[appItem.packageName] = updated
-                                                coroutineScope.launch {
-                                                    ConfigRepository.saveAppConfig(updated)
-                                                }
-                                            },
-                                            onOpenAppInfo = {
-                                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                                    data = Uri.fromParts("package", appItem.packageName, null)
-                                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                                }
-                                                context.startActivity(intent)
-                                            }
-                                        )
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        } else {
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(
+                                    start = 16.dp,
+                                    end = 16.dp,
+                                    top = 8.dp,
+                                    bottom = if (isFloating) 96.dp else 24.dp + navBottomInset
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                items(filteredApps, key = { it.packageName }) { appItem ->
+                                    val currentCfg = appConfigs[appItem.packageName]
+                                        ?: AppProfileConfig(pkg = appItem.packageName)
+                                    val isEnabled = if (appConfigs.containsKey(appItem.packageName)) {
+                                        !currentCfg.disabled && currentCfg.saklarUtama
+                                    } else {
+                                        ConfigRepository.isAppActive(appItem.packageName)
                                     }
+
+                                    AppRowCard(
+                                        app = appItem,
+                                        isEnabled = isEnabled,
+                                        onClick = { selectedPackageName = appItem.packageName },
+                                        onToggleActive = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            val updated = if (!isEnabled) {
+                                                currentCfg.copy(
+                                                    saklarUtama = true,
+                                                    disabled = false,
+                                                    custom = currentCfg.custom || !ConfigRepository.defaultGames.contains(appItem.packageName)
+                                                )
+                                            } else {
+                                                currentCfg.copy(
+                                                    saklarUtama = false,
+                                                    disabled = true,
+                                                    custom = false
+                                                )
+                                            }
+                                            appConfigs[appItem.packageName] = updated
+                                            coroutineScope.launch {
+                                                ConfigRepository.saveAppConfig(updated)
+                                            }
+                                        },
+                                        onOpenAppInfo = {
+                                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                                data = Uri.fromParts("package", appItem.packageName, null)
+                                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            }
+                                            context.startActivity(intent)
+                                        }
+                                    )
                                 }
                             }
                         }
@@ -540,35 +518,18 @@ fun AppRowCard(
 ) {
     val context = LocalContext.current
     val packageManager = remember { context.packageManager }
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.985f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
-        label = "appCardScale"
-    )
-    val cardRadius = (LocalCornerRadius.current * 0.78f).coerceIn(18.dp, 24.dp)
     var showRowMenu by remember { mutableStateOf(false) }
 
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(cardRadius),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        interactionSource = interactionSource,
-        modifier = Modifier
-            .fillMaxWidth()
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(start = 12.dp, top = 12.dp, end = 10.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             AsyncImage(
@@ -585,8 +546,8 @@ fun AppRowCard(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
-                    .size(46.dp)
-                    .clip(CircleShape)
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(14.dp))
             )
 
             Spacer(modifier = Modifier.width(14.dp))
@@ -594,56 +555,40 @@ fun AppRowCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = app.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.5.sp,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(1.dp))
                 Text(
                     text = app.packageName,
-                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 12.5.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
 
-            if (isEnabled) {
-                Spacer(modifier = Modifier.width(8.dp))
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primaryContainer
-                ) {
-                    Text(
-                        text = stringResource(R.string.status_active_upper),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        maxLines = 1,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                    )
-                }
+            AnimatedVisibility(visible = isEnabled && app.isGame) {
+                AospStatusPill(
+                    text = appsLocalizedLabel("GAME", "GAME"),
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                )
             }
 
             Spacer(modifier = Modifier.width(8.dp))
 
             Box {
-                Surface(
-                    onClick = { showRowMenu = true },
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    modifier = Modifier.size(34.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Rounded.MoreVert,
-                            contentDescription = stringResource(R.string.action_more),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                IconButton(onClick = { showRowMenu = true }) {
+                    Icon(
+                        imageVector = Icons.Rounded.MoreVert,
+                        contentDescription = stringResource(R.string.action_more),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
 
                 DropdownMenu(

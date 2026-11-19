@@ -33,21 +33,21 @@ val LocalEdgeSwipeBack = compositionLocalOf { true }
 val LocalPageTransition = compositionLocalOf { PageTransition.CrossAxis }
 
 val LuminaShapes = Shapes(
-    extraSmall = RoundedCornerShape(8.dp),
-    small = RoundedCornerShape(12.dp),
-    medium = RoundedCornerShape(20.dp),
-    large = RoundedCornerShape(28.dp),
-    extraLarge = RoundedCornerShape(36.dp)
+    extraSmall = RoundedCornerShape(6.dp),
+    small = RoundedCornerShape(10.dp),
+    medium = RoundedCornerShape(18.dp),
+    large = RoundedCornerShape(24.dp),
+    extraLarge = RoundedCornerShape(30.dp)
 )
 
 fun createLuminaShapes(baseRadius: Int): Shapes {
     val r = baseRadius.toFloat()
     val ratio = r / 18f
     return Shapes(
-        extraSmall = RoundedCornerShape((8f * ratio).dp),
-        small = RoundedCornerShape((12f * ratio).dp),
+        extraSmall = RoundedCornerShape((6f * ratio).dp),
+        small = RoundedCornerShape((10f * ratio).dp),
         medium = RoundedCornerShape(r.dp),
-        large = RoundedCornerShape((28f * ratio).dp),
-        extraLarge = RoundedCornerShape((36f * ratio).dp)
+        large = RoundedCornerShape((24f * ratio).dp),
+        extraLarge = RoundedCornerShape((30f * ratio).dp)
     )
 }

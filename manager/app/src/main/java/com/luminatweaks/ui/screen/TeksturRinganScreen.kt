@@ -43,13 +43,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.BlurOn
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Compare
@@ -63,12 +61,10 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -85,6 +81,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -95,6 +92,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import com.luminatweaks.R
+import com.luminatweaks.ui.component.LuminaBackButton
+import com.luminatweaks.ui.component.AospTopBar
 import com.luminatweaks.data.AngleStatus
 import com.luminatweaks.data.AppProfileConfig
 import com.luminatweaks.data.ConfigRepository
@@ -201,7 +200,7 @@ fun TextureComparisonPreview(
         label = "previewResultCardColor"
     )
 
-    val outerRadius = LocalCornerRadius.current.coerceAtLeast(26.dp)
+    val outerRadius = 24.dp
     val innerRadius = (LocalCornerRadius.current * 0.78f).coerceIn(16.dp, 22.dp)
 
     val badgeText = if (isActive && clampedLod > 0) {
@@ -387,7 +386,7 @@ fun TeksturRinganScreen(
     val currentLod = profile.textureLod.coerceIn(0, 4)
     val isTweakActive = currentLod > 0
     val isFloating = LocalFloatingNavBar.current
-    val outerRadius = LocalCornerRadius.current.coerceAtLeast(26.dp)
+    val outerRadius = 24.dp
 
     // Texture overrides only take effect when the ROM can actually switch the
     // target to ANGLE. Probe once per screen and warn instead of letting the
@@ -397,42 +396,21 @@ fun TeksturRinganScreen(
         angleStatus = ConfigRepository.getAngleStatus(context)
     }
 
-    val bottomPadding = if (isFloating) {
-        116.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    } else {
-        28.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    }
+    val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomPadding = if (isFloating) 100.dp + navInset else 24.dp + navInset
+
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         contentWindowInsets = WindowInsets(0.dp),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = stringResource(R.string.texture_quality_title),
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Text(
-                            text = appName,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = stringResource(R.string.action_back)
-                        )
-                    }
-                },
-                windowInsets = WindowInsets.statusBars,
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
+            AospTopBar(
+                title = stringResource(R.string.texture_quality_title),
+                subtitle = appName,
+                scrollBehavior = scrollBehavior,
+                navigationIcon = { LuminaBackButton(onBack = onBack) }
             )
         }
     ) { innerPadding ->
@@ -444,7 +422,7 @@ fun TeksturRinganScreen(
                 start = 16.dp,
                 end = 16.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item(key = "angle_warning") {
                 val status = angleStatus
