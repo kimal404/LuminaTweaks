@@ -4,16 +4,9 @@ package com.luminatweaks.ui.screen
 
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,7 +35,6 @@ import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.DataSaverOn
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Layers
-import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.CircularProgressIndicator
@@ -76,7 +68,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -232,40 +223,6 @@ fun MemoryZramScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
-            item(key = "summary_tiles") {
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    MemoryMetricTile(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Rounded.Memory,
-                        label = "RAM",
-                        value = "$physicalRamGb GB",
-                        highlight = false,
-                        onClick = null
-                    )
-                    MemoryMetricTile(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Rounded.DataSaverOn,
-                        label = "ZRAM",
-                        value = "${zramSizeGb.roundToInt()} GB",
-                        highlight = true,
-                        onClick = null
-                    )
-                    MemoryMetricTile(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Rounded.Layers,
-                        label = "ALGO",
-                        value = selectedAlgorithm.uppercase(),
-                        highlight = true,
-                        showArrow = true,
-                        onClick = { showAlgorithmSheet = true }
                     )
                 }
             }
@@ -505,124 +462,6 @@ private fun MemorySquircleIcon(icon: ImageVector) {
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(22.dp)
-        )
-    }
-}
-
-@Composable
-private fun MemoryMetricTile(
-    modifier: Modifier = Modifier,
-    icon: ImageVector,
-    label: String,
-    value: String,
-    highlight: Boolean,
-    showArrow: Boolean = false,
-    onClick: (() -> Unit)?
-) {
-    val colorScheme = MaterialTheme.colorScheme
-    val haptic = LocalHapticFeedback.current
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed && onClick != null) 0.98f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
-        label = "memoryTileScale"
-    )
-
-    val iconBoxBgColor by animateColorAsState(
-        targetValue = if (highlight) {
-            colorScheme.primaryContainer
-        } else {
-            colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        },
-        animationSpec = tween(350),
-        label = "memoryTileBg"
-    )
-
-    val iconColor by animateColorAsState(
-        targetValue = if (highlight) {
-            colorScheme.onPrimaryContainer
-        } else {
-            colorScheme.onSurfaceVariant
-        },
-        animationSpec = tween(350),
-        label = "memoryTileIcon"
-    )
-
-    val tileContent: @Composable () -> Unit = {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(64.dp)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(iconBoxBgColor),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = iconColor,
-                    modifier = Modifier.size(28.dp)
-                )
-                if (showArrow) {
-                    Icon(
-                        imageVector = Icons.Rounded.ChevronRight,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(6.dp)
-                            .size(18.dp),
-                        tint = iconColor.copy(alpha = 0.65f)
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(10.dp))
-            Column(modifier = Modifier.padding(horizontal = 2.dp)) {
-                Text(
-                    text = value,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-
-    if (onClick != null) {
-        Surface(
-            onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onClick()
-            },
-            interactionSource = interactionSource,
-            shape = RoundedCornerShape(26.dp),
-            color = colorScheme.surfaceColorAtElevation(1.dp),
-            modifier = modifier.graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            },
-            content = tileContent
-        )
-    } else {
-        Surface(
-            shape = RoundedCornerShape(26.dp),
-            color = colorScheme.surfaceColorAtElevation(1.dp),
-            modifier = modifier,
-            content = tileContent
         )
     }
 }
