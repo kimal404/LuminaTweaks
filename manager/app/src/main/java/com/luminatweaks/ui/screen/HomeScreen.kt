@@ -57,17 +57,14 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Memory
-import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Security
@@ -485,8 +482,7 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             isRootGranted = isRootGranted,
                             selinuxStatus = selinuxStatus,
                             onRequestRebootDialog = { showRebootDialog = true },
-                            onRestartDaemon = restartAction,
-                            onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" }
+                            onRestartDaemon = restartAction
                         )
                         1 -> AppsScreen(
                             pagerState = pagerState,
@@ -560,8 +556,7 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             isRootGranted = isRootGranted,
                             selinuxStatus = selinuxStatus,
                             onRequestRebootDialog = { showRebootDialog = true },
-                            onRestartDaemon = restartAction,
-                            onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" }
+                            onRestartDaemon = restartAction
                         )
                         1 -> AppsScreen(
                             pagerState = pagerState,
@@ -716,7 +711,7 @@ fun HomeDashboardContent(
     selinuxStatus: String,
     onRequestRebootDialog: () -> Unit,
     onRestartDaemon: suspend () -> Unit,
-    onNavigateToPersonalisasi: () -> Unit
+    onNavigateToPersonalisasi: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
@@ -926,11 +921,6 @@ fun HomeDashboardContent(
                 }
             }
 
-            item(key = "quick") {
-                HomeSectionHeader(title = stringResource(R.string.aosp_section_quick_actions))
-                QuickActionRow(onPersonalize = onNavigateToPersonalisasi)
-            }
-
             item(key = "device") {
                 var isDeviceExpanded by remember { mutableStateOf(false) }
                 val arrowRotation by animateFloatAsState(
@@ -941,6 +931,7 @@ fun HomeDashboardContent(
                 val spatialSpec = MaterialTheme.motionScheme.defaultSpatialSpec<IntSize>()
                 val effectsSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
                 val totalRows = if (isDeviceExpanded) 5 else 3
+                val innerRowColor = MaterialTheme.colorScheme.surfaceContainerHigh
 
                 HomeSectionHeader(
                     title = stringResource(R.string.aosp_section_device),
@@ -972,54 +963,75 @@ fun HomeDashboardContent(
                     }
                 )
 
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    HomeInfoRow(
-                        index = 0,
-                        count = totalRows,
-                        icon = Icons.Rounded.DeveloperBoard,
-                        title = stringResource(R.string.home_manager_version),
-                        subtitle = stringResource(
-                            R.string.home_version_release_format,
-                            com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")
-                        )
-                    )
-                    HomeInfoRow(
-                        index = 1,
-                        count = totalRows,
-                        icon = Icons.Rounded.Memory,
-                        title = stringResource(R.string.home_kernel_version),
-                        subtitle = kernelVersion
-                    )
-                    HomeInfoRow(
-                        index = 2,
-                        count = totalRows,
-                        icon = Icons.Rounded.Smartphone,
-                        title = stringResource(R.string.home_device_model),
-                        subtitle = deviceModel
-                    )
-                    AnimatedVisibility(
-                        visible = isDeviceExpanded,
-                        enter = expandVertically(animationSpec = spatialSpec) + fadeIn(animationSpec = effectsSpec),
-                        exit = shrinkVertically(animationSpec = spatialSpec) + fadeOut(animationSpec = effectsSpec)
+                Surface(
+                    shape = RoundedCornerShape(26.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            HomeInfoRow(
-                                index = 3,
-                                count = totalRows,
-                                icon = Icons.Rounded.Security,
-                                title = stringResource(R.string.home_root_access),
-                                subtitle = stringResource(
-                                    if (isRootGranted) R.string.home_root_granted else R.string.home_root_denied
-                                ),
-                                highlightSubtitle = isRootGranted
-                            )
-                            HomeInfoRow(
-                                index = 4,
-                                count = totalRows,
-                                icon = Icons.Rounded.Security,
-                                title = stringResource(R.string.home_selinux_status),
-                                subtitle = selinuxStatus
-                            )
+                        HomeInfoRow(
+                            index = 0,
+                            count = totalRows,
+                            icon = Icons.Rounded.DeveloperBoard,
+                            title = stringResource(R.string.home_manager_version),
+                            subtitle = stringResource(
+                                R.string.home_version_release_format,
+                                com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")
+                            ),
+                            containerColor = innerRowColor,
+                            outerRadius = 18.dp
+                        )
+                        HomeInfoRow(
+                            index = 1,
+                            count = totalRows,
+                            icon = Icons.Rounded.Memory,
+                            title = stringResource(R.string.home_kernel_version),
+                            subtitle = kernelVersion,
+                            containerColor = innerRowColor,
+                            outerRadius = 18.dp
+                        )
+                        HomeInfoRow(
+                            index = 2,
+                            count = totalRows,
+                            icon = Icons.Rounded.Smartphone,
+                            title = stringResource(R.string.home_device_model),
+                            subtitle = deviceModel,
+                            containerColor = innerRowColor,
+                            outerRadius = 18.dp
+                        )
+                        AnimatedVisibility(
+                            visible = isDeviceExpanded,
+                            enter = expandVertically(animationSpec = spatialSpec) + fadeIn(animationSpec = effectsSpec),
+                            exit = shrinkVertically(animationSpec = spatialSpec) + fadeOut(animationSpec = effectsSpec)
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                HomeInfoRow(
+                                    index = 3,
+                                    count = totalRows,
+                                    icon = Icons.Rounded.Security,
+                                    title = stringResource(R.string.home_root_access),
+                                    subtitle = stringResource(
+                                        if (isRootGranted) R.string.home_root_granted else R.string.home_root_denied
+                                    ),
+                                    highlightSubtitle = isRootGranted,
+                                    containerColor = innerRowColor,
+                                    outerRadius = 18.dp
+                                )
+                                HomeInfoRow(
+                                    index = 4,
+                                    count = totalRows,
+                                    icon = Icons.Rounded.Security,
+                                    title = stringResource(R.string.home_selinux_status),
+                                    subtitle = selinuxStatus,
+                                    containerColor = innerRowColor,
+                                    outerRadius = 18.dp
+                                )
+                            }
                         }
                     }
                 }
@@ -1184,14 +1196,21 @@ private fun HomeInfoRow(
     icon: ImageVector,
     title: String,
     subtitle: String,
-    highlightSubtitle: Boolean = false
+    highlightSubtitle: Boolean = false,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+    outerRadius: Dp = 26.dp
 ) {
-    val shape = connectedContainerShape(index = index, count = count)
+    val shape = connectedContainerShape(
+        index = index,
+        count = count,
+        outerRadius = outerRadius,
+        innerRadius = 4.dp
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .background(containerColor)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1573,103 +1592,6 @@ private fun LiveWave(
                 width = 2.dp.toPx(),
                 cap = StrokeCap.Round
             )
-        )
-    }
-}
-
-@Composable
-private fun QuickActionRow(
-    onPersonalize: () -> Unit
-) {
-    val context = LocalContext.current
-    val haptic = LocalHapticFeedback.current
-    val scope = rememberCoroutineScope()
-    var isTrimming by remember { mutableStateOf(false) }
-    var isClearing by remember { mutableStateOf(false) }
-
-    val runTrim: () -> Unit = {
-        if (!isTrimming) {
-            isTrimming = true
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-            scope.launch {
-                val command =
-                    "if command -v fstrim >/dev/null 2>&1; then " +
-                        "fstrim /data || command fstrim /data; " +
-                        "[ -d /cache ] && { fstrim /cache || true; }; " +
-                        "fi; " +
-                        "sm fstrim >/dev/null 2>&1; " +
-                        "pm trim-caches 999G >/dev/null 2>&1; " +
-                        "echo TRIM_EXIT:$?"
-                val (exitOk, output) = RootUtil.runAsRootWithOutput(command)
-                val trimmed = output.contains("TRIM_EXIT:0")
-                Toast.makeText(
-                    context,
-                    context.getString(
-                        when {
-                            !exitOk && output.contains("Permission denied") ->
-                                R.string.toast_trim_failed
-                            trimmed -> R.string.toast_trim_done
-                            else -> R.string.toast_trim_no_space
-                        }
-                    ),
-                    Toast.LENGTH_SHORT
-                ).show()
-                isTrimming = false
-            }
-        }
-    }
-
-    val runCache: () -> Unit = {
-        if (!isClearing) {
-            isClearing = true
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-            scope.launch {
-                val ok = RootUtil.runAsRoot("sync; echo 3 > /proc/sys/vm/drop_caches; pm trim-caches 999G")
-                Toast.makeText(
-                    context,
-                    context.getString(if (ok) R.string.toast_cache_done else R.string.toast_cache_failed),
-                    Toast.LENGTH_SHORT
-                ).show()
-                isClearing = false
-            }
-        }
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        HomeActionRow(
-            index = 0,
-            count = 3,
-            icon = Icons.Rounded.AutoFixHigh,
-            title = stringResource(R.string.home_quick_trim),
-            subtitle = localizedLabel(
-                "Keluarkan blok penyimpanan yang tidak terpakai",
-                "Release unused storage blocks"
-            ),
-            onClick = runTrim,
-            enabled = !isTrimming
-        )
-        HomeActionRow(
-            index = 1,
-            count = 3,
-            icon = Icons.Rounded.CleaningServices,
-            title = stringResource(R.string.home_quick_cache),
-            subtitle = localizedLabel(
-                "Kosongkan cache RAM dan berkas sementara",
-                "Flush RAM cache and temporary files"
-            ),
-            onClick = runCache,
-            enabled = !isClearing
-        )
-        HomeActionRow(
-            index = 2,
-            count = 3,
-            icon = Icons.Rounded.Palette,
-            title = stringResource(R.string.home_quick_personalize),
-            subtitle = localizedLabel(
-                "Buka personalisasi warna dan tema",
-                "Open colour and theme personalisation"
-            ),
-            onClick = { onPersonalize() }
         )
     }
 }

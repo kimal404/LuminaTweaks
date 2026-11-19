@@ -30,16 +30,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.PagerState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -53,12 +52,12 @@ import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Widgets
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
@@ -67,9 +66,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
@@ -79,7 +78,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -98,6 +96,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -106,11 +105,11 @@ import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DisplayRrMode
 import com.luminatweaks.service.FloatingFpsService
 import com.luminatweaks.ui.component.appBarFade
+import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.DeviceUtil
 import java.util.Locale
 import kotlin.math.roundToInt
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -162,7 +161,7 @@ fun getRendererShortLabel(id: String, defaultLabel: String): String {
     }
 }
 
-private data class TweakSheetOption<T>(
+private data class TweakDialogOption<T>(
     val value: T,
     val label: String
 )
@@ -256,9 +255,9 @@ fun TweaksScreen(
         }
     }
 
-    var showRefreshRateSheet by rememberSaveable { mutableStateOf(false) }
-    var showRenderSheet by rememberSaveable { mutableStateOf(false) }
-    var showIoSchedulerSheet by rememberSaveable { mutableStateOf(false) }
+    var showRefreshRateDialog by rememberSaveable { mutableStateOf(false) }
+    var showRenderDialog by rememberSaveable { mutableStateOf(false) }
+    var showIoSchedulerDialog by rememberSaveable { mutableStateOf(false) }
     var inFloatingFpsSubpage by rememberSaveable { mutableStateOf(false) }
     var inSessionStatsSubpage by remember { mutableStateOf(false) }
     var inMemoryZramSubpage by rememberSaveable { mutableStateOf(false) }
@@ -334,7 +333,7 @@ fun TweaksScreen(
 
     val rendererOptions = remember(defaultRendererLabel) {
         RENDERER_OPTIONS.map {
-            TweakSheetOption(it.id, getRendererDisplayLabel(it.id, defaultRendererLabel))
+            TweakDialogOption(it.id, getRendererDisplayLabel(it.id, defaultRendererLabel))
         }
     }
 
@@ -387,63 +386,72 @@ fun TweaksScreen(
         )
     }
 
-    AZenithOptionSheet(
-        show = showRefreshRateSheet,
-        title = stringResource(R.string.tweaks_dialog_select_rr),
-        subtitle = rrSubtitle,
-        options = rrModes.map { TweakSheetOption(it.id, "${it.hz} Hz") },
-        isSelected = { it == currentRrId },
-        onSelect = { id ->
-            val previous = currentRrId
-            currentRrId = id
-            coroutineScope.launch {
-                applyTweakChange(
-                    snackbarHostState = snackbarHostState,
-                    errorMessage = applyFailedText,
-                    revert = { currentRrId = previous }
-                ) { ConfigRepository.setRefreshRate(id) }
-            }
-        },
-        onDismiss = { showRefreshRateSheet = false }
-    )
+    if (showRefreshRateDialog) {
+        TweakOptionDialog(
+            icon = Icons.Rounded.Speed,
+            title = stringResource(R.string.tweaks_dialog_select_rr),
+            subtitle = rrSubtitle,
+            options = rrModes.map { TweakDialogOption(it.id, "${it.hz} Hz") },
+            isSelected = { it == currentRrId },
+            onSelect = { id ->
+                val previous = currentRrId
+                currentRrId = id
+                showRefreshRateDialog = false
+                coroutineScope.launch {
+                    applyTweakChange(
+                        snackbarHostState = snackbarHostState,
+                        errorMessage = applyFailedText,
+                        revert = { currentRrId = previous }
+                    ) { ConfigRepository.setRefreshRate(id) }
+                }
+            },
+            onDismiss = { showRefreshRateDialog = false }
+        )
+    }
 
-    AZenithOptionSheet(
-        show = showRenderSheet,
-        title = stringResource(R.string.tweaks_dialog_select_renderer),
-        options = rendererOptions,
-        isSelected = { it.equals(currentRendererId, ignoreCase = true) },
-        onSelect = { rawId ->
-            val previous = currentRendererId
-            currentRendererId = rawId
-            coroutineScope.launch {
-                applyTweakChange(
-                    snackbarHostState = snackbarHostState,
-                    errorMessage = applyFailedText,
-                    revert = { currentRendererId = previous }
-                ) { ConfigRepository.setRenderer(rawId) }
-            }
-        },
-        onDismiss = { showRenderSheet = false }
-    )
+    if (showRenderDialog) {
+        TweakOptionDialog(
+            icon = Icons.Rounded.DeveloperBoard,
+            title = stringResource(R.string.tweaks_dialog_select_renderer),
+            options = rendererOptions,
+            isSelected = { it.equals(currentRendererId, ignoreCase = true) },
+            onSelect = { rawId ->
+                val previous = currentRendererId
+                currentRendererId = rawId
+                showRenderDialog = false
+                coroutineScope.launch {
+                    applyTweakChange(
+                        snackbarHostState = snackbarHostState,
+                        errorMessage = applyFailedText,
+                        revert = { currentRendererId = previous }
+                    ) { ConfigRepository.setRenderer(rawId) }
+                }
+            },
+            onDismiss = { showRenderDialog = false }
+        )
+    }
 
-    AZenithOptionSheet(
-        show = showIoSchedulerSheet,
-        title = stringResource(R.string.dialog_select_io_scheduler),
-        options = ioSchedulerOptions.map { TweakSheetOption(it, it) },
-        isSelected = { it.equals(currentIoScheduler, ignoreCase = true) },
-        onSelect = { scheduler ->
-            val previous = currentIoScheduler
-            currentIoScheduler = scheduler
-            coroutineScope.launch {
-                applyTweakChange(
-                    snackbarHostState = snackbarHostState,
-                    errorMessage = applyFailedText,
-                    revert = { currentIoScheduler = previous }
-                ) { ConfigRepository.setIoScheduler(scheduler) }
-            }
-        },
-        onDismiss = { showIoSchedulerSheet = false }
-    )
+    if (showIoSchedulerDialog) {
+        TweakOptionDialog(
+            icon = Icons.Rounded.Storage,
+            title = stringResource(R.string.dialog_select_io_scheduler),
+            options = ioSchedulerOptions.map { TweakDialogOption(it, it) },
+            isSelected = { it.equals(currentIoScheduler, ignoreCase = true) },
+            onSelect = { scheduler ->
+                val previous = currentIoScheduler
+                currentIoScheduler = scheduler
+                showIoSchedulerDialog = false
+                coroutineScope.launch {
+                    applyTweakChange(
+                        snackbarHostState = snackbarHostState,
+                        errorMessage = applyFailedText,
+                        revert = { currentIoScheduler = previous }
+                    ) { ConfigRepository.setIoScheduler(scheduler) }
+                }
+            },
+            onDismiss = { showIoSchedulerDialog = false }
+        )
+    }
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
@@ -543,7 +551,7 @@ fun TweaksScreen(
                         label = stringResource(R.string.tweaks_refresh_rate),
                         value = currentRrText,
                         highlight = true,
-                        onClick = { showRefreshRateSheet = true }
+                        onClick = { showRefreshRateDialog = true }
                     )
 
                     ExpressiveTweakTile(
@@ -553,7 +561,7 @@ fun TweaksScreen(
                         value = effectiveRendererText,
                         highlight = !isGlobalTextureEnabled,
                         enabled = !isGlobalTextureEnabled,
-                        onClick = { showRenderSheet = true }
+                        onClick = { showRenderDialog = true }
                     )
                 }
             }
@@ -582,7 +590,7 @@ fun TweaksScreen(
                         title = stringResource(R.string.tweak_io_scheduler),
                         subtitle = currentIoScheduler,
                         highlightSubtitle = true,
-                        onClick = { showIoSchedulerSheet = true }
+                        onClick = { showIoSchedulerDialog = true }
                     )
                 }
             }
@@ -877,87 +885,56 @@ private fun ExpressiveTweakTile(
 }
 
 @Composable
-private fun <T> AZenithOptionSheet(
-    show: Boolean,
+private fun <T> TweakOptionDialog(
+    icon: ImageVector,
     title: String,
-    options: List<TweakSheetOption<T>>,
+    options: List<TweakDialogOption<T>>,
     isSelected: (T) -> Boolean,
     onSelect: (T) -> Unit,
     onDismiss: () -> Unit,
     subtitle: String? = null
 ) {
-    if (!show) return
-
-    val scope = rememberCoroutineScope()
-    val sheetState = rememberModalBottomSheetState()
-    val currentOnDismiss by rememberUpdatedState(onDismiss)
+    val haptic = LocalHapticFeedback.current
+    val currentRadius = LocalCornerRadius.current
     val scheme = MaterialTheme.colorScheme
 
-    val hideSheet: (() -> Unit) -> Unit = { afterHide ->
-        scope.launch {
-            try {
-                sheetState.hide()
-            } catch (_: CancellationException) {
-                return@launch
-            }
-            if (!sheetState.isVisible) {
-                currentOnDismiss()
-                afterHide()
-            }
-        }
-    }
-
-    val sheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
-
-    ModalBottomSheet(
-        onDismissRequest = currentOnDismiss,
-        sheetState = sheetState,
-        containerColor = Color.Transparent,
-        scrimColor = if (scheme.surfaceContainerLowest == Color.Black) {
-            Color.Black.copy(alpha = 0.5f)
-        } else {
-            scheme.scrim.copy(alpha = 0.32f)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = scheme.primary,
+                modifier = Modifier.size(28.dp)
+            )
         },
-        shape = sheetShape,
-        dragHandle = null,
-        contentWindowInsets = { WindowInsets(0.dp) }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(sheetShape)
-                .background(scheme.surfaceContainerLow)
-                .navigationBarsPadding()
-        ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(top = 12.dp, bottom = 4.dp)
-                    .width(32.dp)
-                    .height(4.dp)
-                    .background(scheme.onSurfaceVariant.copy(alpha = 0.4f), CircleShape)
-            )
-
-            Text(
-                text = title,
-                style = MaterialTheme.typography.headlineSmall,
-                color = scheme.onSurface,
-                modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 4.dp)
-            )
-            if (subtitle != null) {
+        title = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = scheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 4.dp)
+                    text = title,
+                    style = MaterialTheme.typography.titleMediumEmphasized,
+                    textAlign = TextAlign.Center
                 )
+                if (subtitle != null) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
-
+        },
+        text = {
             if (options.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 28.dp),
+                        .padding(vertical = 20.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -970,25 +947,20 @@ private fun <T> AZenithOptionSheet(
                     )
                 }
             } else {
-                LazyColumn(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 520.dp),
-                    contentPadding = PaddingValues(
-                        start = 16.dp,
-                        end = 16.dp,
-                        top = 8.dp,
-                        bottom = 16.dp
-                    ),
+                        .heightIn(max = 360.dp)
+                        .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    itemsIndexed(options) { index, option ->
+                    options.forEachIndexed { index, option ->
                         val selected = isSelected(option.value)
-                        val rowShape = RoundedCornerShape(
-                            topStart = if (index == 0) 20.dp else 0.dp,
-                            topEnd = if (index == 0) 20.dp else 0.dp,
-                            bottomStart = if (index == options.lastIndex) 20.dp else 0.dp,
-                            bottomEnd = if (index == options.lastIndex) 20.dp else 0.dp
+                        val rowShape = connectedContainerShape(
+                            index = index,
+                            count = options.size,
+                            outerRadius = 20.dp,
+                            innerRadius = 4.dp
                         )
 
                         Row(
@@ -999,7 +971,7 @@ private fun <T> AZenithOptionSheet(
                                     if (selected) scheme.secondaryContainer else scheme.surfaceContainer
                                 )
                                 .clickable {
-                                    hideSheet {}
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     onSelect(option.value)
                                 }
                                 .padding(horizontal = 16.dp, vertical = 14.dp),
@@ -1008,7 +980,7 @@ private fun <T> AZenithOptionSheet(
                             Text(
                                 text = option.label,
                                 style = MaterialTheme.typography.bodyLarge.copy(
-                                    fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal
+                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
                                 ),
                                 color = if (selected) scheme.onSecondaryContainer else scheme.onSurface,
                                 maxLines = 1,
@@ -1016,17 +988,28 @@ private fun <T> AZenithOptionSheet(
                                 modifier = Modifier.weight(1f)
                             )
                             Spacer(modifier = Modifier.width(12.dp))
-                            SheetRadioRing(selected = selected)
+                            DialogRadioRing(selected = selected)
                         }
                     }
                 }
             }
-        }
-    }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(
+                    text = stringResource(R.string.action_cancel),
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        },
+        shape = RoundedCornerShape(currentRadius.coerceAtLeast(24.dp)),
+        containerColor = scheme.surfaceContainerHigh
+    )
 }
 
 @Composable
-private fun SheetRadioRing(selected: Boolean) {
+private fun DialogRadioRing(selected: Boolean) {
     val scheme = MaterialTheme.colorScheme
     val ringColor = if (selected) scheme.primary else scheme.onSurfaceVariant
 
