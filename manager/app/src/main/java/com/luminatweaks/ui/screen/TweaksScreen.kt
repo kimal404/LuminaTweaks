@@ -6,11 +6,14 @@ import android.content.Context
 import android.os.Build
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -22,7 +25,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,31 +33,30 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.PagerState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.rounded.BatterySaver
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeveloperBoard
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Widgets
-import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
@@ -69,6 +70,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -76,6 +79,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -83,7 +87,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -95,7 +101,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.luminatweaks.R
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DisplayRrMode
@@ -104,6 +109,7 @@ import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.DeviceUtil
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -371,79 +377,74 @@ fun TweaksScreen(
         return
     }
 
-    if (showRefreshRateSheet) {
-        val rrSubtitle = if (currentRrId == null) {
-            "$liveRefreshRate Hz · $defaultDynamicLabel"
-        } else {
-            localizedLabel(
-                "Layar saat ini: $liveRefreshRate Hz",
-                "Current display: $liveRefreshRate Hz"
-            )
-        }
-        TweakSelectionBottomSheet(
-            title = stringResource(R.string.tweaks_dialog_select_rr),
-            subtitle = rrSubtitle,
-            options = rrModes.map { TweakSheetOption(it.id, "${it.hz} Hz") },
-            isSelected = { it == currentRrId },
-            onSelect = { id ->
-                val previous = currentRrId
-                currentRrId = id
-                showRefreshRateSheet = false
-                coroutineScope.launch {
-                    applyTweakChange(
-                        snackbarHostState = snackbarHostState,
-                        errorMessage = applyFailedText,
-                        revert = { currentRrId = previous }
-                    ) { ConfigRepository.setRefreshRate(id) }
-                }
-            },
-            onDismiss = { showRefreshRateSheet = false }
+    val rrSubtitle = if (currentRrId == null) {
+        "$liveRefreshRate Hz · $defaultDynamicLabel"
+    } else {
+        localizedLabel(
+            "Layar saat ini: $liveRefreshRate Hz",
+            "Current display: $liveRefreshRate Hz"
         )
     }
 
-    if (showRenderSheet) {
-        TweakSelectionBottomSheet(
-            title = stringResource(R.string.tweaks_dialog_select_renderer),
-            options = rendererOptions,
-            isSelected = { it.equals(currentRendererId, ignoreCase = true) },
-            onSelect = { rawId ->
-                val previous = currentRendererId
-                currentRendererId = rawId
-                showRenderSheet = false
-                coroutineScope.launch {
-                    applyTweakChange(
-                        snackbarHostState = snackbarHostState,
-                        errorMessage = applyFailedText,
-                        revert = { currentRendererId = previous }
-                    ) { ConfigRepository.setRenderer(rawId) }
-                }
-            },
-            onDismiss = { showRenderSheet = false }
-        )
-    }
+    AZenithOptionSheet(
+        show = showRefreshRateSheet,
+        title = stringResource(R.string.tweaks_dialog_select_rr),
+        subtitle = rrSubtitle,
+        options = rrModes.map { TweakSheetOption(it.id, "${it.hz} Hz") },
+        isSelected = { it == currentRrId },
+        onSelect = { id ->
+            val previous = currentRrId
+            currentRrId = id
+            coroutineScope.launch {
+                applyTweakChange(
+                    snackbarHostState = snackbarHostState,
+                    errorMessage = applyFailedText,
+                    revert = { currentRrId = previous }
+                ) { ConfigRepository.setRefreshRate(id) }
+            }
+        },
+        onDismiss = { showRefreshRateSheet = false }
+    )
 
-    if (showIoSchedulerSheet) {
-        TweakSelectionBottomSheet(
-            title = stringResource(R.string.dialog_select_io_scheduler),
-            options = ioSchedulerOptions.map { TweakSheetOption(it, it) },
-            isSelected = { it.equals(currentIoScheduler, ignoreCase = true) },
-            onSelect = { scheduler ->
-                val previous = currentIoScheduler
-                currentIoScheduler = scheduler
-                showIoSchedulerSheet = false
-                coroutineScope.launch {
-                    applyTweakChange(
-                        snackbarHostState = snackbarHostState,
-                        errorMessage = applyFailedText,
-                        revert = { currentIoScheduler = previous }
-                    ) { ConfigRepository.setIoScheduler(scheduler) }
-                }
-            },
-            onDismiss = { showIoSchedulerSheet = false }
-        )
-    }
+    AZenithOptionSheet(
+        show = showRenderSheet,
+        title = stringResource(R.string.tweaks_dialog_select_renderer),
+        options = rendererOptions,
+        isSelected = { it.equals(currentRendererId, ignoreCase = true) },
+        onSelect = { rawId ->
+            val previous = currentRendererId
+            currentRendererId = rawId
+            coroutineScope.launch {
+                applyTweakChange(
+                    snackbarHostState = snackbarHostState,
+                    errorMessage = applyFailedText,
+                    revert = { currentRendererId = previous }
+                ) { ConfigRepository.setRenderer(rawId) }
+            }
+        },
+        onDismiss = { showRenderSheet = false }
+    )
 
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    AZenithOptionSheet(
+        show = showIoSchedulerSheet,
+        title = stringResource(R.string.dialog_select_io_scheduler),
+        options = ioSchedulerOptions.map { TweakSheetOption(it, it) },
+        isSelected = { it.equals(currentIoScheduler, ignoreCase = true) },
+        onSelect = { scheduler ->
+            val previous = currentIoScheduler
+            currentIoScheduler = scheduler
+            coroutineScope.launch {
+                applyTweakChange(
+                    snackbarHostState = snackbarHostState,
+                    errorMessage = applyFailedText,
+                    revert = { currentIoScheduler = previous }
+                ) { ConfigRepository.setIoScheduler(scheduler) }
+            }
+        },
+        onDismiss = { showIoSchedulerSheet = false }
+    )
+
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
     val isFloating = LocalFloatingNavBar.current
     val bottomPadding = if (isFloating) {
@@ -457,7 +458,7 @@ fun TweaksScreen(
         contentWindowInsets = WindowInsets(0.dp),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TweaksCollapsingTopBar(
+            TweaksFlexibleTopBar(
                 title = stringResource(R.string.tweaks_title),
                 scrollBehavior = scrollBehavior
             )
@@ -479,25 +480,38 @@ fun TweaksScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding() + 4.dp,
+                top = innerPadding.calculateTopPadding(),
                 bottom = bottomPadding,
                 start = 16.dp,
                 end = 16.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(22.dp)
+            )
         ) {
-            item(key = "display_performance") {
-                ConnectedSectionGroup(
-                    title = localizedLabel("Performa & Layar", "Performance & Display")
-                ) {
+            item(key = "info_banner") {
+                Spacer(modifier = Modifier.height(12.dp))
+                TweaksInfoBanner(
+                    text = localizedLabel(
+                        "Pengaturan di bawah berlaku secara global sebagai default, dan dapat disesuaikan terpisah untuk tiap aplikasi",
+                        "Settings below apply globally as defaults and can be configured individually per app"
+                    )
+                )
+            }
+
+            item(key = "header_performance") {
+                TweaksSectionHeader(
+                    title = localizedLabel("Performa", "Performance")
+                )
+            }
+
+            item(key = "group_performance") {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     ConnectedTweakSwitchRow(
                         index = 0,
-                        count = 3,
+                        count = 1,
                         icon = Icons.Rounded.BatterySaver,
                         title = stringResource(R.string.tweaks_lite_mode),
                         subtitle = localizedLabel(
-                            "Batasi clock CPU untuk suhu lebih adem dan hemat daya",
-                            "Limit CPU clock for cooler thermals and power saving"
+                            "Batasi frekuensi maksimum CPU untuk suhu lebih adem dan hemat daya",
+                            "Limit maximum CPU frequency for cooler thermals and power saving"
                         ),
                         checked = isGlobalLiteMode,
                         onCheckedChange = { newState ->
@@ -513,34 +527,44 @@ fun TweaksScreen(
                             }
                         }
                     )
+                }
+            }
 
-                    ConnectedTweakActionRow(
-                        index = 1,
-                        count = 3,
+            item(key = "display_tiles") {
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    ExpressiveTweakTile(
+                        modifier = Modifier.weight(1f),
                         icon = Icons.Rounded.Speed,
-                        title = stringResource(R.string.tweaks_refresh_rate),
-                        subtitle = currentRrText,
-                        highlightSubtitle = true,
+                        label = stringResource(R.string.tweaks_refresh_rate),
+                        value = currentRrText,
+                        highlight = true,
                         onClick = { showRefreshRateSheet = true }
                     )
 
-                    ConnectedTweakActionRow(
-                        index = 2,
-                        count = 3,
+                    ExpressiveTweakTile(
+                        modifier = Modifier.weight(1f),
                         icon = if (isGlobalTextureEnabled) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
-                        title = stringResource(R.string.tweaks_renderer),
-                        subtitle = effectiveRendererText,
-                        highlightSubtitle = !isGlobalTextureEnabled,
+                        label = stringResource(R.string.tweaks_renderer),
+                        value = effectiveRendererText,
+                        highlight = !isGlobalTextureEnabled,
                         enabled = !isGlobalTextureEnabled,
                         onClick = { showRenderSheet = true }
                     )
                 }
             }
 
-            item(key = "additional") {
-                ConnectedSectionGroup(
+            item(key = "header_additional") {
+                TweaksSectionHeader(
                     title = stringResource(R.string.section_additional_tweaks)
-                ) {
+                )
+            }
+
+            item(key = "group_additional") {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     ConnectedTweakActionRow(
                         index = 0,
                         count = 2,
@@ -562,7 +586,13 @@ fun TweaksScreen(
                 }
             }
 
-            item(key = "utility") {
+            item(key = "header_utility") {
+                TweaksSectionHeader(
+                    title = stringResource(R.string.section_utility_diagnostics)
+                )
+            }
+
+            item(key = "group_utility") {
                 val telemetrySubtitle = if (fpsConfig.enabled) {
                     val count = fpsConfig.activeModuleCount.coerceAtLeast(1)
                     localizedLabel(
@@ -576,9 +606,7 @@ fun TweaksScreen(
                     )
                 }
 
-                ConnectedSectionGroup(
-                    title = stringResource(R.string.section_utility_diagnostics)
-                ) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     ConnectedTweakActionRow(
                         index = 0,
                         count = 4,
@@ -637,70 +665,217 @@ fun TweaksScreen(
 }
 
 @Composable
-private fun TweaksCollapsingTopBar(
+private fun TweaksFlexibleTopBar(
     title: String,
     scrollBehavior: TopAppBarScrollBehavior
 ) {
-    val collapsedFraction = scrollBehavior.state.collapsedFraction
-    val titleSize = (30f - (9f * collapsedFraction)).sp
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+    ) {
+        LargeFlexibleTopAppBar(
+            title = {
+                Text(
+                    text = title,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = Color.Transparent,
+                scrolledContainerColor = Color.Transparent
+            ),
+            scrollBehavior = scrollBehavior,
+            windowInsets = WindowInsets(0, 0, 0, 0)
+        )
+    }
+}
 
-    LargeTopAppBar(
-        title = {
-            Text(
-                text = title,
-                fontSize = titleSize,
-                letterSpacing = (-0.3).sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
-        collapsedHeight = 56.dp,
-        expandedHeight = 96.dp,
-        windowInsets = WindowInsets.statusBars,
-        scrollBehavior = scrollBehavior,
-        colors = TopAppBarDefaults.largeTopAppBarColors(
-            containerColor = MaterialTheme.colorScheme.background,
-            scrolledContainerColor = MaterialTheme.colorScheme.background,
-            titleContentColor = MaterialTheme.colorScheme.onBackground
+@Composable
+private fun TweaksInfoBanner(text: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(26.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TweakSquircleIcon(icon = Icons.Rounded.Info)
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun TweaksSectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(
+            start = 12.dp,
+            end = 12.dp,
+            top = 16.dp,
+            bottom = 8.dp
         )
     )
 }
 
 @Composable
-private fun TweakLeadingSquircle(
+private fun TweakSquircleIcon(
     icon: ImageVector,
-    active: Boolean
+    enabled: Boolean = true
 ) {
-    val containerColor = if (active) {
-        MaterialTheme.colorScheme.secondaryContainer
-    } else {
-        MaterialTheme.colorScheme.surfaceContainerHigh
-    }
-    val iconTint = if (active) {
-        MaterialTheme.colorScheme.onSecondaryContainer
-    } else {
+    val contentColor = if (enabled) {
         MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
     }
 
     Box(
         modifier = Modifier
-            .size(44.dp)
-            .clip(RoundedCornerShape(13.dp))
-            .background(containerColor),
+            .size(36.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
         contentAlignment = Alignment.Center
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = iconTint,
+            tint = contentColor,
             modifier = Modifier.size(22.dp)
         )
     }
 }
 
 @Composable
-private fun <T> TweakSelectionBottomSheet(
+private fun ExpressiveTweakTile(
+    modifier: Modifier = Modifier,
+    icon: ImageVector,
+    label: String,
+    value: String,
+    highlight: Boolean,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    val haptic = LocalHapticFeedback.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed && enabled) 0.98f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "tweakTileScale"
+    )
+
+    val iconBoxBgColor by animateColorAsState(
+        targetValue = if (highlight && enabled) {
+            colorScheme.primaryContainer
+        } else {
+            colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        },
+        animationSpec = tween(350),
+        label = "tileIconBoxBg"
+    )
+
+    val iconColor by animateColorAsState(
+        targetValue = if (highlight && enabled) {
+            colorScheme.onPrimaryContainer
+        } else {
+            colorScheme.onSurfaceVariant
+        },
+        animationSpec = tween(350),
+        label = "tileIconColor"
+    )
+
+    Surface(
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onClick()
+        },
+        enabled = enabled,
+        interactionSource = interactionSource,
+        shape = RoundedCornerShape(26.dp),
+        color = colorScheme.surfaceColorAtElevation(1.dp),
+        modifier = modifier
+            .alpha(if (enabled) 1f else 0.55f)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(82.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(iconBoxBgColor),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconColor,
+                    modifier = Modifier.size(36.dp)
+                )
+
+                Icon(
+                    imageVector = if (enabled) Icons.Rounded.ChevronRight else Icons.Rounded.Lock,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .size(if (enabled) 20.dp else 17.dp),
+                    tint = iconColor.copy(alpha = 0.6f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Column(
+                modifier = Modifier.padding(horizontal = 4.dp)
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+    }
+}
+
+@Composable
+private fun <T> AZenithOptionSheet(
+    show: Boolean,
     title: String,
     options: List<TweakSheetOption<T>>,
     isSelected: (T) -> Boolean,
@@ -708,150 +883,167 @@ private fun <T> TweakSelectionBottomSheet(
     onDismiss: () -> Unit,
     subtitle: String? = null
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    if (!show) return
+
+    val scope = rememberCoroutineScope()
+    val sheetState = rememberModalBottomSheetState()
+    val currentOnDismiss by rememberUpdatedState(onDismiss)
+    val scheme = MaterialTheme.colorScheme
+
+    val hideSheet: (() -> Unit) -> Unit = { afterHide ->
+        scope.launch {
+            try {
+                sheetState.hide()
+            } catch (_: CancellationException) {
+                return@launch
+            }
+            if (!sheetState.isVisible) {
+                currentOnDismiss()
+                afterHide()
+            }
+        }
+    }
+
+    val sheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = currentOnDismiss,
         sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentWindowInsets = { WindowInsets(0.dp) },
-        dragHandle = {
-            BottomSheetDefaults.DragHandle(
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-            )
-        }
+        containerColor = Color.Transparent,
+        scrimColor = if (scheme.surfaceContainerLowest == Color.Black) {
+            Color.Black.copy(alpha = 0.5f)
+        } else {
+            scheme.scrim.copy(alpha = 0.32f)
+        },
+        shape = sheetShape,
+        dragHandle = null,
+        contentWindowInsets = { WindowInsets(0.dp) }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .clip(sheetShape)
+                .background(scheme.surfaceContainerLow)
                 .navigationBarsPadding()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(top = 12.dp, bottom = 4.dp)
+                    .width(32.dp)
+                    .height(4.dp)
+                    .background(scheme.onSurfaceVariant.copy(alpha = 0.4f), CircleShape)
+            )
+
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineSmall,
+                color = scheme.onSurface,
+                modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 4.dp)
+            )
+            if (subtitle != null) {
                 Text(
-                    text = title,
-                    fontSize = 21.sp,
-                    lineHeight = 26.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = scheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 4.dp)
                 )
-                if (subtitle != null) {
-                    Text(
-                        text = subtitle,
-                        fontSize = 13.5.sp,
-                        lineHeight = 18.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
             }
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 440.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
-            ) {
-                if (options.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 28.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = localizedLabel(
-                                "Belum ada opsi tersedia",
-                                "No options available yet"
-                            ),
-                            fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                } else {
-                    options.forEachIndexed { index, option ->
+            if (options.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 28.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = localizedLabel(
+                            "Belum ada opsi tersedia",
+                            "No options available yet"
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = scheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 520.dp),
+                    contentPadding = PaddingValues(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 8.dp,
+                        bottom = 16.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    itemsIndexed(options) { index, option ->
                         val selected = isSelected(option.value)
-                        val rowContainer = if (selected) {
-                            MaterialTheme.colorScheme.secondaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surfaceContainer
-                        }
-                        val rowTextColor = if (selected) {
-                            MaterialTheme.colorScheme.onSecondaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        }
+                        val rowShape = RoundedCornerShape(
+                            topStart = if (index == 0) 20.dp else 0.dp,
+                            topEnd = if (index == 0) 20.dp else 0.dp,
+                            bottomStart = if (index == options.lastIndex) 20.dp else 0.dp,
+                            bottomEnd = if (index == options.lastIndex) 20.dp else 0.dp
+                        )
 
-                        Surface(
-                            onClick = { onSelect(option.value) },
-                            shape = connectedContainerShape(
-                                index = index,
-                                count = options.size,
-                                outerRadius = 20.dp,
-                                innerRadius = 5.dp
-                            ),
-                            color = rowContainer,
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .defaultMinSize(minHeight = 58.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 18.dp, vertical = 15.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier.size(24.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (selected) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(24.dp)
-                                                .clip(CircleShape)
-                                                .background(MaterialTheme.colorScheme.primary),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Check,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.onPrimary,
-                                                modifier = Modifier.size(15.dp)
-                                            )
-                                        }
-                                    } else {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(22.dp)
-                                                .border(
-                                                    width = 1.75.dp,
-                                                    color = MaterialTheme.colorScheme.outlineVariant,
-                                                    shape = CircleShape
-                                                )
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.width(16.dp))
-                                Text(
-                                    text = option.label,
-                                    fontSize = 16.5.sp,
-                                    lineHeight = 22.sp,
-                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                    color = rowTextColor,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                .clip(rowShape)
+                                .background(
+                                    if (selected) scheme.secondaryContainer else scheme.surfaceContainer
                                 )
-                            }
+                                .clickable {
+                                    hideSheet {}
+                                    onSelect(option.value)
+                                }
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = option.label,
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal
+                                ),
+                                color = if (selected) scheme.onSecondaryContainer else scheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            SheetRadioRing(selected = selected)
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SheetRadioRing(selected: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    val ringColor = if (selected) scheme.primary else scheme.onSurfaceVariant
+
+    Box(
+        modifier = Modifier.size(20.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.size(20.dp)) {
+            val stroke = 2.dp.toPx()
+            val radius = (size.width / 2f) - (stroke / 2f)
+            drawCircle(
+                color = ringColor,
+                radius = radius,
+                style = Stroke(width = stroke)
+            )
+            if (selected) {
+                drawCircle(
+                    color = scheme.primary,
+                    radius = (size.width / 2f) * 0.3f
+                )
             }
         }
     }
@@ -861,8 +1053,8 @@ private fun <T> TweakSelectionBottomSheet(
 internal fun connectedContainerShape(
     index: Int,
     count: Int,
-    outerRadius: Dp = 24.dp,
-    innerRadius: Dp = 5.dp
+    outerRadius: Dp = 26.dp,
+    innerRadius: Dp = 4.dp
 ): Shape {
     return when {
         count <= 1 -> RoundedCornerShape(outerRadius)
@@ -889,20 +1081,10 @@ internal fun ConnectedSectionGroup(
     content: @Composable ColumnScope.() -> Unit
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
-        Text(
-            text = title,
-            fontSize = 14.sp,
-            lineHeight = 18.sp,
-            letterSpacing = 0.2.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.primary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = 6.dp, bottom = 10.dp)
-        )
+        TweaksSectionHeader(title = title)
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(3.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
             content = content
         )
     }
@@ -918,55 +1100,63 @@ internal fun ConnectedTweakSwitchRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    Surface(
-        onClick = { onCheckedChange(!checked) },
-        shape = connectedContainerShape(index = index, count = count),
-        color = MaterialTheme.colorScheme.surfaceContainer,
+    val shape = connectedContainerShape(index = index, count = count)
+
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .defaultMinSize(minHeight = 74.dp)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .clickable { onCheckedChange(!checked) }
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier.padding(end = 16.dp),
+            contentAlignment = Alignment.Center
         ) {
-            TweakLeadingSquircle(
-                icon = icon,
-                active = checked
+            TweakSquircleIcon(icon = icon)
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 8.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
             )
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    fontSize = 17.sp,
-                    lineHeight = 22.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(3.dp))
-                Text(
-                    text = subtitle,
-                    fontSize = 13.5.sp,
-                    lineHeight = 18.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Spacer(modifier = Modifier.width(14.dp))
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Box(
+            modifier = Modifier.padding(start = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
             Switch(
                 checked = checked,
                 onCheckedChange = onCheckedChange,
                 thumbContent = {
-                    Icon(
-                        imageVector = if (checked) Icons.Rounded.Check else Icons.Rounded.Close,
-                        contentDescription = null,
-                        modifier = Modifier.size(SwitchDefaults.IconSize)
-                    )
+                    if (checked) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(SwitchDefaults.IconSize)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            modifier = Modifier.size(SwitchDefaults.IconSize)
+                        )
+                    }
                 }
             )
         }
@@ -985,77 +1175,56 @@ internal fun ConnectedTweakActionRow(
     highlightSubtitle: Boolean = false
 ) {
     val haptic = LocalHapticFeedback.current
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed && enabled) 0.985f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
-        label = "tweakActionRowScale"
-    )
+    val shape = connectedContainerShape(index = index, count = count)
 
-    Surface(
-        onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-            onClick()
-        },
-        enabled = enabled,
-        shape = connectedContainerShape(index = index, count = count),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        interactionSource = interactionSource,
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .defaultMinSize(minHeight = 74.dp)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .clickable(enabled = enabled) {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClick()
             }
+            .alpha(if (enabled) 1f else 0.55f)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .alpha(if (enabled) 1f else 0.55f)
-                .padding(horizontal = 18.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier.padding(end = 16.dp),
+            contentAlignment = Alignment.Center
         ) {
-            TweakLeadingSquircle(
-                icon = icon,
-                active = highlightSubtitle && enabled
+            TweakSquircleIcon(icon = icon, enabled = enabled)
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 8.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
             )
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    fontSize = 17.sp,
-                    lineHeight = 22.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(3.dp))
-                Text(
-                    text = subtitle,
-                    fontSize = 13.5.sp,
-                    lineHeight = 18.sp,
-                    fontWeight = if (highlightSubtitle) FontWeight.Medium else FontWeight.Normal,
-                    color = if (highlightSubtitle) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Spacer(modifier = Modifier.width(14.dp))
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (highlightSubtitle) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
+        }
+        Box(
+            modifier = Modifier.padding(start = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
             Icon(
                 imageVector = if (enabled) Icons.Rounded.ChevronRight else Icons.Rounded.Lock,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
-                modifier = Modifier.size(if (enabled) 22.dp else 20.dp)
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -1122,16 +1291,13 @@ internal fun NestedTweakCompactCard(
     modifier: Modifier = Modifier,
     enabled: Boolean = true
 ) {
-    Box(modifier = modifier) {
-        ConnectedTweakActionRow(
-            index = 0,
-            count = 1,
-            icon = icon,
-            title = title,
-            subtitle = value,
-            onClick = onClick,
-            enabled = enabled,
-            highlightSubtitle = enabled
-        )
-    }
+    ExpressiveTweakTile(
+        modifier = modifier,
+        icon = icon,
+        label = title,
+        value = value,
+        highlight = enabled,
+        enabled = enabled,
+        onClick = onClick
+    )
 }
