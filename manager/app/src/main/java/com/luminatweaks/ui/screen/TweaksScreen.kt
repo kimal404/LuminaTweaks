@@ -95,6 +95,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.luminatweaks.R
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DisplayRrMode
@@ -444,12 +445,14 @@ fun TweaksScreen(
     }
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val collapsedFraction = scrollBehavior.state.collapsedFraction
+    val titleFontSize = (32f - (11f * collapsedFraction)).sp
 
     val isFloating = LocalFloatingNavBar.current
     val bottomPadding = if (isFloating) {
-        110.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        114.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     } else {
-        24.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        28.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     }
 
     Scaffold(
@@ -461,11 +464,15 @@ fun TweaksScreen(
                 title = {
                     Text(
                         text = stringResource(R.string.tweaks_title),
+                        fontSize = titleFontSize,
+                        letterSpacing = (-0.4).sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 },
+                collapsedHeight = 56.dp,
+                expandedHeight = 104.dp,
                 windowInsets = WindowInsets.statusBars,
                 scrollBehavior = scrollBehavior,
                 colors = TopAppBarDefaults.largeTopAppBarColors(
@@ -492,12 +499,12 @@ fun TweaksScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding() + 4.dp,
+                top = innerPadding.calculateTopPadding() + 6.dp,
                 bottom = bottomPadding,
                 start = 16.dp,
                 end = 16.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             item(key = "display_performance") {
                 ConnectedSectionGroup(
@@ -653,8 +660,8 @@ fun TweaksScreen(
 internal fun connectedContainerShape(
     index: Int,
     count: Int,
-    outerRadius: Dp = LocalCornerRadius.current.coerceIn(20.dp, 26.dp),
-    innerRadius: Dp = 4.dp
+    outerRadius: Dp = LocalCornerRadius.current.coerceIn(22.dp, 28.dp),
+    innerRadius: Dp = 5.dp
 ): Shape {
     return when {
         count <= 1 -> RoundedCornerShape(outerRadius)
@@ -685,16 +692,16 @@ internal fun ConnectedSectionGroup(
     ) {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = 4.dp, bottom = 10.dp)
+            modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
         )
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
             content = content
         )
     }
@@ -719,33 +726,35 @@ internal fun ConnectedTweakSwitchRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = 18.dp, vertical = 18.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             TweakLeadingIconBadge(
                 icon = icon,
                 active = checked
             )
-            Spacer(modifier = Modifier.width(14.dp))
+            Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 18.sp,
+                    lineHeight = 23.sp,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 13.5.sp,
+                    lineHeight = 18.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(14.dp))
             Switch(
                 checked = checked,
                 onCheckedChange = onCheckedChange,
@@ -804,28 +813,30 @@ internal fun ConnectedTweakActionRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .alpha(if (enabled) 1f else 0.55f)
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = 18.dp, vertical = 18.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             TweakLeadingIconBadge(
                 icon = icon,
                 active = highlightSubtitle && enabled
             )
-            Spacer(modifier = Modifier.width(14.dp))
+            Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 18.sp,
+                    lineHeight = 23.sp,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = if (highlightSubtitle) FontWeight.Medium else FontWeight.Normal,
+                    fontSize = 13.5.sp,
+                    lineHeight = 18.sp,
+                    fontWeight = if (highlightSubtitle) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (highlightSubtitle) {
                         MaterialTheme.colorScheme.primary
                     } else {
@@ -835,12 +846,12 @@ internal fun ConnectedTweakActionRow(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(14.dp))
             Icon(
                 imageVector = if (enabled) Icons.Rounded.ChevronRight else Icons.Rounded.Lock,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                modifier = Modifier.size(if (enabled) 20.dp else 18.dp)
+                modifier = Modifier.size(if (enabled) 22.dp else 20.dp)
             )
         }
     }
@@ -864,8 +875,8 @@ private fun TweakLeadingIconBadge(
 
     Box(
         modifier = Modifier
-            .size(40.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .size(46.dp)
+            .clip(RoundedCornerShape(14.dp))
             .background(containerColor),
         contentAlignment = Alignment.Center
     ) {
@@ -873,7 +884,7 @@ private fun TweakLeadingIconBadge(
             imageVector = icon,
             contentDescription = null,
             tint = iconTint,
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier.size(22.dp)
         )
     }
 }
