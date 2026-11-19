@@ -17,6 +17,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -86,6 +87,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import com.luminatweaks.ui.component.pressScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -885,12 +887,18 @@ private fun GroupedOptionRow(
         scheme.onSurface
     }
 
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressScaleModifier = pressScale(interactionSource, 0.97f)
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .then(pressScaleModifier)
             .clip(shape)
             .background(container)
-            .clickable {
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null
+            ) {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onClick()
             }
@@ -945,12 +953,18 @@ private fun ToggleHeroCard(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressScaleModifier = pressScale(interactionSource, 0.975f)
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .then(pressScaleModifier)
             .clip(CardShape)
             .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
-            .clickable { onCheckedChange(!checked) }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null
+            ) { onCheckedChange(!checked) }
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -994,6 +1008,7 @@ private fun ToggleHeroCard(
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
+            interactionSource = interactionSource,
             thumbContent = {
                 if (checked) {
                     Icon(

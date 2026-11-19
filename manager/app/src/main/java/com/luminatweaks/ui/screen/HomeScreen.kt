@@ -29,6 +29,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -68,7 +69,6 @@ import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Thermostat
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -99,6 +99,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
@@ -118,7 +119,11 @@ import com.luminatweaks.R
 import com.luminatweaks.data.DaemonManager
 import com.luminatweaks.service.FloatingFpsService
 import com.luminatweaks.ui.component.LuminaBottomBar
+import com.luminatweaks.ui.component.TouchOriginDialog
 import com.luminatweaks.ui.component.appBarFade
+import com.luminatweaks.ui.component.bouncyClickable
+import com.luminatweaks.ui.component.pressScale
+import com.luminatweaks.ui.component.rememberDialogOrigin
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.ui.theme.LocalPageTransition
@@ -330,38 +335,48 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
         }
     }
 
-    if (showRebootDialog) {
-        val coroutineScope = rememberCoroutineScope()
-        val haptic = LocalHapticFeedback.current
-        val currentRadius = LocalCornerRadius.current
+    val coroutineScope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
 
-        AlertDialog(
-            onDismissRequest = { showRebootDialog = false },
-            icon = {
-                Icon(
-                    imageVector = Icons.Rounded.Refresh,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(28.dp)
-                )
-            },
-            title = {
-                Text(
-                    text = stringResource(R.string.dialog_reboot_required_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center
-                )
-            },
-            text = {
-                Text(
-                    text = stringResource(R.string.dialog_reboot_required_desc),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-            },
-            confirmButton = {
+    TouchOriginDialog(
+        visible = showRebootDialog,
+        onDismiss = { showRebootDialog = false }
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Refresh,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(28.dp)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = stringResource(R.string.dialog_reboot_required_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.dialog_reboot_required_desc),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(20.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = { showRebootDialog = false }) {
+                    Text(
+                        text = stringResource(R.string.action_later),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
                 TextButton(
                     onClick = {
                         showRebootDialog = false
@@ -382,18 +397,8 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRebootDialog = false }) {
-                    Text(
-                        text = stringResource(R.string.action_later),
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            },
-            shape = RoundedCornerShape(currentRadius.coerceAtLeast(24.dp)),
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
+            }
+        }
     }
 
     val isFloating = LocalFloatingNavBar.current
@@ -721,79 +726,70 @@ fun HomeDashboardContent(
         }
     }
 
-    if (showPowerDialog) {
-        val currentRadius = LocalCornerRadius.current
-        AlertDialog(
-            onDismissRequest = { showPowerDialog = false },
-            icon = {
-                Icon(
-                    imageVector = Icons.Rounded.PowerSettingsNew,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(28.dp)
-                )
-            },
-            title = {
-                Text(
-                    text = stringResource(R.string.power_menu_title),
-                    style = MaterialTheme.typography.titleMediumEmphasized,
-                    textAlign = TextAlign.Center
-                )
-            },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    PowerActionRow(
-                        index = 0,
-                        count = 3,
-                        icon = Icons.Rounded.Refresh,
-                        title = stringResource(R.string.power_action_reboot),
-                        onClick = {
-                            showPowerDialog = false
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            Toast.makeText(context, context.getString(R.string.toast_rebooting_device), Toast.LENGTH_SHORT).show()
-                            restartScope.launch { rootReboot("") }
-                        }
-                    )
-                    PowerActionRow(
-                        index = 1,
-                        count = 3,
-                        icon = Icons.Rounded.Memory,
-                        title = stringResource(R.string.power_action_recovery),
-                        onClick = {
-                            showPowerDialog = false
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            Toast.makeText(context, context.getString(R.string.toast_rebooting_recovery), Toast.LENGTH_SHORT).show()
-                            restartScope.launch { rootReboot("recovery") }
-                        }
-                    )
-                    PowerActionRow(
-                        index = 2,
-                        count = 3,
-                        icon = Icons.Rounded.PowerSettingsNew,
-                        title = stringResource(R.string.power_action_restart_service),
-                        onClick = {
-                            showPowerDialog = false
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            launchRestart()
-                        }
-                    )
+    var powerDialogOriginPoint by remember { mutableStateOf(Offset(0.5f, 0.5f)) }
+    val heroOrigin = rememberDialogOrigin()
+    val topBarPowerOrigin = rememberDialogOrigin()
+
+    TouchOriginDialog(
+        visible = showPowerDialog,
+        onDismiss = { showPowerDialog = false },
+        origin = powerDialogOriginPoint
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            HomeSquircleIcon(icon = Icons.Rounded.PowerSettingsNew)
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = stringResource(R.string.power_menu_title),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            PowerActionRow(
+                index = 0,
+                count = 3,
+                icon = Icons.Rounded.Refresh,
+                title = stringResource(R.string.power_action_reboot),
+                onClick = {
+                    showPowerDialog = false
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    Toast.makeText(context, context.getString(R.string.toast_rebooting_device), Toast.LENGTH_SHORT).show()
+                    restartScope.launch { rootReboot("") }
                 }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { showPowerDialog = false }) {
-                    Text(
-                        text = stringResource(R.string.action_cancel),
-                        fontWeight = FontWeight.SemiBold
-                    )
+            )
+            PowerActionRow(
+                index = 1,
+                count = 3,
+                icon = Icons.Rounded.Memory,
+                title = stringResource(R.string.power_action_recovery),
+                onClick = {
+                    showPowerDialog = false
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    Toast.makeText(context, context.getString(R.string.toast_rebooting_recovery), Toast.LENGTH_SHORT).show()
+                    restartScope.launch { rootReboot("recovery") }
                 }
-            },
-            shape = RoundedCornerShape(currentRadius.coerceAtLeast(24.dp)),
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
+            )
+            PowerActionRow(
+                index = 2,
+                count = 3,
+                icon = Icons.Rounded.PowerSettingsNew,
+                title = stringResource(R.string.power_action_restart_service),
+                onClick = {
+                    showPowerDialog = false
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    launchRestart()
+                }
+            )
+        }
     }
 
     val isFloating = LocalFloatingNavBar.current
@@ -827,8 +823,10 @@ fun HomeDashboardContent(
                     },
                     actions = {
                         IconButton(
+                            modifier = topBarPowerOrigin.trackedModifier(),
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                powerDialogOriginPoint = topBarPowerOrigin.origin
                                 showPowerDialog = true
                             }
                         ) {
@@ -860,6 +858,7 @@ fun HomeDashboardContent(
             item(key = "status") {
                 Spacer(modifier = Modifier.height(12.dp))
                 CoreStatusHero(
+                    modifier = heroOrigin.trackedModifier(),
                     isChecking = isChecking,
                     isRestarting = isRestarting,
                     isRunning = isRunning,
@@ -871,6 +870,7 @@ fun HomeDashboardContent(
                             isChecking || isRestarting -> Unit
                             isRunning -> {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                powerDialogOriginPoint = heroOrigin.origin
                                 showPowerDialog = true
                             }
                             isRebootRequired -> onRequestRebootDialog()
@@ -961,6 +961,8 @@ private fun AZenithDeviceInfoCard(
 
     val totalRows = if (isExpanded) 5 else 3
     val innerRowColor = colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    val infoInteraction = remember { MutableInteractionSource() }
+    val infoPressScale = pressScale(infoInteraction, 0.98f)
 
     Surface(
         shape = RoundedCornerShape(26.dp),
@@ -969,7 +971,10 @@ private fun AZenithDeviceInfoCard(
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             isExpanded = !isExpanded
         },
-        modifier = Modifier.fillMaxWidth()
+        interactionSource = infoInteraction,
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(infoPressScale)
     ) {
         Column(
             modifier = Modifier
@@ -1242,12 +1247,19 @@ private fun HomeActionRow(
 ) {
     val haptic = LocalHapticFeedback.current
     val shape = connectedContainerShape(index = index, count = count)
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressScaleModifier = pressScale(interactionSource, 0.975f, enabled)
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .then(pressScaleModifier)
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
-            .clickable(enabled = enabled) {
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = enabled
+            ) {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onClick()
             }
@@ -1301,6 +1313,9 @@ private fun PowerActionRow(
     title: String,
     onClick: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressScaleModifier = pressScale(interactionSource, 0.97f)
     val shape = connectedContainerShape(
         index = index,
         count = count,
@@ -1310,9 +1325,16 @@ private fun PowerActionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .then(pressScaleModifier)
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceContainer)
-            .clickable(onClick = onClick)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null
+            ) {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClick()
+            }
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1340,9 +1362,12 @@ private fun CoreStatusHero(
     isModuleInstalled: Boolean,
     isRebootRequired: Boolean,
     daemonPid: String?,
-    onStart: () -> Unit
+    onStart: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val isAlive = isRunning && !isRestarting
+    val heroInteraction = remember { MutableInteractionSource() }
+    val heroPressScale = pressScale(heroInteraction, 0.97f)
     val containerColor by animateColorAsState(
         targetValue = when {
             isChecking || isRestarting -> MaterialTheme.colorScheme.surfaceContainerHighest
@@ -1375,11 +1400,13 @@ private fun CoreStatusHero(
 
     Surface(
         onClick = onStart,
+        interactionSource = heroInteraction,
         shape = RoundedCornerShape(26.dp),
         color = containerColor,
         contentColor = contentColor,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
+            .then(heroPressScale)
             .height(100.dp)
             .animateContentSize(animationSpec = spring())
     ) {
@@ -1519,7 +1546,7 @@ fun ConnectedActionCardRow(
             .fillMaxWidth()
             .clip(getConnectedContainerShape(position, outerRadius = 26.dp))
             .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
-            .clickable(onClick = onClick)
+            .bouncyClickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

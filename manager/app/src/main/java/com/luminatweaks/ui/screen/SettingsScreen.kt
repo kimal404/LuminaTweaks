@@ -11,6 +11,7 @@ import android.widget.Toast
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,7 +42,6 @@ import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -69,6 +69,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
@@ -79,8 +80,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.luminatweaks.R
+import com.luminatweaks.ui.component.TouchOriginDialog
 import com.luminatweaks.ui.component.appBarFade
-import com.luminatweaks.ui.theme.LocalCornerRadius
+import com.luminatweaks.ui.component.pressScale
+import com.luminatweaks.ui.component.rememberDialogOrigin
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.LogUtil
 import java.util.Locale
@@ -105,7 +108,6 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val cornerRadius = LocalCornerRadius.current
     val isFloating = LocalFloatingNavBar.current
 
     var currentLanguage by remember {
@@ -120,6 +122,8 @@ fun SettingsScreen(
     var showPersonalisasiScreen by remember { mutableStateOf(false) }
     var showUninstallDialog by remember { mutableStateOf(false) }
     var isUninstalling by remember { mutableStateOf(false) }
+    var uninstallOriginPoint by remember { mutableStateOf(Offset(0.5f, 0.5f)) }
+    val uninstallOrigin = rememberDialogOrigin()
 
     val activeSettingsSubscreen = when {
         showAboutScreen && onNavigateToAbout == null -> "about"
@@ -270,40 +274,59 @@ fun SettingsScreen(
                                     subtitle = stringResource(R.string.settings_module_uninstall_desc),
                                     enabled = !isUninstalling,
                                     accentColor = MaterialTheme.colorScheme.error,
-                                    onClick = { showUninstallDialog = true }
+                                    modifier = uninstallOrigin.trackedModifier(),
+                                    onClick = {
+                                        uninstallOriginPoint = uninstallOrigin.origin
+                                        showUninstallDialog = true
+                                    }
                                 )
                             }
                         }
                     }
                 }
 
-                if (showUninstallDialog) {
-                    AlertDialog(
-                        onDismissRequest = { if (!isUninstalling) showUninstallDialog = false },
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Rounded.DeleteForever,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        },
-                        title = {
-                            Text(
-                                text = stringResource(R.string.settings_module_uninstall_title),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                textAlign = TextAlign.Center
-                            )
-                        },
-                        text = {
-                            Text(
-                                text = stringResource(R.string.settings_module_uninstall_dialog_desc),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        },
-                        confirmButton = {
+                TouchOriginDialog(
+                    visible = showUninstallDialog,
+                    onDismiss = { if (!isUninstalling) showUninstallDialog = false },
+                    origin = uninstallOriginPoint
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.DeleteForever,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = stringResource(R.string.settings_module_uninstall_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.settings_module_uninstall_dialog_desc),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(
+                                onClick = { showUninstallDialog = false },
+                                enabled = !isUninstalling
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.action_cancel),
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
                             TextButton(
                                 onClick = {
                                     isUninstalling = true
@@ -323,21 +346,8 @@ fun SettingsScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                             }
-                        },
-                        dismissButton = {
-                            TextButton(
-                                onClick = { showUninstallDialog = false },
-                                enabled = !isUninstalling
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.action_cancel),
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                        },
-                        shape = RoundedCornerShape(cornerRadius.coerceAtLeast(24.dp)),
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                    )
+                        }
+                    }
                 }
 
                 val languages = listOf(
@@ -446,12 +456,15 @@ private fun SettingsActionRow(
     title: String,
     subtitle: String,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     enabled: Boolean = true,
     highlightSubtitle: Boolean = false,
     accentColor: Color = MaterialTheme.colorScheme.primary
 ) {
     val haptic = LocalHapticFeedback.current
     val shape = connectedContainerShape(index = index, count = count)
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressScaleModifier = pressScale(interactionSource, 0.975f, enabled)
     val titleColor = if (accentColor == MaterialTheme.colorScheme.error) {
         MaterialTheme.colorScheme.error
     } else {
@@ -459,11 +472,16 @@ private fun SettingsActionRow(
     }
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
+            .then(pressScaleModifier)
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
-            .clickable(enabled = enabled) {
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = enabled
+            ) {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onClick()
             }
@@ -619,15 +637,23 @@ private fun <T> SettingsOptionSheet(
                         bottomStart = if (index == options.lastIndex) 20.dp else 0.dp,
                         bottomEnd = if (index == options.lastIndex) 20.dp else 0.dp
                     )
+                    val haptic = LocalHapticFeedback.current
+                    val interactionSource = remember { MutableInteractionSource() }
+                    val pressScaleModifier = pressScale(interactionSource, 0.97f)
 
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .then(pressScaleModifier)
                             .clip(rowShape)
                             .background(
                                 if (selected) scheme.secondaryContainer else scheme.surfaceContainer
                             )
-                            .clickable {
+                            .clickable(
+                                interactionSource = interactionSource,
+                                indication = null
+                            ) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 hideSheet {}
                                 onSelect(option.value)
                             }

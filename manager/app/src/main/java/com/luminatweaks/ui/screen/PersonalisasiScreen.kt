@@ -89,6 +89,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -102,6 +103,7 @@ import androidx.compose.ui.unit.dp
 import com.luminatweaks.R
 import com.luminatweaks.ui.component.LuminaBackButton
 import com.luminatweaks.ui.component.appBarFade
+import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.theme.AccentIntensity
 import com.luminatweaks.ui.theme.ColorEngine
 import com.luminatweaks.ui.theme.ColorMode
@@ -258,6 +260,8 @@ fun PersonalisasiScreen(
                         horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)
                     ) {
                         ColorEngine.entries.forEachIndexed { index, spec ->
+                            val engineSource = remember { MutableInteractionSource() }
+                            val enginePress = pressScale(engineSource, 0.95f)
                             ToggleButton(
                                 checked = currentColorSpec == spec,
                                 onCheckedChange = { checked ->
@@ -266,8 +270,10 @@ fun PersonalisasiScreen(
                                         saveSettings(spec = spec)
                                     }
                                 },
+                                interactionSource = engineSource,
                                 modifier = Modifier
                                     .weight(1f)
+                                    .then(enginePress)
                                     .semantics { role = Role.RadioButton },
                                 shapes = when (index) {
                                     0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
@@ -347,6 +353,8 @@ fun PersonalisasiScreen(
                         horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)
                     ) {
                         modes.forEachIndexed { index, mode ->
+                            val modeSource = remember { MutableInteractionSource() }
+                            val modePress = pressScale(modeSource, 0.95f)
                             ToggleButton(
                                 checked = currentColorMode == mode,
                                 onCheckedChange = { checked ->
@@ -355,8 +363,10 @@ fun PersonalisasiScreen(
                                         saveSettings(mode = mode)
                                     }
                                 },
+                                interactionSource = modeSource,
                                 modifier = Modifier
                                     .weight(1f)
+                                    .then(modePress)
                                     .semantics { role = Role.RadioButton },
                                 shapes = when (index) {
                                     0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
@@ -384,6 +394,16 @@ fun PersonalisasiScreen(
                                 saveSettings(intensity = newIntensity)
                             }
                         }
+                    )
+
+                    Text(
+                        text = persLocalizedLabel(
+                            "Mesin warna berbasis AZenith \u00A9 2025\u20132026 Zexshia \u00B7 Apache License 2.0",
+                            "Color engine based on AZenith \u00A9 2025\u20132026 Zexshia \u00B7 Apache License 2.0"
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(start = 12.dp, end = 12.dp)
                     )
                 }
             }
@@ -466,12 +486,17 @@ private fun AZenithColorButton(
     val colorScheme = animateColorSchemeAsState(
         targetColorScheme = baseTargetScheme.withAccentIntensity(accentIntensity)
     )
+    val swatchSource = remember { MutableInteractionSource() }
+    val swatchPress = pressScale(swatchSource, 0.9f)
 
     Surface(
         onClick = onClick,
+        interactionSource = swatchSource,
         shape = RoundedCornerShape(20.dp),
         color = colorScheme.surfaceContainer,
-        modifier = Modifier.size(72.dp)
+        modifier = Modifier
+            .size(72.dp)
+            .then(swatchPress)
     ) {
         Box(contentAlignment = Alignment.Center) {
             Canvas(modifier = Modifier.size(48.dp)) {
@@ -653,12 +678,18 @@ private fun PersFloatingNavRow(
     onCheckedChange: (Boolean) -> Unit
 ) {
     val shape = connectedContainerShape(index = index, count = count)
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressScaleModifier = pressScale(interactionSource, 0.975f)
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .then(pressScaleModifier)
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
-            .clickable { onCheckedChange(!checked) }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null
+            ) { onCheckedChange(!checked) }
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -689,6 +720,7 @@ private fun PersFloatingNavRow(
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
+            interactionSource = interactionSource,
             thumbContent = {
                 if (checked) {
                     Icon(

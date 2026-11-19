@@ -12,10 +12,13 @@ import android.util.LruCache
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -97,6 +100,7 @@ import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.model.AppItem
 import com.luminatweaks.ui.component.AospStatusPill
 import com.luminatweaks.ui.component.appBarFade
+import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
@@ -464,6 +468,8 @@ fun AppsScreen(
                                                 },
                                                 label = "filterChipText"
                                             )
+                                            val chipSource = remember { MutableInteractionSource() }
+                                            val chipPress = pressScale(chipSource, 0.92f)
 
                                             Surface(
                                                 onClick = {
@@ -472,8 +478,10 @@ fun AppsScreen(
                                                         selectedFilter = filter
                                                     }
                                                 },
+                                                interactionSource = chipSource,
                                                 shape = CircleShape,
-                                                color = chipBg
+                                                color = chipBg,
+                                                modifier = chipPress
                                             ) {
                                                 Text(
                                                     text = label,
@@ -522,6 +530,14 @@ fun AppsScreen(
                                         app = appItem,
                                         isEnabled = isEnabled,
                                         onClick = { selectedPackageName = appItem.packageName },
+                                        modifier = Modifier.animateItem(
+                                            fadeInSpec = null,
+                                            placementSpec = spring(
+                                                dampingRatio = Spring.DampingRatioLowBouncy,
+                                                stiffness = Spring.StiffnessLow
+                                            ),
+                                            fadeOutSpec = null
+                                        ),
                                         onToggleActive = {
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                             val updated = if (!isEnabled) {
@@ -630,17 +646,28 @@ fun AppRowCard(
     onClick: () -> Unit,
     onToggleActive: () -> Unit = {},
     onOpenAppInfo: () -> Unit = {},
+    modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(26.dp)
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     var showRowMenu by remember { mutableStateOf(false) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressScaleModifier = pressScale(interactionSource, 0.975f)
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
+            .then(pressScaleModifier)
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
-            .clickable(onClick = onClick)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null
+            ) {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClick()
+            }
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -678,11 +705,11 @@ fun AppRowCard(
             )
         }
 
-        AnimatedVisibility(visible = isEnabled && app.isGame) {
+        AnimatedVisibility(visible = isEnabled) {
             AospStatusPill(
-                text = appsLocalizedLabel("GAME", "GAME"),
-                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                text = appsLocalizedLabel("Aktif", "Active"),
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
             )
         }
 

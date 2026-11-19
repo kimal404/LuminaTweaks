@@ -83,6 +83,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -94,6 +95,7 @@ import androidx.core.graphics.drawable.toBitmap
 import com.luminatweaks.R
 import com.luminatweaks.ui.component.LuminaBackButton
 import com.luminatweaks.ui.component.AospTopBar
+import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.data.AngleStatus
 import com.luminatweaks.data.AppProfileConfig
 import com.luminatweaks.data.ConfigRepository
@@ -557,6 +559,8 @@ fun TeksturRinganScreen(
                                     label = "tierText"
                                 )
 
+                                val tileSource = remember { MutableInteractionSource() }
+                                val tilePress = pressScale(tileSource, 0.94f)
                                 Surface(
                                     onClick = {
                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -569,11 +573,13 @@ fun TeksturRinganScreen(
                                             )
                                         )
                                     },
+                                    interactionSource = tileSource,
                                     shape = RoundedCornerShape(18.dp),
                                     color = tileBg,
                                     modifier = Modifier
                                         .weight(1f)
                                         .height(68.dp)
+                                        .then(tilePress)
                                 ) {
                                     Column(
                                         modifier = Modifier
@@ -707,6 +713,8 @@ fun TeksturRinganScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    val resetSource = remember { MutableInteractionSource() }
+                    val resetPress = pressScale(resetSource, 0.94f)
                     Surface(
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -725,9 +733,11 @@ fun TeksturRinganScreen(
                         },
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        interactionSource = resetSource,
                         modifier = Modifier
                             .weight(1f)
                             .height(50.dp)
+                            .then(resetPress)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxSize(),
@@ -801,12 +811,17 @@ private fun FilterPillTile(
         },
         label = "filterPillText"
     )
+    val pillSource = remember { MutableInteractionSource() }
+    val pillPress = pressScale(pillSource, 0.94f)
 
     Surface(
         onClick = onClick,
+        interactionSource = pillSource,
         shape = CircleShape,
         color = bgColor,
-        modifier = modifier.height(54.dp)
+        modifier = modifier
+            .height(54.dp)
+            .then(pillPress)
     ) {
         Row(
             modifier = Modifier

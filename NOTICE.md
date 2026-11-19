@@ -37,6 +37,14 @@ This project contains inspirations, logic architectures, and structural concepts
   Contribution: Per-PID eBPF uprobe on `Surface::queueBuffer` used by the FPS
   sampler, including the prebuilt BPF object. Licensed under the MIT License.
 
+* **AZenith**
+  Copyright (C) 2025-2026 Zexshia
+  Source: https://github.com/Liliya2727/AZenith
+  Contribution: Pure AZenith color engine transplanted into
+  `manager/app/src/main/java/com/luminatweaks/ui/theme/` (ColorEngine,
+  accent intensity system, and Personalisasi Warna section). Licensed
+  under the Apache License, Version 2.0.
+
 --------------------------------------------------------------------------------
 
 ### Disclaimer

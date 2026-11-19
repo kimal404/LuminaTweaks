@@ -11,7 +11,6 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -52,7 +51,6 @@ import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Widgets
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -66,7 +64,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.rememberTopAppBarState
@@ -87,16 +84,15 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -104,8 +100,11 @@ import com.luminatweaks.R
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DisplayRrMode
 import com.luminatweaks.service.FloatingFpsService
+import com.luminatweaks.ui.component.DialogOptionRow
+import com.luminatweaks.ui.component.TouchOriginDialog
 import com.luminatweaks.ui.component.appBarFade
-import com.luminatweaks.ui.theme.LocalCornerRadius
+import com.luminatweaks.ui.component.pressScale
+import com.luminatweaks.ui.component.rememberDialogOrigin
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.DeviceUtil
 import java.util.Locale
@@ -258,6 +257,9 @@ fun TweaksScreen(
     var showRefreshRateDialog by rememberSaveable { mutableStateOf(false) }
     var showRenderDialog by rememberSaveable { mutableStateOf(false) }
     var showIoSchedulerDialog by rememberSaveable { mutableStateOf(false) }
+    val refreshRateOrigin = rememberDialogOrigin()
+    val rendererOrigin = rememberDialogOrigin()
+    val ioSchedulerOrigin = rememberDialogOrigin()
     var inFloatingFpsSubpage by rememberSaveable { mutableStateOf(false) }
     var inSessionStatsSubpage by remember { mutableStateOf(false) }
     var inMemoryZramSubpage by rememberSaveable { mutableStateOf(false) }
@@ -386,72 +388,72 @@ fun TweaksScreen(
         )
     }
 
-    if (showRefreshRateDialog) {
-        TweakOptionDialog(
-            icon = Icons.Rounded.Speed,
-            title = stringResource(R.string.tweaks_dialog_select_rr),
-            subtitle = rrSubtitle,
-            options = rrModes.map { TweakDialogOption(it.id, "${it.hz} Hz") },
-            isSelected = { it == currentRrId },
-            onSelect = { id ->
-                val previous = currentRrId
-                currentRrId = id
-                showRefreshRateDialog = false
-                coroutineScope.launch {
-                    applyTweakChange(
-                        snackbarHostState = snackbarHostState,
-                        errorMessage = applyFailedText,
-                        revert = { currentRrId = previous }
-                    ) { ConfigRepository.setRefreshRate(id) }
-                }
-            },
-            onDismiss = { showRefreshRateDialog = false }
-        )
-    }
+    TweakOptionDialog(
+        visible = showRefreshRateDialog,
+        onDismiss = { showRefreshRateDialog = false },
+        origin = refreshRateOrigin.origin,
+        icon = Icons.Rounded.Speed,
+        title = stringResource(R.string.tweaks_dialog_select_rr),
+        subtitle = rrSubtitle,
+        options = rrModes.map { TweakDialogOption(it.id, "${it.hz} Hz") },
+        isSelected = { it == currentRrId },
+        onSelect = { id ->
+            val previous = currentRrId
+            currentRrId = id
+            showRefreshRateDialog = false
+            coroutineScope.launch {
+                applyTweakChange(
+                    snackbarHostState = snackbarHostState,
+                    errorMessage = applyFailedText,
+                    revert = { currentRrId = previous }
+                ) { ConfigRepository.setRefreshRate(id) }
+            }
+        }
+    )
 
-    if (showRenderDialog) {
-        TweakOptionDialog(
-            icon = Icons.Rounded.DeveloperBoard,
-            title = stringResource(R.string.tweaks_dialog_select_renderer),
-            options = rendererOptions,
-            isSelected = { it.equals(currentRendererId, ignoreCase = true) },
-            onSelect = { rawId ->
-                val previous = currentRendererId
-                currentRendererId = rawId
-                showRenderDialog = false
-                coroutineScope.launch {
-                    applyTweakChange(
-                        snackbarHostState = snackbarHostState,
-                        errorMessage = applyFailedText,
-                        revert = { currentRendererId = previous }
-                    ) { ConfigRepository.setRenderer(rawId) }
-                }
-            },
-            onDismiss = { showRenderDialog = false }
-        )
-    }
+    TweakOptionDialog(
+        visible = showRenderDialog,
+        onDismiss = { showRenderDialog = false },
+        origin = rendererOrigin.origin,
+        icon = Icons.Rounded.DeveloperBoard,
+        title = stringResource(R.string.tweaks_dialog_select_renderer),
+        options = rendererOptions,
+        isSelected = { it.equals(currentRendererId, ignoreCase = true) },
+        onSelect = { rawId ->
+            val previous = currentRendererId
+            currentRendererId = rawId
+            showRenderDialog = false
+            coroutineScope.launch {
+                applyTweakChange(
+                    snackbarHostState = snackbarHostState,
+                    errorMessage = applyFailedText,
+                    revert = { currentRendererId = previous }
+                ) { ConfigRepository.setRenderer(rawId) }
+            }
+        }
+    )
 
-    if (showIoSchedulerDialog) {
-        TweakOptionDialog(
-            icon = Icons.Rounded.Storage,
-            title = stringResource(R.string.dialog_select_io_scheduler),
-            options = ioSchedulerOptions.map { TweakDialogOption(it, it) },
-            isSelected = { it.equals(currentIoScheduler, ignoreCase = true) },
-            onSelect = { scheduler ->
-                val previous = currentIoScheduler
-                currentIoScheduler = scheduler
-                showIoSchedulerDialog = false
-                coroutineScope.launch {
-                    applyTweakChange(
-                        snackbarHostState = snackbarHostState,
-                        errorMessage = applyFailedText,
-                        revert = { currentIoScheduler = previous }
-                    ) { ConfigRepository.setIoScheduler(scheduler) }
-                }
-            },
-            onDismiss = { showIoSchedulerDialog = false }
-        )
-    }
+    TweakOptionDialog(
+        visible = showIoSchedulerDialog,
+        onDismiss = { showIoSchedulerDialog = false },
+        origin = ioSchedulerOrigin.origin,
+        icon = Icons.Rounded.Storage,
+        title = stringResource(R.string.dialog_select_io_scheduler),
+        options = ioSchedulerOptions.map { TweakDialogOption(it, it) },
+        isSelected = { it.equals(currentIoScheduler, ignoreCase = true) },
+        onSelect = { scheduler ->
+            val previous = currentIoScheduler
+            currentIoScheduler = scheduler
+            showIoSchedulerDialog = false
+            coroutineScope.launch {
+                applyTweakChange(
+                    snackbarHostState = snackbarHostState,
+                    errorMessage = applyFailedText,
+                    revert = { currentIoScheduler = previous }
+                ) { ConfigRepository.setIoScheduler(scheduler) }
+            }
+        }
+    )
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
@@ -546,7 +548,9 @@ fun TweaksScreen(
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     ExpressiveTweakTile(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .then(refreshRateOrigin.trackedModifier()),
                         icon = Icons.Rounded.Speed,
                         label = stringResource(R.string.tweaks_refresh_rate),
                         value = currentRrText,
@@ -555,7 +559,9 @@ fun TweaksScreen(
                     )
 
                     ExpressiveTweakTile(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .then(rendererOrigin.trackedModifier()),
                         icon = if (isGlobalTextureEnabled) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
                         label = stringResource(R.string.tweaks_renderer),
                         value = effectiveRendererText,
@@ -583,15 +589,17 @@ fun TweaksScreen(
                         onClick = { inMemoryZramSubpage = true }
                     )
 
-                    ConnectedTweakActionRow(
-                        index = 1,
-                        count = 2,
-                        icon = Icons.Rounded.Storage,
-                        title = stringResource(R.string.tweak_io_scheduler),
-                        subtitle = currentIoScheduler,
-                        highlightSubtitle = true,
-                        onClick = { showIoSchedulerDialog = true }
-                    )
+                    Box(modifier = ioSchedulerOrigin.trackedModifier()) {
+                        ConnectedTweakActionRow(
+                            index = 1,
+                            count = 2,
+                            icon = Icons.Rounded.Storage,
+                            title = stringResource(R.string.tweak_io_scheduler),
+                            subtitle = currentIoScheduler,
+                            highlightSubtitle = true,
+                            onClick = { showIoSchedulerDialog = true }
+                        )
+                    }
                 }
             }
 
@@ -886,150 +894,82 @@ private fun ExpressiveTweakTile(
 
 @Composable
 private fun <T> TweakOptionDialog(
+    visible: Boolean,
+    onDismiss: () -> Unit,
+    origin: Offset,
     icon: ImageVector,
     title: String,
     options: List<TweakDialogOption<T>>,
     isSelected: (T) -> Boolean,
     onSelect: (T) -> Unit,
-    onDismiss: () -> Unit,
     subtitle: String? = null
 ) {
-    val haptic = LocalHapticFeedback.current
-    val currentRadius = LocalCornerRadius.current
-    val scheme = MaterialTheme.colorScheme
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = scheme.primary,
-                modifier = Modifier.size(28.dp)
-            )
-        },
-        title = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
+    TouchOriginDialog(
+        visible = visible,
+        onDismiss = onDismiss,
+        origin = origin
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TweakSquircleIcon(icon = icon)
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMediumEmphasized,
-                    textAlign = TextAlign.Center
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 if (subtitle != null) {
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = scheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
-        },
-        text = {
-            if (options.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 20.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = localizedLabel(
-                            "Belum ada opsi tersedia",
-                            "No options available yet"
-                        ),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = scheme.onSurfaceVariant
-                    )
-                }
-            } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 360.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    options.forEachIndexed { index, option ->
-                        val selected = isSelected(option.value)
-                        val rowShape = connectedContainerShape(
-                            index = index,
-                            count = options.size,
-                            outerRadius = 20.dp,
-                            innerRadius = 4.dp
-                        )
+        }
 
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(rowShape)
-                                .background(
-                                    if (selected) scheme.secondaryContainer else scheme.surfaceContainer
-                                )
-                                .clickable {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    onSelect(option.value)
-                                }
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = option.label,
-                                style = MaterialTheme.typography.bodyLarge.copy(
-                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
-                                ),
-                                color = if (selected) scheme.onSecondaryContainer else scheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            DialogRadioRing(selected = selected)
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(
-                    text = stringResource(R.string.action_cancel),
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        },
-        shape = RoundedCornerShape(currentRadius.coerceAtLeast(24.dp)),
-        containerColor = scheme.surfaceContainerHigh
-    )
-}
+        Spacer(modifier = Modifier.height(16.dp))
 
-@Composable
-private fun DialogRadioRing(selected: Boolean) {
-    val scheme = MaterialTheme.colorScheme
-    val ringColor = if (selected) scheme.primary else scheme.onSurfaceVariant
-
-    Box(
-        modifier = Modifier.size(20.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Canvas(modifier = Modifier.size(20.dp)) {
-            val stroke = 2.dp.toPx()
-            val radius = (size.width / 2f) - (stroke / 2f)
-            drawCircle(
-                color = ringColor,
-                radius = radius,
-                style = Stroke(width = stroke)
+        if (options.isEmpty()) {
+            Text(
+                text = localizedLabel(
+                    "Belum ada opsi tersedia",
+                    "No options available yet"
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            if (selected) {
-                drawCircle(
-                    color = scheme.primary,
-                    radius = (size.width / 2f) * 0.3f
-                )
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                options.forEachIndexed { index, option ->
+                    val rowShape = connectedContainerShape(
+                        index = index,
+                        count = options.size,
+                        outerRadius = 20.dp,
+                        innerRadius = 4.dp
+                    )
+                    DialogOptionRow(
+                        label = option.label,
+                        selected = isSelected(option.value),
+                        icon = icon,
+                        shape = rowShape,
+                        onClick = { onSelect(option.value) }
+                    )
+                }
             }
         }
     }
@@ -1087,13 +1027,19 @@ internal fun ConnectedTweakSwitchRow(
     onCheckedChange: (Boolean) -> Unit
 ) {
     val shape = connectedContainerShape(index = index, count = count)
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressScaleModifier = pressScale(interactionSource, 0.975f)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .then(pressScaleModifier)
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
-            .clickable { onCheckedChange(!checked) }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null
+            ) { onCheckedChange(!checked) }
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1127,6 +1073,7 @@ internal fun ConnectedTweakSwitchRow(
             Switch(
                 checked = checked,
                 onCheckedChange = onCheckedChange,
+                interactionSource = interactionSource,
                 thumbContent = {
                     if (checked) {
                         Icon(
@@ -1162,13 +1109,20 @@ internal fun ConnectedTweakActionRow(
 ) {
     val haptic = LocalHapticFeedback.current
     val shape = connectedContainerShape(index = index, count = count)
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressScaleModifier = pressScale(interactionSource, 0.975f, enabled)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .then(pressScaleModifier)
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
-            .clickable(enabled = enabled) {
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = enabled
+            ) {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onClick()
             }

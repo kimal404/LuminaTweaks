@@ -223,15 +223,20 @@ fun AospPreferenceSwitch(
     enabled: Boolean = true
 ) {
     val haptic = LocalHapticFeedback.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressScaleModifier = pressScale(interactionSource, 0.975f, enabled)
     Surface(
         onClick = {
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             onCheckedChange(!checked)
         },
+        interactionSource = interactionSource,
         shape = aospConnectedShape(index, count),
         color = MaterialTheme.colorScheme.surfaceContainer,
         enabled = enabled,
-        modifier = modifier.fillMaxWidth()
+        modifier = modifier
+            .fillMaxWidth()
+            .then(pressScaleModifier)
     ) {
         Row(
             modifier = Modifier
@@ -255,6 +260,7 @@ fun AospPreferenceSwitch(
             Switch(
                 checked = checked,
                 onCheckedChange = onCheckedChange,
+                interactionSource = interactionSource,
                 enabled = enabled,
                 thumbContent = {
                     Icon(

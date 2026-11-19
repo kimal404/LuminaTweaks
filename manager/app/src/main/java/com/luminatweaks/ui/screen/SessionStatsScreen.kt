@@ -115,6 +115,7 @@ import androidx.compose.ui.unit.sp
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.LuminaBridge
 import com.luminatweaks.ui.component.AospSectionHeader
+import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.component.AospStatusPill
 import com.luminatweaks.ui.component.LuminaBackButton
 import com.luminatweaks.ui.component.AospTopBar
@@ -772,11 +773,16 @@ private fun SessionHistoryCard(
         else -> MaterialTheme.colorScheme.error
     }
 
+    val cardSource = remember { MutableInteractionSource() }
+    val cardPress = pressScale(cardSource, 0.975f)
     Surface(
         onClick = onClick,
+        interactionSource = cardSource,
         shape = RoundedCornerShape(22.dp),
         color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = modifier.fillMaxWidth()
+        modifier = modifier
+            .fillMaxWidth()
+            .then(cardPress)
     ) {
         Column(
             modifier = Modifier

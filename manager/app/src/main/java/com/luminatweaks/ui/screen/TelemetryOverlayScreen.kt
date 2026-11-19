@@ -78,6 +78,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -88,6 +89,8 @@ import androidx.compose.ui.unit.sp
 import com.luminatweaks.R
 import com.luminatweaks.ui.component.LuminaBackButton
 import com.luminatweaks.ui.component.appBarFade
+import com.luminatweaks.ui.component.pressScale
+import com.luminatweaks.ui.component.rememberSliderHaptics
 import java.util.Locale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -911,13 +914,19 @@ private fun HudSwitchRow(
     onCheckedChange: (Boolean) -> Unit
 ) {
     val shape = connectedContainerShape(index = index, count = count)
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressScaleModifier = pressScale(interactionSource, 0.975f)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .then(pressScaleModifier)
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
-            .clickable { onCheckedChange(!checked) }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null
+            ) { onCheckedChange(!checked) }
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -951,6 +960,7 @@ private fun HudSwitchRow(
             Switch(
                 checked = checked,
                 onCheckedChange = onCheckedChange,
+                interactionSource = interactionSource,
                 thumbContent = {
                     if (checked) {
                         Icon(
@@ -985,6 +995,7 @@ private fun HudSliderRow(
     onValueChangeFinished: () -> Unit
 ) {
     val shape = connectedContainerShape(index = index, count = count)
+    val sliderHaptics = rememberSliderHaptics()
 
     Column(
         modifier = Modifier
@@ -1019,7 +1030,10 @@ private fun HudSliderRow(
         }
         Slider(
             value = value,
-            onValueChange = onValueChange,
+            onValueChange = { raw ->
+                sliderHaptics(raw, valueRange, 0)
+                onValueChange(raw)
+            },
             onValueChangeFinished = onValueChangeFinished,
             valueRange = valueRange
         )

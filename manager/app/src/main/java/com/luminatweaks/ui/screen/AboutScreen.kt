@@ -19,6 +19,7 @@ import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -72,6 +73,7 @@ import coil.compose.AsyncImage
 import com.luminatweaks.R
 import com.luminatweaks.ui.component.LuminaBackButton
 import com.luminatweaks.ui.component.AospTopBar
+import com.luminatweaks.ui.component.pressScale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -163,10 +165,16 @@ fun AboutScreen(
 
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    val licenseSource = remember { MutableInteractionSource() }
+                    val licensePress = pressScale(licenseSource, 0.975f)
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { showLicenseDialog = true },
+                            .then(licensePress)
+                            .clickable(
+                                interactionSource = licenseSource,
+                                indication = null
+                            ) { showLicenseDialog = true },
                         shape = getConnectedContainerShape(ContainerPosition.Top, outerRadius = 24.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
@@ -208,10 +216,16 @@ fun AboutScreen(
                         }
                     }
 
+                    val repoSource = remember { MutableInteractionSource() }
+                    val repoPress = pressScale(repoSource, 0.975f)
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
+                            .then(repoPress)
+                            .clickable(
+                                interactionSource = repoSource,
+                                indication = null
+                            ) {
                                 val intent = Intent(
                                     Intent.ACTION_VIEW,
                                     Uri.parse("https://github.com/kimal404/LuminaTweaks")
@@ -274,10 +288,16 @@ fun AboutScreen(
             }
 
             item {
+                val maintainerSource = remember { MutableInteractionSource() }
+                val maintainerPress = pressScale(maintainerSource, 0.975f)
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable {
+                        .then(maintainerPress)
+                        .clickable(
+                            interactionSource = maintainerSource,
+                            indication = null
+                        ) {
                             val intent = Intent(
                                 Intent.ACTION_VIEW,
                                 Uri.parse("https://github.com/kimal404")

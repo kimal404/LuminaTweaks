@@ -83,6 +83,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -103,6 +104,7 @@ import com.luminatweaks.data.DisplayRrMode
 import com.luminatweaks.model.AppItem
 import com.luminatweaks.ui.component.LuminaBackButton
 import com.luminatweaks.ui.component.appBarFade
+import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -639,12 +641,18 @@ private fun ProfileSwitchRow(
     onCheckedChange: (Boolean) -> Unit
 ) {
     val shape = connectedContainerShape(index = index, count = count)
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressScaleModifier = pressScale(interactionSource, 0.975f)
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .then(pressScaleModifier)
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
-            .clickable { onCheckedChange(!checked) }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null
+            ) { onCheckedChange(!checked) }
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -678,6 +686,7 @@ private fun ProfileSwitchRow(
             Switch(
                 checked = checked,
                 onCheckedChange = onCheckedChange,
+                interactionSource = interactionSource,
                 thumbContent = {
                     if (checked) {
                         Icon(
@@ -713,13 +722,20 @@ private fun ProfileActionRow(
 ) {
     val haptic = LocalHapticFeedback.current
     val shape = connectedContainerShape(index = index, count = count)
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressScaleModifier = pressScale(interactionSource, 0.975f, enabled)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .then(pressScaleModifier)
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
-            .clickable(enabled = enabled) {
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = enabled
+            ) {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onClick()
             }
@@ -855,15 +871,23 @@ private fun <T> ProfileOptionSheet(
                         bottomStart = if (index == options.lastIndex) 20.dp else 0.dp,
                         bottomEnd = if (index == options.lastIndex) 20.dp else 0.dp
                     )
+                    val haptic = LocalHapticFeedback.current
+                    val interactionSource = remember { MutableInteractionSource() }
+                    val pressScaleModifier = pressScale(interactionSource, 0.97f)
 
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .then(pressScaleModifier)
                             .clip(rowShape)
                             .background(
                                 if (selected) scheme.secondaryContainer else scheme.surfaceContainer
                             )
-                            .clickable {
+                            .clickable(
+                                interactionSource = interactionSource,
+                                indication = null
+                            ) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 hideSheet {}
                                 onSelect(option.value)
                             }

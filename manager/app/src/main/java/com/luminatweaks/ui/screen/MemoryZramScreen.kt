@@ -70,6 +70,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -81,6 +82,8 @@ import com.luminatweaks.R
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.ui.component.LuminaBackButton
 import com.luminatweaks.ui.component.appBarFade
+import com.luminatweaks.ui.component.pressScale
+import com.luminatweaks.ui.component.rememberSliderHaptics
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.DeviceUtil
 import kotlin.math.roundToInt
@@ -478,13 +481,19 @@ private fun MemoryActionRow(
 ) {
     val haptic = LocalHapticFeedback.current
     val shape = connectedContainerShape(index = index, count = count)
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressScaleModifier = pressScale(interactionSource, 0.975f)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .then(pressScaleModifier)
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
-            .clickable {
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null
+            ) {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onClick()
             }
@@ -553,6 +562,7 @@ private fun MemoryFineTunerRow(
     steps: Int = 0
 ) {
     val shape = connectedContainerShape(index = index, count = count)
+    val sliderHaptics = rememberSliderHaptics()
 
     Column(
         modifier = Modifier
@@ -601,7 +611,10 @@ private fun MemoryFineTunerRow(
 
         Slider(
             value = value,
-            onValueChange = onValueChange,
+            onValueChange = { raw ->
+                sliderHaptics(raw, valueRange, steps)
+                onValueChange(raw)
+            },
             onValueChangeFinished = onValueChangeFinished,
             valueRange = valueRange,
             steps = steps,
@@ -619,11 +632,16 @@ private fun MemoryFineTunerRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val minusSource = remember { MutableInteractionSource() }
+            val minusPress = pressScale(minusSource, 0.92f)
             Surface(
                 onClick = onStepMinus,
+                interactionSource = minusSource,
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .then(minusPress)
             ) {
                 Box(
                     modifier = Modifier.padding(vertical = 9.dp),
@@ -638,15 +656,20 @@ private fun MemoryFineTunerRow(
                 }
             }
 
+            val resetSource = remember { MutableInteractionSource() }
+            val resetPress = pressScale(resetSource, 0.92f)
             Surface(
                 onClick = onStepReset,
+                interactionSource = resetSource,
                 shape = CircleShape,
                 color = if (isAtReset) {
                     MaterialTheme.colorScheme.surfaceContainerHighest
                 } else {
                     MaterialTheme.colorScheme.secondaryContainer
                 },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .then(resetPress)
             ) {
                 Box(
                     modifier = Modifier.padding(vertical = 9.dp),
@@ -665,11 +688,16 @@ private fun MemoryFineTunerRow(
                 }
             }
 
+            val plusSource = remember { MutableInteractionSource() }
+            val plusPress = pressScale(plusSource, 0.92f)
             Surface(
                 onClick = onStepPlus,
+                interactionSource = plusSource,
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .then(plusPress)
             ) {
                 Box(
                     modifier = Modifier.padding(vertical = 9.dp),
@@ -775,15 +803,23 @@ private fun ZramAlgorithmSheet(
                         bottomStart = if (index == options.lastIndex) 20.dp else 0.dp,
                         bottomEnd = if (index == options.lastIndex) 20.dp else 0.dp
                     )
+                    val haptic = LocalHapticFeedback.current
+                    val interactionSource = remember { MutableInteractionSource() }
+                    val pressScaleModifier = pressScale(interactionSource, 0.97f)
 
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .then(pressScaleModifier)
                             .clip(rowShape)
                             .background(
                                 if (selected) scheme.secondaryContainer else scheme.surfaceContainer
                             )
-                            .clickable {
+                            .clickable(
+                                interactionSource = interactionSource,
+                                indication = null
+                            ) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 hideSheet {}
                                 onSelect(option)
                             }
