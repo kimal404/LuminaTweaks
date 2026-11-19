@@ -1,17 +1,3 @@
-// Copyright (C) 2026 kimal
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 @file:OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 
 package com.luminatweaks.ui.screen
@@ -20,6 +6,7 @@ import android.content.Context
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,11 +23,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Memory
@@ -48,18 +38,24 @@ import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.Thermostat
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -80,6 +76,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -89,11 +86,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luminatweaks.R
-import com.luminatweaks.ui.component.AospConnectedGroup
-import com.luminatweaks.ui.component.AospPreferenceSwitch
-import com.luminatweaks.ui.component.AospSectionHeader
 import com.luminatweaks.ui.component.LuminaBackButton
-import com.luminatweaks.ui.component.AospTopBar
+import com.luminatweaks.ui.component.appBarFade
 import java.util.Locale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -468,411 +462,399 @@ internal fun TelemetryOverlayScreen(
     var scaleDraft by remember(config.scale) { mutableFloatStateOf(config.scale) }
     var alphaDraft by remember(config.bgAlpha) { mutableFloatStateOf(config.bgAlpha) }
 
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val fadeSurface = MaterialTheme.colorScheme.background
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         contentWindowInsets = WindowInsets(0.dp),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            AospTopBar(
-                title = "Floating HUD",
-                subtitle = localizedLabel("Overlay metrik real-time", "Real-time metrics overlay"),
-                scrollBehavior = scrollBehavior,
-                navigationIcon = { LuminaBackButton(onBack = onBack, contentDescription = stringResource(R.string.setup_back)) }
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .appBarFade(fadeSurface, scrollBehavior.state.overlappedFraction)
+                    .statusBarsPadding()
+            ) {
+                LargeFlexibleTopAppBar(
+                    navigationIcon = {
+                        LuminaBackButton(
+                            onBack = onBack,
+                            contentDescription = stringResource(R.string.setup_back)
+                        )
+                    },
+                    title = {
+                        Text(
+                            text = "Floating HUD",
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent
+                    ),
+                    scrollBehavior = scrollBehavior,
+                    windowInsets = WindowInsets(0, 0, 0, 0)
+                )
+            }
         }
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding() + 4.dp,
-                bottom = 24.dp + navInset,
-                start = 0.dp,
-                end = 0.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                top = innerPadding.calculateTopPadding(),
+                bottom = 28.dp + navInset,
+                start = 16.dp,
+                end = 16.dp
+            )
         ) {
-            item(key = "preview_stage") {
-                Column {
-                    AospSectionHeader(title = localizedLabel("Pratinjau & Gaya", "Preview & Style"))
-                    AospConnectedGroup(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        Surface(
-                            shape = RoundedCornerShape(22.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainer,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(14.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                FpsViewportStage(
-                                    config = config,
-                                    telemetry = telemetry,
-                                    heightDp = 150
-                                )
+            item(key = "header_preview") {
+                HudSectionHeader(title = localizedLabel("Pratinjau & Gaya", "Preview & Style"))
+            }
 
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+            item(key = "group_preview") {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(connectedContainerShape(index = 0, count = 2))
+                            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        FpsViewportStage(
+                            config = config,
+                            telemetry = telemetry,
+                            heightDp = 152
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            FpsOverlayStyle.entries.forEachIndexed { index, style ->
+                                val shapes = when (index) {
+                                    0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                                    FpsOverlayStyle.entries.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                                    else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
+                                }
+                                ToggleButton(
+                                    checked = config.style == style,
+                                    onCheckedChange = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onConfigChange(config.copy(style = style))
+                                    },
+                                    shapes = shapes,
+                                    modifier = Modifier.weight(1f)
                                 ) {
-                                    FpsOverlayStyle.entries.forEachIndexed { index, style ->
-                                        val shapes = when (index) {
-                                            0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
-                                            FpsOverlayStyle.entries.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
-                                            else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
-                                        }
-                                        ToggleButton(
-                                            checked = config.style == style,
-                                            onCheckedChange = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                onConfigChange(config.copy(style = style))
-                                            },
-                                            shapes = shapes,
-                                            modifier = Modifier.weight(1f)
-                                        ) {
-                                            Text(
-                                                text = fpsStyleLabel(style),
-                                                fontSize = 13.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                maxLines = 1
-                                            )
-                                        }
-                                    }
+                                    Text(
+                                        text = fpsStyleLabel(style),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1
+                                    )
                                 }
                             }
                         }
-
-                        Surface(
-                            shape = RoundedCornerShape(5.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainer,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            AospPreferenceSwitch(
-                                index = 0,
-                                count = 1,
-                                icon = Icons.Rounded.Speed,
-                                title = localizedLabel("Aktifkan Floating HUD", "Enable Floating HUD"),
-                                subtitle = if (config.enabled) {
-                                    localizedLabel("Tampilkan overlay di atas aplikasi", "Display overlay above apps")
-                                } else {
-                                    localizedLabel("Nonaktif", "Disabled")
-                                },
-                                checked = config.enabled,
-                                onCheckedChange = { enabled ->
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    onConfigChange(config.copy(enabled = enabled))
-                                }
-                            )
-                        }
                     }
+
+                    HudSwitchRow(
+                        index = 1,
+                        count = 2,
+                        icon = Icons.Rounded.Speed,
+                        title = localizedLabel("Aktifkan Floating HUD", "Enable Floating HUD"),
+                        subtitle = if (config.enabled) {
+                            localizedLabel("Tampilkan overlay di atas aplikasi", "Display overlay above apps")
+                        } else {
+                            localizedLabel("Nonaktif", "Disabled")
+                        },
+                        checked = config.enabled,
+                        onCheckedChange = { enabled ->
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onConfigChange(config.copy(enabled = enabled))
+                        }
+                    )
                 }
             }
 
-            item(key = "automation_position") {
-                Column {
-                    AospSectionHeader(title = localizedLabel("Otomatisasi & Posisi", "Automation & Position"))
-                    AospConnectedGroup(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        AospPreferenceSwitch(
-                            index = 0,
-                            count = 2,
-                            icon = Icons.Rounded.SportsEsports,
-                            title = localizedLabel("Deteksi Game Otomatis", "Automatic Game Detection"),
-                            subtitle = localizedLabel(
-                                "Aktif otomatis saat menjalankan aplikasi dalam daftar game",
-                                "Activate automatically when running apps in the game list"
-                            ),
-                            checked = config.autoGame,
-                            onCheckedChange = { autoGame ->
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                onConfigChange(config.copy(autoGame = autoGame))
-                            }
-                        )
+            item(key = "header_automation") {
+                HudSectionHeader(title = localizedLabel("Otomatisasi & Posisi", "Automation & Position"))
+            }
 
-                        AospPreferenceSwitch(
-                            index = 1,
-                            count = 2,
-                            icon = Icons.Rounded.Lock,
-                            title = localizedLabel("Kunci Sentuhan", "Touch Pass-Through"),
-                            subtitle = localizedLabel(
-                                "Teruskan sentuhan ke layar di bawah overlay",
-                                "Pass touch input through to the screen beneath"
-                            ),
-                            checked = config.touchLock,
-                            onCheckedChange = { touchLock ->
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                onConfigChange(config.copy(touchLock = touchLock))
-                            }
-                        )
-                    }
+            item(key = "group_automation") {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    HudSwitchRow(
+                        index = 0,
+                        count = 3,
+                        icon = Icons.Rounded.SportsEsports,
+                        title = localizedLabel("Deteksi Game Otomatis", "Automatic Game Detection"),
+                        subtitle = localizedLabel(
+                            "Aktif otomatis saat menjalankan aplikasi dalam daftar game",
+                            "Activate automatically when running apps in the game list"
+                        ),
+                        checked = config.autoGame,
+                        onCheckedChange = { autoGame ->
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onConfigChange(config.copy(autoGame = autoGame))
+                        }
+                    )
 
-                    Surface(
-                        shape = RoundedCornerShape(24.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainer,
+                    HudSwitchRow(
+                        index = 1,
+                        count = 3,
+                        icon = Icons.Rounded.Lock,
+                        title = localizedLabel("Kunci Sentuhan", "Touch Pass-Through"),
+                        subtitle = localizedLabel(
+                            "Teruskan sentuhan ke layar di bawah overlay",
+                            "Pass touch input through to the screen beneath"
+                        ),
+                        checked = config.touchLock,
+                        onCheckedChange = { touchLock ->
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onConfigChange(config.copy(touchLock = touchLock))
+                        }
+                    )
+
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                            .clip(connectedContainerShape(index = 2, count = 3))
+                            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            HudSquircleIcon(icon = Icons.Rounded.Tune)
+                            Spacer(modifier = Modifier.width(16.dp))
                             Text(
                                 text = localizedLabel("Posisi Awal", "Initial Anchor"),
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold,
+                                style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                FpsOverlayCorner.entries.forEach { corner ->
-                                    FilterChip(
-                                        selected = config.corner == corner,
-                                        onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            onConfigChange(config.copy(corner = corner))
-                                        },
-                                        label = {
-                                            Text(
-                                                text = fpsCornerLabel(corner),
-                                                fontSize = 13.sp,
-                                                fontWeight = FontWeight.Medium
-                                            )
-                                        }
-                                    )
-                                }
+                        }
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FpsOverlayCorner.entries.forEach { corner ->
+                                FilterChip(
+                                    selected = config.corner == corner,
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onConfigChange(config.copy(corner = corner))
+                                    },
+                                    label = {
+                                        Text(
+                                            text = fpsCornerLabel(corner),
+                                            style = MaterialTheme.typography.labelMedium
+                                        )
+                                    }
+                                )
                             }
                         }
                     }
                 }
             }
 
-            item(key = "appearance_metrics") {
-                Column {
-                    AospSectionHeader(title = localizedLabel("Tampilan & Metrik", "Appearance & Metrics"))
-                    Surface(
-                        shape = RoundedCornerShape(24.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainer,
+            item(key = "header_appearance") {
+                HudSectionHeader(title = localizedLabel("Tampilan & Metrik", "Appearance & Metrics"))
+            }
+
+            item(key = "group_appearance") {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
+                            .clip(connectedContainerShape(index = 0, count = 4))
+                            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            HudSquircleIcon(icon = Icons.Rounded.Palette)
+                            Spacer(modifier = Modifier.width(16.dp))
                             Text(
                                 text = localizedLabel("Metrik Aktif", "Active Metrics"),
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold,
+                                style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                FilterChip(
-                                    selected = config.showFps,
-                                    onClick = {
-                                        if (!config.showFps || config.activeModuleCount > 1) {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            onConfigChange(config.copy(showFps = !config.showFps))
-                                        }
-                                    },
-                                    label = { Text("FPS") }
-                                )
-                                FilterChip(
-                                    selected = config.showFrametime,
-                                    onClick = {
-                                        if (!config.showFrametime || config.activeModuleCount > 1) {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            onConfigChange(config.copy(showFrametime = !config.showFrametime))
-                                        }
-                                    },
-                                    label = { Text("Frametime (ms)") }
-                                )
-                                FilterChip(
-                                    selected = config.showCpuCluster,
-                                    onClick = {
-                                        if (!config.showCpuCluster || config.activeModuleCount > 1) {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            onConfigChange(config.copy(showCpuCluster = !config.showCpuCluster))
-                                        }
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = Icons.Rounded.DeveloperBoard,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    },
-                                    label = { Text("CPU") }
-                                )
-                                FilterChip(
-                                    selected = config.showTemp,
-                                    onClick = {
-                                        if (!config.showTemp || config.activeModuleCount > 1) {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            onConfigChange(config.copy(showTemp = !config.showTemp))
-                                        }
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Thermostat,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    },
-                                    label = { Text(localizedLabel("Suhu", "Temp")) }
-                                )
-                                FilterChip(
-                                    selected = config.showRam,
-                                    onClick = {
-                                        if (!config.showRam || config.activeModuleCount > 1) {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            onConfigChange(config.copy(showRam = !config.showRam))
-                                        }
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Memory,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    },
-                                    label = { Text("RAM") }
-                                )
-                                FilterChip(
-                                    selected = config.showProfile,
-                                    onClick = {
-                                        if (!config.showProfile || config.activeModuleCount > 1) {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            onConfigChange(config.copy(showProfile = !config.showProfile))
-                                        }
-                                    },
-                                    label = { Text(localizedLabel("Profil", "Profile")) }
-                                )
-                            }
+                        }
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = config.showFps,
+                                onClick = {
+                                    if (!config.showFps || config.activeModuleCount > 1) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onConfigChange(config.copy(showFps = !config.showFps))
+                                    }
+                                },
+                                label = { Text("FPS") }
+                            )
+                            FilterChip(
+                                selected = config.showFrametime,
+                                onClick = {
+                                    if (!config.showFrametime || config.activeModuleCount > 1) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onConfigChange(config.copy(showFrametime = !config.showFrametime))
+                                    }
+                                },
+                                label = { Text("Frametime (ms)") }
+                            )
+                            FilterChip(
+                                selected = config.showCpuCluster,
+                                onClick = {
+                                    if (!config.showCpuCluster || config.activeModuleCount > 1) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onConfigChange(config.copy(showCpuCluster = !config.showCpuCluster))
+                                    }
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.DeveloperBoard,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                label = { Text("CPU") }
+                            )
+                            FilterChip(
+                                selected = config.showTemp,
+                                onClick = {
+                                    if (!config.showTemp || config.activeModuleCount > 1) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onConfigChange(config.copy(showTemp = !config.showTemp))
+                                    }
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Thermostat,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                label = { Text(localizedLabel("Suhu", "Temp")) }
+                            )
+                            FilterChip(
+                                selected = config.showRam,
+                                onClick = {
+                                    if (!config.showRam || config.activeModuleCount > 1) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onConfigChange(config.copy(showRam = !config.showRam))
+                                    }
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Memory,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                label = { Text("RAM") }
+                            )
+                            FilterChip(
+                                selected = config.showProfile,
+                                onClick = {
+                                    if (!config.showProfile || config.activeModuleCount > 1) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onConfigChange(config.copy(showProfile = !config.showProfile))
+                                    }
+                                },
+                                label = { Text(localizedLabel("Profil", "Profile")) }
+                            )
                         }
                     }
 
-                    Surface(
-                        shape = RoundedCornerShape(24.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainer,
+                    HudSliderRow(
+                        index = 1,
+                        count = 4,
+                        label = localizedLabel("Skala HUD", "HUD Scale"),
+                        valueText = "${(scaleDraft * 100).roundToInt()}%",
+                        value = scaleDraft,
+                        valueRange = 0.8f..1.3f,
+                        onValueChange = { scaleDraft = it },
+                        onValueChangeFinished = {
+                            onConfigChange(config.copy(scale = scaleDraft))
+                        }
+                    )
+
+                    HudSliderRow(
+                        index = 2,
+                        count = 4,
+                        label = localizedLabel("Opasitas Latar", "Background Opacity"),
+                        valueText = "${(alphaDraft * 100).roundToInt()}%",
+                        value = alphaDraft,
+                        valueRange = 0.25f..1.0f,
+                        onValueChange = { alphaDraft = it },
+                        onValueChangeFinished = {
+                            onConfigChange(config.copy(bgAlpha = alphaDraft))
+                        }
+                    )
+
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                            .clip(connectedContainerShape(index = 3, count = 4))
+                            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            Text(
+                                text = localizedLabel("Interval Sampling", "Sampling Interval"),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Surface(
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                shape = RoundedCornerShape(12.dp)
                             ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Palette,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Text(
-                                        text = localizedLabel("Ukuran & Opasitas", "Size & Opacity"),
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
+                                Text(
+                                    text = "${config.intervalMs} ms",
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
+                        val intervals = listOf(250, 500, 1000)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            intervals.forEachIndexed { index, ms ->
+                                val shapes = when (index) {
+                                    0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                                    intervals.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                                    else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
                                 }
-
-                                FpsSliderRow(
-                                    label = localizedLabel("Skala HUD", "HUD Scale"),
-                                    valueText = "${(scaleDraft * 100).roundToInt()}%",
-                                    value = scaleDraft,
-                                    valueRange = 0.8f..1.3f,
-                                    onValueChange = { scaleDraft = it },
-                                    onValueChangeFinished = {
-                                        onConfigChange(config.copy(scale = scaleDraft))
-                                    }
-                                )
-
-                                FpsSliderRow(
-                                    label = localizedLabel("Opasitas Latar", "Background Opacity"),
-                                    valueText = "${(alphaDraft * 100).roundToInt()}%",
-                                    value = alphaDraft,
-                                    valueRange = 0.25f..1.0f,
-                                    onValueChange = { alphaDraft = it },
-                                    onValueChangeFinished = {
-                                        onConfigChange(config.copy(bgAlpha = alphaDraft))
-                                    }
-                                )
-
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = localizedLabel("Interval Sampling", "Sampling Interval"),
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Text(
-                                            text = "${config.intervalMs} ms",
-                                            fontSize = 13.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                    val intervals = listOf(250, 500, 1000)
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        intervals.forEachIndexed { index, ms ->
-                                            val shapes = when (index) {
-                                                0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
-                                                intervals.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
-                                                else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
-                                            }
-                                            ToggleButton(
-                                                checked = config.intervalMs == ms,
-                                                onCheckedChange = {
-                                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                    onConfigChange(config.copy(intervalMs = ms))
-                                                },
-                                                shapes = shapes,
-                                                modifier = Modifier.weight(1f)
-                                            ) {
-                                                Text(
-                                                    text = "$ms ms",
-                                                    fontSize = 13.sp,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    maxLines = 1,
-                                                    softWrap = false,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                            }
-                                        }
-                                    }
+                                ToggleButton(
+                                    checked = config.intervalMs == ms,
+                                    onCheckedChange = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onConfigChange(config.copy(intervalMs = ms))
+                                    },
+                                    shapes = shapes,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = "$ms ms",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
                             }
                         }
@@ -884,7 +866,117 @@ internal fun TelemetryOverlayScreen(
 }
 
 @Composable
-private fun FpsSliderRow(
+private fun HudSectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(
+            start = 12.dp,
+            end = 12.dp,
+            top = 16.dp,
+            bottom = 8.dp
+        )
+    )
+}
+
+@Composable
+private fun HudSquircleIcon(icon: ImageVector) {
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(22.dp)
+        )
+    }
+}
+
+@Composable
+private fun HudSwitchRow(
+    index: Int,
+    count: Int,
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    val shape = connectedContainerShape(index = index, count = count)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .clickable { onCheckedChange(!checked) }
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.padding(end = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            HudSquircleIcon(icon = icon)
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 8.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Box(
+            modifier = Modifier.padding(start = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                thumbContent = {
+                    if (checked) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(SwitchDefaults.IconSize)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            modifier = Modifier.size(SwitchDefaults.IconSize)
+                        )
+                    }
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun HudSliderRow(
+    index: Int,
+    count: Int,
     label: String,
     valueText: String,
     value: Float,
@@ -892,7 +984,16 @@ private fun FpsSliderRow(
     onValueChange: (Float) -> Unit,
     onValueChangeFinished: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    val shape = connectedContainerShape(index = index, count = count)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -900,16 +1001,21 @@ private fun FpsSliderRow(
         ) {
             Text(
                 text = label,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            Text(
-                text = valueText,
-                fontSize = 13.5.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    text = valueText,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
         }
         Slider(
             value = value,

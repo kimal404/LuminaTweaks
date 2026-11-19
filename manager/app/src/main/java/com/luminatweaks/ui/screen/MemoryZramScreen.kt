@@ -1,26 +1,19 @@
-/*
- * Copyright (C) 2026 kimal
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 @file:OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 
 package com.luminatweaks.ui.screen
 
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,16 +25,22 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.DataSaverOn
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Storage
@@ -50,13 +49,18 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -65,10 +69,14 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -78,21 +86,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.luminatweaks.R
 import com.luminatweaks.data.ConfigRepository
-import com.luminatweaks.ui.component.AospChevron
-import com.luminatweaks.ui.component.AospConnectedGroup
-import com.luminatweaks.ui.component.AospOptionBottomSheet
-import com.luminatweaks.ui.component.AospPreferenceItem
-import com.luminatweaks.ui.component.AospSectionHeader
-import com.luminatweaks.ui.component.AospSheetOption
-import com.luminatweaks.ui.component.AospTopBar
 import com.luminatweaks.ui.component.LuminaBackButton
-import com.luminatweaks.ui.component.aospConnectedShape
+import com.luminatweaks.ui.component.appBarFade
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.DeviceUtil
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -169,216 +170,279 @@ fun MemoryZramScreen(
         }
     }
 
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val bottomPadding = if (isFloating) 100.dp + navInset else 24.dp + navInset
+    val bottomPadding = if (isFloating) 112.dp + navInset else 28.dp + navInset
+    val fadeSurface = MaterialTheme.colorScheme.background
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         contentWindowInsets = WindowInsets(0.dp),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            AospTopBar(
-                title = stringResource(R.string.memory_zram_title),
-                subtitle = localizedLabel("Alokasi swap & kompresi", "Swap allocation & compression"),
-                scrollBehavior = scrollBehavior,
-                navigationIcon = { LuminaBackButton(onBack = onBack) }
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .appBarFade(fadeSurface, scrollBehavior.state.overlappedFraction)
+                    .statusBarsPadding()
+            ) {
+                LargeFlexibleTopAppBar(
+                    navigationIcon = { LuminaBackButton(onBack = onBack) },
+                    title = {
+                        Text(
+                            text = stringResource(R.string.memory_zram_title),
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent
+                    ),
+                    scrollBehavior = scrollBehavior,
+                    windowInsets = WindowInsets(0, 0, 0, 0)
+                )
+            }
         }
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding() + 4.dp,
+                top = innerPadding.calculateTopPadding(),
                 bottom = bottomPadding,
-                start = 0.dp,
-                end = 0.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                start = 16.dp,
+                end = 16.dp
+            )
         ) {
-            item(key = "hero") {
-                MemoryHero(
-                    physicalRamGb = physicalRamGb,
-                    zramSizeGb = zramSizeGb,
-                    algorithm = selectedAlgorithm,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-            }
-
-            item(key = "zram_config") {
-                val defaultZram = physicalRamGb.coerceIn(1, maxZramLimit)
-                Column {
-                    AospSectionHeader(title = stringResource(R.string.memory_section_zram_config))
-                    AospConnectedGroup(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        MemoryFineTunerCard(
-                            shapeIndex = 0,
-                            shapeCount = 3,
-                            icon = Icons.Rounded.DataSaverOn,
-                            title = stringResource(R.string.memory_zram_size),
-                            description = stringResource(R.string.memory_zram_size_desc),
-                            valueText = "${zramSizeGb.roundToInt()} GB",
-                            value = zramSizeGb,
-                            valueRange = 1f..maxZramLimit.toFloat(),
-                            steps = (maxZramLimit - 2).coerceAtLeast(0),
-                            stepMinusLabel = "-1 GB",
-                            stepResetLabel = "$defaultZram GB",
-                            stepPlusLabel = "+1 GB",
-                            isAtReset = zramSizeGb.roundToInt() == defaultZram,
-                            onValueChange = { zramSizeGb = it },
-                            onValueChangeFinished = {
-                                coroutineScope.launch {
-                                    ConfigRepository.setZramConfig(sizeGb = zramSizeGb.roundToInt())
-                                }
-                            },
-                            onStepMinus = {
-                                val next = (zramSizeGb.roundToInt() - 1).coerceIn(1, maxZramLimit)
-                                if (next != zramSizeGb.roundToInt()) {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    zramSizeGb = next.toFloat()
-                                    coroutineScope.launch {
-                                        ConfigRepository.setZramConfig(sizeGb = next)
-                                    }
-                                }
-                            },
-                            onStepReset = {
-                                if (zramSizeGb.roundToInt() != defaultZram) {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    zramSizeGb = defaultZram.toFloat()
-                                    coroutineScope.launch {
-                                        ConfigRepository.setZramConfig(sizeGb = defaultZram)
-                                    }
-                                }
-                            },
-                            onStepPlus = {
-                                val next = (zramSizeGb.roundToInt() + 1).coerceIn(1, maxZramLimit)
-                                if (next != zramSizeGb.roundToInt()) {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    zramSizeGb = next.toFloat()
-                                    coroutineScope.launch {
-                                        ConfigRepository.setZramConfig(sizeGb = next)
-                                    }
-                                }
-                            }
-                        )
-
-                        AospPreferenceItem(
-                            index = 1,
-                            count = 3,
-                            icon = Icons.Rounded.Layers,
-                            title = stringResource(R.string.memory_zram_compression),
-                            subtitle = stringResource(R.string.memory_zram_compression_desc),
-                            valueText = selectedAlgorithm,
-                            onClick = { showAlgorithmSheet = true },
-                            trailing = { AospChevron() }
-                        )
-
-                        MemoryFineTunerCard(
-                            shapeIndex = 2,
-                            shapeCount = 3,
-                            icon = Icons.Rounded.Tune,
-                            title = stringResource(R.string.memory_swappiness_title),
-                            description = stringResource(R.string.memory_swappiness_desc),
-                            valueText = "${swappinessValue.roundToInt()}",
-                            value = swappinessValue,
-                            valueRange = 0f..200f,
-                            stepMinusLabel = "-10",
-                            stepResetLabel = "100",
-                            stepPlusLabel = "+10",
-                            isAtReset = swappinessValue.roundToInt() == 100,
-                            onValueChange = { swappinessValue = it },
-                            onValueChangeFinished = {
-                                coroutineScope.launch {
-                                    ConfigRepository.setZramConfig(swappiness = swappinessValue.roundToInt())
-                                }
-                            },
-                            onStepMinus = {
-                                val next = (swappinessValue.roundToInt() - 10).coerceIn(0, 200)
-                                if (next != swappinessValue.roundToInt()) {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    swappinessValue = next.toFloat()
-                                    coroutineScope.launch {
-                                        ConfigRepository.setZramConfig(swappiness = next)
-                                    }
-                                }
-                            },
-                            onStepReset = {
-                                if (swappinessValue.roundToInt() != 100) {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    swappinessValue = 100f
-                                    coroutineScope.launch {
-                                        ConfigRepository.setZramConfig(swappiness = 100)
-                                    }
-                                }
-                            },
-                            onStepPlus = {
-                                val next = (swappinessValue.roundToInt() + 10).coerceIn(0, 200)
-                                if (next != swappinessValue.roundToInt()) {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    swappinessValue = next.toFloat()
-                                    coroutineScope.launch {
-                                        ConfigRepository.setZramConfig(swappiness = next)
-                                    }
-                                }
-                            }
-                        )
-                    }
+            item(key = "info_banner") {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(26.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    MemorySquircleIcon(icon = Icons.Rounded.Info)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text(
+                        text = stringResource(R.string.memory_status_desc),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
 
-            item(key = "maintenance") {
-                Column {
-                    AospSectionHeader(title = stringResource(R.string.memory_section_maintenance))
-                    AospConnectedGroup(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        AospPreferenceItem(
-                            index = 0,
-                            count = 2,
-                            icon = Icons.Rounded.CleaningServices,
-                            title = stringResource(R.string.memory_action_drop_caches),
-                            subtitle = stringResource(R.string.memory_action_drop_caches_desc),
-                            onClick = {
-                                coroutineScope.launch {
-                                    withContext(Dispatchers.IO) {
-                                        runCatching {
-                                            Runtime.getRuntime()
-                                                .exec(arrayOf("su", "-c", "echo 3 > /proc/sys/vm/drop_caches"))
-                                                .waitFor()
-                                        }
-                                    }
-                                    Toast.makeText(
-                                        context,
-                                        context.getString(R.string.toast_drop_caches_success),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            },
-                            trailing = { AospChevron() }
-                        )
+            item(key = "summary_tiles") {
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    MemoryMetricTile(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Rounded.Memory,
+                        label = "RAM",
+                        value = "$physicalRamGb GB",
+                        highlight = false,
+                        onClick = null
+                    )
+                    MemoryMetricTile(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Rounded.DataSaverOn,
+                        label = "ZRAM",
+                        value = "${zramSizeGb.roundToInt()} GB",
+                        highlight = true,
+                        onClick = null
+                    )
+                    MemoryMetricTile(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Rounded.Layers,
+                        label = "ALGO",
+                        value = selectedAlgorithm.uppercase(),
+                        highlight = true,
+                        showArrow = true,
+                        onClick = { showAlgorithmSheet = true }
+                    )
+                }
+            }
 
-                        AospPreferenceItem(
-                            index = 1,
-                            count = 2,
-                            icon = Icons.Rounded.Storage,
-                            title = stringResource(R.string.memory_action_fstrim),
-                            subtitle = stringResource(R.string.memory_action_fstrim_desc),
-                            onClick = {
+            item(key = "header_zram") {
+                MemorySectionHeader(title = stringResource(R.string.memory_section_zram_config))
+            }
+
+            item(key = "group_zram") {
+                val defaultZram = physicalRamGb.coerceIn(1, maxZramLimit)
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    MemoryFineTunerRow(
+                        index = 0,
+                        count = 3,
+                        icon = Icons.Rounded.DataSaverOn,
+                        title = stringResource(R.string.memory_zram_size),
+                        description = stringResource(R.string.memory_zram_size_desc),
+                        valueText = "${zramSizeGb.roundToInt()} GB",
+                        value = zramSizeGb,
+                        valueRange = 1f..maxZramLimit.toFloat(),
+                        steps = (maxZramLimit - 2).coerceAtLeast(0),
+                        stepMinusLabel = "-1 GB",
+                        stepResetLabel = "$defaultZram GB",
+                        stepPlusLabel = "+1 GB",
+                        isAtReset = zramSizeGb.roundToInt() == defaultZram,
+                        onValueChange = { zramSizeGb = it },
+                        onValueChangeFinished = {
+                            coroutineScope.launch {
+                                ConfigRepository.setZramConfig(sizeGb = zramSizeGb.roundToInt())
+                            }
+                        },
+                        onStepMinus = {
+                            val next = (zramSizeGb.roundToInt() - 1).coerceIn(1, maxZramLimit)
+                            if (next != zramSizeGb.roundToInt()) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                zramSizeGb = next.toFloat()
                                 coroutineScope.launch {
-                                    withContext(Dispatchers.IO) {
-                                        runCatching {
-                                            Runtime.getRuntime()
-                                                .exec(arrayOf("su", "-c", "fstrim -v /data"))
-                                                .waitFor()
-                                        }
-                                    }
-                                    Toast.makeText(
-                                        context,
-                                        context.getString(R.string.toast_fstrim_success),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
+                                    ConfigRepository.setZramConfig(sizeGb = next)
                                 }
-                            },
-                            trailing = { AospChevron() }
-                        )
-                    }
+                            }
+                        },
+                        onStepReset = {
+                            if (zramSizeGb.roundToInt() != defaultZram) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                zramSizeGb = defaultZram.toFloat()
+                                coroutineScope.launch {
+                                    ConfigRepository.setZramConfig(sizeGb = defaultZram)
+                                }
+                            }
+                        },
+                        onStepPlus = {
+                            val next = (zramSizeGb.roundToInt() + 1).coerceIn(1, maxZramLimit)
+                            if (next != zramSizeGb.roundToInt()) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                zramSizeGb = next.toFloat()
+                                coroutineScope.launch {
+                                    ConfigRepository.setZramConfig(sizeGb = next)
+                                }
+                            }
+                        }
+                    )
+
+                    MemoryActionRow(
+                        index = 1,
+                        count = 3,
+                        icon = Icons.Rounded.Layers,
+                        title = stringResource(R.string.memory_zram_compression),
+                        subtitle = selectedAlgorithm,
+                        highlightSubtitle = true,
+                        onClick = { showAlgorithmSheet = true }
+                    )
+
+                    MemoryFineTunerRow(
+                        index = 2,
+                        count = 3,
+                        icon = Icons.Rounded.Tune,
+                        title = stringResource(R.string.memory_swappiness_title),
+                        description = stringResource(R.string.memory_swappiness_desc),
+                        valueText = "${swappinessValue.roundToInt()}",
+                        value = swappinessValue,
+                        valueRange = 0f..200f,
+                        stepMinusLabel = "-10",
+                        stepResetLabel = "100",
+                        stepPlusLabel = "+10",
+                        isAtReset = swappinessValue.roundToInt() == 100,
+                        onValueChange = { swappinessValue = it },
+                        onValueChangeFinished = {
+                            coroutineScope.launch {
+                                ConfigRepository.setZramConfig(swappiness = swappinessValue.roundToInt())
+                            }
+                        },
+                        onStepMinus = {
+                            val next = (swappinessValue.roundToInt() - 10).coerceIn(0, 200)
+                            if (next != swappinessValue.roundToInt()) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                swappinessValue = next.toFloat()
+                                coroutineScope.launch {
+                                    ConfigRepository.setZramConfig(swappiness = next)
+                                }
+                            }
+                        },
+                        onStepReset = {
+                            if (swappinessValue.roundToInt() != 100) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                swappinessValue = 100f
+                                coroutineScope.launch {
+                                    ConfigRepository.setZramConfig(swappiness = 100)
+                                }
+                            }
+                        },
+                        onStepPlus = {
+                            val next = (swappinessValue.roundToInt() + 10).coerceIn(0, 200)
+                            if (next != swappinessValue.roundToInt()) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                swappinessValue = next.toFloat()
+                                coroutineScope.launch {
+                                    ConfigRepository.setZramConfig(swappiness = next)
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+
+            item(key = "header_maintenance") {
+                MemorySectionHeader(title = stringResource(R.string.memory_section_maintenance))
+            }
+
+            item(key = "group_maintenance") {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    MemoryActionRow(
+                        index = 0,
+                        count = 2,
+                        icon = Icons.Rounded.CleaningServices,
+                        title = stringResource(R.string.memory_action_drop_caches),
+                        subtitle = stringResource(R.string.memory_action_drop_caches_desc),
+                        onClick = {
+                            coroutineScope.launch {
+                                withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        Runtime.getRuntime()
+                                            .exec(arrayOf("su", "-c", "echo 3 > /proc/sys/vm/drop_caches"))
+                                            .waitFor()
+                                    }
+                                }
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.toast_drop_caches_success),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    )
+
+                    MemoryActionRow(
+                        index = 1,
+                        count = 2,
+                        icon = Icons.Rounded.Storage,
+                        title = stringResource(R.string.memory_action_fstrim),
+                        subtitle = stringResource(R.string.memory_action_fstrim_desc),
+                        onClick = {
+                            coroutineScope.launch {
+                                withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        Runtime.getRuntime()
+                                            .exec(arrayOf("su", "-c", "fstrim -v /data"))
+                                            .waitFor()
+                                    }
+                                }
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.toast_fstrim_success),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    )
                 }
             }
         }
@@ -395,125 +459,243 @@ fun MemoryZramScreen(
         }
     }
 
-    if (showAlgorithmSheet) {
-        AospOptionBottomSheet(
-            title = stringResource(R.string.dialog_select_compression),
-            options = algorithms.map { AospSheetOption(it, it) },
-            isSelected = { it.equals(selectedAlgorithm, ignoreCase = true) },
-            onSelect = { algo ->
-                selectedAlgorithm = algo
-                showAlgorithmSheet = false
-                coroutineScope.launch {
-                    ConfigRepository.setZramConfig(algorithm = algo)
-                }
-            },
-            onDismiss = { showAlgorithmSheet = false }
+    ZramAlgorithmSheet(
+        show = showAlgorithmSheet,
+        title = stringResource(R.string.dialog_select_compression),
+        options = algorithms,
+        selectedValue = selectedAlgorithm,
+        onSelect = { algo ->
+            selectedAlgorithm = algo
+            coroutineScope.launch {
+                ConfigRepository.setZramConfig(algorithm = algo)
+            }
+        },
+        onDismiss = { showAlgorithmSheet = false }
+    )
+}
+
+@Composable
+private fun MemorySectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(
+            start = 12.dp,
+            end = 12.dp,
+            top = 16.dp,
+            bottom = 8.dp
+        )
+    )
+}
+
+@Composable
+private fun MemorySquircleIcon(icon: ImageVector) {
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(22.dp)
         )
     }
 }
 
 @Composable
-private fun MemoryHero(
-    physicalRamGb: Int,
-    zramSizeGb: Float,
-    algorithm: String,
-    modifier: Modifier = Modifier
+private fun MemoryMetricTile(
+    modifier: Modifier = Modifier,
+    icon: ImageVector,
+    label: String,
+    value: String,
+    highlight: Boolean,
+    showArrow: Boolean = false,
+    onClick: (() -> Unit)?
 ) {
-    val scheme = MaterialTheme.colorScheme
+    val colorScheme = MaterialTheme.colorScheme
+    val haptic = LocalHapticFeedback.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed && onClick != null) 0.98f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "memoryTileScale"
+    )
 
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        color = scheme.primaryContainer
-    ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(scheme.onPrimaryContainer.copy(alpha = 0.14f)),
-                    contentAlignment = Alignment.Center
-                ) {
+    val iconBoxBgColor by animateColorAsState(
+        targetValue = if (highlight) {
+            colorScheme.primaryContainer
+        } else {
+            colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        },
+        animationSpec = tween(350),
+        label = "memoryTileBg"
+    )
+
+    val iconColor by animateColorAsState(
+        targetValue = if (highlight) {
+            colorScheme.onPrimaryContainer
+        } else {
+            colorScheme.onSurfaceVariant
+        },
+        animationSpec = tween(350),
+        label = "memoryTileIcon"
+    )
+
+    val tileContent: @Composable () -> Unit = {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(64.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(iconBoxBgColor),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconColor,
+                    modifier = Modifier.size(28.dp)
+                )
+                if (showArrow) {
                     Icon(
-                        imageVector = Icons.Rounded.Memory,
+                        imageVector = Icons.Rounded.ChevronRight,
                         contentDescription = null,
-                        tint = scheme.onPrimaryContainer,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(14.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.memory_status_title),
-                        style = MaterialTheme.typography.titleMediumEmphasized,
-                        color = scheme.onPrimaryContainer
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = stringResource(R.string.memory_status_desc),
-                        fontSize = 13.sp,
-                        color = scheme.onPrimaryContainer.copy(alpha = 0.78f),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(6.dp)
+                            .size(18.dp),
+                        tint = iconColor.copy(alpha = 0.65f)
                     )
                 }
             }
-
-            Spacer(modifier = Modifier.height(18.dp))
-
-            Row(modifier = Modifier.fillMaxWidth()) {
-                MemoryStat(
-                    label = "RAM",
-                    value = "$physicalRamGb GB",
-                    modifier = Modifier.weight(1f)
+            Spacer(modifier = Modifier.height(10.dp))
+            Column(modifier = Modifier.padding(horizontal = 2.dp)) {
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                MemoryStat(
-                    label = "ZRAM",
-                    value = "${zramSizeGb.roundToInt()} GB",
-                    modifier = Modifier.weight(1f)
-                )
-                MemoryStat(
-                    label = "ALGO",
-                    value = algorithm.uppercase(),
-                    modifier = Modifier.weight(1f)
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
+        }
+    }
+
+    if (onClick != null) {
+        Surface(
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClick()
+            },
+            interactionSource = interactionSource,
+            shape = RoundedCornerShape(26.dp),
+            color = colorScheme.surfaceColorAtElevation(1.dp),
+            modifier = modifier.graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            },
+            content = tileContent
+        )
+    } else {
+        Surface(
+            shape = RoundedCornerShape(26.dp),
+            color = colorScheme.surfaceColorAtElevation(1.dp),
+            modifier = modifier,
+            content = tileContent
+        )
+    }
+}
+
+@Composable
+private fun MemoryActionRow(
+    index: Int,
+    count: Int,
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    highlightSubtitle: Boolean = false
+) {
+    val haptic = LocalHapticFeedback.current
+    val shape = connectedContainerShape(index = index, count = count)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .clickable {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClick()
+            }
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.padding(end = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            MemorySquircleIcon(icon = icon)
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 8.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (highlightSubtitle) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
+        }
+        Box(
+            modifier = Modifier.padding(start = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
 
 @Composable
-private fun MemoryStat(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier
-) {
-    Column(modifier = modifier) {
-        Text(
-            text = label,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
-            letterSpacing = 0.6.sp,
-            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
-            maxLines = 1
-        )
-        Spacer(modifier = Modifier.height(3.dp))
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
-private fun MemoryFineTunerCard(
-    shapeIndex: Int,
-    shapeCount: Int,
+private fun MemoryFineTunerRow(
+    index: Int,
+    count: Int,
     icon: ImageVector,
     title: String,
     description: String,
@@ -531,138 +713,285 @@ private fun MemoryFineTunerCard(
     onStepPlus: () -> Unit,
     steps: Int = 0
 ) {
-    Surface(
-        shape = aospConnectedShape(index = shapeIndex, count = shapeCount),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier.fillMaxWidth()
+    val shape = connectedContainerShape(index = index, count = count)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .padding(horizontal = 16.dp, vertical = 14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            MemorySquircleIcon(icon = icon)
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    text = valueText,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    maxLines = 1
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            onValueChangeFinished = onValueChangeFinished,
+            valueRange = valueRange,
+            steps = steps,
+            colors = SliderDefaults.colors(
+                thumbColor = MaterialTheme.colorScheme.primary,
+                activeTrackColor = MaterialTheme.colorScheme.primary
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                onClick = onStepMinus,
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier.weight(1f)
+            ) {
+                Box(
+                    modifier = Modifier.padding(vertical = 9.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = stepMinusLabel,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+
+            Surface(
+                onClick = onStepReset,
+                shape = CircleShape,
+                color = if (isAtReset) {
+                    MaterialTheme.colorScheme.surfaceContainerHighest
+                } else {
+                    MaterialTheme.colorScheme.secondaryContainer
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Box(
+                    modifier = Modifier.padding(vertical = 9.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = stepResetLabel,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (isAtReset) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.onSecondaryContainer
+                        }
+                    )
+                }
+            }
+
+            Surface(
+                onClick = onStepPlus,
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier.weight(1f)
+            ) {
+                Box(
+                    modifier = Modifier.padding(vertical = 9.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = stepPlusLabel,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ZramAlgorithmSheet(
+    show: Boolean,
+    title: String,
+    options: List<String>,
+    selectedValue: String,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    if (!show) return
+
+    val scope = rememberCoroutineScope()
+    val sheetState = rememberModalBottomSheetState()
+    val currentOnDismiss by rememberUpdatedState(onDismiss)
+    val scheme = MaterialTheme.colorScheme
+
+    val hideSheet: (() -> Unit) -> Unit = { afterHide ->
+        scope.launch {
+            try {
+                sheetState.hide()
+            } catch (_: CancellationException) {
+                return@launch
+            }
+            if (!sheetState.isVisible) {
+                currentOnDismiss()
+                afterHide()
+            }
+        }
+    }
+
+    val sheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+
+    ModalBottomSheet(
+        onDismissRequest = currentOnDismiss,
+        sheetState = sheetState,
+        containerColor = Color.Transparent,
+        scrimColor = if (scheme.surfaceContainerLowest == Color.Black) {
+            Color.Black.copy(alpha = 0.5f)
+        } else {
+            scheme.scrim.copy(alpha = 0.32f)
+        },
+        shape = sheetShape,
+        dragHandle = null,
+        contentWindowInsets = { WindowInsets(0.dp) }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .clip(sheetShape)
+                .background(scheme.surfaceContainerLow)
+                .navigationBarsPadding()
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(22.dp)
-                )
-                Spacer(modifier = Modifier.width(14.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = title,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = description,
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = valueText,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Slider(
-                value = value,
-                onValueChange = onValueChange,
-                onValueChangeFinished = onValueChangeFinished,
-                valueRange = valueRange,
-                steps = steps,
-                colors = SliderDefaults.colors(
-                    thumbColor = MaterialTheme.colorScheme.primary,
-                    activeTrackColor = MaterialTheme.colorScheme.primary
-                ),
-                modifier = Modifier.fillMaxWidth()
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(top = 12.dp, bottom = 4.dp)
+                    .width(32.dp)
+                    .height(4.dp)
+                    .background(scheme.onSurfaceVariant.copy(alpha = 0.4f), CircleShape)
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineSmall,
+                color = scheme.onSurface,
+                modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 4.dp)
+            )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 520.dp),
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 8.dp,
+                    bottom = 16.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                Surface(
-                    onClick = onStepMinus,
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Box(
-                        modifier = Modifier.padding(vertical = 9.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = stepMinusLabel,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
+                itemsIndexed(options) { index, option ->
+                    val selected = option.equals(selectedValue, ignoreCase = true)
+                    val rowShape = RoundedCornerShape(
+                        topStart = if (index == 0) 20.dp else 0.dp,
+                        topEnd = if (index == 0) 20.dp else 0.dp,
+                        bottomStart = if (index == options.lastIndex) 20.dp else 0.dp,
+                        bottomEnd = if (index == options.lastIndex) 20.dp else 0.dp
+                    )
 
-                Surface(
-                    onClick = onStepReset,
-                    shape = CircleShape,
-                    color = if (isAtReset) {
-                        MaterialTheme.colorScheme.surfaceContainerHighest
-                    } else {
-                        MaterialTheme.colorScheme.secondaryContainer
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Box(
-                        modifier = Modifier.padding(vertical = 9.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = stepResetLabel,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (isAtReset) {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            } else {
-                                MaterialTheme.colorScheme.onSecondaryContainer
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(rowShape)
+                            .background(
+                                if (selected) scheme.secondaryContainer else scheme.surfaceContainer
+                            )
+                            .clickable {
+                                hideSheet {}
+                                onSelect(option)
                             }
-                        )
-                    }
-                }
-
-                Surface(
-                    onClick = onStepPlus,
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Box(
-                        modifier = Modifier.padding(vertical = 9.dp),
-                        contentAlignment = Alignment.Center
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = stepPlusLabel,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            text = option,
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal
+                            ),
+                            color = if (selected) scheme.onSecondaryContainer else scheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
                         )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        ZramRadioRing(selected = selected)
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ZramRadioRing(selected: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    val ringColor = if (selected) scheme.primary else scheme.onSurfaceVariant
+
+    Box(
+        modifier = Modifier.size(20.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.size(20.dp)) {
+            val stroke = 2.dp.toPx()
+            val radius = (size.width / 2f) - (stroke / 2f)
+            drawCircle(
+                color = ringColor,
+                radius = radius,
+                style = Stroke(width = stroke)
+            )
+            if (selected) {
+                drawCircle(
+                    color = scheme.primary,
+                    radius = (size.width / 2f) * 0.3f
+                )
             }
         }
     }

@@ -1,19 +1,3 @@
-/*
- * Copyright (C) 2026 kimal
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 @file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
 
 package com.luminatweaks.ui.screen
@@ -30,7 +14,9 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -55,11 +41,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Palette
@@ -77,8 +64,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -90,10 +79,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -104,7 +93,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
@@ -116,15 +104,15 @@ import com.luminatweaks.ui.theme.ColorEngine
 import com.luminatweaks.ui.theme.ColorMode
 import com.luminatweaks.ui.theme.ThemeController
 import com.luminatweaks.util.RootUtil
+import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.abs
 
 private const val PAGE_COUNT = 4
-private val CardShape = RoundedCornerShape(24.dp)
+private val CardShape = RoundedCornerShape(26.dp)
 
 private enum class CheckState { CHECKING, READY, MISSING }
 
@@ -214,7 +202,6 @@ fun SetupWizardScreen(
 
     val currentPage = pagerState.currentPage
 
-    // Auto-deteksi saat dialog Superuser overlay (KernelSU / Magisk / APatch) baru disetujui
     LaunchedEffect(currentPage, isRootGranted) {
         if (currentPage == 0 && !isRootGranted) {
             while (isActive && !isRootGranted) {
@@ -423,7 +410,7 @@ private fun WizardFooter(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 24.dp)
+            .padding(horizontal = 16.dp)
             .padding(top = 8.dp, bottom = 12.dp)
     ) {
         AnimatedContent(
@@ -431,23 +418,39 @@ private fun WizardFooter(
             transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(120)) },
             label = "setupFooterNote"
         ) { targetPage ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Outlined.Info,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.width(6.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(CardShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Info,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = stringResource(footerNoteForPage(targetPage)),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         Button(
             onClick = onNext,
@@ -496,23 +499,24 @@ private fun WizardPage(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp)
-            .padding(top = 4.dp, bottom = 24.dp)
+            .padding(horizontal = 16.dp)
+            .padding(top = 8.dp, bottom = 24.dp)
     ) {
         Text(
             text = stringResource(titleRes),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.padding(horizontal = 4.dp)
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = stringResource(descriptionRes),
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp)
         )
-        Spacer(modifier = Modifier.height(22.dp))
+        Spacer(modifier = Modifier.height(20.dp))
         content()
     }
 }
@@ -528,15 +532,15 @@ private fun WelcomePage(
         titleRes = R.string.setup_title_welcome,
         descriptionRes = R.string.setup_desc_welcome
     ) {
-        val badgeColor = when {
-            isCheckingRoot -> MaterialTheme.colorScheme.surfaceContainerHigh
+        val badgeBg = when {
+            isCheckingRoot -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+            isRootGranted -> MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+            else -> MaterialTheme.colorScheme.error.copy(alpha = 0.14f)
+        }
+        val badgeTint = when {
+            isCheckingRoot -> MaterialTheme.colorScheme.primary
             isRootGranted -> MaterialTheme.colorScheme.primary
             else -> MaterialTheme.colorScheme.error
-        }
-        val badgeContentColor = when {
-            isCheckingRoot -> MaterialTheme.colorScheme.onSurfaceVariant
-            isRootGranted -> MaterialTheme.colorScheme.onPrimary
-            else -> MaterialTheme.colorScheme.onError
         }
         val grantedText = stringResource(R.string.setup_root_granted)
         val subtitle = when {
@@ -553,8 +557,8 @@ private fun WelcomePage(
             icon = Icons.Rounded.Security,
             title = stringResource(R.string.setup_root_privilege),
             subtitle = subtitle,
-            badgeColor = badgeColor,
-            badgeContentColor = badgeContentColor,
+            badgeColor = badgeBg,
+            badgeContentColor = badgeTint,
             trailing = {
                 AnimatedContent(
                     targetState = when {
@@ -676,7 +680,7 @@ private fun DiagnosticsPage(isActive: Boolean) {
             else -> stringResource(R.string.setup_status_missing)
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             StaggeredItem(visible = revealCount > 0) {
                 DiagnosticRow(
                     icon = Icons.Rounded.Memory,
@@ -739,69 +743,68 @@ private fun DiagnosticRow(
         CheckState.MISSING -> MaterialTheme.colorScheme.error
     }
 
-    Surface(
-        shape = shape,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier.fillMaxWidth()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, top = 14.dp, end = 16.dp, bottom = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .size(36.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(13.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-                contentAlignment = Alignment.Center
-            ) {
-                if (status == CheckState.CHECKING) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                } else {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        modifier = Modifier.size(22.dp),
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
+            if (status == CheckState.CHECKING) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary
                 )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = subtitle,
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+            } else {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp),
+                    tint = MaterialTheme.colorScheme.primary
                 )
             }
+        }
 
-            Spacer(modifier = Modifier.width(10.dp))
+        Spacer(modifier = Modifier.width(16.dp))
 
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 6.dp)
+        ) {
             Text(
-                text = statusText,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = statusColor,
-                maxLines = 1
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
+
+        Spacer(modifier = Modifier.width(10.dp))
+
+        Text(
+            text = statusText,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = statusColor,
+            maxLines = 1
+        )
     }
 }
 
@@ -826,10 +829,8 @@ private fun AppearancePage(
             onCheckedChange = onFloatingNavBarChange
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
-
         GroupLabel(text = stringResource(R.string.setup_color_mode))
-        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             colorModeOptions.forEachIndexed { index, (mode, labelRes) ->
                 GroupedOptionRow(
                     label = stringResource(labelRes),
@@ -840,10 +841,8 @@ private fun AppearancePage(
             }
         }
 
-        Spacer(modifier = Modifier.height(18.dp))
-
         GroupLabel(text = stringResource(R.string.setup_color_engine))
-        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             colorEngineOptions.forEachIndexed { index, (engine, labelRes) ->
                 GroupedOptionRow(
                     label = stringResource(labelRes),
@@ -860,10 +859,9 @@ private fun AppearancePage(
 private fun GroupLabel(text: String) {
     Text(
         text = text,
-        modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 8.dp),
-        fontSize = 14.sp,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.primary
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 16.dp, bottom = 8.dp)
     )
 }
 
@@ -875,45 +873,64 @@ private fun GroupedOptionRow(
     onClick: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
+    val scheme = MaterialTheme.colorScheme
     val container = if (selected) {
-        MaterialTheme.colorScheme.primaryContainer
+        scheme.secondaryContainer
     } else {
-        MaterialTheme.colorScheme.surfaceContainer
+        scheme.surfaceColorAtElevation(1.dp)
     }
     val content = if (selected) {
-        MaterialTheme.colorScheme.onPrimaryContainer
+        scheme.onSecondaryContainer
     } else {
-        MaterialTheme.colorScheme.onSurface
+        scheme.onSurface
     }
 
-    Surface(
-        onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-            onClick()
-        },
-        shape = shape,
-        color = container,
-        modifier = Modifier.fillMaxWidth()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(container)
+            .clickable {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClick()
+            }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 20.dp, top = 15.dp, end = 16.dp, bottom = 15.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = label,
-                modifier = Modifier.weight(1f),
-                fontSize = 16.sp,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                color = content
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyLarge.copy(
+                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal
+            ),
+            color = content
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        WizardRadioRing(selected = selected)
+    }
+}
+
+@Composable
+private fun WizardRadioRing(selected: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    val ringColor = if (selected) scheme.primary else scheme.onSurfaceVariant
+
+    Box(
+        modifier = Modifier.size(20.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.size(20.dp)) {
+            val stroke = 2.dp.toPx()
+            val radius = (size.width / 2f) - (stroke / 2f)
+            drawCircle(
+                color = ringColor,
+                radius = radius,
+                style = Stroke(width = stroke)
             )
             if (selected) {
-                Icon(
-                    imageVector = Icons.Rounded.Check,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                drawCircle(
+                    color = scheme.primary,
+                    radius = (size.width / 2f) * 0.3f
                 )
             }
         }
@@ -928,64 +945,73 @@ private fun ToggleHeroCard(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    Surface(
-        onClick = { onCheckedChange(!checked) },
-        shape = CardShape,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier.fillMaxWidth()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(CardShape)
+            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .clickable { onCheckedChange(!checked) }
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, top = 14.dp, end = 12.dp, bottom = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .size(36.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(13.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(22.dp),
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = subtitle,
-                    fontSize = 13.5.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Switch(
-                checked = checked,
-                onCheckedChange = onCheckedChange,
-                thumbContent = {
-                    Icon(
-                        imageVector = if (checked) Icons.Rounded.Check else Icons.Rounded.Close,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(22.dp),
+                tint = MaterialTheme.colorScheme.primary
             )
         }
+
+        Spacer(modifier = Modifier.width(16.dp))
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 6.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            thumbContent = {
+                if (checked) {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                    )
+                }
+            }
+        )
     }
 }
 
@@ -1013,11 +1039,11 @@ private fun GamesPage(isRootGranted: Boolean) {
         titleRes = R.string.setup_title_games,
         descriptionRes = R.string.setup_desc_games
     ) {
-        Surface(
-            shape = CardShape,
-            color = MaterialTheme.colorScheme.surfaceContainer,
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .clip(CardShape)
+                .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
                 .animateContentSize()
         ) {
             when {
@@ -1043,28 +1069,28 @@ private fun GamesPage(isRootGranted: Boolean) {
                 games.isNotEmpty() -> Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(18.dp)
+                        .padding(16.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary),
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.SportsEsports,
                                 contentDescription = null,
-                                modifier = Modifier.size(24.dp),
-                                tint = MaterialTheme.colorScheme.onPrimary
+                                modifier = Modifier.size(22.dp),
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         }
                         Spacer(modifier = Modifier.width(14.dp))
                         Text(
                             text = stringResource(R.string.setup_games_count, games.size),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     }
@@ -1088,8 +1114,7 @@ private fun GamesPage(isRootGranted: Boolean) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = game.label,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium,
+                                    style = MaterialTheme.typography.bodyLarge,
                                     color = MaterialTheme.colorScheme.onSurface,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -1136,16 +1161,16 @@ private fun GamesPage(isRootGranted: Boolean) {
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(64.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                            .size(56.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.SportsEsports,
                             contentDescription = null,
-                            modifier = Modifier.size(30.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            modifier = Modifier.size(28.dp),
+                            tint = MaterialTheme.colorScheme.primary
                         )
                     }
                     Spacer(modifier = Modifier.height(14.dp))
@@ -1188,53 +1213,52 @@ private fun StatusHeroCard(
     badgeContentColor: Color,
     trailing: @Composable () -> Unit
 ) {
-    Surface(
-        shape = CardShape,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier.fillMaxWidth()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(CardShape)
+            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .size(36.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(badgeColor),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(13.dp))
-                    .background(badgeColor),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                    tint = badgeContentColor
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = subtitle,
-                    fontSize = 13.5.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Spacer(modifier = Modifier.width(10.dp))
-
-            trailing()
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(22.dp),
+                tint = badgeContentColor
+            )
         }
+
+        Spacer(modifier = Modifier.width(16.dp))
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 4.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Spacer(modifier = Modifier.width(10.dp))
+
+        trailing()
     }
 }
 
@@ -1289,7 +1313,7 @@ private suspend fun detectRootManagerName(context: Context): String? = withConte
 }
 
 private fun groupedShape(index: Int, count: Int): Shape {
-    val outer = 24.dp
+    val outer = 26.dp
     val inner = 4.dp
     return when {
         count <= 1 -> RoundedCornerShape(outer)
