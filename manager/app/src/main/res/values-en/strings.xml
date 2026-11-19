@@ -163,7 +163,7 @@
     <string name="setup_root_note">Root access is used to apply kernel tweaks. Without root you can still explore in preview mode.</string>
     <string name="setup_title_diagnostics">System Diagnostics</string>
     <string name="setup_desc_diagnostics">Checking LuminaTweaks core components and your device platform in real time.</string>
-    <string name="setup_core_name">Lumina Core</string>
+    <string name="setup_core_name">Daemon</string>
     <string name="setup_core_desc">luminad daemon &amp; IPC socket</string>
     <string name="setup_soc_name">Detected Chipset</string>
     <string name="setup_soc_desc">Tweak profile from soc.conf</string>

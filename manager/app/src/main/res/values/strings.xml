@@ -164,7 +164,7 @@
     <string name="setup_root_note">Akses root dipakai untuk menerapkan tweak kernel. Tanpa root Anda tetap bisa menjelajah dalam mode pratinjau.</string>
     <string name="setup_title_diagnostics">Diagnostik Sistem</string>
     <string name="setup_desc_diagnostics">Memeriksa komponen inti LuminaTweaks dan platform perangkat Anda secara real-time.</string>
-    <string name="setup_core_name">Lumina Core</string>
+    <string name="setup_core_name">Daemon</string>
     <string name="setup_core_desc">Daemon luminad &amp; soket IPC</string>
     <string name="setup_soc_name">Chipset Terdeteksi</string>
     <string name="setup_soc_desc">Profil tweak dari berkas soc.conf</string>

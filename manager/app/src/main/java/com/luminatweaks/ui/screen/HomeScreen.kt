@@ -62,7 +62,6 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DeveloperBoard
-import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.MenuBook
@@ -125,7 +124,6 @@ import androidx.lifecycle.LifecycleOwner
 import com.luminatweaks.R
 import com.luminatweaks.data.DaemonManager
 import com.luminatweaks.service.FloatingFpsService
-import com.luminatweaks.ui.component.AospStatusPill
 import com.luminatweaks.ui.component.LuminaBottomBar
 import com.luminatweaks.ui.component.appBarFade
 import com.luminatweaks.ui.theme.LocalCornerRadius
@@ -1440,12 +1438,13 @@ private fun CoreStatusHero(
     daemonPid: String?,
     onStart: () -> Unit
 ) {
+    val isAlive = isRunning && !isRestarting
     val containerColor by animateColorAsState(
         targetValue = when {
             isChecking || isRestarting -> MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
-            isRunning -> MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
+            isAlive -> MaterialTheme.colorScheme.secondaryContainer
             isRebootRequired -> MaterialTheme.colorScheme.tertiaryContainer
-            else -> MaterialTheme.colorScheme.errorContainer
+            else -> MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
         },
         animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
         label = "coreContainer"
@@ -1453,32 +1452,29 @@ private fun CoreStatusHero(
     val contentColor by animateColorAsState(
         targetValue = when {
             isChecking || isRestarting -> MaterialTheme.colorScheme.onSurface
-            isRunning -> MaterialTheme.colorScheme.primary
+            isAlive -> MaterialTheme.colorScheme.onSecondaryContainer
             isRebootRequired -> MaterialTheme.colorScheme.onTertiaryContainer
-            else -> MaterialTheme.colorScheme.error
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
         },
         animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
         label = "coreContent"
     )
     val title = when {
-        isChecking -> stringResource(R.string.home_core_checking)
-        isRestarting -> stringResource(R.string.home_core_starting)
-        isRunning -> stringResource(R.string.home_core_alive)
-        isRebootRequired -> stringResource(R.string.dialog_reboot_required_title)
-        !isModuleInstalled -> stringResource(R.string.home_core_module_inactive)
-        else -> stringResource(R.string.home_core_inactive)
+        isChecking -> "CHECKING"
+        isRestarting -> "STARTING"
+        isAlive -> "ALIVE"
+        isRebootRequired -> "REBOOT"
+        !isModuleInstalled -> "MISSING"
+        else -> "SLEEP"
     }
+    val cleanPid = daemonPid?.takeIf { it.all(Char::isDigit) }
     val subtitle = when {
         isChecking || isRestarting -> stringResource(R.string.home_core_scanning)
-        isRunning -> stringResource(
-            R.string.home_core_pid_format,
-            daemonPid?.takeIf { pid -> pid.all(Char::isDigit) } ?: "-"
-        )
+        isAlive -> if (cleanPid != null) "PID: $cleanPid" else "Daemon active"
         isRebootRequired -> stringResource(R.string.home_core_reboot_hint)
         !isModuleInstalled -> stringResource(R.string.home_core_install_hint)
         else -> stringResource(R.string.home_core_tap_start)
     }
-    val isAlive = isRunning && !isRestarting
 
     val aliveTransition = rememberInfiniteTransition(label = "coreAlive")
     val wavePhase by aliveTransition.animateFloat(
@@ -1506,59 +1502,60 @@ private fun CoreStatusHero(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .height(28.dp)
+                        .height(24.dp)
                 )
             }
 
             Row(
                 modifier = Modifier.padding(
-                    start = 18.dp,
-                    top = 18.dp,
-                    end = 18.dp,
-                    bottom = if (isAlive) 28.dp else 18.dp
+                    start = 22.dp,
+                    top = 20.dp,
+                    end = 22.dp,
+                    bottom = if (isAlive) 26.dp else 20.dp
                 ),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(contentColor.copy(alpha = 0.14f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    when {
-                        isChecking || isRestarting -> CircularWavyProgressIndicator(
-                            modifier = Modifier.size(22.dp),
-                            color = contentColor,
-                            trackColor = contentColor.copy(alpha = 0.24f)
-                        )
-                        isAlive -> Icon(
-                            imageVector = Icons.Rounded.Check,
-                            contentDescription = null,
-                            tint = contentColor,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        isRebootRequired -> Icon(
-                            imageVector = Icons.Rounded.Refresh,
-                            contentDescription = null,
-                            tint = contentColor,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        else -> Icon(
-                            imageVector = Icons.Rounded.ErrorOutline,
-                            contentDescription = null,
-                            tint = contentColor,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
+                when {
+                    isChecking || isRestarting -> CircularWavyProgressIndicator(
+                        modifier = Modifier.size(32.dp),
+                        color = contentColor,
+                        trackColor = contentColor.copy(alpha = 0.24f)
+                    )
+                    isAlive -> Icon(
+                        imageVector = Icons.Rounded.Check,
+                        contentDescription = null,
+                        tint = contentColor,
+                        modifier = Modifier.size(34.dp)
+                    )
+                    isRebootRequired -> Icon(
+                        imageVector = Icons.Rounded.Refresh,
+                        contentDescription = null,
+                        tint = contentColor,
+                        modifier = Modifier.size(32.dp)
+                    )
+                    else -> Icon(
+                        imageVector = Icons.Rounded.PowerSettingsNew,
+                        contentDescription = null,
+                        tint = contentColor,
+                        modifier = Modifier.size(32.dp)
+                    )
                 }
 
-                Spacer(modifier = Modifier.width(16.dp))
+                Box(
+                    modifier = Modifier
+                        .height(36.dp)
+                        .width(1.5.dp)
+                        .background(contentColor.copy(alpha = 0.28f))
+                )
 
-                Column(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.Center
+                ) {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = contentColor,
                         maxLines = 1,
@@ -1568,24 +1565,12 @@ private fun CoreStatusHero(
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
                         color = contentColor.copy(alpha = 0.8f),
-                        maxLines = 2,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                AospStatusPill(
-                    text = if (isAlive) {
-                        stringResource(R.string.aosp_label_online)
-                    } else {
-                        stringResource(R.string.aosp_label_offline)
-                    },
-                    containerColor = contentColor.copy(alpha = 0.14f),
-                    contentColor = contentColor,
-                    leadingDotColor = if (isAlive) contentColor else contentColor.copy(alpha = 0.5f)
-                )
             }
         }
     }
