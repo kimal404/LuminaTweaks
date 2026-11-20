@@ -394,7 +394,24 @@ pub fn apply(profile: SocProfile) -> usize {
     applied
 }
 
-pub fn enforce_gaming(lite: bool) {
+fn desired_opp_index(lite: bool) -> Option<String> {
+    let fix_index = "/proc/gpufreqv2/fix_target_opp_index";
+    if !Path::new(fix_index).exists() {
+        return None;
+    }
+    if !lite {
+        return Some("0".to_string());
+    }
+    let (table_v2, _) = gpufreq_opp_paths();
+    let opps = read_opp_table(table_v2);
+    let freqs: Vec<u64> = opps.iter().map(|(_, freq)| *freq).collect();
+    let mid = crate::tweaks::devfreq::mid_frequency(&freqs)?;
+    opps.iter()
+        .min_by_key(|(_, freq)| freq.abs_diff(mid))
+        .map(|(index, _)| index.to_string())
+}
+
+pub fn apply_gaming_once(lite: bool) {
     let profile = if lite {
         SocProfile::Lite
     } else {
@@ -440,6 +457,96 @@ pub fn enforce_gaming(lite: bool) {
     ] {
         crate::tweaks::thermal::write_enforced(path, value);
     }
+
+    if lite {
+        return;
+    }
+
+    for (path, value) in [
+        ("/proc/cpufreq/cpufreq_cci_mode", "1"),
+        ("/proc/cpufreq/cpufreq_power_mode", "3"),
+        (
+            "/sys/devices/platform/boot_dramboost/dramboost/dramboost",
+            "1",
+        ),
+        ("/sys/devices/system/cpu/eas/enable", "0"),
+        ("/proc/gpufreq/gpufreq_opp_freq", "0"),
+        ("/proc/gpufreqv2/fix_target_opp_index", "-1"),
+        ("/sys/kernel/eara_thermal/enable", "0"),
+        (
+            "/proc/mtk_batoc_throttling/battery_oc_protect_stop",
+            "stop 1",
+        ),
+    ] {
+        crate::tweaks::thermal::write_enforced(path, value);
+    }
+
+    for key in [
+        "ignore_batt_oc",
+        "ignore_batt_percent",
+        "ignore_low_batt",
+        "ignore_thermal_protect",
+        "ignore_pbm_limited",
+    ] {
+        let value = format!("{} 1", key);
+        crate::tweaks::thermal::write_enforced(
+            "/proc/gpufreq/gpufreq_power_limited",
+            &value,
+        );
+    }
+
+    apply_gpufreq_opp(SocProfile::Performance);
+}
+
+pub fn guard_gaming(lite: bool) {
+    if let Some(target) = desired_opp_index(lite) {
+        let path = "/proc/gpufreqv2/fix_target_opp_index";
+        let current = fs::read_to_string(path)
+            .ok()
+            .map(|value| value.trim().to_string());
+        if current.as_deref() != Some(target.as_str()) {
+            write_summary_file(path, &target, true);
+        }
+        return;
+    }
+
+    let (table_v1, legacy) = (
+        "/proc/gpufreq/gpufreq_opp_dump",
+        "/proc/gpufreq/gpufreq_opp_freq",
+    );
+    if !Path::new(legacy).exists() {
+        return;
+    }
+    let opps = read_opp_table(table_v1);
+    let target = if lite {
+        let freqs: Vec<u64> = opps.iter().map(|(_, freq)| *freq).collect();
+        crate::tweaks::devfreq::mid_frequency(&freqs)
+            .and_then(|mid| {
+                opps.iter()
+                    .min_by_key(|(_, freq)| freq.abs_diff(mid))
+                    .map(|(_, freq)| *freq)
+            })
+    } else {
+        opps.first().map(|(_, freq)| *freq)
+    };
+    let Some(target) = target else {
+        return;
+    };
+    let current = fs::read_to_string(legacy)
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok());
+    if current != Some(target) {
+        write_summary_file(legacy, &format!("{}", target), true);
+    }
+}
+
+pub fn restore_gaming() {
+    crate::tweaks::engine::write_sysfs(
+        "/proc/gpufreqv2/fix_target_opp_index",
+        "-1",
+        false,
+    );
+    crate::tweaks::engine::write_sysfs("/proc/gpufreq/gpufreq_opp_freq", "0", false);
 }
 
 pub fn optimize_storage(profile: SocProfile) -> usize {

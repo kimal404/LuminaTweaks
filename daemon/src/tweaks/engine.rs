@@ -633,12 +633,19 @@ fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool, max_cap_ratio
                     .collect();
 
                 if min_clamp {
-                    crate::tweaks::state::write_tracked(
-                        &min_path,
-                        &hw_max.to_string(),
-                        false,
-                    );
-                    crate::tweaks::state::write_tracked(&max_path, &hw_max.to_string(), false);
+                    crate::tweaks::state::write_tracked(&max_path, &hw_max.to_string(), true);
+                    crate::tweaks::state::write_tracked(&min_path, &hw_max.to_string(), true);
+                    let current_min = fs::read_to_string(&min_path)
+                        .ok()
+                        .and_then(|value| value.trim().parse::<u64>().ok());
+                    if current_min != Some(hw_max) {
+                        log!(
+                            "[ENFORCE] {} min freq mismatch: {:?} != {}",
+                            fname,
+                            current_min,
+                            hw_max
+                        );
+                    }
                 } else if let Some(pct) = max_cap_ratio {
                     let target_cap = (hw_max * pct) / 100;
                     let target_max = if !freqs.is_empty() {
@@ -718,21 +725,29 @@ fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool, max_cap_ratio
 pub fn performance_profile() {
     crate::tweaks::sched::apply_performance();
     crate::tweaks::thermal::apply("performance");
+    crate::tweaks::thermal::apply_performance_lockers(false);
     apply_universal_cpu("performance", true, true, None);
     soc::apply(SocProfile::Performance);
+    if soc::vendor() == soc::Vendor::Mediatek {
+        crate::tweaks::soc::mediatek::apply_gaming_once(false);
+    }
     soc::optimize_storage(SocProfile::Performance);
 }
 
 pub fn performance_lite_profile() {
     crate::tweaks::sched::apply_balance();
     crate::tweaks::thermal::apply("lite");
+    crate::tweaks::thermal::apply_performance_lockers(true);
     apply_universal_cpu("schedutil", true, false, Some(72));
     tune_schedutil_rate_limits(500, 20000);
     soc::apply(SocProfile::Lite);
+    if soc::vendor() == soc::Vendor::Mediatek {
+        crate::tweaks::soc::mediatek::apply_gaming_once(true);
+    }
     soc::optimize_storage(SocProfile::Lite);
 }
 
-fn enforce_cpu_limits(lite: bool) {
+fn guard_cpu_limits(lite: bool) {
     let Ok(entries) = fs::read_dir("/sys/devices/system/cpu/cpufreq") else {
         return;
     };
@@ -773,22 +788,27 @@ fn enforce_cpu_limits(lite: bool) {
         };
         let target_min = if lite { hw_min } else { hw_max };
         let governor = if lite { "schedutil" } else { "performance" };
+        let governor_path = format!("{}/scaling_governor", base);
+        let min_path = format!("{}/scaling_min_freq", base);
+        let max_path = format!("{}/scaling_max_freq", base);
 
-        crate::tweaks::state::write_tracked(
-            &format!("{}/scaling_min_freq", base),
-            &target_min.to_string(),
-            false,
-        );
-        crate::tweaks::state::write_tracked(
-            &format!("{}/scaling_max_freq", base),
-            &target_max.to_string(),
-            true,
-        );
-        crate::tweaks::state::write_tracked(
-            &format!("{}/scaling_governor", base),
-            governor,
-            true,
-        );
+        let current_governor = fs::read_to_string(&governor_path)
+            .ok()
+            .map(|value| value.trim().to_string());
+        if current_governor.as_deref() != Some(governor) {
+            crate::tweaks::state::write_tracked(&governor_path, governor, true);
+        }
+
+        if read_freq("scaling_max_freq") != Some(target_max) {
+            crate::tweaks::state::write_tracked(&max_path, &target_max.to_string(), true);
+        }
+        if read_freq("scaling_min_freq") != Some(target_min) {
+            crate::tweaks::state::write_tracked(&min_path, &target_min.to_string(), true);
+        }
+
+        if read_freq("scaling_min_freq") != Some(target_min) {
+            warn_stuck_freq(&min_path, &name, target_min);
+        }
     }
 
     if lite {
@@ -796,30 +816,67 @@ fn enforce_cpu_limits(lite: bool) {
     }
 }
 
-pub fn enforce_gaming(lite: bool) {
-    if lite {
-        crate::tweaks::sched::enforce_lite();
-    } else {
-        crate::tweaks::sched::enforce_performance();
+fn warn_stuck_freq(path: &str, policy: &str, expected: u64) {
+    static WARNED: OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = OnceLock::new();
+    let set = WARNED.get_or_init(|| std::sync::Mutex::new(std::collections::HashSet::new()));
+    let mut guard = set
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if guard.insert(path.to_string()) {
+        log!(
+            "[ENFORCE] {} scaling_min_freq did not reach {} kHz",
+            policy,
+            expected
+        );
     }
-    if !crate::tweaks::thermal::thermal_budget_open() {
-        return;
-    }
+}
 
-    crate::tweaks::thermal::enforce_gaming(lite);
-    enforce_cpu_limits(lite);
+fn restore_cpu_minimums() {
+    let Ok(entries) = fs::read_dir("/sys/devices/system/cpu/cpufreq") else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !name.starts_with("policy") {
+            continue;
+        }
+        let base = format!("/sys/devices/system/cpu/cpufreq/{}", name);
+        let Ok(min_value) = fs::read_to_string(format!("{}/cpuinfo_min_freq", base)) else {
+            continue;
+        };
+        let min_value = min_value.trim();
+        if !min_value.is_empty() {
+            write_sysfs(&format!("{}/scaling_min_freq", base), min_value, false);
+        }
+        if let Ok(max_value) = fs::read_to_string(format!("{}/cpuinfo_max_freq", base)) {
+            let max_value = max_value.trim();
+            if !max_value.is_empty() {
+                write_sysfs(&format!("{}/scaling_max_freq", base), max_value, false);
+            }
+        }
+    }
+}
+
+pub fn guard_gaming(lite: bool) {
+    guard_cpu_limits(lite);
+    crate::tweaks::thermal::guard_performance_lockers();
 
     if soc::vendor() == soc::Vendor::Mediatek {
-        crate::tweaks::soc::mediatek::enforce_gaming(lite);
+        crate::tweaks::soc::mediatek::guard_gaming(lite);
     }
 }
 
 pub fn balance_profile() {
     crate::tweaks::state::restore_all();
+    crate::tweaks::thermal::reset_sconfig_target();
+    restore_cpu_minimums();
+    if soc::vendor() == soc::Vendor::Mediatek {
+        crate::tweaks::soc::mediatek::restore_gaming();
+    }
 }
 
 pub fn restore_balance() {
-    crate::tweaks::state::restore_all();
+    balance_profile();
 }
 
 pub fn eco_profile() {

@@ -16,7 +16,6 @@ use crate::tweaks::state;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 const ENERGY_AWARE_PATHS: &[&str] = &[
@@ -40,10 +39,9 @@ const GPU_LIMIT_TABLE_PATHS: &[&str] = &[
     "/proc/gpufreqv2/limit_table",
     "/proc/gpufreq/gpufreq_limit_table",
 ];
-const THERMAL_GATE_MILLI: i64 = 82_000;
 
-static THERMAL_HOT: AtomicBool = AtomicBool::new(false);
 static FAILED_WRITES: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+static SCONFIG_TARGET: Mutex<Option<String>> = Mutex::new(None);
 
 fn failed_writes() -> &'static Mutex<HashSet<String>> {
     FAILED_WRITES.get_or_init(|| Mutex::new(HashSet::new()))
@@ -72,50 +70,32 @@ pub(crate) fn write_enforced(path: &str, value: &str) -> bool {
     false
 }
 
-fn max_zone_temp() -> Option<i64> {
-    let mut max: Option<i64> = None;
-    for dir in COOLING_DIRS {
-        let Ok(entries) = fs::read_dir(dir) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if !name.starts_with("thermal_zone") {
-                continue;
-            }
-            let base = format!("{}/{}", dir, name);
-            let Ok(raw) = fs::read_to_string(format!("{}/temp", base)) else {
-                continue;
-            };
-            let Ok(raw) = raw.trim().parse::<i64>() else {
-                continue;
-            };
-            let temp = if raw.abs() > 1000 { raw } else { raw * 1000 };
-            if !(1_000..=200_000).contains(&temp) {
-                continue;
-            }
-            max = Some(max.map_or(temp, |current: i64| current.max(temp)));
-        }
-    }
-    max
+fn sconfig_path() -> Option<&'static str> {
+    THERMAL_SCONFIG_PATHS
+        .iter()
+        .copied()
+        .find(|path| Path::new(path).exists())
 }
 
-pub(crate) fn thermal_budget_open() -> bool {
-    let hot = max_zone_temp()
-        .map(|temp| temp >= THERMAL_GATE_MILLI)
-        .unwrap_or(false);
-    let previous = THERMAL_HOT.swap(hot, Ordering::Relaxed);
-    if hot != previous {
-        if hot {
-            log!(
-                "[THERMAL] Zone reached {}C; keeping stock thermal limits",
-                THERMAL_GATE_MILLI / 1000
-            );
-        } else {
-            log!("[THERMAL] Headroom recovered; lifting thermal limiters");
-        }
+fn hold_sconfig() -> bool {
+    let Some(path) = sconfig_path() else {
+        return false;
+    };
+    let Some(current) = fs::read_to_string(path)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    else {
+        return false;
+    };
+    let mut guard = SCONFIG_TARGET
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let target = guard.get_or_insert_with(|| current.clone()).clone();
+    if current == target {
+        return true;
     }
-    !hot
+    write_enforced(path, &target)
 }
 
 fn ppm_policy_limit(value: &str) -> usize {
@@ -168,21 +148,7 @@ fn ppm_hard_limits(lite: bool) -> usize {
         if write_enforced(PPM_MAX_PATH, &format!("{} {}", cluster, max_value)) {
             applied += 1;
         }
-        let target_min = if lite {
-            let available = fs::read_to_string(format!("{}/scaling_available_frequencies", base))
-                .unwrap_or_default();
-            let mut freqs: Vec<u64> = available
-                .split_whitespace()
-                .filter_map(|value| value.parse::<u64>().ok())
-                .collect();
-            freqs.sort_unstable();
-            freqs
-                .get(freqs.len() / 2)
-                .map(|value| value.to_string())
-                .unwrap_or(min_value)
-        } else {
-            max_value
-        };
+        let target_min = if lite { min_value } else { max_value };
         if write_enforced(PPM_MIN_PATH, &format!("{} {}", cluster, target_min)) {
             applied += 1;
         }
@@ -191,7 +157,7 @@ fn ppm_hard_limits(lite: bool) -> usize {
     applied
 }
 
-fn apply_zone_governors() -> usize {
+fn apply_zone_policy(performance: bool) -> usize {
     let mut applied = 0;
     for dir in COOLING_DIRS {
         let Ok(entries) = fs::read_dir(dir) else {
@@ -202,8 +168,15 @@ fn apply_zone_governors() -> usize {
             if !name.starts_with("thermal_zone") {
                 continue;
             }
-            let policy = format!("{}/{}/policy", dir, name);
-            if write_enforced(&policy, "step_wise") {
+            let base = format!("{}/{}/", dir, name);
+            if performance {
+                if write_enforced(&format!("{}mode", base), "disabled") {
+                    applied += 1;
+                }
+                if write_enforced(&format!("{}policy", base), "userspace") {
+                    applied += 1;
+                }
+            } else if write_enforced(&format!("{}policy", base), "step_wise") {
                 applied += 1;
             }
         }
@@ -211,15 +184,10 @@ fn apply_zone_governors() -> usize {
     applied
 }
 
-pub fn enforce_gaming(lite: bool) -> usize {
-    if !thermal_budget_open() {
-        return 0;
-    }
+pub fn apply_performance_lockers(lite: bool) -> usize {
     let mut applied = 0;
-    for path in THERMAL_SCONFIG_PATHS {
-        if write_enforced(path, "0") {
-            applied += 1;
-        }
+    if hold_sconfig() {
+        applied += 1;
     }
     if Path::new(PPM_ENABLED_PATH).exists() {
         write_enforced(PPM_ENABLED_PATH, "1");
@@ -231,9 +199,20 @@ pub fn enforce_gaming(lite: bool) -> usize {
             applied += 1;
         }
     }
-    applied += apply_zone_governors();
+    applied += apply_zone_policy(!lite);
     applied += hold_cooling_at_minimum();
     applied
+}
+
+pub fn guard_performance_lockers() -> bool {
+    hold_sconfig()
+}
+
+pub fn reset_sconfig_target() {
+    let mut guard = SCONFIG_TARGET
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    *guard = None;
 }
 
 fn write(path: &str, value: &str, lock: bool) -> bool {

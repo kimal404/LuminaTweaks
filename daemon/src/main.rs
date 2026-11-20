@@ -362,7 +362,7 @@ impl EngineRuntime {
         if (target_profile == Profile::Performance || target_profile == Profile::PerformanceLite)
             && self.last_gaming_enforce.elapsed() >= GAMING_ENFORCE_INTERVAL
         {
-            engine::enforce_gaming(target_profile == Profile::PerformanceLite);
+            engine::guard_gaming(target_profile == Profile::PerformanceLite);
             self.last_gaming_enforce = Instant::now();
         }
 

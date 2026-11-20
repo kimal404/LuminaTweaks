@@ -66,30 +66,9 @@ fn tune_top_app(
 }
 
 pub fn apply_performance() {
-    tune_top_app("100", "1", "1", "100", "max");
-}
-
-pub fn enforce_performance() {
+    tune_top_app("100", "1", "1", "1024", "max");
     for dir in UCLAMP_DIRS {
-        write_node(&format!("{}/cpu.uclamp.min", dir), "100");
-        write_node(&format!("{}/cpu.uclamp.max", dir), "max");
         write_node(&format!("{}/cpu.uclamp.latency_sensitive", dir), "1");
-    }
-    for dir in STUNE_DIRS {
-        write_node(&format!("{}/schedtune.boost", dir), "100");
-        write_node(&format!("{}/schedtune.prefer_idle", dir), "1");
-    }
-}
-
-pub fn enforce_lite() {
-    for dir in UCLAMP_DIRS {
-        write_node(&format!("{}/cpu.uclamp.min", dir), "0");
-        write_node(&format!("{}/cpu.uclamp.max", dir), "max");
-        write_node(&format!("{}/cpu.uclamp.latency_sensitive", dir), "1");
-    }
-    for dir in STUNE_DIRS {
-        write_node(&format!("{}/schedtune.boost", dir), "0");
-        write_node(&format!("{}/schedtune.prefer_idle", dir), "1");
     }
 }
 
