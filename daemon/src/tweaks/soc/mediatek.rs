@@ -463,6 +463,13 @@ pub fn apply_gaming_once(lite: bool) {
     }
 
     for (path, value) in [
+        ("/sys/kernel/fpsgo/fbt/enable_ceiling", "0"),
+        ("/sys/kernel/fpsgo/fbt/engine_cooler_enable", "0"),
+    ] {
+        crate::tweaks::thermal::write_enforced(path, value);
+    }
+
+    for (path, value) in [
         ("/proc/cpufreq/cpufreq_cci_mode", "1"),
         ("/proc/cpufreq/cpufreq_power_mode", "3"),
         (

@@ -13,10 +13,8 @@
 // limitations under the License.
 
 use crate::tweaks::state;
-use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
-use std::sync::{Mutex, OnceLock};
 
 const ENERGY_AWARE_PATHS: &[&str] = &[
     "/sys/devices/system/cpu/sched_energy_aware",
@@ -40,34 +38,14 @@ const GPU_LIMIT_TABLE_PATHS: &[&str] = &[
     "/proc/gpufreq/gpufreq_limit_table",
 ];
 
-static FAILED_WRITES: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
-static SCONFIG_TARGET: Mutex<Option<String>> = Mutex::new(None);
-
-fn failed_writes() -> &'static Mutex<HashSet<String>> {
-    FAILED_WRITES.get_or_init(|| Mutex::new(HashSet::new()))
-}
+const SCONFIG_PERFORMANCE_VALUE: &str = "6";
+const SCONFIG_NORMAL_VALUE: &str = "0";
 
 pub(crate) fn write_enforced(path: &str, value: &str) -> bool {
     if !Path::new(path).exists() {
         return false;
     }
-    let key = format!("{}={}", path, value);
-    {
-        let set = failed_writes()
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        if set.contains(&key) {
-            return false;
-        }
-    }
-    if state::write_tracked(path, value, false) {
-        return true;
-    }
-    failed_writes()
-        .lock()
-        .unwrap_or_else(|error| error.into_inner())
-        .insert(key);
-    false
+    state::write_tracked(path, value, false)
 }
 
 fn sconfig_path() -> Option<&'static str> {
@@ -77,25 +55,30 @@ fn sconfig_path() -> Option<&'static str> {
         .find(|path| Path::new(path).exists())
 }
 
-fn hold_sconfig() -> bool {
+fn apply_sconfig(value: &str) -> bool {
     let Some(path) = sconfig_path() else {
         return false;
     };
-    let Some(current) = fs::read_to_string(path)
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-    else {
+    write_enforced(path, value)
+}
+
+fn guard_sconfig() -> bool {
+    let Some(path) = sconfig_path() else {
         return false;
     };
-    let mut guard = SCONFIG_TARGET
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
-    let target = guard.get_or_insert_with(|| current.clone()).clone();
-    if current == target {
+    let current = fs::read_to_string(path)
+        .ok()
+        .map(|value| value.trim().to_string());
+    if current.as_deref() == Some(SCONFIG_PERFORMANCE_VALUE) {
         return true;
     }
-    write_enforced(path, &target)
+    write_enforced(path, SCONFIG_PERFORMANCE_VALUE)
+}
+
+pub fn reset_sconfig() {
+    if let Some(path) = sconfig_path() {
+        crate::tweaks::engine::write_sysfs(path, SCONFIG_NORMAL_VALUE, false);
+    }
 }
 
 fn ppm_policy_limit(value: &str) -> usize {
@@ -131,20 +114,34 @@ fn ppm_hard_limits(lite: bool) -> usize {
     if !Path::new(PPM_MAX_PATH).exists() {
         return 0;
     }
+    let Ok(entries) = fs::read_dir("/sys/devices/system/cpu/cpufreq") else {
+        return 0;
+    };
     let mut applied = 0;
     let mut cluster = 0u32;
-    for index in 0..16 {
-        let base = format!("/sys/devices/system/cpu/cpufreq/policy{}", index);
-        let Ok(max_value) = fs::read_to_string(format!("{}/cpuinfo_max_freq", base)) else {
-            continue;
-        };
-        let max_value = max_value.trim().to_string();
-        if max_value.is_empty() {
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !name.starts_with("policy") {
             continue;
         }
+        let base = format!("/sys/devices/system/cpu/cpufreq/{}", name);
+        let available: Vec<u64> =
+            fs::read_to_string(format!("{}/scaling_available_frequencies", base))
+                .unwrap_or_default()
+                .split_whitespace()
+                .filter_map(|value| value.parse::<u64>().ok())
+                .collect();
+        let max_value = fs::read_to_string(format!("{}/cpuinfo_max_freq", base))
+            .ok()
+            .and_then(|value| value.trim().parse::<u64>().ok())
+            .or_else(|| available.iter().copied().max());
         let min_value = fs::read_to_string(format!("{}/cpuinfo_min_freq", base))
-            .map(|value| value.trim().to_string())
-            .unwrap_or_default();
+            .ok()
+            .and_then(|value| value.trim().parse::<u64>().ok())
+            .or_else(|| available.iter().copied().min());
+        let (Some(max_value), Some(min_value)) = (max_value, min_value) else {
+            continue;
+        };
         if write_enforced(PPM_MAX_PATH, &format!("{} {}", cluster, max_value)) {
             applied += 1;
         }
@@ -153,6 +150,53 @@ fn ppm_hard_limits(lite: bool) -> usize {
             applied += 1;
         }
         cluster += 1;
+    }
+    applied
+}
+
+fn release_cpu_limits() -> usize {
+    let path = "/sys/class/thermal/thermal_message/cpu_limits";
+    if !Path::new(path).exists() {
+        return 0;
+    }
+    let Ok(entries) = fs::read_dir("/sys/devices/system/cpu/cpufreq") else {
+        return 0;
+    };
+    let mut applied = 0;
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !name.starts_with("policy") {
+            continue;
+        }
+        let base = format!("/sys/devices/system/cpu/cpufreq/{}", name);
+        let cpu = fs::read_to_string(format!("{}/affected_cpus", base))
+            .ok()
+            .and_then(|value| value.split_whitespace().next().map(str::to_string))
+            .or_else(|| name.strip_prefix("policy").map(str::to_string));
+        let Some(cpu) = cpu else {
+            continue;
+        };
+        let max_value = fs::read_to_string(format!("{}/cpuinfo_max_freq", base))
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .or_else(|| {
+                fs::read_to_string(format!("{}/scaling_available_frequencies", base))
+                    .ok()
+                    .and_then(|value| {
+                        value
+                            .split_whitespace()
+                            .filter_map(|freq| freq.parse::<u64>().ok())
+                            .max()
+                            .map(|freq| freq.to_string())
+                    })
+            });
+        let Some(max_value) = max_value else {
+            continue;
+        };
+        if write_enforced(path, &format!("{} {}", cpu, max_value)) {
+            applied += 1;
+        }
     }
     applied
 }
@@ -186,7 +230,7 @@ fn apply_zone_policy(performance: bool) -> usize {
 
 pub fn apply_performance_lockers(lite: bool) -> usize {
     let mut applied = 0;
-    if hold_sconfig() {
+    if !lite && apply_sconfig(SCONFIG_PERFORMANCE_VALUE) {
         applied += 1;
     }
     if Path::new(PPM_ENABLED_PATH).exists() {
@@ -199,20 +243,17 @@ pub fn apply_performance_lockers(lite: bool) -> usize {
             applied += 1;
         }
     }
+    applied += release_cpu_limits();
     applied += apply_zone_policy(!lite);
     applied += hold_cooling_at_minimum();
     applied
 }
 
-pub fn guard_performance_lockers() -> bool {
-    hold_sconfig()
-}
-
-pub fn reset_sconfig_target() {
-    let mut guard = SCONFIG_TARGET
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
-    *guard = None;
+pub fn guard_performance_lockers(lite: bool) -> bool {
+    if lite {
+        return true;
+    }
+    guard_sconfig()
 }
 
 fn write(path: &str, value: &str, lock: bool) -> bool {

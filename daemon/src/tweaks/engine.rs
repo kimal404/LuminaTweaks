@@ -617,20 +617,23 @@ fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool, max_cap_ratio
 
                 crate::tweaks::state::write_tracked(&gov_path, gov, lock_gov);
 
-                let hw_min = fs::read_to_string(&hw_min_path)
-                    .ok()
-                    .and_then(|s| s.trim().parse::<u64>().ok())
-                    .unwrap_or(300000);
-                let hw_max = fs::read_to_string(&hw_max_path)
-                    .ok()
-                    .and_then(|s| s.trim().parse::<u64>().ok())
-                    .unwrap_or(2000000);
-
                 let freqs: Vec<u64> = fs::read_to_string(&avail_path)
                     .unwrap_or_default()
                     .split_whitespace()
                     .filter_map(|s| s.parse::<u64>().ok())
                     .collect();
+
+                let hw_min = fs::read_to_string(&hw_min_path)
+                    .ok()
+                    .and_then(|s| s.trim().parse::<u64>().ok())
+                    .or_else(|| freqs.iter().copied().min());
+                let hw_max = fs::read_to_string(&hw_max_path)
+                    .ok()
+                    .and_then(|s| s.trim().parse::<u64>().ok())
+                    .or_else(|| freqs.iter().copied().max());
+                let (Some(hw_min), Some(hw_max)) = (hw_min, hw_max) else {
+                    continue;
+                };
 
                 if min_clamp {
                     crate::tweaks::state::write_tracked(&max_path, &hw_max.to_string(), true);
@@ -762,9 +765,15 @@ fn guard_cpu_limits(lite: bool) {
                 .ok()
                 .and_then(|value| value.trim().parse::<u64>().ok())
         };
-        let (Some(hw_min), Some(hw_max)) =
-            (read_freq("cpuinfo_min_freq"), read_freq("cpuinfo_max_freq"))
-        else {
+        let available: Vec<u64> =
+            fs::read_to_string(format!("{}/scaling_available_frequencies", base))
+                .unwrap_or_default()
+                .split_whitespace()
+                .filter_map(|value| value.parse::<u64>().ok())
+                .collect();
+        let hw_min = read_freq("cpuinfo_min_freq").or_else(|| available.iter().copied().min());
+        let hw_max = read_freq("cpuinfo_max_freq").or_else(|| available.iter().copied().max());
+        let (Some(hw_min), Some(hw_max)) = (hw_min, hw_max) else {
             continue;
         };
 
@@ -841,25 +850,40 @@ fn restore_cpu_minimums() {
             continue;
         }
         let base = format!("/sys/devices/system/cpu/cpufreq/{}", name);
-        let Ok(min_value) = fs::read_to_string(format!("{}/cpuinfo_min_freq", base)) else {
-            continue;
-        };
-        let min_value = min_value.trim();
-        if !min_value.is_empty() {
-            write_sysfs(&format!("{}/scaling_min_freq", base), min_value, false);
+        let available: Vec<u64> =
+            fs::read_to_string(format!("{}/scaling_available_frequencies", base))
+                .unwrap_or_default()
+                .split_whitespace()
+                .filter_map(|value| value.parse::<u64>().ok())
+                .collect();
+        let min_value = fs::read_to_string(format!("{}/cpuinfo_min_freq", base))
+            .ok()
+            .and_then(|value| value.trim().parse::<u64>().ok())
+            .or_else(|| available.iter().copied().min());
+        let max_value = fs::read_to_string(format!("{}/cpuinfo_max_freq", base))
+            .ok()
+            .and_then(|value| value.trim().parse::<u64>().ok())
+            .or_else(|| available.iter().copied().max());
+        if let Some(min_value) = min_value {
+            write_sysfs(
+                &format!("{}/scaling_min_freq", base),
+                &min_value.to_string(),
+                false,
+            );
         }
-        if let Ok(max_value) = fs::read_to_string(format!("{}/cpuinfo_max_freq", base)) {
-            let max_value = max_value.trim();
-            if !max_value.is_empty() {
-                write_sysfs(&format!("{}/scaling_max_freq", base), max_value, false);
-            }
+        if let Some(max_value) = max_value {
+            write_sysfs(
+                &format!("{}/scaling_max_freq", base),
+                &max_value.to_string(),
+                false,
+            );
         }
     }
 }
 
 pub fn guard_gaming(lite: bool) {
     guard_cpu_limits(lite);
-    crate::tweaks::thermal::guard_performance_lockers();
+    crate::tweaks::thermal::guard_performance_lockers(lite);
 
     if soc::vendor() == soc::Vendor::Mediatek {
         crate::tweaks::soc::mediatek::guard_gaming(lite);
@@ -868,7 +892,7 @@ pub fn guard_gaming(lite: bool) {
 
 pub fn balance_profile() {
     crate::tweaks::state::restore_all();
-    crate::tweaks::thermal::reset_sconfig_target();
+    crate::tweaks::thermal::reset_sconfig();
     restore_cpu_minimums();
     if soc::vendor() == soc::Vendor::Mediatek {
         crate::tweaks::soc::mediatek::restore_gaming();

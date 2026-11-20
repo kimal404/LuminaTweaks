@@ -143,9 +143,7 @@ fn capture(path: &str) -> bool {
 }
 
 pub fn write_tracked(path: &str, value: &str, lock: bool) -> bool {
-    if !capture(path) {
-        return false;
-    }
+    capture(path);
     crate::tweaks::engine::write_sysfs(path, value, lock)
 }
 
