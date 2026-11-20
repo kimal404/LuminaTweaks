@@ -73,6 +73,23 @@ pub fn enforce_performance() {
     for dir in UCLAMP_DIRS {
         write_node(&format!("{}/cpu.uclamp.min", dir), "100");
         write_node(&format!("{}/cpu.uclamp.max", dir), "max");
+        write_node(&format!("{}/cpu.uclamp.latency_sensitive", dir), "1");
+    }
+    for dir in STUNE_DIRS {
+        write_node(&format!("{}/schedtune.boost", dir), "100");
+        write_node(&format!("{}/schedtune.prefer_idle", dir), "1");
+    }
+}
+
+pub fn enforce_lite() {
+    for dir in UCLAMP_DIRS {
+        write_node(&format!("{}/cpu.uclamp.min", dir), "0");
+        write_node(&format!("{}/cpu.uclamp.max", dir), "max");
+        write_node(&format!("{}/cpu.uclamp.latency_sensitive", dir), "1");
+    }
+    for dir in STUNE_DIRS {
+        write_node(&format!("{}/schedtune.boost", dir), "0");
+        write_node(&format!("{}/schedtune.prefer_idle", dir), "1");
     }
 }
 

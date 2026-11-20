@@ -57,6 +57,7 @@ const HEARTBEAT_FILE_PATH: &str = "/data/adb/.config/lumina/luminad.alive";
 const LEGACY_PID_FILE_PATH: &str = "/data/local/tmp/lumina.pid";
 const LEGACY_HEARTBEAT_FILE_PATH: &str = "/data/local/tmp/lumina.alive";
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(2);
+const GAMING_ENFORCE_INTERVAL: Duration = Duration::from_secs(2);
 
 extern "C" fn handle_signal(_: i32) {
     SHUTDOWN.store(true, Ordering::Relaxed);
@@ -229,7 +230,7 @@ struct EngineRuntime {
     dnd_override: bool,
     prev_zen_mode: String,
     last_config_poll: Instant,
-    last_sched_enforce: Instant,
+    last_gaming_enforce: Instant,
     low_power: bool,
     shared_state: Arc<SharedState>,
 }
@@ -252,7 +253,7 @@ impl EngineRuntime {
             dnd_override: false,
             prev_zen_mode: "0".to_string(),
             last_config_poll: Instant::now(),
-            last_sched_enforce: Instant::now(),
+            last_gaming_enforce: Instant::now(),
             low_power: is_low_power_active(),
             shared_state,
         }
@@ -352,16 +353,17 @@ impl EngineRuntime {
             }
             self.current_profile = Some(target_profile);
             self.update_shared_state(target_profile, target_pkg);
-            if target_profile == Profile::Performance {
-                self.last_sched_enforce = Instant::now();
+            if target_profile == Profile::Performance || target_profile == Profile::PerformanceLite
+            {
+                self.last_gaming_enforce = Instant::now();
             }
         }
 
-        if target_profile == Profile::Performance
-            && self.last_sched_enforce.elapsed() >= Duration::from_secs(1)
+        if (target_profile == Profile::Performance || target_profile == Profile::PerformanceLite)
+            && self.last_gaming_enforce.elapsed() >= GAMING_ENFORCE_INTERVAL
         {
-            sched::enforce_performance();
-            self.last_sched_enforce = Instant::now();
+            engine::enforce_gaming(target_profile == Profile::PerformanceLite);
+            self.last_gaming_enforce = Instant::now();
         }
 
         let global_rr = display::get_saved_mode_id();

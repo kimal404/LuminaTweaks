@@ -394,6 +394,54 @@ pub fn apply(profile: SocProfile) -> usize {
     applied
 }
 
+pub fn enforce_gaming(lite: bool) {
+    let profile = if lite {
+        SocProfile::Lite
+    } else {
+        SocProfile::Performance
+    };
+
+    apply_gpufreq_opp(profile);
+    apply_gpu_frequency(profile);
+    apply_ged_hal(profile);
+    apply_ged_flags(profile);
+
+    for (name, value) in [
+        ("gx_game_mode", "1"),
+        ("gx_force_cpu_boost", "1"),
+        ("gx_boost_on", "1"),
+        ("gx_frc_mode", "1"),
+        ("gpu_dvfs_enable", "1"),
+        ("boost_gpu_enable", "1"),
+        ("ged_boost_enable", "1"),
+        ("ged_smart_boost", "1"),
+        ("enable_gpu_boost", "1"),
+        ("is_GED_KPI_enabled", "0"),
+    ] {
+        write_param(name, value);
+    }
+
+    for (path, value) in [
+        ("/sys/kernel/ged/hal/gpu_boost_level", "100"),
+        ("/sys/kernel/fpsgo/common/force_onoff", "0"),
+        ("/sys/kernel/fpsgo/fbt/thrm_enable", "0"),
+        ("/sys/kernel/fpsgo/fbt/thrm_limit_cpu", "0"),
+        ("/sys/kernel/fpsgo/fbt/ultra_rescue", "1"),
+        ("/sys/kernel/fpsgo/fbt/boost_ta", "0"),
+        ("/sys/kernel/fpsgo/fstb/adopt_low_fps", "1"),
+        ("/sys/kernel/fpsgo/fstb/fstb_self_ctrl_fps_enable", "1"),
+        ("/sys/kernel/fpsgo/fstb/gpu_slowdown_check", "1"),
+        ("/sys/kernel/fpsgo/fstb/boost_ta", "0"),
+        ("/sys/module/mtk_fpsgo/parameters/xgf_uboost", "1"),
+        ("/sys/module/mtk_fpsgo/parameters/isolation_limit_cap", "0"),
+        ("/sys/module/mtk_fpsgo/parameters/uboost_enhance_f", "100"),
+        ("/sys/pnpmgr/fpsgo_boost/boost_enable", "1"),
+        ("/sys/pnpmgr/fpsgo_boost/boost_mode", "1"),
+    ] {
+        crate::tweaks::thermal::write_enforced(path, value);
+    }
+}
+
 pub fn optimize_storage(profile: SocProfile) -> usize {
     let governor = match profile {
         SocProfile::Performance => "performance",
