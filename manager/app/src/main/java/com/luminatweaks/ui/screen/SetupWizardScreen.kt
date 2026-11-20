@@ -25,6 +25,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -53,6 +54,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ArrowForward
+import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.Memory
@@ -61,7 +63,10 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SportsEsports
+import androidx.compose.material.icons.rounded.Thermostat
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -100,6 +105,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -124,6 +130,37 @@ private const val PAGE_COUNT = 4
 private val CardShape = RoundedCornerShape(26.dp)
 
 private enum class CheckState { CHECKING, READY, MISSING }
+
+private data class FloatingBadgeSpec(
+    val icon: ImageVector,
+    val xFraction: Float,
+    val yFraction: Float,
+    val boxSize: Dp,
+    val rotation: Float,
+    val driftAmplitude: Float,
+    val tone: Int
+)
+
+private val welcomeFloatingSpecs = listOf(
+    FloatingBadgeSpec(Icons.Rounded.RocketLaunch, 0.43f, 0.34f, 60.dp, -6f, 7f, 0),
+    FloatingBadgeSpec(Icons.Rounded.Speed, 0.14f, 0.12f, 48.dp, -14f, -6f, 1),
+    FloatingBadgeSpec(Icons.Rounded.Memory, 0.74f, 0.10f, 50.dp, 12f, 6f, 2),
+    FloatingBadgeSpec(Icons.Rounded.Bolt, 0.06f, 0.46f, 44.dp, 10f, 5f, 2),
+    FloatingBadgeSpec(Icons.Rounded.DeveloperBoard, 0.80f, 0.44f, 46.dp, -11f, -6f, 1),
+    FloatingBadgeSpec(Icons.Rounded.Thermostat, 0.22f, 0.72f, 44.dp, -9f, -5f, 3),
+    FloatingBadgeSpec(Icons.Rounded.Tune, 0.66f, 0.74f, 46.dp, 13f, 6f, 0),
+    FloatingBadgeSpec(Icons.Rounded.Security, 0.44f, 0.04f, 40.dp, 7f, -5f, 3),
+    FloatingBadgeSpec(Icons.Rounded.SportsEsports, 0.44f, 0.78f, 42.dp, -8f, 5f, 1)
+)
+
+private val compactFloatingSpecs = listOf(
+    FloatingBadgeSpec(Icons.Rounded.Memory, 0.14f, 0.16f, 46.dp, -12f, 6f, 0),
+    FloatingBadgeSpec(Icons.Rounded.Speed, 0.45f, 0.32f, 54.dp, 6f, -6f, 1),
+    FloatingBadgeSpec(Icons.Rounded.DeveloperBoard, 0.76f, 0.14f, 46.dp, 11f, 5f, 2),
+    FloatingBadgeSpec(Icons.Rounded.Bolt, 0.24f, 0.66f, 42.dp, 9f, -5f, 2),
+    FloatingBadgeSpec(Icons.Rounded.Tune, 0.68f, 0.64f, 44.dp, -10f, 6f, 3),
+    FloatingBadgeSpec(Icons.Rounded.RocketLaunch, 0.46f, 0.74f, 40.dp, -5f, 5f, 0)
+)
 
 private val colorModeOptions = listOf(
     ColorMode.SYSTEM to R.string.mode_system,
@@ -499,102 +536,75 @@ private fun footerNoteForPage(page: Int): Int = when (page) {
 }
 
 @Composable
-private fun WizardFloatingHero(
-    mainIcon: ImageVector,
-    leftIcon: ImageVector,
-    rightIcon: ImageVector
+private fun FloatingIconCluster(
+    specs: List<FloatingBadgeSpec>,
+    areaHeight: Dp,
+    modifier: Modifier = Modifier
 ) {
-    val floatTransition = rememberInfiniteTransition(label = "wizardFloatingIcons")
-    val mainOffset by floatTransition.animateFloat(
-        initialValue = -5f,
-        targetValue = 5f,
+    val scheme = MaterialTheme.colorScheme
+    val transition = rememberInfiniteTransition(label = "wizardFloatingCluster")
+    val waveA by transition.animateFloat(
+        initialValue = -1f,
+        targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2400, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = 2500, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "mainFloat"
+        label = "floatingWaveA"
     )
-    val leftOffset by floatTransition.animateFloat(
-        initialValue = 4f,
-        targetValue = -4f,
+    val waveB by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = -1f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 2100, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "leftFloat"
-    )
-    val rightOffset by floatTransition.animateFloat(
-        initialValue = -4f,
-        targetValue = 4f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2700, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "rightFloat"
+        label = "floatingWaveB"
     )
 
-    Box(
-        modifier = Modifier
+    BoxWithConstraints(
+        modifier = modifier
             .fillMaxWidth()
-            .height(116.dp),
-        contentAlignment = Alignment.Center
+            .height(areaHeight)
     ) {
-        Box(
-            modifier = Modifier
-                .offset(x = (-78).dp, y = 10.dp)
-                .graphicsLayer {
-                    translationY = leftOffset.dp.toPx()
-                    rotationZ = -8f
-                }
-                .size(42.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(MaterialTheme.colorScheme.secondaryContainer),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = leftIcon,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.onSecondaryContainer
-            )
-        }
+        specs.forEachIndexed { index, spec ->
+            val containerColor = when (spec.tone) {
+                0 -> scheme.primaryContainer
+                1 -> scheme.secondaryContainer
+                2 -> scheme.tertiaryContainer
+                else -> scheme.surfaceContainerHigh
+            }
+            val iconTint = when (spec.tone) {
+                0 -> scheme.onPrimaryContainer
+                1 -> scheme.onSecondaryContainer
+                2 -> scheme.onTertiaryContainer
+                else -> scheme.primary
+            }
+            val phase = if (index % 2 == 0) waveA else waveB
+            val xPos = (maxWidth - spec.boxSize) * spec.xFraction
+            val yPos = (maxHeight - spec.boxSize) * spec.yFraction
+            val cornerRadius = (spec.boxSize.value * 0.34f).dp
+            val iconSize = (spec.boxSize.value * 0.48f).dp
 
-        Box(
-            modifier = Modifier
-                .offset(x = 78.dp, y = (-8).dp)
-                .graphicsLayer {
-                    translationY = rightOffset.dp.toPx()
-                    rotationZ = 8f
-                }
-                .size(42.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(MaterialTheme.colorScheme.tertiaryContainer),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = rightIcon,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.onTertiaryContainer
-            )
-        }
-
-        Box(
-            modifier = Modifier
-                .graphicsLayer {
-                    translationY = mainOffset.dp.toPx()
-                }
-                .size(68.dp)
-                .clip(RoundedCornerShape(22.dp))
-                .background(MaterialTheme.colorScheme.primaryContainer),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = mainIcon,
-                contentDescription = null,
-                modifier = Modifier.size(34.dp),
-                tint = MaterialTheme.colorScheme.onPrimaryContainer
-            )
+            Box(
+                modifier = Modifier
+                    .offset(x = xPos, y = yPos)
+                    .graphicsLayer {
+                        translationY = phase * spec.driftAmplitude.dp.toPx()
+                        rotationZ = spec.rotation + (phase * 2.5f)
+                    }
+                    .size(spec.boxSize)
+                    .clip(RoundedCornerShape(cornerRadius))
+                    .background(containerColor),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = spec.icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(iconSize),
+                    tint = iconTint
+                )
+            }
         }
     }
 }
@@ -603,9 +613,6 @@ private fun WizardFloatingHero(
 private fun WizardPage(
     @StringRes titleRes: Int,
     @StringRes descriptionRes: Int,
-    heroIcon: ImageVector,
-    leftFloatIcon: ImageVector,
-    rightFloatIcon: ImageVector,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Column(
@@ -615,12 +622,6 @@ private fun WizardPage(
             .padding(horizontal = 16.dp)
             .padding(top = 8.dp, bottom = 24.dp)
     ) {
-        WizardFloatingHero(
-            mainIcon = heroIcon,
-            leftIcon = leftFloatIcon,
-            rightIcon = rightFloatIcon
-        )
-        Spacer(modifier = Modifier.height(10.dp))
         Text(
             text = stringResource(titleRes),
             style = MaterialTheme.typography.headlineMedium,
@@ -649,10 +650,7 @@ private fun WelcomePage(
 ) {
     WizardPage(
         titleRes = R.string.setup_title_welcome,
-        descriptionRes = R.string.setup_desc_welcome,
-        heroIcon = Icons.Rounded.RocketLaunch,
-        leftFloatIcon = Icons.Rounded.Security,
-        rightFloatIcon = Icons.Rounded.Memory
+        descriptionRes = R.string.setup_desc_welcome
     ) {
         val badgeBg = when {
             isCheckingRoot -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
@@ -725,6 +723,13 @@ private fun WelcomePage(
                 }
             }
         )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        FloatingIconCluster(
+            specs = welcomeFloatingSpecs,
+            areaHeight = 250.dp
+        )
     }
 }
 
@@ -767,10 +772,7 @@ private fun DiagnosticsPage(isActive: Boolean) {
 
     WizardPage(
         titleRes = R.string.setup_title_diagnostics,
-        descriptionRes = R.string.setup_desc_diagnostics,
-        heroIcon = Icons.Rounded.DeveloperBoard,
-        leftFloatIcon = Icons.Rounded.Memory,
-        rightFloatIcon = Icons.Rounded.Settings
+        descriptionRes = R.string.setup_desc_diagnostics
     ) {
         val coreState = when {
             !coreChecked -> CheckState.CHECKING
@@ -837,6 +839,13 @@ private fun DiagnosticsPage(isActive: Boolean) {
                 )
             }
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        FloatingIconCluster(
+            specs = compactFloatingSpecs,
+            areaHeight = 165.dp
+        )
     }
 }
 
@@ -944,10 +953,7 @@ private fun AppearancePage(
 ) {
     WizardPage(
         titleRes = R.string.setup_title_appearance,
-        descriptionRes = R.string.setup_desc_appearance,
-        heroIcon = Icons.Rounded.Palette,
-        leftFloatIcon = Icons.Rounded.Check,
-        rightFloatIcon = Icons.Rounded.Settings
+        descriptionRes = R.string.setup_desc_appearance
     ) {
         ToggleHeroCard(
             icon = Icons.Rounded.Palette,
@@ -1178,10 +1184,7 @@ private fun GamesPage(isRootGranted: Boolean) {
 
     WizardPage(
         titleRes = R.string.setup_title_games,
-        descriptionRes = R.string.setup_desc_games,
-        heroIcon = Icons.Rounded.SportsEsports,
-        leftFloatIcon = Icons.Rounded.RocketLaunch,
-        rightFloatIcon = Icons.Rounded.DeveloperBoard
+        descriptionRes = R.string.setup_desc_games
     ) {
         Column(
             modifier = Modifier
@@ -1344,6 +1347,14 @@ private fun GamesPage(isRootGranted: Boolean) {
                     }
                 }
             }
+        }
+
+        if (games.size <= 2) {
+            Spacer(modifier = Modifier.height(16.dp))
+            FloatingIconCluster(
+                specs = compactFloatingSpecs,
+                areaHeight = 160.dp
+            )
         }
     }
 }
