@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::tweaks::soc::{self, Vendor};
 use crate::tweaks::state;
 use std::fs;
 use std::path::Path;
+use std::sync::Mutex;
+use std::time::Duration;
 
 const ENERGY_AWARE_PATHS: &[&str] = &[
     "/sys/devices/system/cpu/sched_energy_aware",
@@ -38,8 +41,16 @@ const GPU_LIMIT_TABLE_PATHS: &[&str] = &[
     "/proc/gpufreq/gpufreq_limit_table",
 ];
 
-const SCONFIG_PERFORMANCE_VALUE: &str = "6";
 const SCONFIG_NORMAL_VALUE: &str = "0";
+const SCONFIG_VALIDATION_DELAY: Duration = Duration::from_millis(120);
+
+enum SconfigMode {
+    Unknown,
+    Valid(String),
+    Unsupported,
+}
+
+static SCONFIG_MODE: Mutex<SconfigMode> = Mutex::new(SconfigMode::Unknown);
 
 pub(crate) fn write_enforced(path: &str, value: &str) -> bool {
     if !Path::new(path).exists() {
@@ -55,30 +66,110 @@ fn sconfig_path() -> Option<&'static str> {
         .find(|path| Path::new(path).exists())
 }
 
-fn apply_sconfig(value: &str) -> bool {
+fn read_sconfig(path: &str) -> Option<String> {
+    fs::read_to_string(path)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn sconfig_candidates() -> [&'static str; 2] {
+    if soc::vendor() == Vendor::Snapdragon {
+        ["10", "6"]
+    } else {
+        ["6", "10"]
+    }
+}
+
+fn select_sconfig() -> Option<String> {
+    let path = sconfig_path()?;
+    let original = read_sconfig(path)?;
+    for candidate in sconfig_candidates() {
+        if !write_enforced(path, candidate) {
+            continue;
+        }
+        std::thread::sleep(SCONFIG_VALIDATION_DELAY);
+        if read_sconfig(path).as_deref() == Some(candidate) {
+            log!("[THERMAL] sconfig {} accepted by kernel", candidate);
+            return Some(candidate.to_string());
+        }
+    }
+    write_enforced(path, &original);
+    log!("[THERMAL] sconfig rejected every candidate; keeping {}", original);
+    None
+}
+
+fn ensure_sconfig() -> bool {
     let Some(path) = sconfig_path() else {
         return false;
     };
-    write_enforced(path, value)
+    let cached = {
+        let guard = SCONFIG_MODE
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        match &*guard {
+            SconfigMode::Valid(value) => Some(value.clone()),
+            SconfigMode::Unsupported => return false,
+            SconfigMode::Unknown => None,
+        }
+    };
+    if let Some(value) = cached {
+        if read_sconfig(path).as_deref() == Some(value.as_str()) {
+            return true;
+        }
+        return write_enforced(path, &value);
+    }
+
+    let selected = select_sconfig();
+    let mut guard = SCONFIG_MODE
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    match selected {
+        Some(value) => {
+            *guard = SconfigMode::Valid(value);
+            true
+        }
+        None => {
+            *guard = SconfigMode::Unsupported;
+            false
+        }
+    }
 }
 
 fn guard_sconfig() -> bool {
     let Some(path) = sconfig_path() else {
         return false;
     };
-    let current = fs::read_to_string(path)
-        .ok()
-        .map(|value| value.trim().to_string());
-    if current.as_deref() == Some(SCONFIG_PERFORMANCE_VALUE) {
-        return true;
+    let cached = {
+        let guard = SCONFIG_MODE
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        match &*guard {
+            SconfigMode::Valid(value) => Some(value.clone()),
+            SconfigMode::Unsupported => return false,
+            SconfigMode::Unknown => None,
+        }
+    };
+    match cached {
+        Some(value) => {
+            if read_sconfig(path).as_deref() == Some(value.as_str()) {
+                true
+            } else {
+                write_enforced(path, &value)
+            }
+        }
+        None => ensure_sconfig(),
     }
-    write_enforced(path, SCONFIG_PERFORMANCE_VALUE)
 }
 
 pub fn reset_sconfig() {
     if let Some(path) = sconfig_path() {
         crate::tweaks::engine::write_sysfs(path, SCONFIG_NORMAL_VALUE, false);
     }
+    let mut guard = SCONFIG_MODE
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    *guard = SconfigMode::Unknown;
 }
 
 fn ppm_policy_limit(value: &str) -> usize {
@@ -230,7 +321,7 @@ fn apply_zone_policy(performance: bool) -> usize {
 
 pub fn apply_performance_lockers(lite: bool) -> usize {
     let mut applied = 0;
-    if !lite && apply_sconfig(SCONFIG_PERFORMANCE_VALUE) {
+    if !lite && ensure_sconfig() {
         applied += 1;
     }
     if Path::new(PPM_ENABLED_PATH).exists() {
