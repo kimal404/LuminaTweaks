@@ -54,19 +54,24 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ArrowForward
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.DeveloperBoard
+import androidx.compose.material.icons.rounded.EmojiEvents
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SportsEsports
-import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.VpnKey
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -131,35 +136,41 @@ private val CardShape = RoundedCornerShape(26.dp)
 
 private enum class CheckState { CHECKING, READY, MISSING }
 
-private data class FloatingBadgeSpec(
+private data class BackdropGlyph(
     val icon: ImageVector,
-    val xFraction: Float,
-    val yFraction: Float,
-    val boxSize: Dp,
+    val xRatio: Float,
+    val yRatio: Float,
+    val size: Dp,
     val rotation: Float,
-    val driftAmplitude: Float,
-    val tone: Int
+    val driftDp: Float
 )
 
-private val welcomeFloatingSpecs = listOf(
-    FloatingBadgeSpec(Icons.Rounded.RocketLaunch, 0.43f, 0.34f, 60.dp, -6f, 7f, 0),
-    FloatingBadgeSpec(Icons.Rounded.Speed, 0.14f, 0.12f, 48.dp, -14f, -6f, 1),
-    FloatingBadgeSpec(Icons.Rounded.Memory, 0.74f, 0.10f, 50.dp, 12f, 6f, 2),
-    FloatingBadgeSpec(Icons.Rounded.Bolt, 0.06f, 0.46f, 44.dp, 10f, 5f, 2),
-    FloatingBadgeSpec(Icons.Rounded.DeveloperBoard, 0.80f, 0.44f, 46.dp, -11f, -6f, 1),
-    FloatingBadgeSpec(Icons.Rounded.Thermostat, 0.22f, 0.72f, 44.dp, -9f, -5f, 3),
-    FloatingBadgeSpec(Icons.Rounded.Tune, 0.66f, 0.74f, 46.dp, 13f, 6f, 0),
-    FloatingBadgeSpec(Icons.Rounded.Security, 0.44f, 0.04f, 40.dp, 7f, -5f, 3),
-    FloatingBadgeSpec(Icons.Rounded.SportsEsports, 0.44f, 0.78f, 42.dp, -8f, 5f, 1)
+private val welcomeBackdropGlyphs = listOf(
+    BackdropGlyph(Icons.Rounded.CheckCircle, 0.08f, 0.48f, 76.dp, -14f, 6f),
+    BackdropGlyph(Icons.Rounded.VpnKey, 0.72f, 0.46f, 68.dp, 15f, -6f),
+    BackdropGlyph(Icons.Rounded.Lock, 0.05f, 0.72f, 88.dp, -10f, -5f),
+    BackdropGlyph(Icons.Rounded.Shield, 0.62f, 0.68f, 100.dp, 9f, 7f)
 )
 
-private val compactFloatingSpecs = listOf(
-    FloatingBadgeSpec(Icons.Rounded.Memory, 0.14f, 0.16f, 46.dp, -12f, 6f, 0),
-    FloatingBadgeSpec(Icons.Rounded.Speed, 0.45f, 0.32f, 54.dp, 6f, -6f, 1),
-    FloatingBadgeSpec(Icons.Rounded.DeveloperBoard, 0.76f, 0.14f, 46.dp, 11f, 5f, 2),
-    FloatingBadgeSpec(Icons.Rounded.Bolt, 0.24f, 0.66f, 42.dp, 9f, -5f, 2),
-    FloatingBadgeSpec(Icons.Rounded.Tune, 0.68f, 0.64f, 44.dp, -10f, 6f, 3),
-    FloatingBadgeSpec(Icons.Rounded.RocketLaunch, 0.46f, 0.74f, 40.dp, -5f, 5f, 0)
+private val diagnosticsBackdropGlyphs = listOf(
+    BackdropGlyph(Icons.Rounded.Settings, 0.07f, 0.60f, 92.dp, -14f, 6f),
+    BackdropGlyph(Icons.Rounded.Speed, 0.66f, 0.52f, 72.dp, 14f, -6f),
+    BackdropGlyph(Icons.Rounded.Tune, 0.39f, 0.75f, 68.dp, -9f, -5f),
+    BackdropGlyph(Icons.Rounded.RocketLaunch, 0.72f, 0.70f, 96.dp, 11f, 7f)
+)
+
+private val appearanceBackdropGlyphs = listOf(
+    BackdropGlyph(Icons.Rounded.Palette, 0.08f, 0.56f, 84.dp, -12f, 6f),
+    BackdropGlyph(Icons.Rounded.AutoAwesome, 0.72f, 0.50f, 70.dp, 14f, -6f),
+    BackdropGlyph(Icons.Rounded.Tune, 0.38f, 0.75f, 68.dp, -8f, -5f),
+    BackdropGlyph(Icons.Rounded.Palette, 0.70f, 0.69f, 92.dp, 10f, 7f)
+)
+
+private val gamesBackdropGlyphs = listOf(
+    BackdropGlyph(Icons.Rounded.SportsEsports, 0.07f, 0.60f, 88.dp, -13f, 6f),
+    BackdropGlyph(Icons.Rounded.Bolt, 0.64f, 0.50f, 70.dp, 14f, -6f),
+    BackdropGlyph(Icons.Rounded.EmojiEvents, 0.37f, 0.74f, 74.dp, -9f, -5f),
+    BackdropGlyph(Icons.Rounded.SportsEsports, 0.71f, 0.69f, 96.dp, 11f, 7f)
 )
 
 private val colorModeOptions = listOf(
@@ -536,73 +547,58 @@ private fun footerNoteForPage(page: Int): Int = when (page) {
 }
 
 @Composable
-private fun FloatingIconCluster(
-    specs: List<FloatingBadgeSpec>,
-    areaHeight: Dp,
+private fun FloatingBackdropLayer(
+    glyphs: List<BackdropGlyph>,
     modifier: Modifier = Modifier
 ) {
-    val scheme = MaterialTheme.colorScheme
-    val transition = rememberInfiniteTransition(label = "wizardFloatingCluster")
+    val tileColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f)
+    val glyphColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.085f)
+    val transition = rememberInfiniteTransition(label = "wizardWatermarkFloat")
     val waveA by transition.animateFloat(
         initialValue = -1f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2500, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = 2800, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "floatingWaveA"
+        label = "watermarkWaveA"
     )
     val waveB by transition.animateFloat(
         initialValue = 1f,
         targetValue = -1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2100, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = 2300, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "floatingWaveB"
+        label = "watermarkWaveB"
     )
 
-    BoxWithConstraints(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(areaHeight)
-    ) {
-        specs.forEachIndexed { index, spec ->
-            val containerColor = when (spec.tone) {
-                0 -> scheme.primaryContainer
-                1 -> scheme.secondaryContainer
-                2 -> scheme.tertiaryContainer
-                else -> scheme.surfaceContainerHigh
-            }
-            val iconTint = when (spec.tone) {
-                0 -> scheme.onPrimaryContainer
-                1 -> scheme.onSecondaryContainer
-                2 -> scheme.onTertiaryContainer
-                else -> scheme.primary
-            }
-            val phase = if (index % 2 == 0) waveA else waveB
-            val xPos = (maxWidth - spec.boxSize) * spec.xFraction
-            val yPos = (maxHeight - spec.boxSize) * spec.yFraction
-            val cornerRadius = (spec.boxSize.value * 0.34f).dp
-            val iconSize = (spec.boxSize.value * 0.48f).dp
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val canvasWidth = maxWidth
+        val canvasHeight = maxHeight
 
+        glyphs.forEachIndexed { index, item ->
+            val phase = if (index % 2 == 0) waveA else waveB
             Box(
                 modifier = Modifier
-                    .offset(x = xPos, y = yPos)
+                    .offset(
+                        x = canvasWidth * item.xRatio,
+                        y = canvasHeight * item.yRatio
+                    )
                     .graphicsLayer {
-                        translationY = phase * spec.driftAmplitude.dp.toPx()
-                        rotationZ = spec.rotation + (phase * 2.5f)
+                        translationY = phase * item.driftDp.dp.toPx()
+                        rotationZ = item.rotation + (phase * 2f)
                     }
-                    .size(spec.boxSize)
-                    .clip(RoundedCornerShape(cornerRadius))
-                    .background(containerColor),
+                    .size(item.size)
+                    .clip(RoundedCornerShape(item.size * 0.28f))
+                    .background(tileColor),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = spec.icon,
+                    imageVector = item.icon,
                     contentDescription = null,
-                    modifier = Modifier.size(iconSize),
-                    tint = iconTint
+                    modifier = Modifier.size(item.size * 0.48f),
+                    tint = glyphColor
                 )
             }
         }
@@ -613,31 +609,36 @@ private fun FloatingIconCluster(
 private fun WizardPage(
     @StringRes titleRes: Int,
     @StringRes descriptionRes: Int,
+    backdropGlyphs: List<BackdropGlyph>,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp)
-            .padding(top = 8.dp, bottom = 24.dp)
-    ) {
-        Text(
-            text = stringResource(titleRes),
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = stringResource(descriptionRes),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
-        Spacer(modifier = Modifier.height(20.dp))
-        content()
+    Box(modifier = Modifier.fillMaxSize()) {
+        FloatingBackdropLayer(glyphs = backdropGlyphs)
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
+                .padding(top = 8.dp, bottom = 24.dp)
+        ) {
+            Text(
+                text = stringResource(titleRes),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = stringResource(descriptionRes),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
+            Spacer(modifier = Modifier.height(20.dp))
+            content()
+        }
     }
 }
 
@@ -650,7 +651,8 @@ private fun WelcomePage(
 ) {
     WizardPage(
         titleRes = R.string.setup_title_welcome,
-        descriptionRes = R.string.setup_desc_welcome
+        descriptionRes = R.string.setup_desc_welcome,
+        backdropGlyphs = welcomeBackdropGlyphs
     ) {
         val badgeBg = when {
             isCheckingRoot -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
@@ -723,13 +725,6 @@ private fun WelcomePage(
                 }
             }
         )
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        FloatingIconCluster(
-            specs = welcomeFloatingSpecs,
-            areaHeight = 250.dp
-        )
     }
 }
 
@@ -772,7 +767,8 @@ private fun DiagnosticsPage(isActive: Boolean) {
 
     WizardPage(
         titleRes = R.string.setup_title_diagnostics,
-        descriptionRes = R.string.setup_desc_diagnostics
+        descriptionRes = R.string.setup_desc_diagnostics,
+        backdropGlyphs = diagnosticsBackdropGlyphs
     ) {
         val coreState = when {
             !coreChecked -> CheckState.CHECKING
@@ -839,13 +835,6 @@ private fun DiagnosticsPage(isActive: Boolean) {
                 )
             }
         }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        FloatingIconCluster(
-            specs = compactFloatingSpecs,
-            areaHeight = 165.dp
-        )
     }
 }
 
@@ -953,7 +942,8 @@ private fun AppearancePage(
 ) {
     WizardPage(
         titleRes = R.string.setup_title_appearance,
-        descriptionRes = R.string.setup_desc_appearance
+        descriptionRes = R.string.setup_desc_appearance,
+        backdropGlyphs = appearanceBackdropGlyphs
     ) {
         ToggleHeroCard(
             icon = Icons.Rounded.Palette,
@@ -1184,7 +1174,8 @@ private fun GamesPage(isRootGranted: Boolean) {
 
     WizardPage(
         titleRes = R.string.setup_title_games,
-        descriptionRes = R.string.setup_desc_games
+        descriptionRes = R.string.setup_desc_games,
+        backdropGlyphs = gamesBackdropGlyphs
     ) {
         Column(
             modifier = Modifier
@@ -1347,14 +1338,6 @@ private fun GamesPage(isRootGranted: Boolean) {
                     }
                 }
             }
-        }
-
-        if (games.size <= 2) {
-            Spacer(modifier = Modifier.height(16.dp))
-            FloatingIconCluster(
-                specs = compactFloatingSpecs,
-                areaHeight = 160.dp
-            )
         }
     }
 }
