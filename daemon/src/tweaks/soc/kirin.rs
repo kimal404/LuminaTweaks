@@ -95,6 +95,10 @@ pub fn apply(profile: SocProfile) -> usize {
     applied
 }
 
+pub fn guard(profile: SocProfile) -> usize {
+    super::guard_devfreq(profile, NEEDLES)
+}
+
 pub fn optimize_storage(profile: SocProfile) -> usize {
     let governor = match profile {
         SocProfile::Performance => "performance",

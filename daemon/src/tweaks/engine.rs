@@ -883,11 +883,12 @@ fn restore_cpu_minimums() {
 
 pub fn guard_gaming(lite: bool) {
     guard_cpu_limits(lite);
-    crate::tweaks::thermal::guard_performance_lockers(lite);
-
-    if soc::vendor() == soc::Vendor::Mediatek {
-        crate::tweaks::soc::mediatek::guard_gaming(lite);
-    }
+    let profile = if lite {
+        SocProfile::Lite
+    } else {
+        SocProfile::Performance
+    };
+    soc::guard(profile);
 }
 
 pub fn balance_profile() {

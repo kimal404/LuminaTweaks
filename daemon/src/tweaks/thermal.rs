@@ -136,32 +136,6 @@ fn ensure_sconfig() -> bool {
     }
 }
 
-fn guard_sconfig() -> bool {
-    let Some(path) = sconfig_path() else {
-        return false;
-    };
-    let cached = {
-        let guard = SCONFIG_MODE
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        match &*guard {
-            SconfigMode::Valid(value) => Some(value.clone()),
-            SconfigMode::Unsupported => return false,
-            SconfigMode::Unknown => None,
-        }
-    };
-    match cached {
-        Some(value) => {
-            if read_sconfig(path).as_deref() == Some(value.as_str()) {
-                true
-            } else {
-                write_enforced(path, &value)
-            }
-        }
-        None => ensure_sconfig(),
-    }
-}
-
 pub fn reset_sconfig() {
     if let Some(path) = sconfig_path() {
         crate::tweaks::engine::write_sysfs(path, SCONFIG_NORMAL_VALUE, false);
@@ -338,13 +312,6 @@ pub fn apply_performance_lockers(lite: bool) -> usize {
     applied += apply_zone_policy(!lite);
     applied += hold_cooling_at_minimum();
     applied
-}
-
-pub fn guard_performance_lockers(lite: bool) -> bool {
-    if lite {
-        return true;
-    }
-    guard_sconfig()
 }
 
 fn write(path: &str, value: &str, lock: bool) -> bool {

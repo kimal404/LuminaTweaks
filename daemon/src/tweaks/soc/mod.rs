@@ -101,6 +101,7 @@ pub enum SocProfile {
 
 pub fn apply(profile: SocProfile) -> usize {
     let vendor = vendor();
+    let core_ctl = apply_core_ctl(profile);
     let applied = match vendor {
         Vendor::Mediatek => mediatek::apply(profile),
         Vendor::Snapdragon => snapdragon::apply(profile),
@@ -116,7 +117,89 @@ pub fn apply(profile: SocProfile) -> usize {
         vendor.as_str(),
         applied
     );
+    if core_ctl > 0 {
+        log!("[SOC] core_ctl adjusted on {} node(s)", core_ctl);
+    }
     applied
+}
+
+fn apply_core_ctl(profile: SocProfile) -> usize {
+    let Ok(entries) = fs::read_dir("/sys/devices/system/cpu") else {
+        return 0;
+    };
+    let value = if profile == SocProfile::Performance {
+        "0"
+    } else {
+        "1"
+    };
+    let mut applied = 0;
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !name.starts_with("cpu") || !name[3..].chars().all(|c| c.is_ascii_digit()) {
+            continue;
+        }
+        let path = format!("/sys/devices/system/cpu/{}/core_ctl/enable", name);
+        if !Path::new(&path).exists() {
+            continue;
+        }
+        if crate::tweaks::state::write_tracked(&path, value, false) {
+            applied += 1;
+        }
+    }
+    applied
+}
+
+pub(crate) fn guard_devfreq(profile: SocProfile, needles: &[&str]) -> usize {
+    let Ok(entries) = fs::read_dir("/sys/class/devfreq") else {
+        return 0;
+    };
+    let mut applied = 0;
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+        if !needles.iter().any(|needle| name.contains(needle)) {
+            continue;
+        }
+        let base = format!("/sys/class/devfreq/{}", entry.file_name().to_string_lossy());
+        let Some((min, mid, max)) = crate::tweaks::devfreq::frequency_range(&base) else {
+            continue;
+        };
+        let (target_min, target_max) = match profile {
+            SocProfile::Performance => (max, max),
+            SocProfile::Lite => (min, mid),
+            SocProfile::Eco => (min, min),
+        };
+        for (node, target) in [("min_freq", target_min), ("max_freq", target_max)] {
+            let path = format!("{}/{}", base, node);
+            if !Path::new(&path).exists() {
+                continue;
+            }
+            let current = fs::read_to_string(&path)
+                .ok()
+                .and_then(|value| value.trim().parse::<u64>().ok());
+            if current != Some(target)
+                && crate::tweaks::state::write_tracked(&path, &target.to_string(), false)
+            {
+                applied += 1;
+            }
+        }
+    }
+    applied
+}
+
+pub fn guard(profile: SocProfile) -> usize {
+    if profile != SocProfile::Performance {
+        return 0;
+    }
+    match vendor() {
+        Vendor::Mediatek => mediatek::guard(profile),
+        Vendor::Snapdragon => snapdragon::guard(profile),
+        Vendor::Exynos => exynos::guard(profile),
+        Vendor::Unisoc => unisoc::guard(profile),
+        Vendor::Tensor => tensor::guard(profile),
+        Vendor::Tegra => tegra::guard(profile),
+        Vendor::Kirin => kirin::guard(profile),
+        Vendor::Generic => generic::guard(profile),
+    }
 }
 
 pub fn optimize_storage(profile: SocProfile) -> usize {

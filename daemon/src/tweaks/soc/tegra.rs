@@ -81,6 +81,35 @@ pub fn apply(profile: SocProfile) -> usize {
     applied
 }
 
+pub fn guard(profile: SocProfile) -> usize {
+    let mut applied = super::guard_devfreq(profile, NEEDLES);
+    let Some(dir) = gpu_dir() else {
+        return applied;
+    };
+    let values = read_frequencies(dir);
+    let (Some(min), Some(max)) = (values.iter().copied().min(), values.iter().copied().max())
+    else {
+        return applied;
+    };
+    let mid = crate::tweaks::devfreq::mid_frequency(&values).unwrap_or(max);
+    let (floor, cap) = target_rates(profile, min, mid, max);
+    for (name, target) in [("gpu_floor_rate", floor), ("gpu_cap_rate", cap)] {
+        let path = format!("{}/{}", dir, name);
+        if !Path::new(&path).exists() {
+            continue;
+        }
+        let current = fs::read_to_string(&path)
+            .ok()
+            .and_then(|value| value.trim().parse::<u64>().ok());
+        if current != Some(target)
+            && state::write_tracked(&path, &target.to_string(), false)
+        {
+            applied += 1;
+        }
+    }
+    applied
+}
+
 pub fn optimize_storage(profile: SocProfile) -> usize {
     let governor = match profile {
         SocProfile::Performance => "performance",

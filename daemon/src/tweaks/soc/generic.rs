@@ -14,8 +14,22 @@
 
 use super::SocProfile;
 
-const NEEDLES: &[&str] = &["gpu", "mali", "kgsl", "ddr", "bus", "memlat"];
+const NEEDLES: &[&str] = &[
+    "gpu",
+    "mali",
+    "kgsl",
+    "ddr",
+    "bus",
+    "memlat",
+    "latfloor",
+    "ddr-lat",
+    "mif",
+];
 
 pub fn apply(profile: SocProfile) -> usize {
     super::apply_devfreq(profile, NEEDLES)
+}
+
+pub fn guard(profile: SocProfile) -> usize {
+    super::guard_devfreq(profile, NEEDLES)
 }

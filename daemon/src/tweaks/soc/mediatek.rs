@@ -391,6 +391,15 @@ pub fn apply(profile: SocProfile) -> usize {
     if apply_helio_dvfsrc(profile) {
         log!("[SOC] MediaTek helio-dvfsrc adjusted");
     }
+    if super::mali::apply_power_policy(profile) > 0 {
+        log!("[SOC] MediaTek Mali power policy applied");
+    }
+    applied
+}
+
+pub fn guard(profile: SocProfile) -> usize {
+    let mut applied = super::guard_devfreq(profile, NEEDLES);
+    applied += guard_gaming(profile != SocProfile::Performance);
     applied
 }
 
@@ -465,6 +474,7 @@ pub fn apply_gaming_once(lite: bool) {
     for (path, value) in [
         ("/sys/kernel/fpsgo/fbt/enable_ceiling", "0"),
         ("/sys/kernel/fpsgo/fbt/engine_cooler_enable", "0"),
+        ("/sys/kernel/fpsgo/fbt/boost_VIP", "1"),
     ] {
         crate::tweaks::thermal::write_enforced(path, value);
     }
@@ -505,16 +515,16 @@ pub fn apply_gaming_once(lite: bool) {
     apply_gpufreq_opp(SocProfile::Performance);
 }
 
-pub fn guard_gaming(lite: bool) {
+pub fn guard_gaming(lite: bool) -> usize {
     if let Some(target) = desired_opp_index(lite) {
         let path = "/proc/gpufreqv2/fix_target_opp_index";
         let current = fs::read_to_string(path)
             .ok()
             .map(|value| value.trim().to_string());
         if current.as_deref() != Some(target.as_str()) {
-            write_summary_file(path, &target, true);
+            return usize::from(write_summary_file(path, &target, true));
         }
-        return;
+        return 0;
     }
 
     let (table_v1, legacy) = (
@@ -522,7 +532,7 @@ pub fn guard_gaming(lite: bool) {
         "/proc/gpufreq/gpufreq_opp_freq",
     );
     if !Path::new(legacy).exists() {
-        return;
+        return 0;
     }
     let opps = read_opp_table(table_v1);
     let target = if lite {
@@ -537,14 +547,15 @@ pub fn guard_gaming(lite: bool) {
         opps.first().map(|(_, freq)| *freq)
     };
     let Some(target) = target else {
-        return;
+        return 0;
     };
     let current = fs::read_to_string(legacy)
         .ok()
         .and_then(|value| value.trim().parse::<u64>().ok());
     if current != Some(target) {
-        write_summary_file(legacy, &format!("{}", target), true);
+        return usize::from(write_summary_file(legacy, &format!("{}", target), true));
     }
+    0
 }
 
 pub fn restore_gaming() {
