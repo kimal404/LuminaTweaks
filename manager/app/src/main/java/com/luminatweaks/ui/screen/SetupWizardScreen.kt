@@ -1,3 +1,4 @@
+
 @file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
 
 package com.luminatweaks.ui.screen
@@ -7,7 +8,7 @@ import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -19,13 +20,9 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -49,9 +46,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.rounded.AdminPanelSettings
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.AutoAwesome
@@ -60,18 +56,20 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.EmojiEvents
-import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SportsEsports
+import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material.icons.rounded.VpnKey
+import androidx.compose.material.icons.rounded.VerifiedUser
+import androidx.compose.material.icons.rounded.VideogameAsset
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -84,7 +82,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -96,11 +93,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -119,58 +116,32 @@ import com.luminatweaks.R
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DaemonManager
 import com.luminatweaks.data.DetectedGame
-import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.theme.ColorEngine
 import com.luminatweaks.ui.theme.ColorMode
 import com.luminatweaks.ui.theme.ThemeController
 import com.luminatweaks.util.RootUtil
-import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 
 private const val PAGE_COUNT = 4
-private val CardShape = RoundedCornerShape(26.dp)
+private val CardShape = RoundedCornerShape(24.dp)
 
 private enum class CheckState { CHECKING, READY, MISSING }
 
-private data class BackdropGlyph(
+private data class DecorIconSpec(
     val icon: ImageVector,
-    val xRatio: Float,
-    val yRatio: Float,
     val size: Dp,
+    val alignment: Alignment,
+    val offsetX: Dp,
+    val offsetY: Dp,
     val rotation: Float,
-    val driftDp: Float
-)
-
-private val welcomeBackdropGlyphs = listOf(
-    BackdropGlyph(Icons.Rounded.CheckCircle, 0.08f, 0.48f, 76.dp, -14f, 6f),
-    BackdropGlyph(Icons.Rounded.VpnKey, 0.72f, 0.46f, 68.dp, 15f, -6f),
-    BackdropGlyph(Icons.Rounded.Lock, 0.05f, 0.72f, 88.dp, -10f, -5f),
-    BackdropGlyph(Icons.Rounded.Shield, 0.62f, 0.68f, 100.dp, 9f, 7f)
-)
-
-private val diagnosticsBackdropGlyphs = listOf(
-    BackdropGlyph(Icons.Rounded.Settings, 0.07f, 0.60f, 92.dp, -14f, 6f),
-    BackdropGlyph(Icons.Rounded.Speed, 0.66f, 0.52f, 72.dp, 14f, -6f),
-    BackdropGlyph(Icons.Rounded.Tune, 0.39f, 0.75f, 68.dp, -9f, -5f),
-    BackdropGlyph(Icons.Rounded.RocketLaunch, 0.72f, 0.70f, 96.dp, 11f, 7f)
-)
-
-private val appearanceBackdropGlyphs = listOf(
-    BackdropGlyph(Icons.Rounded.Palette, 0.08f, 0.56f, 84.dp, -12f, 6f),
-    BackdropGlyph(Icons.Rounded.AutoAwesome, 0.72f, 0.50f, 70.dp, 14f, -6f),
-    BackdropGlyph(Icons.Rounded.Tune, 0.38f, 0.75f, 68.dp, -8f, -5f),
-    BackdropGlyph(Icons.Rounded.Palette, 0.70f, 0.69f, 92.dp, 10f, 7f)
-)
-
-private val gamesBackdropGlyphs = listOf(
-    BackdropGlyph(Icons.Rounded.SportsEsports, 0.07f, 0.60f, 88.dp, -13f, 6f),
-    BackdropGlyph(Icons.Rounded.Bolt, 0.64f, 0.50f, 70.dp, 14f, -6f),
-    BackdropGlyph(Icons.Rounded.EmojiEvents, 0.37f, 0.74f, 74.dp, -9f, -5f),
-    BackdropGlyph(Icons.Rounded.SportsEsports, 0.71f, 0.69f, 96.dp, 11f, 7f)
+    val alpha: Float,
+    val usePrimaryTint: Boolean = true,
+    val phaseOffset: Float = 0f
 )
 
 private val colorModeOptions = listOf(
@@ -467,7 +438,7 @@ private fun WizardFooter(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = 24.dp)
             .padding(top = 8.dp, bottom = 12.dp)
     ) {
         AnimatedContent(
@@ -475,39 +446,23 @@ private fun WizardFooter(
             transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(120)) },
             label = "setupFooterNote"
         ) { targetPage ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(CardShape)
-                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Info,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-                Spacer(modifier = Modifier.width(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Outlined.Info,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = stringResource(footerNoteForPage(targetPage)),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
         Button(
             onClick = onNext,
@@ -547,58 +502,45 @@ private fun footerNoteForPage(page: Int): Int = when (page) {
 }
 
 @Composable
-private fun FloatingBackdropLayer(
-    glyphs: List<BackdropGlyph>,
+private fun WizardBackgroundDecor(
+    specs: List<DecorIconSpec>,
     modifier: Modifier = Modifier
 ) {
-    val tileColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f)
-    val glyphColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.085f)
-    val transition = rememberInfiniteTransition(label = "wizardWatermarkFloat")
-    val waveA by transition.animateFloat(
+    val infiniteTransition = rememberInfiniteTransition(label = "wizardBgDecor")
+    val drift by infiniteTransition.animateFloat(
         initialValue = -1f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2800, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = 3600, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "watermarkWaveA"
-    )
-    val waveB by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = -1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2300, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "watermarkWaveB"
+        label = "wizardBgDrift"
     )
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val canvasWidth = maxWidth
-        val canvasHeight = maxHeight
-
-        glyphs.forEachIndexed { index, item ->
-            val phase = if (index % 2 == 0) waveA else waveB
+    Box(modifier = modifier.fillMaxSize()) {
+        specs.forEach { spec ->
+            val bobY = (drift * 6f * (if (spec.phaseOffset >= 0f) 1f else -1f)).dp
+            val tint = if (spec.usePrimaryTint) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onBackground
+            }
             Box(
                 modifier = Modifier
-                    .offset(
-                        x = canvasWidth * item.xRatio,
-                        y = canvasHeight * item.yRatio
-                    )
-                    .graphicsLayer {
-                        translationY = phase * item.driftDp.dp.toPx()
-                        rotationZ = item.rotation + (phase * 2f)
-                    }
-                    .size(item.size)
-                    .clip(RoundedCornerShape(item.size * 0.28f))
-                    .background(tileColor),
+                    .align(spec.alignment)
+                    .offset(x = spec.offsetX, y = spec.offsetY + bobY)
+                    .rotate(spec.rotation)
+                    .alpha(spec.alpha)
+                    .size(spec.size + 22.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(tint.copy(alpha = 0.25f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = item.icon,
+                    imageVector = spec.icon,
                     contentDescription = null,
-                    modifier = Modifier.size(item.size * 0.48f),
-                    tint = glyphColor
+                    tint = tint,
+                    modifier = Modifier.size(spec.size)
                 )
             }
         }
@@ -609,34 +551,34 @@ private fun FloatingBackdropLayer(
 private fun WizardPage(
     @StringRes titleRes: Int,
     @StringRes descriptionRes: Int,
-    backdropGlyphs: List<BackdropGlyph>,
+    decorSpecs: List<DecorIconSpec> = emptyList(),
     content: @Composable ColumnScope.() -> Unit
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
-        FloatingBackdropLayer(glyphs = backdropGlyphs)
+        if (decorSpecs.isNotEmpty()) {
+            WizardBackgroundDecor(specs = decorSpecs)
+        }
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 24.dp)
                 .padding(top = 8.dp, bottom = 24.dp)
         ) {
             Text(
                 text = stringResource(titleRes),
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.padding(horizontal = 4.dp)
+                color = MaterialTheme.colorScheme.onBackground
             )
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = stringResource(descriptionRes),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 4.dp)
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(24.dp))
             content()
         }
     }
@@ -649,20 +591,80 @@ private fun WelcomePage(
     rootProvider: String?,
     onRetry: () -> Unit
 ) {
+    val rootDecor = remember {
+        listOf(
+            DecorIconSpec(
+                icon = Icons.Rounded.Security,
+                size = 64.dp,
+                alignment = Alignment.BottomEnd,
+                offsetX = (-18).dp,
+                offsetY = (-44).dp,
+                rotation = -14f,
+                alpha = 0.14f,
+                usePrimaryTint = true,
+                phaseOffset = 1f
+            ),
+            DecorIconSpec(
+                icon = Icons.Rounded.AdminPanelSettings,
+                size = 54.dp,
+                alignment = Alignment.BottomStart,
+                offsetX = 20.dp,
+                offsetY = (-84).dp,
+                rotation = 12f,
+                alpha = 0.12f,
+                usePrimaryTint = false,
+                phaseOffset = -1f
+            ),
+            DecorIconSpec(
+                icon = Icons.Rounded.Terminal,
+                size = 44.dp,
+                alignment = Alignment.BottomCenter,
+                offsetX = (-6).dp,
+                offsetY = (-20).dp,
+                rotation = -8f,
+                alpha = 0.11f,
+                usePrimaryTint = true,
+                phaseOffset = 1f
+            ),
+            DecorIconSpec(
+                icon = Icons.Rounded.Key,
+                size = 38.dp,
+                alignment = Alignment.CenterEnd,
+                offsetX = (-28).dp,
+                offsetY = 68.dp,
+                rotation = 22f,
+                alpha = 0.10f,
+                usePrimaryTint = false,
+                phaseOffset = -1f
+            ),
+            DecorIconSpec(
+                icon = Icons.Rounded.VerifiedUser,
+                size = 40.dp,
+                alignment = Alignment.CenterStart,
+                offsetX = 28.dp,
+                offsetY = 56.dp,
+                rotation = -16f,
+                alpha = 0.10f,
+                usePrimaryTint = true,
+                phaseOffset = 1f
+            )
+        )
+    }
+
     WizardPage(
         titleRes = R.string.setup_title_welcome,
         descriptionRes = R.string.setup_desc_welcome,
-        backdropGlyphs = welcomeBackdropGlyphs
+        decorSpecs = rootDecor
     ) {
-        val badgeBg = when {
-            isCheckingRoot -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-            isRootGranted -> MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-            else -> MaterialTheme.colorScheme.error.copy(alpha = 0.14f)
-        }
-        val badgeTint = when {
-            isCheckingRoot -> MaterialTheme.colorScheme.primary
+        val badgeColor = when {
+            isCheckingRoot -> MaterialTheme.colorScheme.surfaceContainerHigh
             isRootGranted -> MaterialTheme.colorScheme.primary
             else -> MaterialTheme.colorScheme.error
+        }
+        val badgeContentColor = when {
+            isCheckingRoot -> MaterialTheme.colorScheme.onSurfaceVariant
+            isRootGranted -> MaterialTheme.colorScheme.onPrimary
+            else -> MaterialTheme.colorScheme.onError
         }
         val grantedText = stringResource(R.string.setup_root_granted)
         val subtitle = when {
@@ -679,8 +681,8 @@ private fun WelcomePage(
             icon = Icons.Rounded.Security,
             title = stringResource(R.string.setup_root_privilege),
             subtitle = subtitle,
-            badgeColor = badgeBg,
-            badgeContentColor = badgeTint,
+            badgeColor = badgeColor,
+            badgeContentColor = badgeContentColor,
             trailing = {
                 AnimatedContent(
                     targetState = when {
@@ -738,6 +740,55 @@ private fun DiagnosticsPage(isActive: Boolean) {
     var binderChecked by remember { mutableStateOf(false) }
     var binderReady by remember { mutableStateOf(false) }
 
+    val gearRocketDecor = remember {
+        listOf(
+            DecorIconSpec(
+                icon = Icons.Rounded.RocketLaunch,
+                size = 64.dp,
+                alignment = Alignment.BottomEnd,
+                offsetX = (-20).dp,
+                offsetY = (-36).dp,
+                rotation = -12f,
+                alpha = 0.14f,
+                usePrimaryTint = true,
+                phaseOffset = 1f
+            ),
+            DecorIconSpec(
+                icon = Icons.Rounded.Settings,
+                size = 56.dp,
+                alignment = Alignment.BottomStart,
+                offsetX = 22.dp,
+                offsetY = (-68).dp,
+                rotation = 18f,
+                alpha = 0.12f,
+                usePrimaryTint = false,
+                phaseOffset = -1f
+            ),
+            DecorIconSpec(
+                icon = Icons.Rounded.Tune,
+                size = 42.dp,
+                alignment = Alignment.BottomCenter,
+                offsetX = (-4).dp,
+                offsetY = (-16).dp,
+                rotation = -10f,
+                alpha = 0.11f,
+                usePrimaryTint = true,
+                phaseOffset = 1f
+            ),
+            DecorIconSpec(
+                icon = Icons.Rounded.Speed,
+                size = 40.dp,
+                alignment = Alignment.BottomEnd,
+                offsetX = (-96).dp,
+                offsetY = (-96).dp,
+                rotation = 14f,
+                alpha = 0.09f,
+                usePrimaryTint = false,
+                phaseOffset = -1f
+            )
+        )
+    }
+
     LaunchedEffect(isActive) {
         if (!isActive || revealCount >= 3) return@LaunchedEffect
         delay(80)
@@ -768,7 +819,7 @@ private fun DiagnosticsPage(isActive: Boolean) {
     WizardPage(
         titleRes = R.string.setup_title_diagnostics,
         descriptionRes = R.string.setup_desc_diagnostics,
-        backdropGlyphs = diagnosticsBackdropGlyphs
+        decorSpecs = gearRocketDecor
     ) {
         val coreState = when {
             !coreChecked -> CheckState.CHECKING
@@ -803,7 +854,7 @@ private fun DiagnosticsPage(isActive: Boolean) {
             else -> stringResource(R.string.setup_status_missing)
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             StaggeredItem(visible = revealCount > 0) {
                 DiagnosticRow(
                     icon = Icons.Rounded.Memory,
@@ -865,69 +916,92 @@ private fun DiagnosticRow(
         CheckState.READY -> MaterialTheme.colorScheme.primary
         CheckState.MISSING -> MaterialTheme.colorScheme.error
     }
+    val iconContainer = when (status) {
+        CheckState.READY -> MaterialTheme.colorScheme.primaryContainer
+        else -> MaterialTheme.colorScheme.surfaceContainerHigh
+    }
+    val iconTint = when (status) {
+        CheckState.READY -> MaterialTheme.colorScheme.onPrimaryContainer
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Surface(
+        shape = shape,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Box(
+        Row(
             modifier = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-            contentAlignment = Alignment.Center
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            if (status == CheckState.CHECKING) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.primary
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(iconContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                if (status == CheckState.CHECKING) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = iconTint
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(14.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
-            } else {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(22.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (status != CheckState.CHECKING) {
+                    Icon(
+                        imageVector = if (status == CheckState.READY) {
+                            Icons.Rounded.CheckCircle
+                        } else {
+                            Icons.Rounded.ErrorOutline
+                        },
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = statusColor
+                    )
+                    Spacer(modifier = Modifier.width(5.dp))
+                }
+                Text(
+                    text = statusText,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = statusColor,
+                    maxLines = 1
                 )
             }
         }
-
-        Spacer(modifier = Modifier.width(16.dp))
-
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(vertical = 6.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-
-        Spacer(modifier = Modifier.width(10.dp))
-
-        Text(
-            text = statusText,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            color = statusColor,
-            maxLines = 1
-        )
     }
 }
 
@@ -942,8 +1016,7 @@ private fun AppearancePage(
 ) {
     WizardPage(
         titleRes = R.string.setup_title_appearance,
-        descriptionRes = R.string.setup_desc_appearance,
-        backdropGlyphs = appearanceBackdropGlyphs
+        descriptionRes = R.string.setup_desc_appearance
     ) {
         ToggleHeroCard(
             icon = Icons.Rounded.Palette,
@@ -953,8 +1026,10 @@ private fun AppearancePage(
             onCheckedChange = onFloatingNavBarChange
         )
 
+        Spacer(modifier = Modifier.height(22.dp))
+
         GroupLabel(text = stringResource(R.string.setup_color_mode))
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             colorModeOptions.forEachIndexed { index, (mode, labelRes) ->
                 GroupedOptionRow(
                     label = stringResource(labelRes),
@@ -965,8 +1040,10 @@ private fun AppearancePage(
             }
         }
 
+        Spacer(modifier = Modifier.height(18.dp))
+
         GroupLabel(text = stringResource(R.string.setup_color_engine))
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             colorEngineOptions.forEachIndexed { index, (engine, labelRes) ->
                 GroupedOptionRow(
                     label = stringResource(labelRes),
@@ -983,9 +1060,10 @@ private fun AppearancePage(
 private fun GroupLabel(text: String) {
     Text(
         text = text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 16.dp, bottom = 8.dp)
+        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
     )
 }
 
@@ -997,70 +1075,45 @@ private fun GroupedOptionRow(
     onClick: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
-    val scheme = MaterialTheme.colorScheme
     val container = if (selected) {
-        scheme.secondaryContainer
+        MaterialTheme.colorScheme.primaryContainer
     } else {
-        scheme.surfaceColorAtElevation(1.dp)
+        MaterialTheme.colorScheme.surfaceContainer
     }
     val content = if (selected) {
-        scheme.onSecondaryContainer
+        MaterialTheme.colorScheme.onPrimaryContainer
     } else {
-        scheme.onSurface
+        MaterialTheme.colorScheme.onSurface
     }
 
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressScaleModifier = pressScale(interactionSource, 0.97f)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(pressScaleModifier)
-            .clip(shape)
-            .background(container)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null
-            ) {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onClick()
-            }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Surface(
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onClick()
+        },
+        shape = shape,
+        color = container,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Text(
-            text = label,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyLarge.copy(
-                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal
-            ),
-            color = content
-        )
-        Spacer(modifier = Modifier.width(12.dp))
-        WizardRadioRing(selected = selected)
-    }
-}
-
-@Composable
-private fun WizardRadioRing(selected: Boolean) {
-    val scheme = MaterialTheme.colorScheme
-    val ringColor = if (selected) scheme.primary else scheme.onSurfaceVariant
-
-    Box(
-        modifier = Modifier.size(20.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Canvas(modifier = Modifier.size(20.dp)) {
-            val stroke = 2.dp.toPx()
-            val radius = (size.width / 2f) - (stroke / 2f)
-            drawCircle(
-                color = ringColor,
-                radius = radius,
-                style = Stroke(width = stroke)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                color = content
             )
             if (selected) {
-                drawCircle(
-                    color = scheme.primary,
-                    radius = (size.width / 2f) * 0.3f
+                Icon(
+                    imageVector = Icons.Rounded.Check,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.primary
                 )
             }
         }
@@ -1075,80 +1128,72 @@ private fun ToggleHeroCard(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressScaleModifier = pressScale(interactionSource, 0.975f)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(pressScaleModifier)
-            .clip(CardShape)
-            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null
-            ) { onCheckedChange(!checked) }
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Surface(
+        shape = CardShape,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Box(
+        Row(
             modifier = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-            contentAlignment = Alignment.Center
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(22.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
-        }
-
-        Spacer(modifier = Modifier.width(16.dp))
-
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(vertical = 6.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        Spacer(modifier = Modifier.width(12.dp))
-
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            interactionSource = interactionSource,
-            thumbContent = {
-                if (checked) {
-                    Icon(
-                        imageVector = Icons.Filled.Check,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(SwitchDefaults.IconSize)
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Filled.Close,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        modifier = Modifier.size(SwitchDefaults.IconSize)
-                    )
-                }
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onPrimary
+                )
             }
-        )
+
+            Spacer(modifier = Modifier.width(14.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                thumbContent = if (checked) {
+                    {
+                        Icon(
+                            imageVector = Icons.Rounded.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                } else {
+                    null
+                },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedIconColor = MaterialTheme.colorScheme.primary
+                )
+            )
+        }
     }
 }
 
@@ -1158,6 +1203,55 @@ private fun GamesPage(isRootGranted: Boolean) {
     var games by remember { mutableStateOf<List<DetectedGame>>(emptyList()) }
     var isScanning by remember { mutableStateOf(true) }
     var scanToken by remember { mutableIntStateOf(0) }
+
+    val gamingDecor = remember {
+        listOf(
+            DecorIconSpec(
+                icon = Icons.Rounded.SportsEsports,
+                size = 64.dp,
+                alignment = Alignment.BottomEnd,
+                offsetX = (-20).dp,
+                offsetY = (-36).dp,
+                rotation = -14f,
+                alpha = 0.14f,
+                usePrimaryTint = true,
+                phaseOffset = 1f
+            ),
+            DecorIconSpec(
+                icon = Icons.Rounded.VideogameAsset,
+                size = 54.dp,
+                alignment = Alignment.BottomStart,
+                offsetX = 20.dp,
+                offsetY = (-74).dp,
+                rotation = 14f,
+                alpha = 0.12f,
+                usePrimaryTint = false,
+                phaseOffset = -1f
+            ),
+            DecorIconSpec(
+                icon = Icons.Rounded.EmojiEvents,
+                size = 44.dp,
+                alignment = Alignment.BottomCenter,
+                offsetX = (-4).dp,
+                offsetY = (-16).dp,
+                rotation = -8f,
+                alpha = 0.11f,
+                usePrimaryTint = true,
+                phaseOffset = 1f
+            ),
+            DecorIconSpec(
+                icon = Icons.Rounded.Bolt,
+                size = 40.dp,
+                alignment = Alignment.BottomEnd,
+                offsetX = (-96).dp,
+                offsetY = (-96).dp,
+                rotation = 18f,
+                alpha = 0.09f,
+                usePrimaryTint = false,
+                phaseOffset = -1f
+            )
+        )
+    }
 
     LaunchedEffect(scanToken, isRootGranted) {
         isScanning = true
@@ -1175,13 +1269,13 @@ private fun GamesPage(isRootGranted: Boolean) {
     WizardPage(
         titleRes = R.string.setup_title_games,
         descriptionRes = R.string.setup_desc_games,
-        backdropGlyphs = gamesBackdropGlyphs
+        decorSpecs = gamingDecor
     ) {
-        Column(
+        Surface(
+            shape = CardShape,
+            color = MaterialTheme.colorScheme.surfaceContainer,
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(CardShape)
-                .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
                 .animateContentSize()
         ) {
             when {
@@ -1207,28 +1301,28 @@ private fun GamesPage(isRootGranted: Boolean) {
                 games.isNotEmpty() -> Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp)
+                        .padding(18.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .size(36.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.SportsEsports,
                                 contentDescription = null,
-                                modifier = Modifier.size(22.dp),
-                                tint = MaterialTheme.colorScheme.primary
+                                modifier = Modifier.size(24.dp),
+                                tint = MaterialTheme.colorScheme.onPrimary
                             )
                         }
                         Spacer(modifier = Modifier.width(14.dp))
                         Text(
                             text = stringResource(R.string.setup_games_count, games.size),
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     }
@@ -1252,7 +1346,8 @@ private fun GamesPage(isRootGranted: Boolean) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = game.label,
-                                    style = MaterialTheme.typography.bodyLarge,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -1299,16 +1394,16 @@ private fun GamesPage(isRootGranted: Boolean) {
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(56.dp)
-                            .clip(RoundedCornerShape(18.dp))
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.SportsEsports,
                             contentDescription = null,
-                            modifier = Modifier.size(28.dp),
-                            tint = MaterialTheme.colorScheme.primary
+                            modifier = Modifier.size(30.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Spacer(modifier = Modifier.height(14.dp))
@@ -1351,52 +1446,53 @@ private fun StatusHeroCard(
     badgeContentColor: Color,
     trailing: @Composable () -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(CardShape)
-            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Surface(
+        shape = CardShape,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Box(
+        Row(
             modifier = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(badgeColor),
-            contentAlignment = Alignment.Center
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(22.dp),
-                tint = badgeContentColor
-            )
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(badgeColor),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = badgeContentColor
+                )
+            }
+
+            Spacer(modifier = Modifier.width(14.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            trailing()
         }
-
-        Spacer(modifier = Modifier.width(16.dp))
-
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(vertical = 4.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        Spacer(modifier = Modifier.width(10.dp))
-
-        trailing()
     }
 }
 
@@ -1451,7 +1547,7 @@ private suspend fun detectRootManagerName(context: Context): String? = withConte
 }
 
 private fun groupedShape(index: Int, count: Int): Shape {
-    val outer = 26.dp
+    val outer = 24.dp
     val inner = 4.dp
     return when {
         count <= 1 -> RoundedCornerShape(outer)
