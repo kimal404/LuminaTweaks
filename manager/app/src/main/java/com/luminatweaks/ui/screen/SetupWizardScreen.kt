@@ -7,6 +7,11 @@ import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -31,6 +36,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -84,10 +90,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import com.luminatweaks.ui.component.pressScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -102,6 +108,7 @@ import com.luminatweaks.R
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DaemonManager
 import com.luminatweaks.data.DetectedGame
+import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.theme.ColorEngine
 import com.luminatweaks.ui.theme.ColorMode
 import com.luminatweaks.ui.theme.ThemeController
@@ -492,9 +499,113 @@ private fun footerNoteForPage(page: Int): Int = when (page) {
 }
 
 @Composable
+private fun WizardFloatingHero(
+    mainIcon: ImageVector,
+    leftIcon: ImageVector,
+    rightIcon: ImageVector
+) {
+    val floatTransition = rememberInfiniteTransition(label = "wizardFloatingIcons")
+    val mainOffset by floatTransition.animateFloat(
+        initialValue = -5f,
+        targetValue = 5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "mainFloat"
+    )
+    val leftOffset by floatTransition.animateFloat(
+        initialValue = 4f,
+        targetValue = -4f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2100, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "leftFloat"
+    )
+    val rightOffset by floatTransition.animateFloat(
+        initialValue = -4f,
+        targetValue = 4f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2700, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "rightFloat"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(116.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .offset(x = (-78).dp, y = 10.dp)
+                .graphicsLayer {
+                    translationY = leftOffset.dp.toPx()
+                    rotationZ = -8f
+                }
+                .size(42.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.secondaryContainer),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = leftIcon,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .offset(x = 78.dp, y = (-8).dp)
+                .graphicsLayer {
+                    translationY = rightOffset.dp.toPx()
+                    rotationZ = 8f
+                }
+                .size(42.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.tertiaryContainer),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = rightIcon,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.onTertiaryContainer
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .graphicsLayer {
+                    translationY = mainOffset.dp.toPx()
+                }
+                .size(68.dp)
+                .clip(RoundedCornerShape(22.dp))
+                .background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = mainIcon,
+                contentDescription = null,
+                modifier = Modifier.size(34.dp),
+                tint = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        }
+    }
+}
+
+@Composable
 private fun WizardPage(
     @StringRes titleRes: Int,
     @StringRes descriptionRes: Int,
+    heroIcon: ImageVector,
+    leftFloatIcon: ImageVector,
+    rightFloatIcon: ImageVector,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Column(
@@ -504,6 +615,12 @@ private fun WizardPage(
             .padding(horizontal = 16.dp)
             .padding(top = 8.dp, bottom = 24.dp)
     ) {
+        WizardFloatingHero(
+            mainIcon = heroIcon,
+            leftIcon = leftFloatIcon,
+            rightIcon = rightFloatIcon
+        )
+        Spacer(modifier = Modifier.height(10.dp))
         Text(
             text = stringResource(titleRes),
             style = MaterialTheme.typography.headlineMedium,
@@ -532,7 +649,10 @@ private fun WelcomePage(
 ) {
     WizardPage(
         titleRes = R.string.setup_title_welcome,
-        descriptionRes = R.string.setup_desc_welcome
+        descriptionRes = R.string.setup_desc_welcome,
+        heroIcon = Icons.Rounded.RocketLaunch,
+        leftFloatIcon = Icons.Rounded.Security,
+        rightFloatIcon = Icons.Rounded.Memory
     ) {
         val badgeBg = when {
             isCheckingRoot -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
@@ -647,7 +767,10 @@ private fun DiagnosticsPage(isActive: Boolean) {
 
     WizardPage(
         titleRes = R.string.setup_title_diagnostics,
-        descriptionRes = R.string.setup_desc_diagnostics
+        descriptionRes = R.string.setup_desc_diagnostics,
+        heroIcon = Icons.Rounded.DeveloperBoard,
+        leftFloatIcon = Icons.Rounded.Memory,
+        rightFloatIcon = Icons.Rounded.Settings
     ) {
         val coreState = when {
             !coreChecked -> CheckState.CHECKING
@@ -821,7 +944,10 @@ private fun AppearancePage(
 ) {
     WizardPage(
         titleRes = R.string.setup_title_appearance,
-        descriptionRes = R.string.setup_desc_appearance
+        descriptionRes = R.string.setup_desc_appearance,
+        heroIcon = Icons.Rounded.Palette,
+        leftFloatIcon = Icons.Rounded.Check,
+        rightFloatIcon = Icons.Rounded.Settings
     ) {
         ToggleHeroCard(
             icon = Icons.Rounded.Palette,
@@ -1052,7 +1178,10 @@ private fun GamesPage(isRootGranted: Boolean) {
 
     WizardPage(
         titleRes = R.string.setup_title_games,
-        descriptionRes = R.string.setup_desc_games
+        descriptionRes = R.string.setup_desc_games,
+        heroIcon = Icons.Rounded.SportsEsports,
+        leftFloatIcon = Icons.Rounded.RocketLaunch,
+        rightFloatIcon = Icons.Rounded.DeveloperBoard
     ) {
         Column(
             modifier = Modifier
