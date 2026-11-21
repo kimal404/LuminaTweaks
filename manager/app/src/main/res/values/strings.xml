@@ -72,7 +72,6 @@
     <string name="home_core_tap_start">Ketuk untuk memulai atau restart daemon</string>
     <string name="action_start">Mulai</string>
     <string name="home_thermal">Thermal</string>
-    <string name="home_profile">Profile</string>
     <string name="home_manager_version">Manager Version</string>
     <string name="home_kernel_version">Kernel Version</string>
     <string name="home_device_model">Device Model</string>
@@ -387,13 +386,11 @@ Fitur di halaman ini hanya aktif ketika sistem berada pada profil Maestro. Pada 
     <string name="profile_app_profile">Profil Aplikasi</string>
     <string name="dialog_select_profile">Pilih Profil</string>
     <string name="aosp_profile_maestro">Maestro</string>
+    <string name="aosp_profile_performance">Performance</string>
     <string name="profile_desc_powersave">Hemat daya maksimal dengan clock rendah dan responsivitas dasar</string>
     <string name="profile_desc_balanced">Keseimbangan antara performa, suhu, dan konsumsi daya</string>
     <string name="profile_desc_maestro">Governor EAS dinamis dengan frame-pacing mengikuti refresh rate aktif</string>
-    <string name="profile_desc_performance">Peak gaming statis: CPU/GPU tinggi, anti-throttle, dan thermal guard</string>
+    <string name="profile_desc_performance">Performa puncak untuk game berat dengan clock tinggi dan perlindungan suhu</string>
     <string name="section_automation">Otomatisasi</string>
-    <string name="settings_disable_auto_title">Nonaktifkan Mode Otomatis</string>
-    <string name="settings_disable_auto_desc">Matikan perpindahan profil otomatis per aplikasi. Setelah nonaktif, kartu profil di Beranda dapat dibuka untuk memilih profil manual.</string>
     <string name="home_profile_auto">Profil (Otomatis)</string>
-    <string name="toast_profile_auto_locked">Mode otomatis aktif. Nonaktifkan Mode Otomatis di Pengaturan untuk memilih profil manual.</string>
 </resources>

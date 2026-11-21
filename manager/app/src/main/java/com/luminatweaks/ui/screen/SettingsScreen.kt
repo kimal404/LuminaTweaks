@@ -57,7 +57,6 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -82,7 +81,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.luminatweaks.R
-import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.ui.component.TouchOriginDialog
 import com.luminatweaks.ui.component.appBarFade
 import com.luminatweaks.ui.component.pressScale
@@ -125,15 +123,8 @@ fun SettingsScreen(
     var showPersonalisasiScreen by remember { mutableStateOf(false) }
     var showUninstallDialog by remember { mutableStateOf(false) }
     var isUninstalling by remember { mutableStateOf(false) }
-    var isAutoProfile by remember { mutableStateOf(true) }
-    var autoProfileLoaded by remember { mutableStateOf(false) }
     var uninstallOriginPoint by remember { mutableStateOf(Offset(0.5f, 0.5f)) }
     val uninstallOrigin = rememberDialogOrigin()
-
-    LaunchedEffect(Unit) {
-        isAutoProfile = ConfigRepository.getTweaksState().isAutoProfile
-        autoProfileLoaded = true
-    }
 
     val activeSettingsSubscreen = when {
         showAboutScreen && onNavigateToAbout == null -> "about"
@@ -207,27 +198,6 @@ fun SettingsScreen(
                                             onNavigateToPersonalisasi()
                                         } else {
                                             showPersonalisasiScreen = true
-                                        }
-                                    }
-                                )
-                            }
-                        }
-
-                        item(key = "automation") {
-                            SettingsSectionHeader(title = stringResource(R.string.section_automation))
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                SettingsSwitchRow(
-                                    index = 0,
-                                    count = 1,
-                                    icon = Icons.Rounded.AutoFixHigh,
-                                    title = stringResource(R.string.settings_disable_auto_title),
-                                    subtitle = stringResource(R.string.settings_disable_auto_desc),
-                                    checked = !isAutoProfile,
-                                    enabled = autoProfileLoaded,
-                                    onCheckedChange = { disabled ->
-                                        isAutoProfile = !disabled
-                                        coroutineScope.launch {
-                                            ConfigRepository.setAutoProfile(!disabled)
                                         }
                                     }
                                 )

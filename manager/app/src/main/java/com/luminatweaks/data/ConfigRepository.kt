@@ -56,7 +56,8 @@ object ConfigRepository {
     private fun normalizeProfileName(raw: String): String {
         val value = raw.trim()
         return when (value.lowercase()) {
-            "performance", "performa", "performance lite", "performance_lite", "performance-lite" -> "maestro"
+            "performance", "performa" -> "performance"
+            "performance lite", "performance_lite", "performance-lite" -> "maestro"
             "" -> "default"
             else -> value
         }

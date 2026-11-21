@@ -215,10 +215,11 @@ fun AppProfileScreen(
                 ProfileSheetOption("default", stringResource(R.string.opt_default)),
                 ProfileSheetOption("powersave", stringResource(R.string.aosp_profile_powersave)),
                 ProfileSheetOption("balanced", stringResource(R.string.aosp_profile_balanced)),
-                ProfileSheetOption("maestro", stringResource(R.string.aosp_profile_maestro))
+                ProfileSheetOption("maestro", stringResource(R.string.aosp_profile_maestro)),
+                ProfileSheetOption("performance", stringResource(R.string.aosp_profile_performance))
             )
             val effectiveAppProfile = when (profile.profile.lowercase()) {
-                "performance", "performa", "performance lite", "performance_lite", "performance-lite" -> "maestro"
+                "performance lite", "performance_lite", "performance-lite" -> "maestro"
                 else -> profile.profile
             }
             val currentAppProfileLabel = profileOptions
