@@ -1,20 +1,4 @@
-// Copyright (C) 2026 kimal
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use super::SocProfile;
-use crate::tweaks::{devfreq, state};
-use std::fs;
 use std::path::Path;
 
 const GPU_DIRS: &[&str] = &[
@@ -22,8 +6,7 @@ const GPU_DIRS: &[&str] = &[
     "/sys/devices/platform/gpufreq",
     "/sys/kernel/gpu",
 ];
-const DEVFREQ_DIR: &str = "/sys/class/devfreq";
-const NEEDLES: &[&str] = &["gpu", "mali", "kirin", "ddr", "bus"];
+const GPU_NEEDLES: &[&str] = &["gpu", "mali"];
 
 fn gpu_devfreq() -> Option<String> {
     for dir in GPU_DIRS {
@@ -31,89 +14,27 @@ fn gpu_devfreq() -> Option<String> {
             return Some((*dir).to_string());
         }
     }
-
-    let entries = fs::read_dir(DEVFREQ_DIR).ok()?;
-    entries.flatten().find_map(|entry| {
-        let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
-        if !name.contains("gpu") && !name.contains("mali") {
-            return None;
-        }
-        let base = format!("{}/{}", DEVFREQ_DIR, entry.file_name().to_string_lossy());
-        Path::new(&base)
-            .join("available_frequencies")
-            .exists()
-            .then_some(base)
-    })
-}
-
-fn frequencies(base: &str) -> Vec<u64> {
-    fs::read_to_string(format!("{}/available_frequencies", base))
-        .map(|content| {
-            content
-                .split_whitespace()
-                .filter_map(|value| value.parse().ok())
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn apply_gpu(profile: SocProfile) -> usize {
-    let Some(base) = gpu_devfreq() else {
-        return 0;
-    };
-    let values = frequencies(&base);
-    let (Some(min), Some(max)) = (values.iter().copied().min(), values.iter().copied().max())
-    else {
-        return 0;
-    };
-
-    let (target_min, target_max) = match profile {
-        SocProfile::Performance => (max, max),
-        SocProfile::Lite => (
-            min,
-            devfreq::mid_frequency(&values).unwrap_or(max),
-        ),
-        SocProfile::Eco => (min, min),
-    };
-
-    let mut applied = 0;
-    for (name, target) in [("min_freq", target_min), ("max_freq", target_max)] {
-        let path = format!("{}/{}", base, name);
-        if state::write_tracked(&path, &target.to_string(), false) {
-            applied += 1;
-        }
-    }
-    applied
+    super::devfreq_matching(GPU_NEEDLES).into_iter().next()
 }
 
 pub fn apply(profile: SocProfile) -> usize {
-    let applied = super::apply_devfreq(profile, NEEDLES);
-    let gpu = apply_gpu(profile);
-    if gpu > 0 {
-        log!("[SOC] Kirin GPU tuned for {:?}", profile);
-    }
-    applied
-}
-
-pub fn guard(profile: SocProfile) -> usize {
-    super::guard_devfreq(profile, NEEDLES)
-}
-
-pub fn optimize_storage(profile: SocProfile) -> usize {
-    let governor = match profile {
-        SocProfile::Performance => "performance",
-        SocProfile::Lite => "simple_ondemand",
-        SocProfile::Eco => "powersave",
+    let Some(base) = gpu_devfreq() else {
+        return 0;
     };
-    devfreq::apply(&["ufs", "mmc"], governor, profile == SocProfile::Performance)
+    match profile {
+        SocProfile::Performance => super::devfreq_max_perf(&base),
+        SocProfile::Lite => super::devfreq_mid_perf(&base),
+        SocProfile::Balance => super::devfreq_unlock(&base),
+        SocProfile::Eco => super::devfreq_min_perf(&base),
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::NEEDLES;
+    use super::GPU_NEEDLES;
 
     #[test]
-    fn covers_kirin_bus() {
-        assert!(NEEDLES.contains(&"kirin"));
+    fn covers_kirin_gpu_nodes() {
+        assert!(GPU_NEEDLES.contains(&"gpu"));
     }
 }

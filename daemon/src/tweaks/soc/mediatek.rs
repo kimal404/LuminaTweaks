@@ -1,187 +1,48 @@
-// Copyright (C) 2026 kimal
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 use super::SocProfile;
-use crate::tweaks::state;
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
-const GED_PARAM_DIRS: &[&str] = &[
-    "/sys/module/ged/parameters",
-    "/sys/module/met_ged/parameters",
+const FPSGO_PATH: &str = "/sys/kernel/fpsgo/common/force_onoff";
+const CCI_MODE_PATH: &str = "/proc/cpufreq/cpufreq_cci_mode";
+const POWER_MODE_PATH: &str = "/proc/cpufreq/cpufreq_power_mode";
+const DRAMBOOST_PATH: &str = "/sys/devices/platform/boot_dramboost/dramboost/dramboost";
+const EAS_PATH: &str = "/sys/devices/system/cpu/eas/enable";
+const GED_KPI_PATH: &str =
+    "/sys/module/sspm_v3/holders/ged/parameters/is_GED_KPI_enabled";
+const LEGACY_GPUFREQ_PATH: &str = "/proc/gpufreq/gpufreq_opp_freq";
+const FIX_OPP_PATH: &str = "/proc/gpufreqv2/fix_target_opp_index";
+const GPUFREQ_V2_TABLE: &str = "/proc/gpufreqv2/gpu_working_opp_table";
+const GPUFREQ_V1_TABLE: &str = "/proc/gpufreq/gpufreq_opp_dump";
+const POWER_LIMITED_PATH: &str = "/proc/gpufreq/gpufreq_power_limited";
+const GED_BOOST_PATH: &str = "/sys/kernel/ged/hal/custom_boost_gpu_freq";
+const BATOC_PATH: &str = "/proc/mtk_batoc_throttling/battery_oc_protect_stop";
+const HELIO_FORCE_PATH: &str = "/sys/kernel/helio-dvfsrc/dvfsrc_force_vcore_dvfs_opp";
+const EARA_THERMAL_PATH: &str = "/sys/kernel/eara_thermal/enable";
+const PPM_STATUS_PATH: &str = "/proc/ppm/policy_status";
+const POWER_LIMIT_KEYS: &[&str] = &[
+    "ignore_batt_oc",
+    "ignore_batt_percent",
+    "ignore_low_batt",
+    "ignore_thermal_protect",
+    "ignore_pbm_limited",
 ];
-const GED_BOOST_NODES: &[&str] = &["boost_gpu_enable", "ged_boost_enable", "ged_smart_boost"];
-const DEVFREQ_DIR: &str = "/sys/class/devfreq";
-const GED_KPI_PATHS: &[&str] = &[
-    "/sys/module/sspm_v3/holders/ged/parameters/is_GED_KPI_enabled",
-    "/sys/module/ged/parameters/is_GED_KPI_enabled",
-];
-const FPSGO_PATHS: &[&str] = &[
-    "/sys/kernel/fpsgo/common/force_onoff",
-    "/sys/module/fpsgo/parameters/force_onoff",
-];
-const HELIO_DVFSRC_PATHS: &[&str] = &[
-    "/sys/kernel/helio-dvfsrc/dvfsrc_force_vcore_dvfs_opp",
-    "/sys/devices/platform/10012000.dvfsrc/helio-dvfsrc/dvfsrc_force_vcore_dvfs_opp",
-];
-const GED_HAL_DIRS: &[&str] = &["/sys/kernel/ged/hal"];
-const NEEDLES: &[&str] = &[
-    "gpu",
-    "mali",
-    "kgsl",
-    "ddr",
-    "bus",
-    "memlat",
-    "mtk-dvfsrc",
-    "dvfsrc",
-];
+const PPM_LIMIT_POLICIES: &[&str] = &["PWR_THRO", "THERMAL"];
 
-fn ged_dir() -> Option<&'static str> {
-    GED_PARAM_DIRS
-        .iter()
-        .copied()
-        .find(|dir| Path::new(dir).is_dir())
-}
-
-fn ged_param_path(name: &str) -> Option<String> {
-    let dir = ged_dir()?;
-    let path = format!("{}/{}", dir, name);
-    Path::new(&path).exists().then_some(path)
-}
-
-fn write_param(name: &str, value: &str) -> bool {
-    match ged_param_path(name) {
-        Some(path) => state::write_tracked(&path, value, false),
-        None => false,
-    }
-}
-
-fn read_param(name: &str) -> Option<u64> {
-    let path = ged_param_path(name)?;
-    fs::read_to_string(path)
-        .ok()
-        .and_then(|value| value.trim().parse().ok())
-}
-
-fn write_summary_file(path: &str, value: &str, force_writable: bool) -> bool {
-    if !Path::new(path).exists() {
-        return false;
-    }
-    if force_writable {
-        let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o644));
-    }
-    state::write_tracked(path, value, false)
-}
-
-fn write_first(paths: &[&str], value: &str, force_writable: bool) -> bool {
-    paths
-        .iter()
-        .any(|path| write_summary_file(path, value, force_writable))
-}
-
-fn gpu_devfreq_node() -> Option<String> {
-    let entries = fs::read_dir(DEVFREQ_DIR).ok()?;
-    let mut best: Option<(String, usize)> = None;
-
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
-        if !(name.contains("mali") || name.contains("gpu")) {
-            continue;
-        }
-        let base = format!("{}/{}", DEVFREQ_DIR, entry.file_name().to_string_lossy());
-        let values = read_frequencies(&base);
-        if values.is_empty() {
-            continue;
-        }
-        if best
-            .as_ref()
-            .map(|(_, count)| values.len() > *count)
-            .unwrap_or(true)
-        {
-            best = Some((base, values.len()));
-        }
-    }
-
-    best.map(|(base, _)| base)
-}
-
-fn read_frequencies(base: &str) -> Vec<u64> {
-    fs::read_to_string(format!("{}/available_frequencies", base))
-        .map(|content| {
-            content
-                .split_whitespace()
-                .filter_map(|value| value.parse().ok())
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn gpu_frequency_values() -> Vec<u64> {
-    gpu_devfreq_node()
-        .map(|base| read_frequencies(&base))
-        .unwrap_or_default()
-}
-
-fn gpu_frequency_range() -> Option<(u64, u64)> {
-    let base = gpu_devfreq_node()?;
-    let values = read_frequencies(&base);
-    let min = values.iter().copied().min()?;
-    let max = values.iter().copied().max()?;
-    Some((min, max))
-}
-
-fn boost_values(profile: SocProfile) -> (&'static str, &'static str, &'static str) {
-    match profile {
-        SocProfile::Performance => ("1", "1", "1"),
-        SocProfile::Lite | SocProfile::Eco => ("0", "0", "0"),
-    }
-}
-
-fn apply_gpu_frequency(profile: SocProfile) -> usize {
-    let Some((min, max)) = gpu_frequency_range() else {
-        return 0;
-    };
-    let (bottom, boost, upbound) = match profile {
-        SocProfile::Performance => (max, max, max),
-        SocProfile::Lite => {
-            let values = gpu_frequency_values();
-            let mid = crate::tweaks::devfreq::mid_frequency(&values).unwrap_or(max);
-            (min.min(mid), mid, mid)
-        }
-        SocProfile::Eco => (min, min, min),
-    };
-
-    let mut applied = 0;
-    if write_param("gpu_bottom_freq", &bottom.to_string()) {
-        applied += 1;
-    }
-    if read_param("gpu_cust_upbound_freq").is_some() {
-        write_param("gpu_cust_boost_freq", &boost.to_string());
-        write_param("gpu_cust_upbound_freq", &upbound.to_string());
-    }
-    applied
-}
-
-fn read_opp_table(path: &str) -> Vec<(usize, u64)> {
+fn parse_opp_table(path: &str) -> Vec<(usize, u64)> {
     let Ok(content) = fs::read_to_string(path) else {
         return Vec::new();
     };
     content
         .lines()
         .filter_map(|line| {
-            let index = line.split('[').nth(1)?.split(']').next()?;
+            let index = line
+                .split('[')
+                .nth(1)?
+                .split(']')
+                .next()?
+                .trim()
+                .parse::<usize>()
+                .ok()?;
             let freq = line
                 .split("freq:")
                 .nth(1)?
@@ -190,432 +51,247 @@ fn read_opp_table(path: &str) -> Vec<(usize, u64)> {
                 .trim()
                 .parse::<u64>()
                 .ok()?;
-            Some((index.trim().parse().ok()?, freq))
+            Some((index, freq))
         })
         .collect()
 }
 
-fn gpufreq_opp_paths() -> (&'static str, &'static str) {
-    (
-        "/proc/gpufreqv2/gpu_working_opp_table",
-        "/proc/gpufreq/gpufreq_opp_dump",
-    )
+fn min_opp_index(table: &str) -> Option<usize> {
+    parse_opp_table(table).last().map(|(index, _)| *index)
 }
 
-fn apply_gpufreq_opp(profile: SocProfile) -> usize {
-    let fix_index = "/proc/gpufreqv2/fix_target_opp_index";
-    let (table_v2, table_v1) = gpufreq_opp_paths();
-
-    if Path::new(fix_index).exists() {
-        let opps = read_opp_table(table_v2);
-        let target = match profile {
-            SocProfile::Performance => opps.first().map(|(_, freq)| (0usize, *freq)),
-            SocProfile::Lite => {
-                let freqs: Vec<u64> = opps.iter().map(|(_, freq)| *freq).collect();
-                let mid = crate::tweaks::devfreq::mid_frequency(&freqs)
-                    .unwrap_or_else(|| opps.first().map(|(_, freq)| *freq).unwrap_or(0));
-                opps.iter()
-                    .min_by_key(|(_, freq)| freq.abs_diff(mid))
-                    .copied()
-            }
-            SocProfile::Eco => opps.last().copied(),
-        };
-
-        if let Some((index, _)) = target {
-            if write_summary_file(fix_index, &format!("{}", index), true) {
-                log!("[SOC] MediaTek gpufreqv2 OPP index set to {}", index);
-                return 1;
-            }
-        }
-    }
-
-    let legacy = "/proc/gpufreq/gpufreq_opp_freq";
-    if Path::new(legacy).exists() {
-        let opps = read_opp_table(table_v1);
-        let value = match profile {
-            SocProfile::Performance => opps.first().map(|(_, freq)| *freq),
-            SocProfile::Lite => {
-                let freqs: Vec<u64> = opps.iter().map(|(_, freq)| *freq).collect();
-                let mid = crate::tweaks::devfreq::mid_frequency(&freqs)
-                    .unwrap_or_else(|| opps.first().map(|(_, freq)| *freq).unwrap_or(0));
-                opps.iter()
-                    .min_by_key(|(_, freq)| freq.abs_diff(mid))
-                    .map(|(_, freq)| *freq)
-            }
-            SocProfile::Eco => opps.last().map(|(_, freq)| *freq),
-        };
-        if let Some(freq) = value {
-            if write_summary_file(legacy, &format!("{}", freq), true) {
-                log!("[SOC] MediaTek gpufreq frequency set to {} kHz", freq);
-                return 1;
-            }
-        }
-    }
-
-    0
+fn first_opp_freq(table: &str) -> Option<u64> {
+    parse_opp_table(table).first().map(|(_, freq)| *freq)
 }
 
-fn apply_ged_hal(profile: SocProfile) -> usize {
-    let dir = match GED_HAL_DIRS
-        .iter()
-        .copied()
-        .find(|dir| Path::new(dir).is_dir())
-    {
-        Some(dir) => dir,
-        None => return 0,
-    };
+fn last_opp_freq(table: &str) -> Option<u64> {
+    parse_opp_table(table).last().map(|(_, freq)| *freq)
+}
 
-    let (min, mid, max) = match profile {
-        SocProfile::Performance => (true, false, true),
-        SocProfile::Lite => (false, true, false),
-        SocProfile::Eco => (true, false, false),
-    };
-
-    let Some((low, middle, high)) = read_gpu_devfreq_range() else {
+fn ppm_policies(enabled: bool) -> usize {
+    let Ok(content) = fs::read_to_string(PPM_STATUS_PATH) else {
         return 0;
     };
-    let _ = low;
-
+    let value = if enabled { "1" } else { "0" };
     let mut applied = 0;
-    let boost_node = format!("{}/custom_boost_gpu_freq", dir);
-    if (min || mid) && Path::new(&boost_node).exists() {
-        let target = if min { high } else { middle };
-        if write_summary_file(&boost_node, &format!("{}", target), false) {
+    for line in content.lines() {
+        if !PPM_LIMIT_POLICIES
+            .iter()
+            .any(|policy| line.contains(policy))
+        {
+            continue;
+        }
+        let Some(index) = line
+            .split('[')
+            .nth(1)
+            .and_then(|rest| rest.split(']').next())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            continue;
+        };
+        if super::write_node(PPM_STATUS_PATH, &format!("{} {}", index, value)) {
             applied += 1;
         }
     }
+    applied
+}
 
-    let upbound_node = format!("{}/custom_upbound_gpu_freq", dir);
-    if max && Path::new(&upbound_node).exists() {
-        let value = if profile == SocProfile::Performance {
-            "0".to_string()
+fn power_limited(value: &str) -> usize {
+    let mut applied = 0;
+    for key in POWER_LIMIT_KEYS {
+        if super::apply_node(POWER_LIMITED_PATH, &format!("{} {}", key, value)) {
+            applied += 1;
+        }
+    }
+    applied
+}
+
+fn dvfsrc_platform_nodes() -> Vec<String> {
+    super::platform_matching(".dvfsrc")
+        .into_iter()
+        .map(|dir| format!("{}/helio-dvfsrc/dvfsrc_req_ddr_opp", dir))
+        .filter(|path| Path::new(path).exists())
+        .collect()
+}
+
+fn ddr_performance(lite: bool) -> usize {
+    let mut applied = usize::from(super::apply_node(HELIO_FORCE_PATH, "0"));
+    for path in dvfsrc_platform_nodes() {
+        if super::apply_node(&path, "0") {
+            applied += 1;
+        }
+    }
+    if let Some(base) = super::find_devfreq(&["mtk-dvfsrc-devfreq"]) {
+        applied += if lite {
+            super::devfreq_mid_perf(&base)
         } else {
-            format!("{}", middle)
+            super::devfreq_max_perf(&base)
         };
-        if write_summary_file(&upbound_node, &value, false) {
-            applied += 1;
-        }
     }
     applied
 }
 
-fn read_gpu_devfreq_range() -> Option<(u64, u64, u64)> {
-    let base = gpu_devfreq_node()?;
-    crate::tweaks::devfreq::frequency_range(&base)
-}
-
-fn apply_ged_flags(profile: SocProfile) -> usize {
-    if ged_dir().is_none() {
-        return 0;
-    }
-
-    let (boost_gpu, ged_boost, smart_boost) = boost_values(profile);
-    let flags = [
-        ("boost_gpu_enable", boost_gpu),
-        ("ged_boost_enable", ged_boost),
-        ("ged_smart_boost", smart_boost),
-    ];
+fn ddr_balance() -> usize {
     let mut applied = 0;
-    for (name, value) in flags {
-        if GED_BOOST_NODES.contains(&name) && write_param(name, value) {
+    for path in dvfsrc_platform_nodes() {
+        if super::apply_node(&path, "-1") {
             applied += 1;
         }
     }
-
-    let (dvfs, idle, block) = match profile {
-        SocProfile::Performance | SocProfile::Lite => ("1", "0", "0"),
-        SocProfile::Eco => ("0", "1", "1"),
-    };
-    for (name, value) in [
-        ("gpu_dvfs_enable", dvfs),
-        ("gpu_idle", idle),
-        ("gpu_block", block),
-    ] {
-        if write_param(name, value) {
-            applied += 1;
-        }
+    if super::write_node(HELIO_FORCE_PATH, "-1") {
+        applied += 1;
+    }
+    if let Some(base) = super::find_devfreq(&["mtk-dvfsrc-devfreq"]) {
+        applied += super::devfreq_unlock(&base);
     }
     applied
 }
 
-fn apply_fpsgo(profile: SocProfile) -> bool {
-    let value = match profile {
-        SocProfile::Performance => "0",
-        SocProfile::Lite => "2",
-        SocProfile::Eco => "2",
-    };
-    write_first(FPSGO_PATHS, value, false)
+fn performance_profile(lite: bool) -> usize {
+    let mut applied = ppm_policies(false);
+    if super::apply_node(FPSGO_PATH, "0") {
+        applied += 1;
+    }
+    for (path, value) in [
+        (CCI_MODE_PATH, "1"),
+        (POWER_MODE_PATH, "3"),
+        (DRAMBOOST_PATH, "1"),
+        (EAS_PATH, "0"),
+        (GED_KPI_PATH, "0"),
+        (LEGACY_GPUFREQ_PATH, "0"),
+        (FIX_OPP_PATH, "-1"),
+    ] {
+        if super::apply_node(path, value) {
+            applied += 1;
+        }
+    }
+
+    if !lite {
+        if Path::new("/proc/gpufreqv2").is_dir() {
+            if super::apply_node(FIX_OPP_PATH, "0") {
+                applied += 1;
+            }
+        } else if let Some(freq) = first_opp_freq(GPUFREQ_V1_TABLE) {
+            if super::apply_node(LEGACY_GPUFREQ_PATH, &freq.to_string()) {
+                applied += 1;
+            }
+        }
+    }
+
+    applied += power_limited("1");
+    applied += super::mali_power_policy(SocProfile::Performance);
+    if super::apply_node(BATOC_PATH, "stop 1") {
+        applied += 1;
+    }
+    applied += ddr_performance(lite);
+    if super::apply_node(EARA_THERMAL_PATH, "0") {
+        applied += 1;
+    }
+    applied
 }
 
-fn apply_ged_kpi(profile: SocProfile) -> bool {
-    let value = match profile {
-        SocProfile::Performance => "0",
-        SocProfile::Lite | SocProfile::Eco => "1",
-    };
-    write_first(GED_KPI_PATHS, value, false)
-}
+fn balance_profile() -> usize {
+    let mut applied = ppm_policies(true);
+    if super::apply_node(FPSGO_PATH, "2") {
+        applied += 1;
+    }
+    for (path, value) in [
+        (CCI_MODE_PATH, "0"),
+        (POWER_MODE_PATH, "0"),
+        (DRAMBOOST_PATH, "0"),
+        (EAS_PATH, "2"),
+        (GED_KPI_PATH, "1"),
+    ] {
+        if super::apply_node(path, value) {
+            applied += 1;
+        }
+    }
 
-fn apply_helio_dvfsrc(profile: SocProfile) -> bool {
-    let value = if profile == SocProfile::Performance {
-        "0"
+    if super::write_node(LEGACY_GPUFREQ_PATH, "0") {
+        applied += 1;
+    }
+    if super::write_node(FIX_OPP_PATH, "-1") {
+        applied += 1;
+    }
+
+    let min_index = if Path::new("/proc/gpufreqv2").is_dir() {
+        min_opp_index(GPUFREQ_V2_TABLE)
     } else {
-        "-1"
+        min_opp_index(GPUFREQ_V1_TABLE)
     };
-    write_first(HELIO_DVFSRC_PATHS, value, true)
+    if let Some(index) = min_index {
+        if super::apply_node(GED_BOOST_PATH, &index.to_string()) {
+            applied += 1;
+        }
+    }
+
+    applied += power_limited("0");
+    applied += super::mali_power_policy(SocProfile::Balance);
+    if super::apply_node(BATOC_PATH, "stop 0") {
+        applied += 1;
+    }
+    applied += ddr_balance();
+    if super::apply_node(EARA_THERMAL_PATH, "1") {
+        applied += 1;
+    }
+    applied
+}
+
+fn powersave_profile() -> usize {
+    let mut applied = usize::from(super::apply_node(POWER_MODE_PATH, "1"));
+    if Path::new("/proc/gpufreqv2").is_dir() {
+        if let Some(index) = min_opp_index(GPUFREQ_V2_TABLE) {
+            if super::apply_node(FIX_OPP_PATH, &index.to_string()) {
+                applied += 1;
+            }
+        }
+    } else if let Some(freq) = last_opp_freq(GPUFREQ_V1_TABLE) {
+        if super::apply_node(LEGACY_GPUFREQ_PATH, &freq.to_string()) {
+            applied += 1;
+        }
+    }
+    applied += super::mali_power_policy(SocProfile::Eco);
+    applied
 }
 
 pub fn apply(profile: SocProfile) -> usize {
-    let applied = super::apply_devfreq(profile, NEEDLES);
-    let opp = apply_gpufreq_opp(profile);
-    let gpu = apply_gpu_frequency(profile);
-    let hal = apply_ged_hal(profile);
-    let flags = apply_ged_flags(profile);
-    if opp > 0 {
-        log!("[SOC] MediaTek GPU OPP applied via gpufreqv2");
+    match profile {
+        SocProfile::Performance => performance_profile(false),
+        SocProfile::Lite => performance_profile(true),
+        SocProfile::Balance => balance_profile(),
+        SocProfile::Eco => powersave_profile(),
     }
-    if gpu > 0 {
-        log!("[SOC] MediaTek GPU frequency tuned for {:?}", profile);
-    }
-    if hal > 0 {
-        log!("[SOC] MediaTek GED HAL nodes applied ({})", hal);
-    }
-    if flags > 0 {
-        log!("[SOC] MediaTek GED flags applied ({})", flags);
-    }
-    if apply_fpsgo(profile) {
-        log!("[SOC] MediaTek FPSGO adjusted");
-    }
-    if apply_ged_kpi(profile) {
-        log!("[SOC] MediaTek GED KPI adjusted");
-    }
-    if apply_helio_dvfsrc(profile) {
-        log!("[SOC] MediaTek helio-dvfsrc adjusted");
-    }
-    if super::mali::apply_power_policy(profile) > 0 {
-        log!("[SOC] MediaTek Mali power policy applied");
-    }
-    applied
-}
-
-pub fn guard(profile: SocProfile) -> usize {
-    let mut applied = super::guard_devfreq(profile, NEEDLES);
-    applied += guard_gaming(profile != SocProfile::Performance);
-    applied
-}
-
-fn desired_opp_index(lite: bool) -> Option<String> {
-    let fix_index = "/proc/gpufreqv2/fix_target_opp_index";
-    if !Path::new(fix_index).exists() {
-        return None;
-    }
-    if !lite {
-        return Some("0".to_string());
-    }
-    let (table_v2, _) = gpufreq_opp_paths();
-    let opps = read_opp_table(table_v2);
-    let freqs: Vec<u64> = opps.iter().map(|(_, freq)| *freq).collect();
-    let mid = crate::tweaks::devfreq::mid_frequency(&freqs)?;
-    opps.iter()
-        .min_by_key(|(_, freq)| freq.abs_diff(mid))
-        .map(|(index, _)| index.to_string())
-}
-
-pub fn apply_gaming_once(lite: bool) {
-    let profile = if lite {
-        SocProfile::Lite
-    } else {
-        SocProfile::Performance
-    };
-
-    apply_gpufreq_opp(profile);
-    apply_gpu_frequency(profile);
-    apply_ged_hal(profile);
-    apply_ged_flags(profile);
-
-    for (name, value) in [
-        ("gx_game_mode", "1"),
-        ("gx_force_cpu_boost", "1"),
-        ("gx_boost_on", "1"),
-        ("gx_frc_mode", "1"),
-        ("gpu_dvfs_enable", "1"),
-        ("boost_gpu_enable", "1"),
-        ("ged_boost_enable", "1"),
-        ("ged_smart_boost", "1"),
-        ("enable_gpu_boost", "1"),
-        ("is_GED_KPI_enabled", "0"),
-    ] {
-        write_param(name, value);
-    }
-
-    for (path, value) in [
-        ("/sys/kernel/ged/hal/gpu_boost_level", "100"),
-        ("/sys/kernel/fpsgo/common/force_onoff", "0"),
-        ("/sys/kernel/fpsgo/fbt/thrm_enable", "0"),
-        ("/sys/kernel/fpsgo/fbt/thrm_limit_cpu", "0"),
-        ("/sys/kernel/fpsgo/fbt/ultra_rescue", "1"),
-        ("/sys/kernel/fpsgo/fbt/boost_ta", "0"),
-        ("/sys/kernel/fpsgo/fstb/adopt_low_fps", "1"),
-        ("/sys/kernel/fpsgo/fstb/fstb_self_ctrl_fps_enable", "1"),
-        ("/sys/kernel/fpsgo/fstb/gpu_slowdown_check", "1"),
-        ("/sys/kernel/fpsgo/fstb/boost_ta", "0"),
-        ("/sys/module/mtk_fpsgo/parameters/xgf_uboost", "1"),
-        ("/sys/module/mtk_fpsgo/parameters/isolation_limit_cap", "0"),
-        ("/sys/module/mtk_fpsgo/parameters/uboost_enhance_f", "100"),
-        ("/sys/pnpmgr/fpsgo_boost/boost_enable", "1"),
-        ("/sys/pnpmgr/fpsgo_boost/boost_mode", "1"),
-    ] {
-        crate::tweaks::thermal::write_enforced(path, value);
-    }
-
-    if lite {
-        return;
-    }
-
-    for (path, value) in [
-        ("/sys/kernel/fpsgo/fbt/enable_ceiling", "0"),
-        ("/sys/kernel/fpsgo/fbt/engine_cooler_enable", "0"),
-        ("/sys/kernel/fpsgo/fbt/boost_VIP", "1"),
-    ] {
-        crate::tweaks::thermal::write_enforced(path, value);
-    }
-
-    for (path, value) in [
-        ("/proc/cpufreq/cpufreq_cci_mode", "1"),
-        ("/proc/cpufreq/cpufreq_power_mode", "3"),
-        (
-            "/sys/devices/platform/boot_dramboost/dramboost/dramboost",
-            "1",
-        ),
-        ("/sys/devices/system/cpu/eas/enable", "0"),
-        ("/proc/gpufreq/gpufreq_opp_freq", "0"),
-        ("/proc/gpufreqv2/fix_target_opp_index", "-1"),
-        ("/sys/kernel/eara_thermal/enable", "0"),
-        (
-            "/proc/mtk_batoc_throttling/battery_oc_protect_stop",
-            "stop 1",
-        ),
-    ] {
-        crate::tweaks::thermal::write_enforced(path, value);
-    }
-
-    for key in [
-        "ignore_batt_oc",
-        "ignore_batt_percent",
-        "ignore_low_batt",
-        "ignore_thermal_protect",
-        "ignore_pbm_limited",
-    ] {
-        let value = format!("{} 1", key);
-        crate::tweaks::thermal::write_enforced(
-            "/proc/gpufreq/gpufreq_power_limited",
-            &value,
-        );
-    }
-
-    apply_gpufreq_opp(SocProfile::Performance);
-}
-
-pub fn guard_gaming(lite: bool) -> usize {
-    if let Some(target) = desired_opp_index(lite) {
-        let path = "/proc/gpufreqv2/fix_target_opp_index";
-        let current = fs::read_to_string(path)
-            .ok()
-            .map(|value| value.trim().to_string());
-        if current.as_deref() != Some(target.as_str()) {
-            return usize::from(write_summary_file(path, &target, true));
-        }
-        return 0;
-    }
-
-    let (table_v1, legacy) = (
-        "/proc/gpufreq/gpufreq_opp_dump",
-        "/proc/gpufreq/gpufreq_opp_freq",
-    );
-    if !Path::new(legacy).exists() {
-        return 0;
-    }
-    let opps = read_opp_table(table_v1);
-    let target = if lite {
-        let freqs: Vec<u64> = opps.iter().map(|(_, freq)| *freq).collect();
-        crate::tweaks::devfreq::mid_frequency(&freqs)
-            .and_then(|mid| {
-                opps.iter()
-                    .min_by_key(|(_, freq)| freq.abs_diff(mid))
-                    .map(|(_, freq)| *freq)
-            })
-    } else {
-        opps.first().map(|(_, freq)| *freq)
-    };
-    let Some(target) = target else {
-        return 0;
-    };
-    let current = fs::read_to_string(legacy)
-        .ok()
-        .and_then(|value| value.trim().parse::<u64>().ok());
-    if current != Some(target) {
-        return usize::from(write_summary_file(legacy, &format!("{}", target), true));
-    }
-    0
-}
-
-pub fn restore_gaming() {
-    crate::tweaks::engine::write_sysfs(
-        "/proc/gpufreqv2/fix_target_opp_index",
-        "-1",
-        false,
-    );
-    crate::tweaks::engine::write_sysfs("/proc/gpufreq/gpufreq_opp_freq", "0", false);
-}
-
-pub fn optimize_storage(profile: SocProfile) -> usize {
-    let governor = match profile {
-        SocProfile::Performance => "performance",
-        SocProfile::Lite => "simple_ondemand",
-        SocProfile::Eco => "powersave",
-    };
-    let applied = crate::tweaks::devfreq::apply(
-        &["ufshci", "ufs"],
-        governor,
-        profile == SocProfile::Performance,
-    );
-    if applied > 0 {
-        log!("[SOC] MediaTek storage governor '{}'", governor);
-    }
-    applied
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{boost_values, read_opp_table, SocProfile};
+    use super::{first_opp_freq, last_opp_freq, min_opp_index, parse_opp_table};
 
-    #[test]
-    fn performance_enables_all_ged_boosts() {
-        assert_eq!(boost_values(SocProfile::Performance), ("1", "1", "1"));
-    }
-
-    #[test]
-    fn lite_and_eco_disable_ged_boosts() {
-        assert_eq!(boost_values(SocProfile::Lite), ("0", "0", "0"));
-        assert_eq!(boost_values(SocProfile::Eco), ("0", "0", "0"));
+    fn sample_table(name: &str) -> String {
+        let dir = std::env::temp_dir().join(name);
+        std::fs::write(
+            &dir,
+            "[00] freq: 1300000, volt: 93750, vsram: 93750\n[01] freq: 1274000, volt: 92500, vsram: 92500\n[02] freq: 1248000, volt: 90000, vsram: 90000\n",
+        )
+        .unwrap();
+        dir.to_string_lossy().into_owned()
     }
 
     #[test]
     fn parses_gpufreq_opp_table() {
-        let dir = std::env::temp_dir().join("lumina_opp_table");
-        std::fs::write(
-            &dir,
-            "[00] freq: 1300000, volt: 93750, vsram: 93750\n[01] freq: 1274000, volt: 92500, vsram: 92500\n",
-        )
-        .unwrap();
-        let opps = read_opp_table(dir.to_str().unwrap());
-        assert_eq!(opps, vec![(0, 1300000), (1, 1274000)]);
-        let _ = std::fs::remove_file(dir);
+        let path = sample_table("lumina_mtk_opp_table_parse");
+        let opps = parse_opp_table(&path);
+        assert_eq!(opps, vec![(0, 1300000), (1, 1274000), (2, 1248000)]);
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]
-    fn picks_lowest_index_for_performance() {
-        let opps = vec![(0, 1300000), (1, 1274000), (2, 1248000)];
-        assert_eq!(opps.first().copied(), Some((0, 1300000)));
-        assert_eq!(opps.last().copied(), Some((2, 1248000)));
+    fn picks_opp_indices() {
+        let path = sample_table("lumina_mtk_opp_table_indices");
+        assert_eq!(min_opp_index(&path), Some(2));
+        assert_eq!(first_opp_freq(&path), Some(1300000));
+        assert_eq!(last_opp_freq(&path), Some(1248000));
+        let _ = std::fs::remove_file(path);
     }
 }

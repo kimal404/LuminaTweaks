@@ -1,144 +1,77 @@
-// Copyright (C) 2026 kimal
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-use super::{SocProfile, mali};
-use crate::tweaks::{devfreq, state};
-use std::fs;
+use super::SocProfile;
 use std::path::Path;
 
-const GPU_DIRS: &[&str] = &[
-    "/sys/class/devfreq/17000000.gpu",
-    "/sys/class/devfreq/17000000.mali",
-    "/sys/devices/platform/17000000.gpu",
-];
-const DEVFREQ_DIR: &str = "/sys/class/devfreq";
-const NEEDLES: &[&str] = &["gpu", "mali", "devfreq_mif", "mif", "ddr", "bus", "tensor"];
+const MIF_NEEDLES: &[&str] = &["devfreq_mif"];
 
-fn gpu_devfreq() -> Option<String> {
-    for dir in GPU_DIRS {
-        if Path::new(dir).join("available_frequencies").exists() {
-            return Some((*dir).to_string());
+fn gpu_dir() -> Option<String> {
+    let candidates = super::platform_matching("mali");
+    for base in candidates {
+        if Path::new(&base).join("available_frequencies").exists() {
+            return Some(base);
         }
     }
-
-    let entries = fs::read_dir(DEVFREQ_DIR).ok()?;
-    entries.flatten().find_map(|entry| {
-        let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
-        if !name.contains("gpu") && !name.contains("mali") {
-            return None;
-        }
-        let base = format!("{}/{}", DEVFREQ_DIR, entry.file_name().to_string_lossy());
-        Path::new(&base)
-            .join("available_frequencies")
-            .exists()
-            .then_some(base)
-    })
+    super::mali_dir().filter(|base| Path::new(base).join("available_frequencies").exists())
 }
 
-fn frequencies(base: &str) -> Vec<u64> {
-    fs::read_to_string(format!("{}/available_frequencies", base))
-        .map(|content| {
-            content
-                .split_whitespace()
-                .filter_map(|value| value.parse().ok())
-                .collect()
-        })
-        .unwrap_or_default()
+fn set_freq(base: &str, node: &str, value: u64) -> usize {
+    let path = format!("{}/{}", base, node);
+    usize::from(super::apply_node(&path, &value.to_string()))
 }
 
 fn apply_gpu(profile: SocProfile) -> usize {
-    let Some(base) = gpu_devfreq() else {
+    let Some(base) = gpu_dir() else {
         return 0;
     };
-    let values = frequencies(&base);
-    let (Some(min), Some(max)) = (values.iter().copied().min(), values.iter().copied().max())
-    else {
+    let values = super::read_frequencies(&format!("{}/available_frequencies", base));
+    let (Some(min), Some(max)) = (
+        crate::tweaks::devfreq::min_frequency(&values),
+        crate::tweaks::devfreq::max_frequency(&values),
+    ) else {
         return 0;
     };
-
-    let (target_min, target_max) = match profile {
+    let (floor, cap) = match profile {
         SocProfile::Performance => (max, max),
-        SocProfile::Lite => (
-            min,
-            devfreq::mid_frequency(&values).unwrap_or(max),
-        ),
+        SocProfile::Lite => (min, max),
+        SocProfile::Balance => (min, max),
         SocProfile::Eco => (min, min),
     };
 
-    let mut applied = 0;
-    let governor = match profile {
-        SocProfile::Performance => "performance",
-        SocProfile::Lite => "simple_ondemand",
-        SocProfile::Eco => "powersave",
+    let mut applied = set_freq(&base, "scaling_max_freq", cap);
+    applied += set_freq(&base, "scaling_min_freq", floor);
+    let policy = match profile {
+        SocProfile::Performance | SocProfile::Lite => SocProfile::Performance,
+        SocProfile::Balance => SocProfile::Balance,
+        SocProfile::Eco => SocProfile::Eco,
     };
-    let governor_path = format!("{}/governor", base);
-    if Path::new(&governor_path).exists()
-        && state::write_tracked(&governor_path, governor, false)
-    {
-        applied += 1;
-    }
+    applied += super::mali::apply_power_policy(policy);
+    applied
+}
 
-    for (name, target) in [
-        ("min_freq", target_min),
-        ("max_freq", target_max),
-    ] {
-        let path = format!("{}/{}", base, name);
-        if state::write_tracked(&path, &target.to_string(), false) {
-            applied += 1;
-        }
+fn mif(profile: SocProfile) -> usize {
+    if !matches!(profile, SocProfile::Performance | SocProfile::Lite | SocProfile::Balance) {
+        return 0;
     }
-
+    let mut applied = 0;
+    for base in super::devfreq_matching(MIF_NEEDLES) {
+        applied += match profile {
+            SocProfile::Performance => super::devfreq_max_perf(&base),
+            SocProfile::Lite => super::devfreq_mid_perf(&base),
+            _ => super::devfreq_unlock(&base),
+        };
+    }
     applied
 }
 
 pub fn apply(profile: SocProfile) -> usize {
-    let applied = super::apply_devfreq(profile, NEEDLES);
-    let gpu = apply_gpu(profile);
-    let mali = mali::apply_power_policy(profile);
-    if gpu > 0 {
-        log!("[SOC] Tensor GPU tuned for {:?}", profile);
-    }
-    if mali > 0 {
-        log!("[SOC] Tensor Mali power policy applied");
-    }
-    applied
-}
-
-pub fn guard(profile: SocProfile) -> usize {
-    super::guard_devfreq(profile, NEEDLES)
-}
-
-pub fn optimize_storage(profile: SocProfile) -> usize {
-    let governor = match profile {
-        SocProfile::Performance => "performance",
-        SocProfile::Lite => "simple_ondemand",
-        SocProfile::Eco => "powersave",
-    };
-    devfreq::apply(&["ufs", "mmc"], governor, profile == SocProfile::Performance)
-}
-
-pub fn apply_gpu_needs_mif() -> bool {
-    true
+    apply_gpu(profile) + mif(profile)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::NEEDLES;
+    use super::MIF_NEEDLES;
 
     #[test]
-    fn covers_tensor_mif_bus() {
-        assert!(NEEDLES.contains(&"devfreq_mif"));
-        assert!(NEEDLES.contains(&"tensor"));
+    fn covers_tensor_mif_nodes() {
+        assert!(MIF_NEEDLES.contains(&"devfreq_mif"));
     }
 }

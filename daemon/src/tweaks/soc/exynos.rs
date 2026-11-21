@@ -1,36 +1,9 @@
-// Copyright (C) 2026 kimal
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-use super::{SocProfile, mali};
-use crate::tweaks::{devfreq, state};
-use std::fs;
+use super::SocProfile;
 use std::path::Path;
 
 const GPU_DIRS: &[&str] = &["/sys/kernel/gpu", "/sys/devices/platform/gpu"];
-const CLOCK_CANDIDATES: &[&str] = &[
-    "gpu_max_clock",
-    "gpu_min_clock",
-    "scaling_max_freq",
-    "scaling_min_freq",
-];
-const FREQ_TABLES: &[&str] = &[
-    "gpu_available_frequencies",
-    "gpu_freq_table",
-    "available_frequencies",
-];
-const POWER_POLICY: &str = "power_policy";
-const NEEDLES: &[&str] = &["gpu", "mali", "devfreq_mif", "mif", "ddr", "bus"];
+const FREQ_TABLES: &[&str] = &["gpu_available_frequencies", "gpu_freq_table"];
+const MIF_NEEDLES: &[&str] = &["devfreq_mif"];
 
 fn gpu_dir() -> Option<&'static str> {
     GPU_DIRS
@@ -46,113 +19,75 @@ fn freq_table(dir: &str) -> Option<String> {
     })
 }
 
-fn read_frequencies(path: &str) -> Vec<u64> {
-    fs::read_to_string(path)
-        .map(|content| {
-            content
-                .split_whitespace()
-                .filter_map(|value| value.parse().ok())
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn clock_value(dir: &str, name: &str) -> Option<String> {
-    let path = format!("{}/{}", dir, name);
-    Path::new(&path).exists().then_some(path)
-}
-
-fn target_frequencies(profile: SocProfile) -> Option<(u64, u64)> {
-    let dir = gpu_dir()?;
-    let table = freq_table(dir)?;
-    let values = read_frequencies(&table);
-    let min = values.iter().copied().min()?;
-    let max = values.iter().copied().max()?;
-
-    Some(match profile {
-        SocProfile::Performance => (max, max),
-        SocProfile::Lite => (
-            min,
-            devfreq::mid_frequency(&values).unwrap_or(max),
-        ),
-        SocProfile::Eco => (min, min),
-    })
+fn write_clock(dir: &str, primary: &str, fallback: &str, value: u64) -> usize {
+    let primary_path = format!("{}/{}", dir, primary);
+    if Path::new(&primary_path).exists() {
+        return usize::from(super::apply_node(&primary_path, &value.to_string()));
+    }
+    let fallback_path = format!("{}/{}", dir, fallback);
+    usize::from(super::apply_node(&fallback_path, &value.to_string()))
 }
 
 fn apply_gpu(profile: SocProfile) -> usize {
     let Some(dir) = gpu_dir() else {
         return 0;
     };
-    let Some((min_freq, max_freq)) = target_frequencies(profile) else {
+    let Some(table) = freq_table(dir) else {
         return 0;
     };
+    let values = super::read_frequencies(&table);
+    let (Some(min), Some(max)) = (
+        crate::tweaks::devfreq::min_frequency(&values),
+        crate::tweaks::devfreq::max_frequency(&values),
+    ) else {
+        return 0;
+    };
+    let (max_target, min_target) = match profile {
+        SocProfile::Performance => (max, max),
+        SocProfile::Lite => (max, min),
+        SocProfile::Balance => (max, min),
+        SocProfile::Eco => (min, min),
+    };
 
+    let mut applied = write_clock(dir, "gpu_max_clock", "scaling_max_freq", max_target);
+    applied += write_clock(dir, "gpu_min_clock", "scaling_min_freq", min_target);
+    applied
+}
+
+fn mif(profile: SocProfile) -> usize {
+    if !matches!(profile, SocProfile::Performance | SocProfile::Lite | SocProfile::Balance) {
+        return 0;
+    }
     let mut applied = 0;
-    for name in ["gpu_max_clock", "scaling_max_freq"] {
-        if let Some(path) = clock_value(dir, name) {
-            if state::write_tracked(&path, &max_freq.to_string(), false) {
-                applied += 1;
-            }
-        }
-    }
-    for name in ["gpu_min_clock", "scaling_min_freq"] {
-        if let Some(path) = clock_value(dir, name) {
-            if state::write_tracked(&path, &min_freq.to_string(), false) {
-                applied += 1;
-            }
-        }
-    }
-
-    if let Some(path) = clock_value(dir, POWER_POLICY) {
-        let value = match profile {
-            SocProfile::Performance => "always_on",
-            SocProfile::Lite | SocProfile::Eco => "coarse_demand",
+    for base in super::devfreq_matching(MIF_NEEDLES) {
+        applied += match profile {
+            SocProfile::Performance => super::devfreq_max_perf(&base),
+            SocProfile::Lite => super::devfreq_mid_perf(&base),
+            _ => super::devfreq_unlock(&base),
         };
-        state::write_tracked(&path, value, false);
-        applied += 1;
     }
-
     applied
 }
 
 pub fn apply(profile: SocProfile) -> usize {
-    let applied = super::apply_devfreq(profile, NEEDLES);
-    let gpu = apply_gpu(profile);
-    let mali = mali::apply_power_policy(profile);
-    if gpu > 0 {
-        log!("[SOC] Exynos GPU clocks tuned for {:?}", profile);
-    }
-    if mali > 0 {
-        log!("[SOC] Exynos Mali power policy applied");
-    }
-    applied
-}
-
-pub fn guard(profile: SocProfile) -> usize {
-    super::guard_devfreq(profile, NEEDLES)
-}
-
-pub fn optimize_storage(profile: SocProfile) -> usize {
-    let governor = match profile {
-        SocProfile::Performance => "performance",
-        SocProfile::Lite => "simple_ondemand",
-        SocProfile::Eco => "powersave",
+    let mut applied = apply_gpu(profile);
+    let policy = match profile {
+        SocProfile::Performance | SocProfile::Lite => SocProfile::Performance,
+        SocProfile::Balance => SocProfile::Balance,
+        SocProfile::Eco => SocProfile::Eco,
     };
-    devfreq::apply(&["ufs", "mmc"], governor, profile == SocProfile::Performance)
+    applied += super::mali::apply_power_policy(policy);
+    applied += mif(profile);
+    applied
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{CLOCK_CANDIDATES, FREQ_TABLES};
+    use super::{FREQ_TABLES, GPU_DIRS};
 
     #[test]
-    fn has_clock_candidates() {
-        assert!(CLOCK_CANDIDATES.contains(&"gpu_max_clock"));
-        assert!(CLOCK_CANDIDATES.contains(&"scaling_max_freq"));
-    }
-
-    #[test]
-    fn has_frequency_tables() {
+    fn has_exynos_gpu_nodes() {
+        assert!(GPU_DIRS.contains(&"/sys/kernel/gpu"));
         assert!(FREQ_TABLES.contains(&"gpu_available_frequencies"));
         assert!(FREQ_TABLES.contains(&"gpu_freq_table"));
     }

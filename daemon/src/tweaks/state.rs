@@ -1,19 +1,3 @@
-/*
- * Copyright (C) 2026 kimal
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
@@ -145,6 +129,12 @@ fn capture(path: &str) -> bool {
 pub fn write_tracked(path: &str, value: &str, lock: bool) -> bool {
     capture(path);
     crate::tweaks::engine::write_sysfs(path, value, lock)
+}
+
+pub fn discard() {
+    let mut guard = STATE.lock().unwrap_or_else(|error| error.into_inner());
+    *guard = None;
+    let _ = fs::remove_file(STATE_PATH);
 }
 
 pub fn restore_all() {

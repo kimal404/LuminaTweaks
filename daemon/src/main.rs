@@ -1,16 +1,3 @@
-// Copyright (C) 2026 kimal
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 #[macro_use]
 mod core;
@@ -57,7 +44,6 @@ const HEARTBEAT_FILE_PATH: &str = "/data/adb/.config/lumina/luminad.alive";
 const LEGACY_PID_FILE_PATH: &str = "/data/local/tmp/lumina.pid";
 const LEGACY_HEARTBEAT_FILE_PATH: &str = "/data/local/tmp/lumina.alive";
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(2);
-const GAMING_ENFORCE_INTERVAL: Duration = Duration::from_secs(2);
 
 extern "C" fn handle_signal(_: i32) {
     SHUTDOWN.store(true, Ordering::Relaxed);
@@ -133,8 +119,6 @@ fn set_system_profile_prop(name: &str) {
         .status();
 }
 
-/// Applies DND through the persistent binder helper (`INotificationManager`),
-/// falling back to the legacy shell command only when the transaction fails.
 fn set_dnd(binder: &mut binder_client::BinderClient, mode: &str) {
     if !binder.set_dnd(mode) {
         engine::set_dnd_mode(mode);
@@ -167,8 +151,6 @@ fn publish_pid() {
     if !write_runtime_file(PID_FILE_PATH, &pid) {
         log!("[WARN] PID file unavailable; manager may not detect daemon");
     }
-    // Keep the pre-reorganisation location in sync so an older Manager that
-    // still reads it can detect the daemon during a rolling update.
     let _ = write_runtime_file(LEGACY_PID_FILE_PATH, &pid);
 }
 
@@ -230,7 +212,6 @@ struct EngineRuntime {
     dnd_override: bool,
     prev_zen_mode: String,
     last_config_poll: Instant,
-    last_gaming_enforce: Instant,
     low_power: bool,
     shared_state: Arc<SharedState>,
 }
@@ -253,7 +234,6 @@ impl EngineRuntime {
             dnd_override: false,
             prev_zen_mode: "0".to_string(),
             last_config_poll: Instant::now(),
-            last_gaming_enforce: Instant::now(),
             low_power: is_low_power_active(),
             shared_state,
         }
@@ -353,17 +333,6 @@ impl EngineRuntime {
             }
             self.current_profile = Some(target_profile);
             self.update_shared_state(target_profile, target_pkg);
-            if target_profile == Profile::Performance || target_profile == Profile::PerformanceLite
-            {
-                self.last_gaming_enforce = Instant::now();
-            }
-        }
-
-        if (target_profile == Profile::Performance || target_profile == Profile::PerformanceLite)
-            && self.last_gaming_enforce.elapsed() >= GAMING_ENFORCE_INTERVAL
-        {
-            engine::guard_gaming(target_profile == Profile::PerformanceLite);
-            self.last_gaming_enforce = Instant::now();
         }
 
         let global_rr = display::get_saved_mode_id();
@@ -517,6 +486,7 @@ fn main() {
     display::init_display_subsystem();
     renderer::init_renderer_subsystem();
     tweaks::state::restore_all();
+    engine::init_baseline_governor();
     engine::sync_global_tweaks();
     engine::apply_boot_profile();
     soc::vendor();
@@ -590,8 +560,6 @@ fn main() {
         let reload_requested = shared_state.reload_flag.swap(false, Ordering::Relaxed);
         let files_changed = config_watcher.poll_changed();
         if reload_requested || files_changed {
-            // Coalesce bursts of config writes (slider steps, atomic renames)
-            // into one reload after a short quiet window.
             reload_pending_at = Some(Instant::now() + Duration::from_millis(300));
             reload_force |= reload_requested;
         }
@@ -678,9 +646,6 @@ fn main() {
         } else {
             None
         };
-        // Binder and /proc cmdline can expose a sub-process suffix such as
-        // `com.mobile.legends:UnityKillsMe`.  Normalise once so recording,
-        // profiles and texture rules all compare the base package name.
         let focused = focused
             .map(|package| detector::sanitize_pkg_name(&package).to_string())
             .filter(|package| !package.is_empty());
@@ -695,8 +660,6 @@ fn main() {
                     runtime.left_foreground_at = None;
                 }
                 if active_pid > 0 {
-                    // Keep the profile log tied to the focused process instead
-                    // of the previous target's stale pid.
                     runtime.active_target_pid = active_pid;
                 }
                 runtime.active_target_pkg = Some(pkg_str.clone());
@@ -761,10 +724,6 @@ fn main() {
             None
         };
 
-        // Sampling follows the whitelisted game, a recording candidate, or a
-        // short preview requested by the Manager. Recording candidates are
-        // independent from the tweak whitelist: a user may opt in to session
-        // stats for an app whose profile is disabled.
         let preview_active = screen_awake && shared_state.fps_preview_active();
         let record_candidate =
             session_recorder.candidate(screen_awake, focused.as_deref());

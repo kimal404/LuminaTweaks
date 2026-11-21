@@ -1,37 +1,26 @@
-// Copyright (C) 2026 kimal
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 const STUNE_DIRS: &[&str] = &["/dev/stune/top-app", "/sys/fs/cgroup/stune/top-app"];
 const UCLAMP_DIRS: &[&str] = &[
     "/sys/fs/cgroup/top-app",
     "/dev/cpuctl/top-app",
     "/sys/fs/cgroup/cpu/top-app",
 ];
+const SCHED_FEATURES_PATH: &str = "/sys/kernel/debug/sched_features";
+const SPLIT_LOCK_PATH: &str = "/proc/sys/kernel/split_lock_mitigate";
+const TOUCHPANEL_DIR: &str = "/proc/touchpanel";
 
-fn node_exists(path: &str) -> bool {
+fn exists(path: &str) -> bool {
     std::path::Path::new(path).exists()
 }
 
 fn write_node(path: &str, value: &str) {
-    if node_exists(path) {
+    if exists(path) {
         crate::tweaks::state::write_tracked(path, value, false);
     }
 }
 
 fn write_first_available(candidates: &[&str], nodes: &[(&str, &str)]) {
     for dir in candidates {
-        if !node_exists(dir) {
+        if !exists(dir) {
             continue;
         }
         for (name, value) in nodes {
@@ -40,19 +29,31 @@ fn write_first_available(candidates: &[&str], nodes: &[(&str, &str)]) {
     }
 }
 
+fn set_sched_features(features: &[&str]) {
+    if !exists(SCHED_FEATURES_PATH) {
+        return;
+    }
+    for feature in features {
+        write_node(SCHED_FEATURES_PATH, feature);
+    }
+}
+
+fn set_split_lock(enabled: bool) {
+    write_node(SPLIT_LOCK_PATH, if enabled { "1" } else { "0" });
+}
+
 fn tune_top_app(
     boost: &str,
     prefer_idle: &str,
-    boost_enabled: &str,
     uclamp_min: &str,
     uclamp_max: &str,
+    latency_sensitive: &str,
 ) {
     write_first_available(
         STUNE_DIRS,
         &[
             ("schedtune.boost", boost),
             ("schedtune.prefer_idle", prefer_idle),
-            ("schedtune.sched_boost_enabled", boost_enabled),
         ],
     );
 
@@ -61,23 +62,49 @@ fn tune_top_app(
         &[
             ("cpu.uclamp.min", uclamp_min),
             ("cpu.uclamp.max", uclamp_max),
+            ("cpu.uclamp.latency_sensitive", latency_sensitive),
         ],
     );
 }
 
-pub fn apply_performance() {
-    tune_top_app("100", "1", "1", "1024", "max");
-    for dir in UCLAMP_DIRS {
-        write_node(&format!("{}/cpu.uclamp.latency_sensitive", dir), "1");
+fn tune_touchpanel(performance: bool) {
+    if !exists(TOUCHPANEL_DIR) {
+        return;
+    }
+    let value = |on: bool| if on { "1" } else { "0" };
+    for (name, enabled) in [
+        ("game_switch_enable", performance),
+        ("oplus_tp_limit_enable", !performance),
+        ("oppo_tp_limit_enable", !performance),
+        ("oplus_tp_direction", performance),
+        ("oppo_tp_direction", performance),
+    ] {
+        write_node(
+            &format!("{}/{}", TOUCHPANEL_DIR, name),
+            value(enabled),
+        );
     }
 }
 
-pub fn apply_balance() {
-    tune_top_app("0", "0", "0", "0", "max");
+pub fn apply_performance() {
+    set_split_lock(false);
+    set_sched_features(&["NEXT_BUDDY", "NO_TTWU_QUEUE"]);
+    tune_top_app("1", "1", "1024", "max", "1");
+    tune_touchpanel(true);
 }
 
-pub fn apply_eco() {
-    tune_top_app("0", "1", "0", "0", "50");
+pub fn apply_balance() {
+    set_split_lock(true);
+    set_sched_features(&["NEXT_BUDDY", "TTWU_QUEUE"]);
+    tune_top_app("0", "0", "0", "max", "0");
+    tune_touchpanel(false);
+}
+
+pub fn apply_powersave() {
+    set_split_lock(true);
+    set_sched_features(&["NEXT_BUDDY", "TTWU_QUEUE"]);
+    tune_top_app("0", "1", "0", "max", "0");
+    tune_touchpanel(false);
 }
 
 pub fn tune_daemon() {

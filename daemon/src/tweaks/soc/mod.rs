@@ -1,19 +1,5 @@
-// Copyright (C) 2026 kimal
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-pub mod generic;
 pub mod exynos;
+pub mod generic;
 pub mod kirin;
 pub mod mali;
 pub mod mediatek;
@@ -22,6 +8,8 @@ pub mod tegra;
 pub mod tensor;
 pub mod unisoc;
 
+use crate::tweaks::devfreq;
+use crate::tweaks::state;
 use std::fs;
 use std::path::Path;
 use std::sync::OnceLock;
@@ -96,12 +84,12 @@ impl Vendor {
 pub enum SocProfile {
     Performance,
     Lite,
+    Balance,
     Eco,
 }
 
 pub fn apply(profile: SocProfile) -> usize {
     let vendor = vendor();
-    let core_ctl = apply_core_ctl(profile);
     let applied = match vendor {
         Vendor::Mediatek => mediatek::apply(profile),
         Vendor::Snapdragon => snapdragon::apply(profile),
@@ -113,126 +101,243 @@ pub fn apply(profile: SocProfile) -> usize {
         Vendor::Generic => generic::apply(profile),
     };
     log!(
-        "[SOC] {} profile applied to {} devfreq node(s)",
+        "[SOC] {} profile {:?} applied to {} node(s)",
         vendor.as_str(),
+        profile,
         applied
     );
-    if core_ctl > 0 {
-        log!("[SOC] core_ctl adjusted on {} node(s)", core_ctl);
-    }
     applied
 }
 
-fn apply_core_ctl(profile: SocProfile) -> usize {
-    let Ok(entries) = fs::read_dir("/sys/devices/system/cpu") else {
-        return 0;
-    };
-    let value = if profile == SocProfile::Performance {
-        "0"
-    } else {
-        "1"
-    };
-    let mut applied = 0;
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if !name.starts_with("cpu") || !name[3..].chars().all(|c| c.is_ascii_digit()) {
-            continue;
-        }
-        let path = format!("/sys/devices/system/cpu/{}/core_ctl/enable", name);
-        if !Path::new(&path).exists() {
-            continue;
-        }
-        if crate::tweaks::state::write_tracked(&path, value, false) {
-            applied += 1;
-        }
+pub(crate) fn apply_node(path: &str, value: &str) -> bool {
+    if !Path::new(path).exists() {
+        return false;
     }
-    applied
+    state::write_tracked(path, value, true)
 }
 
-pub(crate) fn guard_devfreq(profile: SocProfile, needles: &[&str]) -> usize {
+pub(crate) fn write_node(path: &str, value: &str) -> bool {
+    if !Path::new(path).exists() {
+        return false;
+    }
+    state::write_tracked(path, value, false)
+}
+
+pub(crate) fn read_node(path: &str) -> Option<String> {
+    fs::read_to_string(path)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+pub(crate) fn read_frequencies(path: &str) -> Vec<u64> {
+    fs::read_to_string(path)
+        .unwrap_or_default()
+        .split_whitespace()
+        .filter_map(|value| value.parse::<u64>().ok())
+        .collect()
+}
+
+pub(crate) fn devfreq_matching(needles: &[&str]) -> Vec<String> {
+    let mut found = Vec::new();
     let Ok(entries) = fs::read_dir("/sys/class/devfreq") else {
-        return 0;
+        return found;
     };
-    let mut applied = 0;
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
         if !needles.iter().any(|needle| name.contains(needle)) {
             continue;
         }
-        let base = format!("/sys/class/devfreq/{}", entry.file_name().to_string_lossy());
-        let Some((min, mid, max)) = crate::tweaks::devfreq::frequency_range(&base) else {
+        found.push(format!(
+            "/sys/class/devfreq/{}",
+            entry.file_name().to_string_lossy()
+        ));
+    }
+    found
+}
+
+pub(crate) fn find_devfreq(needles: &[&str]) -> Option<String> {
+    devfreq_matching(needles).into_iter().next()
+}
+
+pub(crate) fn platform_matching(suffix: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    let Ok(entries) = fs::read_dir("/sys/devices/platform") else {
+        return found;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+        if !name.contains(suffix) {
+            continue;
+        }
+        found.push(format!(
+            "/sys/devices/platform/{}",
+            entry.file_name().to_string_lossy()
+        ));
+    }
+    found
+}
+
+pub(crate) fn devfreq_max_perf(base: &str) -> usize {
+    let values = read_frequencies(&format!("{}/available_frequencies", base));
+    let Some(max) = devfreq::max_frequency(&values) else {
+        return 0;
+    };
+    let value = max.to_string();
+    usize::from(apply_node(&format!("{}/max_freq", base), &value))
+        + usize::from(apply_node(&format!("{}/min_freq", base), &value))
+}
+
+pub(crate) fn devfreq_mid_perf(base: &str) -> usize {
+    let values = read_frequencies(&format!("{}/available_frequencies", base));
+    let (Some(max), Some(mid)) = (
+        devfreq::max_frequency(&values),
+        devfreq::mid_frequency(&values),
+    ) else {
+        return 0;
+    };
+    usize::from(apply_node(&format!("{}/max_freq", base), &max.to_string()))
+        + usize::from(apply_node(&format!("{}/min_freq", base), &mid.to_string()))
+}
+
+pub(crate) fn devfreq_unlock(base: &str) -> usize {
+    let values = read_frequencies(&format!("{}/available_frequencies", base));
+    let (Some(max), Some(min)) = (
+        devfreq::max_frequency(&values),
+        devfreq::min_frequency(&values),
+    ) else {
+        return 0;
+    };
+    usize::from(write_node(&format!("{}/max_freq", base), &max.to_string()))
+        + usize::from(write_node(&format!("{}/min_freq", base), &min.to_string()))
+}
+
+pub(crate) fn devfreq_min_perf(base: &str) -> usize {
+    let values = read_frequencies(&format!("{}/available_frequencies", base));
+    let Some(min) = devfreq::min_frequency(&values) else {
+        return 0;
+    };
+    let value = min.to_string();
+    usize::from(apply_node(&format!("{}/min_freq", base), &value))
+        + usize::from(apply_node(&format!("{}/max_freq", base), &value))
+}
+
+pub(crate) fn cpudcvs_max_perf(base: &str) -> usize {
+    let values = read_frequencies(&format!("{}/available_frequencies", base));
+    let Some(max) = devfreq::max_frequency(&values) else {
+        return 0;
+    };
+    let value = max.to_string();
+    usize::from(apply_node(&format!("{}/hw_max_freq", base), &value))
+        + usize::from(apply_node(&format!("{}/hw_min_freq", base), &value))
+}
+
+pub(crate) fn cpudcvs_mid_perf(base: &str) -> usize {
+    let values = read_frequencies(&format!("{}/available_frequencies", base));
+    let (Some(max), Some(mid)) = (
+        devfreq::max_frequency(&values),
+        devfreq::mid_frequency(&values),
+    ) else {
+        return 0;
+    };
+    usize::from(apply_node(
+        &format!("{}/hw_max_freq", base),
+        &max.to_string(),
+    )) + usize::from(apply_node(
+        &format!("{}/hw_min_freq", base),
+        &mid.to_string(),
+    ))
+}
+
+pub(crate) fn cpudcvs_unlock(base: &str) -> usize {
+    let values = read_frequencies(&format!("{}/available_frequencies", base));
+    let (Some(max), Some(min)) = (
+        devfreq::max_frequency(&values),
+        devfreq::min_frequency(&values),
+    ) else {
+        return 0;
+    };
+    usize::from(write_node(&format!("{}/hw_max_freq", base), &max.to_string()))
+        + usize::from(write_node(
+            &format!("{}/hw_min_freq", base),
+            &min.to_string(),
+        ))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DevfreqMode {
+    Max,
+    Mid,
+    Unlock,
+}
+
+fn cpudcvs_mode(base: &str, mode: DevfreqMode) -> usize {
+    match mode {
+        DevfreqMode::Max => cpudcvs_max_perf(base),
+        DevfreqMode::Mid => cpudcvs_mid_perf(base),
+        DevfreqMode::Unlock => cpudcvs_unlock(base),
+    }
+}
+
+fn profile_devfreq_mode(profile: SocProfile) -> Option<DevfreqMode> {
+    match profile {
+        SocProfile::Performance => Some(DevfreqMode::Max),
+        SocProfile::Lite => Some(DevfreqMode::Mid),
+        SocProfile::Balance => Some(DevfreqMode::Unlock),
+        SocProfile::Eco => None,
+    }
+}
+
+pub(crate) fn apply_profile_cpudcvs(base: &str, profile: SocProfile) -> usize {
+    match profile_devfreq_mode(profile) {
+        Some(mode) => cpudcvs_mode(base, mode),
+        None => 0,
+    }
+}
+
+pub(crate) fn mali_dir() -> Option<String> {
+    for dir in ["/sys/devices/platform"] {
+        let Ok(entries) = fs::read_dir(dir) else {
             continue;
         };
-        let (target_min, target_max) = match profile {
-            SocProfile::Performance => (max, max),
-            SocProfile::Lite => (min, mid),
-            SocProfile::Eco => (min, min),
-        };
-        for (node, target) in [("min_freq", target_min), ("max_freq", target_max)] {
-            let path = format!("{}/{}", base, node);
-            if !Path::new(&path).exists() {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+            if !name.contains("mali") {
                 continue;
             }
-            let current = fs::read_to_string(&path)
-                .ok()
-                .and_then(|value| value.trim().parse::<u64>().ok());
-            if current != Some(target)
-                && crate::tweaks::state::write_tracked(&path, &target.to_string(), false)
-            {
-                applied += 1;
+            let base = entry.path().to_string_lossy().into_owned();
+            if Path::new(&base).join("power_policy").exists() {
+                return Some(base);
             }
         }
     }
-    applied
+    None
 }
 
-pub fn guard(profile: SocProfile) -> usize {
-    if profile != SocProfile::Performance {
+pub(crate) fn mali_power_policy(profile: SocProfile) -> usize {
+    let Some(base) = mali_dir() else {
         return 0;
-    }
-    match vendor() {
-        Vendor::Mediatek => mediatek::guard(profile),
-        Vendor::Snapdragon => snapdragon::guard(profile),
-        Vendor::Exynos => exynos::guard(profile),
-        Vendor::Unisoc => unisoc::guard(profile),
-        Vendor::Tensor => tensor::guard(profile),
-        Vendor::Tegra => tegra::guard(profile),
-        Vendor::Kirin => kirin::guard(profile),
-        Vendor::Generic => generic::guard(profile),
-    }
-}
-
-pub fn optimize_storage(profile: SocProfile) -> usize {
-    let applied = match vendor() {
-        Vendor::Mediatek => mediatek::optimize_storage(profile),
-        Vendor::Snapdragon => snapdragon::optimize_storage(profile),
-        Vendor::Exynos => exynos::optimize_storage(profile),
-        Vendor::Unisoc => unisoc::optimize_storage(profile),
-        Vendor::Tensor => tensor::optimize_storage(profile),
-        Vendor::Tegra => tegra::optimize_storage(profile),
-        Vendor::Kirin => kirin::optimize_storage(profile),
-        Vendor::Generic => crate::tweaks::devfreq::apply(
-            &["ufs", "mmc"],
-            match profile {
-                SocProfile::Performance => "performance",
-                SocProfile::Lite => "simple_ondemand",
-                SocProfile::Eco => "powersave",
-            },
-            profile == SocProfile::Performance,
-        ),
     };
-    if applied > 0 {
-        log!("[SOC] Storage tuned on {} devfreq node(s)", applied);
-    }
-    applied
-}
-
-pub(crate) fn apply_devfreq(profile: SocProfile, needles: &[&str]) -> usize {
-    match profile {
-        SocProfile::Performance => crate::tweaks::devfreq::apply(needles, "performance", true),
-        SocProfile::Lite => crate::tweaks::devfreq::apply_capped(needles, "simple_ondemand", 85),
-        SocProfile::Eco => crate::tweaks::devfreq::apply(needles, "powersave", false),
-    }
+    let path = format!("{}/power_policy", base);
+    let available = read_node(&path).unwrap_or_default();
+    let value = match profile {
+        SocProfile::Performance => "always_on",
+        SocProfile::Balance | SocProfile::Eco => {
+            if available.contains("adaptive") {
+                "adaptive"
+            } else {
+                "coarse_demand"
+            }
+        }
+        SocProfile::Lite => {
+            if available.contains("adaptive") {
+                "adaptive"
+            } else {
+                "coarse_demand"
+            }
+        }
+    };
+    usize::from(apply_node(&path, value))
 }
 
 static DETECTED_VENDOR: OnceLock<Vendor> = OnceLock::new();
@@ -240,10 +345,7 @@ static DETECTED_VENDOR: OnceLock<Vendor> = OnceLock::new();
 pub fn vendor() -> Vendor {
     *DETECTED_VENDOR.get_or_init(|| {
         if let Some(vendor) = configured_vendor() {
-            crate::log!(
-                "[SOC] Detected {} from flash config",
-                vendor.as_str()
-            );
+            crate::log!("[SOC] Detected {} from flash config", vendor.as_str());
             return vendor;
         }
 
@@ -308,7 +410,10 @@ fn live_vendor() -> Vendor {
         return Vendor::Tegra;
     }
     if Path::new("/sys/kernel/gpu").exists() && Path::new("/sys/kernel/debug/tracing").exists() {
-        if has_any_path(&["/sys/devices/platform/17000000.gpu", "/sys/class/devfreq/gpufreq"]) {
+        if has_any_path(&[
+            "/sys/devices/platform/17000000.gpu",
+            "/sys/class/devfreq/gpufreq",
+        ]) {
             return Vendor::Tensor;
         }
     }
@@ -382,10 +487,7 @@ fn classify(value: &str) -> Option<Vendor> {
         return Some(Vendor::Exynos);
     }
 
-    if value.contains("google")
-        || value.contains("tensor")
-        || value.starts_with("gs")
-    {
+    if value.contains("google") || value.contains("tensor") || value.starts_with("gs") {
         return Some(Vendor::Tensor);
     }
 

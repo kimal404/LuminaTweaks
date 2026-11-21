@@ -1,27 +1,16 @@
-/*
- * Copyright (C) 2026 kimal
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 use crate::tweaks::soc::{self, SocProfile};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Command;
 use std::sync::mpsc::{self, RecvTimeoutError};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
+
+const BASELINE_GOVERNOR_PATH: &str = "/data/adb/.config/lumina/baseline_governor";
+const BOOT_BACKUP_PATH: &str = "/data/adb/.config/lumina/boot_backup.json";
+const PPM_MAX_PATH: &str = "/proc/ppm/policy/hard_userlimit_max_cpu_freq";
+const PPM_MIN_PATH: &str = "/proc/ppm/policy/hard_userlimit_min_cpu_freq";
 
 pub fn get_zen_mode() -> String {
     match Command::new("settings")
@@ -72,54 +61,445 @@ pub fn write_sysfs(path: &str, val: &str, lock: bool) -> bool {
     res
 }
 
-const BOOT_BACKUP_PATH: &str = "/data/adb/.config/lumina/boot_backup.json";
+fn profile_write(path: &str, value: &str) -> bool {
+    crate::tweaks::state::write_tracked(path, value, false)
+}
 
-const BOOT_TUNED_PATHS: &[&str] = &[
-    "/proc/sys/kernel/panic",
-    "/proc/sys/kernel/panic_on_oops",
-    "/proc/sys/kernel/panic_on_warn",
-    "/proc/sys/kernel/softlockup_panic",
-    "/proc/sys/net/ipv4/tcp_congestion_control",
-    "/proc/sys/net/ipv4/tcp_low_latency",
-    "/proc/sys/net/ipv4/tcp_ecn",
-    "/proc/sys/net/ipv4/tcp_fastopen",
-    "/proc/sys/net/ipv4/tcp_sack",
-    "/proc/sys/net/ipv4/tcp_timestamps",
-    "/proc/sys/kernel/perf_cpu_time_max_percent",
-    "/proc/sys/kernel/sched_schedstats",
-    "/proc/sys/kernel/task_cpustats_enable",
-    "/proc/sys/kernel/sched_autogroup_enabled",
-    "/proc/sys/kernel/sched_child_runs_first",
-    "/proc/sys/kernel/sched_nr_migrate",
-    "/proc/sys/kernel/sched_migration_cost_ns",
-    "/proc/sys/kernel/sched_min_granularity_ns",
-    "/proc/sys/kernel/sched_wakeup_granularity_ns",
-    "/proc/sys/kernel/printk",
-    "/sys/kernel/debug/tracing/tracing_on",
-    "/proc/sys/kernel/sched_lib_name",
-    "/proc/sys/kernel/sched_lib_mask_force",
-    "/proc/sys/vm/page-cluster",
-    "/proc/sys/vm/compaction_proactiveness",
-    "/proc/sys/vm/stat_interval",
-    "/proc/sys/vm/dirty_ratio",
-    "/proc/sys/vm/dirty_background_ratio",
-    "/sys/module/mmc_core/parameters/use_spi_crc",
-    "/sys/module/opchain/parameters/chain_on",
-    "/sys/module/cpufreq_bouncing/parameters/enable",
-    "/proc/task_info/task_sched_info/task_sched_info_enable",
-    "/proc/oplus_scheduler/sched_assist/sched_assist_enabled",
-    "/sys/kernel/debug/sched_features",
-    "/proc/sys/kernel/split_lock_mitigate",
-];
+fn profile_apply(path: &str, value: &str) -> bool {
+    crate::tweaks::state::write_tracked(path, value, true)
+}
+
+fn read_u64(path: &str) -> Option<u64> {
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+}
+
+fn read_string(path: &str) -> Option<String> {
+    fs::read_to_string(path)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn cpu_frequencies(base: &str) -> Vec<u64> {
+    fs::read_to_string(format!("{}/scaling_available_frequencies", base))
+        .unwrap_or_default()
+        .split_whitespace()
+        .filter_map(|value| value.parse::<u64>().ok())
+        .collect()
+}
+
+fn hardware_limits(base: &str) -> Option<(u64, u64, Vec<u64>)> {
+    let freqs = cpu_frequencies(base);
+    let hw_min = read_u64(&format!("{}/cpuinfo_min_freq", base))
+        .or_else(|| crate::tweaks::devfreq::min_frequency(&freqs))?;
+    let hw_max = read_u64(&format!("{}/cpuinfo_max_freq", base))
+        .or_else(|| crate::tweaks::devfreq::max_frequency(&freqs))?;
+    Some((hw_min, hw_max, freqs))
+}
+
+fn cpu_policy_dirs() -> Vec<String> {
+    let mut dirs = Vec::new();
+    if let Ok(entries) = fs::read_dir("/sys/devices/system/cpu/cpufreq") {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if !name.starts_with("policy") {
+                continue;
+            }
+            let base = format!("/sys/devices/system/cpu/cpufreq/{}", name);
+            if Path::new(&format!("{}/cpuinfo_max_freq", base)).exists()
+                || Path::new(&format!("{}/scaling_governor", base)).exists()
+            {
+                dirs.push(base);
+            }
+        }
+    }
+
+    if dirs.is_empty() {
+        if let Ok(entries) = fs::read_dir("/sys/devices/system/cpu") {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if !name.starts_with("cpu") || !name[3..].chars().all(|c| c.is_ascii_digit()) {
+                    continue;
+                }
+                let base = format!("/sys/devices/system/cpu/{}/cpufreq", name);
+                if Path::new(&base).join("scaling_governor").exists() {
+                    dirs.push(base);
+                }
+            }
+        }
+    }
+
+    dirs.sort();
+    dirs.dedup();
+    dirs
+}
+
+fn cpu_governor_paths() -> Vec<String> {
+    let mut paths: Vec<String> = cpu_policy_dirs()
+        .into_iter()
+        .map(|base| format!("{}/scaling_governor", base))
+        .collect();
+
+    if let Ok(entries) = fs::read_dir("/sys/devices/system/cpu") {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if !name.starts_with("cpu") || !name[3..].chars().all(|c| c.is_ascii_digit()) {
+                continue;
+            }
+            let path = format!(
+                "/sys/devices/system/cpu/{}/cpufreq/scaling_governor",
+                name
+            );
+            if Path::new(&path).exists() && !paths.contains(&path) {
+                paths.push(path);
+            }
+        }
+    }
+
+    paths.retain(|path| Path::new(path).exists());
+    paths
+}
+
+fn fallback_governor() -> String {
+    for base in cpu_policy_dirs() {
+        let available = fs::read_to_string(format!("{}/scaling_available_governors", base))
+            .unwrap_or_default();
+        for preferred in ["schedutil", "walt", "interactive", "ondemand", "conservative"] {
+            if available.split_whitespace().any(|item| item == preferred) {
+                return preferred.to_string();
+            }
+        }
+        if let Some(other) = available
+            .split_whitespace()
+            .find(|item| *item != "performance")
+        {
+            return other.to_string();
+        }
+    }
+    "schedutil".to_string()
+}
+
+fn governor_cache() -> &'static Mutex<Option<String>> {
+    static CACHE: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(None))
+}
+
+pub fn init_baseline_governor() {
+    {
+        let guard = governor_cache()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if guard.is_some() {
+            return;
+        }
+    }
+
+    let stored = read_string(BASELINE_GOVERNOR_PATH);
+    let governor = stored.unwrap_or_else(|| {
+        let current = cpu_policy_dirs()
+            .first()
+            .and_then(|base| read_string(&format!("{}/scaling_governor", base)))
+            .unwrap_or_else(|| "schedutil".to_string());
+        if current == "performance" {
+            fallback_governor()
+        } else {
+            current
+        }
+    });
+
+    if !Path::new(BASELINE_GOVERNOR_PATH).exists() {
+        if let Some(parent) = Path::new(BASELINE_GOVERNOR_PATH).parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let _ = fs::write(BASELINE_GOVERNOR_PATH, &governor);
+    }
+
+    let mut guard = governor_cache()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    *guard = Some(governor);
+}
+
+fn default_governor() -> String {
+    init_baseline_governor();
+    let guard = governor_cache()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    guard
+        .as_ref()
+        .cloned()
+        .unwrap_or_else(|| "schedutil".to_string())
+}
+
+fn change_cpu_governor(governor: &str) {
+    if governor.is_empty() {
+        return;
+    }
+    for path in cpu_governor_paths() {
+        profile_write(&path, governor);
+    }
+}
+
+fn cpufreq_max_perf(lite: bool) {
+    for base in cpu_policy_dirs() {
+        let Some((hw_min, hw_max, freqs)) = hardware_limits(&base) else {
+            continue;
+        };
+        let min_target = if lite {
+            crate::tweaks::devfreq::mid_frequency(&freqs).unwrap_or(hw_min)
+        } else {
+            hw_max
+        };
+        profile_apply(
+            &format!("{}/scaling_max_freq", base),
+            &hw_max.to_string(),
+        );
+        profile_apply(
+            &format!("{}/scaling_min_freq", base),
+            &min_target.to_string(),
+        );
+    }
+}
+
+fn cpufreq_ppm_max_perf(lite: bool) {
+    for (cluster, base) in cpu_policy_dirs().iter().enumerate() {
+        let Some((hw_min, hw_max, freqs)) = hardware_limits(base) else {
+            continue;
+        };
+        profile_write(PPM_MAX_PATH, &format!("{} {}", cluster, hw_max));
+        let min_target = if lite {
+            crate::tweaks::devfreq::mid_frequency(&freqs).unwrap_or(hw_min)
+        } else {
+            hw_max
+        };
+        profile_write(PPM_MIN_PATH, &format!("{} {}", cluster, min_target));
+    }
+}
+
+fn cpufreq_unlock() {
+    for base in cpu_policy_dirs() {
+        let Some((hw_min, hw_max, _)) = hardware_limits(&base) else {
+            continue;
+        };
+        profile_write(
+            &format!("{}/scaling_max_freq", base),
+            &hw_max.to_string(),
+        );
+        profile_write(
+            &format!("{}/scaling_min_freq", base),
+            &hw_min.to_string(),
+        );
+    }
+}
+
+fn cpufreq_ppm_unlock() {
+    for (cluster, base) in cpu_policy_dirs().iter().enumerate() {
+        let Some((hw_min, hw_max, _)) = hardware_limits(base) else {
+            continue;
+        };
+        profile_write(PPM_MAX_PATH, &format!("{} {}", cluster, hw_max));
+        profile_write(PPM_MIN_PATH, &format!("{} {}", cluster, hw_min));
+    }
+}
+
+fn ppm_available() -> bool {
+    Path::new("/proc/ppm").is_dir()
+}
+
+fn apply_battery_saver(enabled: bool) {
+    let path = "/sys/module/battery_saver/parameters/enabled";
+    let Some(content) = read_string(path) else {
+        return;
+    };
+    let numeric = content.chars().any(|value| value.is_ascii_digit());
+    let value = if numeric {
+        if enabled { "1" } else { "0" }
+    } else if enabled {
+        "Y"
+    } else {
+        "N"
+    };
+    profile_apply(path, value);
+}
+
+fn apply_vfs_cache_pressure(value: &str) {
+    profile_apply("/proc/sys/vm/vfs_cache_pressure", value);
+}
+
+fn apply_io_latency(performance: bool) {
+    let (read_ahead, nr_requests) = if performance {
+        ("32", "32")
+    } else {
+        ("128", "64")
+    };
+
+    let Ok(entries) = fs::read_dir("/sys/block") else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with("loop")
+            || name.starts_with("zram")
+            || name.starts_with("ram")
+            || name.starts_with("dm-")
+        {
+            continue;
+        }
+        let base = format!("/sys/block/{}", name);
+        profile_apply(
+            &format!("{}/queue/read_ahead_kb", base),
+            read_ahead,
+        );
+        profile_apply(&format!("{}/queue/nr_requests", base), nr_requests);
+    }
+}
+
+fn drop_caches() {
+    let _ = fs::write("/proc/sys/vm/drop_caches", b"3");
+}
+
+pub fn performance_profile() {
+    apply_battery_saver(false);
+    crate::tweaks::sched::apply_performance();
+    apply_vfs_cache_pressure("80");
+    change_cpu_governor("performance");
+    if ppm_available() {
+        cpufreq_ppm_max_perf(false);
+    } else {
+        cpufreq_max_perf(false);
+    }
+    apply_io_latency(true);
+    soc::apply(SocProfile::Performance);
+    drop_caches();
+}
+
+pub fn performance_lite_profile() {
+    apply_battery_saver(false);
+    crate::tweaks::sched::apply_performance();
+    apply_vfs_cache_pressure("80");
+    change_cpu_governor(&default_governor());
+    if ppm_available() {
+        cpufreq_ppm_max_perf(true);
+    } else {
+        cpufreq_max_perf(true);
+    }
+    apply_io_latency(true);
+    soc::apply(SocProfile::Lite);
+    drop_caches();
+}
+
+pub fn balance_profile() {
+    crate::tweaks::state::restore_all();
+    apply_battery_saver(false);
+    crate::tweaks::sched::apply_balance();
+    apply_vfs_cache_pressure("120");
+    change_cpu_governor(&default_governor());
+    if ppm_available() {
+        cpufreq_ppm_unlock();
+    } else {
+        cpufreq_unlock();
+    }
+    apply_io_latency(false);
+    soc::apply(SocProfile::Balance);
+    crate::tweaks::state::discard();
+}
+
+pub fn restore_balance() {
+    balance_profile();
+}
+
+pub fn eco_profile() {
+    balance_profile();
+    crate::tweaks::sched::apply_powersave();
+    apply_battery_saver(true);
+    change_cpu_governor(&default_governor());
+    soc::apply(SocProfile::Eco);
+}
+
+fn block_paths() -> Vec<String> {
+    let mut paths = Vec::new();
+    let Ok(entries) = fs::read_dir("/sys/block") else {
+        return paths;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with("loop") || name.starts_with("ram") {
+            continue;
+        }
+        let base = format!("/sys/block/{}", name);
+        paths.push(format!("{}/queue/iostats", base));
+        paths.push(format!("{}/queue/add_random", base));
+    }
+    paths
+}
+
+fn thermal_paths() -> Vec<String> {
+    let mut paths = Vec::new();
+    for dir in ["/sys/class/thermal", "/sys/devices/virtual/thermal"] {
+        let Ok(entries) = fs::read_dir(dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with("thermal_zone") {
+                paths.push(format!("{}/{}/policy", dir, name));
+            }
+        }
+    }
+    paths
+}
+
+fn boot_tuned_paths() -> Vec<String> {
+    let mut paths: Vec<String> = [
+        "/proc/sys/kernel/panic",
+        "/proc/sys/kernel/panic_on_oops",
+        "/proc/sys/kernel/panic_on_warn",
+        "/proc/sys/kernel/softlockup_panic",
+        "/proc/sys/net/ipv4/tcp_congestion_control",
+        "/proc/sys/net/ipv4/tcp_low_latency",
+        "/proc/sys/net/ipv4/tcp_ecn",
+        "/proc/sys/net/ipv4/tcp_fastopen",
+        "/proc/sys/net/ipv4/tcp_sack",
+        "/proc/sys/net/ipv4/tcp_timestamps",
+        "/proc/sys/kernel/perf_cpu_time_max_percent",
+        "/proc/sys/kernel/sched_schedstats",
+        "/proc/sys/kernel/task_cpustats_enable",
+        "/proc/sys/kernel/sched_autogroup_enabled",
+        "/proc/sys/kernel/sched_child_runs_first",
+        "/proc/sys/kernel/sched_nr_migrate",
+        "/proc/sys/kernel/sched_migration_cost_ns",
+        "/proc/sys/kernel/sched_min_granularity_ns",
+        "/proc/sys/kernel/sched_wakeup_granularity_ns",
+        "/proc/sys/kernel/sched_lib_name",
+        "/proc/sys/kernel/sched_lib_mask_force",
+        "/proc/sys/vm/page-cluster",
+        "/proc/sys/vm/compaction_proactiveness",
+        "/proc/sys/vm/stat_interval",
+        "/sys/module/mmc_core/parameters/use_spi_crc",
+        "/sys/module/opchain/parameters/chain_on",
+        "/sys/module/cpufreq_bouncing/parameters/enable",
+        "/proc/task_info/task_sched_info/task_sched_info_enable",
+        "/proc/oplus_scheduler/sched_assist/sched_assist_enabled",
+    ]
+    .iter()
+    .map(|path| (*path).to_string())
+    .collect();
+
+    paths.extend(block_paths());
+    paths.extend(thermal_paths());
+    paths
+}
 
 fn snapshot_boot_settings() -> serde_json::Map<String, serde_json::Value> {
     let mut map = serde_json::Map::new();
-    for path in BOOT_TUNED_PATHS {
-        if map.contains_key(*path) {
+    for path in boot_tuned_paths() {
+        if map.contains_key(&path) {
             continue;
         }
-        if let Ok(value) = fs::read_to_string(path) {
-            map.insert((*path).to_string(), serde_json::Value::String(value));
+        if let Ok(value) = fs::read_to_string(&path) {
+            map.insert(path, serde_json::Value::String(value));
         }
     }
     map
@@ -167,30 +547,22 @@ pub fn apply_boot_profile() {
     write_sysfs("/proc/sys/kernel/panic_on_warn", "0", false);
     write_sysfs("/proc/sys/kernel/softlockup_panic", "0", false);
 
-    if let Ok(entries) = fs::read_dir("/sys/block") {
-        let mut disk_count = 0;
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with("loop") || name.starts_with("ram") {
-                continue;
-            }
-            let iostats_path = format!("/sys/block/{}/queue/iostats", name);
-            let add_random_path = format!("/sys/block/{}/queue/add_random", name);
+    let _ = Command::new("sync").status();
 
-            write_sysfs(&iostats_path, "0", false);
-            write_sysfs(&add_random_path, "0", false);
+    let mut disk_count = 0;
+    for path in block_paths() {
+        if write_sysfs(&path, "0", false) {
             disk_count += 1;
         }
-        log!(
-            "[BOOT] I/O Queue: Disabled iostats & add_random across {} device(s)",
-            disk_count
-        );
     }
+    log!(
+        "[BOOT] I/O Queue: Disabled iostats & add_random on {} node(s)",
+        disk_count
+    );
 
     let avail_cc = fs::read_to_string("/proc/sys/net/ipv4/tcp_available_congestion_control")
         .unwrap_or_default();
-    let cc_candidates = ["bbr3", "bbr2", "bbrplus", "bbr", "westwood", "cubic"];
-    for algo in cc_candidates {
+    for algo in ["bbr3", "bbr2", "bbrplus", "bbr", "westwood", "cubic"] {
         if avail_cc.contains(algo) {
             write_sysfs("/proc/sys/net/ipv4/tcp_congestion_control", algo, false);
             log!("[BOOT] TCP Congestion Control selected: {}", algo);
@@ -221,8 +593,6 @@ pub fn apply_boot_profile() {
         "1500000",
         false,
     );
-    write_sysfs("/proc/sys/kernel/printk", "0 0 0 0", false);
-    write_sysfs("/sys/kernel/debug/tracing/tracing_on", "0", false);
 
     let game_libs = "libunity.so, libil2cpp.so, libmain.so, libUE4.so, libgodot_android.so, libgdx.so, libgdx-box2d.so, libminecraftpe.so, libLive2DCubismCore.so, libyuzu-android.so, libryujinx.so, libcitra-android.so, libhdr_pro_engine.so, libandroidx.graphics.path.so, libeffect.so";
     write_sysfs("/proc/sys/kernel/sched_lib_name", game_libs, false);
@@ -231,8 +601,6 @@ pub fn apply_boot_profile() {
     write_sysfs("/proc/sys/vm/page-cluster", "0", false);
     write_sysfs("/proc/sys/vm/compaction_proactiveness", "0", false);
     write_sysfs("/proc/sys/vm/stat_interval", "15", false);
-    write_sysfs("/proc/sys/vm/dirty_ratio", "10", false);
-    write_sysfs("/proc/sys/vm/dirty_background_ratio", "5", false);
     write_sysfs("/sys/module/mmc_core/parameters/use_spi_crc", "0", false);
 
     write_sysfs("/sys/module/opchain/parameters/chain_on", "0", false);
@@ -248,27 +616,11 @@ pub fn apply_boot_profile() {
         false,
     );
 
-    if Path::new("/sys/kernel/debug/sched_features").exists() {
-        write_sysfs("/sys/kernel/debug/sched_features", "NEXT_BUDDY", false);
-        write_sysfs("/sys/kernel/debug/sched_features", "NO_TTWU_QUEUE", false);
-    }
-
-    write_sysfs("/proc/sys/kernel/split_lock_mitigate", "0", false);
-
-    std::thread::spawn(|| {
-        let _ = Command::new("sync").status();
-        let _ = Command::new("fstrim").arg("/data").output();
-        log!("[BOOT] Storage maintenance (/data fstrim) completed in background");
-    });
-
-    log!("[BOOT] Universal Boot Profile applied successfully");
+    let zones = crate::tweaks::thermal::apply_kernel_governor();
+    log!("[BOOT] Thermal governor step_wise on {} zone(s)", zones);
+    log!("[BOOT] Encore perfcommon profile applied");
 }
 
-/// Latest-wins mailbox for ZRAM reconfiguration. Reapplying ZRAM runs
-/// `swapoff`/`mkswap`/`swapon`, which can take seconds; doing it on the main
-/// event loop stalled the daemon for up to 14s in the field. Requests are
-/// coalesced with a short quiet window so dragging a slider only applies the
-/// final value once.
 static ZRAM_TX: OnceLock<mpsc::Sender<(u32, String)>> = OnceLock::new();
 
 fn zram_sender() -> &'static mpsc::Sender<(u32, String)> {
@@ -302,7 +654,6 @@ fn zram_worker(rx: mpsc::Receiver<(u32, String)>) {
     }
 }
 
-/// Queues a ZRAM configuration for the background worker.
 pub fn request_zram(size_gb: u32, algorithm: &str) {
     if size_gb == 0 {
         return;
@@ -322,8 +673,6 @@ fn read_swap_zram_device() -> Option<String> {
     })
 }
 
-/// Finds the ZRAM block device dynamically (zram0, zram1, ...). The active
-/// swap device wins; otherwise the lowest index is used.
 fn zram_device() -> Option<(String, String)> {
     let mut candidates: Vec<(u32, String, String)> = Vec::new();
     if let Ok(entries) = fs::read_dir("/sys/block") {
@@ -394,8 +743,6 @@ pub fn apply_zram(size_gb: u32, algorithm: &str) {
     let available = fs::read_to_string(&comp_path).unwrap_or_default();
     let requested = algorithm.trim();
 
-    // Validate the compressor before touching the device so an unsupported
-    // algorithm cannot leave ZRAM reset without swap.
     let wanted_algo = if requested.is_empty() {
         None
     } else if available
@@ -436,8 +783,6 @@ pub fn apply_zram(size_gb: u32, algorithm: &str) {
         wanted_algo.unwrap_or("device default")
     );
 
-    // reset returns EBUSY while the device is still an active swap device, so
-    // swapoff must succeed first (and it is only attempted when active).
     if read_swap_zram_device()
         .map(|active| {
             Path::new(&active).file_name() == Path::new(&zram_block).file_name()
@@ -565,351 +910,6 @@ pub fn sync_global_tweaks() {
     if let Some(sched) = crate::core::detector::get_global_io_scheduler() {
         apply_io_scheduler(&sched);
     }
-}
-
-pub fn tune_schedutil_rate_limits(up_us: u64, down_us: u64) {
-    if let Ok(entries) = fs::read_dir("/sys/devices/system/cpu/cpufreq") {
-        for entry in entries.flatten() {
-            let fname = entry.file_name().to_string_lossy().into_owned();
-            if fname.starts_with("policy") {
-                let p_str = format!("/sys/devices/system/cpu/cpufreq/{}", fname);
-                let up_path = format!("{}/schedutil/up_rate_limit_us", p_str);
-                let down_path = format!("{}/schedutil/down_rate_limit_us", p_str);
-
-                crate::tweaks::state::write_tracked(
-                    &up_path,
-                    &up_us.to_string(),
-                    false,
-                );
-                crate::tweaks::state::write_tracked(
-                    &down_path,
-                    &down_us.to_string(),
-                    false,
-                );
-            }
-        }
-    }
-
-    crate::tweaks::state::write_tracked(
-        "/sys/devices/system/cpu/cpufreq/schedutil/up_rate_limit_us",
-        &up_us.to_string(),
-        false,
-    );
-    crate::tweaks::state::write_tracked(
-        "/sys/devices/system/cpu/cpufreq/schedutil/down_rate_limit_us",
-        &down_us.to_string(),
-        false,
-    );
-}
-
-fn apply_universal_cpu(gov: &str, lock_gov: bool, min_clamp: bool, max_cap_ratio: Option<u64>) {
-    if let Ok(entries) = fs::read_dir("/sys/devices/system/cpu/cpufreq") {
-        for entry in entries.flatten() {
-            let fname = entry.file_name().to_string_lossy().into_owned();
-            if fname.starts_with("policy") {
-                let p_str = format!("/sys/devices/system/cpu/cpufreq/{}", fname);
-                let gov_path = format!("{}/scaling_governor", p_str);
-                let min_path = format!("{}/scaling_min_freq", p_str);
-                let max_path = format!("{}/scaling_max_freq", p_str);
-                let avail_path = format!("{}/scaling_available_frequencies", p_str);
-                let hw_min_path = format!("{}/cpuinfo_min_freq", p_str);
-                let hw_max_path = format!("{}/cpuinfo_max_freq", p_str);
-
-                crate::tweaks::state::write_tracked(&gov_path, gov, lock_gov);
-
-                let freqs: Vec<u64> = fs::read_to_string(&avail_path)
-                    .unwrap_or_default()
-                    .split_whitespace()
-                    .filter_map(|s| s.parse::<u64>().ok())
-                    .collect();
-
-                let hw_min = fs::read_to_string(&hw_min_path)
-                    .ok()
-                    .and_then(|s| s.trim().parse::<u64>().ok())
-                    .or_else(|| freqs.iter().copied().min());
-                let hw_max = fs::read_to_string(&hw_max_path)
-                    .ok()
-                    .and_then(|s| s.trim().parse::<u64>().ok())
-                    .or_else(|| freqs.iter().copied().max());
-                let (Some(hw_min), Some(hw_max)) = (hw_min, hw_max) else {
-                    continue;
-                };
-
-                if min_clamp {
-                    crate::tweaks::state::write_tracked(&max_path, &hw_max.to_string(), true);
-                    crate::tweaks::state::write_tracked(&min_path, &hw_max.to_string(), true);
-                    let current_min = fs::read_to_string(&min_path)
-                        .ok()
-                        .and_then(|value| value.trim().parse::<u64>().ok());
-                    if current_min != Some(hw_max) {
-                        log!(
-                            "[ENFORCE] {} min freq mismatch: {:?} != {}",
-                            fname,
-                            current_min,
-                            hw_max
-                        );
-                    }
-                } else if let Some(pct) = max_cap_ratio {
-                    let target_cap = (hw_max * pct) / 100;
-                    let target_max = if !freqs.is_empty() {
-                        freqs
-                            .iter()
-                            .copied()
-                            .filter(|&f| f <= target_cap)
-                            .max()
-                            .unwrap_or_else(|| freqs.iter().copied().min().unwrap_or(target_cap))
-                    } else {
-                        target_cap
-                    };
-                    let target_max = target_max.max(hw_min);
-
-                    crate::tweaks::state::write_tracked(
-                        &min_path,
-                        &hw_min.to_string(),
-                        false,
-                    );
-                    crate::tweaks::state::write_tracked(
-                        &max_path,
-                        &target_max.to_string(),
-                        true,
-                    );
-                    log!(
-                        "[LITE] {}: Capped max freq to {} kHz (~{}% of {} kHz)",
-                        fname,
-                        target_max,
-                        pct,
-                        hw_max
-                    );
-                } else {
-                    crate::tweaks::state::write_tracked(
-                        &min_path,
-                        &hw_min.to_string(),
-                        false,
-                    );
-                    crate::tweaks::state::write_tracked(
-                        &max_path,
-                        &hw_max.to_string(),
-                        false,
-                    );
-                }
-            }
-        }
-    }
-
-    if let Ok(entries) = fs::read_dir("/sys/devices/system/cpu") {
-        for entry in entries.flatten() {
-            let fname = entry.file_name().to_string_lossy().into_owned();
-            if fname.starts_with("cpu") && fname[3..].chars().all(|c| c.is_ascii_digit()) {
-                let gov_path =
-                    format!("/sys/devices/system/cpu/{}/cpufreq/scaling_governor", fname);
-                crate::tweaks::state::write_tracked(&gov_path, gov, lock_gov);
-            }
-        }
-    }
-
-    let ra_val = if min_clamp { "1024" } else { "128" };
-    if let Ok(entries) = fs::read_dir("/sys/block") {
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with("loop") || name.starts_with("ram") {
-                continue;
-            }
-            let ra_path = format!("/sys/block/{}/queue/read_ahead_kb", name);
-            crate::tweaks::state::write_tracked(&ra_path, ra_val, min_clamp);
-        }
-    }
-    crate::tweaks::state::write_tracked(
-        "/proc/sys/vm/vfs_cache_pressure",
-        if min_clamp { "80" } else { "100" },
-        min_clamp,
-    );
-}
-
-pub fn performance_profile() {
-    crate::tweaks::sched::apply_performance();
-    crate::tweaks::thermal::apply("performance");
-    crate::tweaks::thermal::apply_performance_lockers(false);
-    apply_universal_cpu("performance", true, true, None);
-    soc::apply(SocProfile::Performance);
-    if soc::vendor() == soc::Vendor::Mediatek {
-        crate::tweaks::soc::mediatek::apply_gaming_once(false);
-    }
-    soc::optimize_storage(SocProfile::Performance);
-}
-
-pub fn performance_lite_profile() {
-    crate::tweaks::sched::apply_balance();
-    crate::tweaks::thermal::apply("lite");
-    crate::tweaks::thermal::apply_performance_lockers(true);
-    apply_universal_cpu("schedutil", true, false, Some(72));
-    tune_schedutil_rate_limits(500, 20000);
-    soc::apply(SocProfile::Lite);
-    if soc::vendor() == soc::Vendor::Mediatek {
-        crate::tweaks::soc::mediatek::apply_gaming_once(true);
-    }
-    soc::optimize_storage(SocProfile::Lite);
-}
-
-fn guard_cpu_limits(lite: bool) {
-    let Ok(entries) = fs::read_dir("/sys/devices/system/cpu/cpufreq") else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if !name.starts_with("policy") {
-            continue;
-        }
-        let base = format!("/sys/devices/system/cpu/cpufreq/{}", name);
-        let read_freq = |node: &str| {
-            fs::read_to_string(format!("{}/{}", base, node))
-                .ok()
-                .and_then(|value| value.trim().parse::<u64>().ok())
-        };
-        let available: Vec<u64> =
-            fs::read_to_string(format!("{}/scaling_available_frequencies", base))
-                .unwrap_or_default()
-                .split_whitespace()
-                .filter_map(|value| value.parse::<u64>().ok())
-                .collect();
-        let hw_min = read_freq("cpuinfo_min_freq").or_else(|| available.iter().copied().min());
-        let hw_max = read_freq("cpuinfo_max_freq").or_else(|| available.iter().copied().max());
-        let (Some(hw_min), Some(hw_max)) = (hw_min, hw_max) else {
-            continue;
-        };
-
-        let target_max = if lite {
-            let cap = (hw_max * 72) / 100;
-            let freqs: Vec<u64> =
-                fs::read_to_string(format!("{}/scaling_available_frequencies", base))
-                    .unwrap_or_default()
-                    .split_whitespace()
-                    .filter_map(|value| value.parse::<u64>().ok())
-                    .collect();
-            freqs
-                .iter()
-                .copied()
-                .filter(|&freq| freq <= cap)
-                .max()
-                .unwrap_or(hw_min)
-                .max(hw_min)
-        } else {
-            hw_max
-        };
-        let target_min = if lite { hw_min } else { hw_max };
-        let governor = if lite { "schedutil" } else { "performance" };
-        let governor_path = format!("{}/scaling_governor", base);
-        let min_path = format!("{}/scaling_min_freq", base);
-        let max_path = format!("{}/scaling_max_freq", base);
-
-        let current_governor = fs::read_to_string(&governor_path)
-            .ok()
-            .map(|value| value.trim().to_string());
-        if current_governor.as_deref() != Some(governor) {
-            crate::tweaks::state::write_tracked(&governor_path, governor, true);
-        }
-
-        if read_freq("scaling_max_freq") != Some(target_max) {
-            crate::tweaks::state::write_tracked(&max_path, &target_max.to_string(), true);
-        }
-        if read_freq("scaling_min_freq") != Some(target_min) {
-            crate::tweaks::state::write_tracked(&min_path, &target_min.to_string(), true);
-        }
-
-        if read_freq("scaling_min_freq") != Some(target_min) {
-            warn_stuck_freq(&min_path, &name, target_min);
-        }
-    }
-
-    if lite {
-        tune_schedutil_rate_limits(500, 20000);
-    }
-}
-
-fn warn_stuck_freq(path: &str, policy: &str, expected: u64) {
-    static WARNED: OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = OnceLock::new();
-    let set = WARNED.get_or_init(|| std::sync::Mutex::new(std::collections::HashSet::new()));
-    let mut guard = set
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
-    if guard.insert(path.to_string()) {
-        log!(
-            "[ENFORCE] {} scaling_min_freq did not reach {} kHz",
-            policy,
-            expected
-        );
-    }
-}
-
-fn restore_cpu_minimums() {
-    let Ok(entries) = fs::read_dir("/sys/devices/system/cpu/cpufreq") else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if !name.starts_with("policy") {
-            continue;
-        }
-        let base = format!("/sys/devices/system/cpu/cpufreq/{}", name);
-        let available: Vec<u64> =
-            fs::read_to_string(format!("{}/scaling_available_frequencies", base))
-                .unwrap_or_default()
-                .split_whitespace()
-                .filter_map(|value| value.parse::<u64>().ok())
-                .collect();
-        let min_value = fs::read_to_string(format!("{}/cpuinfo_min_freq", base))
-            .ok()
-            .and_then(|value| value.trim().parse::<u64>().ok())
-            .or_else(|| available.iter().copied().min());
-        let max_value = fs::read_to_string(format!("{}/cpuinfo_max_freq", base))
-            .ok()
-            .and_then(|value| value.trim().parse::<u64>().ok())
-            .or_else(|| available.iter().copied().max());
-        if let Some(min_value) = min_value {
-            write_sysfs(
-                &format!("{}/scaling_min_freq", base),
-                &min_value.to_string(),
-                false,
-            );
-        }
-        if let Some(max_value) = max_value {
-            write_sysfs(
-                &format!("{}/scaling_max_freq", base),
-                &max_value.to_string(),
-                false,
-            );
-        }
-    }
-}
-
-pub fn guard_gaming(lite: bool) {
-    guard_cpu_limits(lite);
-    let profile = if lite {
-        SocProfile::Lite
-    } else {
-        SocProfile::Performance
-    };
-    soc::guard(profile);
-}
-
-pub fn balance_profile() {
-    crate::tweaks::state::restore_all();
-    crate::tweaks::thermal::reset_sconfig();
-    restore_cpu_minimums();
-    if soc::vendor() == soc::Vendor::Mediatek {
-        crate::tweaks::soc::mediatek::restore_gaming();
-    }
-}
-
-pub fn restore_balance() {
-    balance_profile();
-}
-
-pub fn eco_profile() {
-    crate::tweaks::sched::apply_eco();
-    crate::tweaks::thermal::apply("eco");
-    apply_universal_cpu("powersave", false, false, None);
-    tune_schedutil_rate_limits(4000, 8000);
-    soc::apply(SocProfile::Eco);
 }
 
 #[cfg(test)]
