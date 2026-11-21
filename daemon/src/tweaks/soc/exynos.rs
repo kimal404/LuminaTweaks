@@ -47,6 +47,7 @@ fn apply_gpu(profile: SocProfile) -> usize {
         SocProfile::Lite => (max, min),
         SocProfile::Balance => (max, min),
         SocProfile::Eco => (min, min),
+        SocProfile::Maestro => (max, min),
     };
 
     let mut applied = write_clock(dir, "gpu_max_clock", "scaling_max_freq", max_target);
@@ -55,7 +56,10 @@ fn apply_gpu(profile: SocProfile) -> usize {
 }
 
 fn mif(profile: SocProfile) -> usize {
-    if !matches!(profile, SocProfile::Performance | SocProfile::Lite | SocProfile::Balance) {
+    if !matches!(
+        profile,
+        SocProfile::Performance | SocProfile::Lite | SocProfile::Balance | SocProfile::Maestro
+    ) {
         return 0;
     }
     let mut applied = 0;
@@ -63,6 +67,7 @@ fn mif(profile: SocProfile) -> usize {
         applied += match profile {
             SocProfile::Performance => super::devfreq_max_perf(&base),
             SocProfile::Lite => super::devfreq_mid_perf(&base),
+            SocProfile::Maestro => super::devfreq_max_perf(&base),
             _ => super::devfreq_unlock(&base),
         };
     }
@@ -75,6 +80,7 @@ pub fn apply(profile: SocProfile) -> usize {
         SocProfile::Performance | SocProfile::Lite => SocProfile::Performance,
         SocProfile::Balance => SocProfile::Balance,
         SocProfile::Eco => SocProfile::Eco,
+        SocProfile::Maestro => SocProfile::Maestro,
     };
     applied += super::mali::apply_power_policy(policy);
     applied += mif(profile);

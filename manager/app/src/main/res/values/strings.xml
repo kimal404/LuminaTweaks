@@ -385,4 +385,14 @@ Fitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. P
     <string name="aosp_section_override">Penerapan Profil Aplikasi</string>
     <string name="aosp_push_badge_live">LIVE</string>
     <string name="aosp_games_scan_running">Memindai game…</string>
+    <string name="profile_app_profile">Profil Aplikasi</string>
+    <string name="dialog_select_profile">Pilih Profil</string>
+    <string name="aosp_profile_maestro">Maestro</string>
+    <string name="profile_desc_powersave">Hemat daya maksimal dengan clock rendah dan responsivitas dasar</string>
+    <string name="profile_desc_balanced">Keseimbangan antara performa, suhu, dan konsumsi daya</string>
+    <string name="profile_desc_performance">Kunci performa puncak untuk frame rate stabil saat gaming</string>
+    <string name="profile_desc_maestro">Governor EAS dinamis dengan frame-pacing mengikuti refresh rate aktif</string>
+    <string name="section_automation">Otomatisasi</string>
+    <string name="settings_disable_auto_title">Nonaktifkan Mode Otomatis</string>
+    <string name="settings_disable_auto_desc">Matikan perpindahan profil otomatis per aplikasi. Profil akan mengikuti pilihan manual di Home.</string>
 </resources>

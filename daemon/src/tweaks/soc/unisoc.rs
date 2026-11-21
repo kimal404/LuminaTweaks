@@ -15,6 +15,7 @@ pub fn apply(profile: SocProfile) -> usize {
         SocProfile::Lite => super::devfreq_unlock(&base),
         SocProfile::Balance => super::devfreq_unlock(&base),
         SocProfile::Eco => super::devfreq_min_perf(&base),
+        SocProfile::Maestro => super::devfreq_unlock(&base),
     }
 }
 

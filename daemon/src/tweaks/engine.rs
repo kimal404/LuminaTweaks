@@ -253,6 +253,100 @@ fn change_cpu_governor(governor: &str) {
     }
 }
 
+fn maestro_governor(base: &str) -> String {
+    let available = fs::read_to_string(format!("{}/scaling_available_governors", base))
+        .unwrap_or_default();
+    for preferred in ["sugov_ext", "schedutil", "walt"] {
+        if available.split_whitespace().any(|item| item == preferred) {
+            return preferred.to_string();
+        }
+    }
+    default_governor()
+}
+
+fn apply_maestro_governor() {
+    for base in cpu_policy_dirs() {
+        let governor = maestro_governor(&base);
+        if !governor.is_empty() {
+            profile_write(&format!("{}/scaling_governor", base), &governor);
+        }
+    }
+}
+
+fn maestro_floor(hw_min: u64, hw_max: u64, freqs: &[u64]) -> u64 {
+    let target = hw_max / 2;
+    crate::tweaks::devfreq::nearest_frequency(freqs, target)
+        .unwrap_or(target)
+        .max(hw_min)
+}
+
+fn cpufreq_maestro() {
+    for base in cpu_policy_dirs() {
+        let Some((hw_min, hw_max, freqs)) = hardware_limits(&base) else {
+            continue;
+        };
+        let floor = maestro_floor(hw_min, hw_max, &freqs);
+        profile_write(
+            &format!("{}/scaling_max_freq", base),
+            &hw_max.to_string(),
+        );
+        profile_write(
+            &format!("{}/scaling_min_freq", base),
+            &floor.to_string(),
+        );
+    }
+}
+
+fn cpufreq_ppm_maestro() {
+    for (cluster, base) in cpu_policy_dirs().iter().enumerate() {
+        let Some((hw_min, hw_max, freqs)) = hardware_limits(base) else {
+            continue;
+        };
+        let floor = maestro_floor(hw_min, hw_max, &freqs);
+        profile_write(PPM_MAX_PATH, &format!("{} {}", cluster, hw_max));
+        profile_write(PPM_MIN_PATH, &format!("{} {}", cluster, floor));
+    }
+}
+
+fn ufs_clkscale_paths() -> Vec<String> {
+    let mut paths = Vec::new();
+    if let Ok(entries) = fs::read_dir("/sys/devices/platform/soc") {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+            if !name.contains("ufshc") && !name.starts_with("ufs") {
+                continue;
+            }
+            let path = format!(
+                "/sys/devices/platform/soc/{}/clkscale_enable",
+                entry.file_name().to_string_lossy()
+            );
+            if Path::new(&path).exists() {
+                paths.push(path);
+            }
+        }
+    }
+    if let Ok(entries) = fs::read_dir("/sys/class/scsi_host") {
+        for entry in entries.flatten() {
+            let path = format!(
+                "/sys/class/scsi_host/{}/clkscale_enable",
+                entry.file_name().to_string_lossy()
+            );
+            if Path::new(&path).exists() {
+                paths.push(path);
+            }
+        }
+    }
+    paths.sort();
+    paths.dedup();
+    paths
+}
+
+fn apply_ufs_antistall() {
+    for path in ufs_clkscale_paths() {
+        profile_write(&path, "0");
+    }
+}
+
 fn cpufreq_max_perf(lite: bool) {
     for base in cpu_policy_dirs() {
         let Some((hw_min, hw_max, freqs)) = hardware_limits(&base) else {
@@ -340,11 +434,7 @@ fn apply_vfs_cache_pressure(value: &str) {
 }
 
 fn apply_io_latency(performance: bool) {
-    let (read_ahead, nr_requests) = if performance {
-        ("32", "32")
-    } else {
-        ("128", "64")
-    };
+    let read_ahead = if performance { "32" } else { "128" };
 
     let Ok(entries) = fs::read_dir("/sys/block") else {
         return;
@@ -364,7 +454,9 @@ fn apply_io_latency(performance: bool) {
             read_ahead,
         );
         let nr_path = format!("{}/queue/nr_requests", base);
-        if !crate::tweaks::state::write_tracked_quiet(&nr_path, nr_requests, true) && !performance
+        let nr_primary = if performance { "32" } else { "64" };
+        if !crate::tweaks::state::write_tracked_quiet(&nr_path, nr_primary, true)
+            && nr_primary != "32"
         {
             crate::tweaks::state::write_tracked_quiet(&nr_path, "32", true);
         }
@@ -402,6 +494,21 @@ pub fn performance_lite_profile() {
     }
     apply_io_latency(true);
     soc::apply(SocProfile::Lite);
+    drop_caches();
+}
+
+pub fn maestro_profile() {
+    apply_battery_saver(false);
+    crate::tweaks::sched::apply_maestro();
+    apply_vfs_cache_pressure("80");
+    apply_maestro_governor();
+    cpufreq_maestro();
+    if ppm_available() {
+        cpufreq_ppm_maestro();
+    }
+    apply_io_latency(true);
+    apply_ufs_antistall();
+    soc::apply(SocProfile::Maestro);
     drop_caches();
 }
 
@@ -633,7 +740,7 @@ pub fn apply_boot_profile() {
 
     let zones = crate::tweaks::thermal::apply_kernel_governor();
     log!("[BOOT] Thermal governor step_wise on {} zone(s)", zones);
-    log!("[BOOT] Encore perfcommon profile applied");
+    log!("[BOOT] Boot performance tuning applied");
 }
 
 static ZRAM_TX: OnceLock<mpsc::Sender<(u32, String)>> = OnceLock::new();

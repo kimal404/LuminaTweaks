@@ -58,6 +58,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.BatterySaver
+import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.ErrorOutline
@@ -340,6 +343,12 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
     }
 
     val coroutineScope = rememberCoroutineScope()
+    val selectProfile: (String) -> Unit = { name ->
+        currentProfile = name
+        coroutineScope.launch {
+            DaemonManager.setProfile(name)
+        }
+    }
     val haptic = LocalHapticFeedback.current
 
     TouchOriginDialog(
@@ -482,7 +491,8 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             isRootGranted = isRootGranted,
                             selinuxStatus = selinuxStatus,
                             onRequestRebootDialog = { showRebootDialog = true },
-                            onRestartDaemon = restartAction
+                            onRestartDaemon = restartAction,
+                            onProfileChanged = selectProfile
                         )
                         1 -> AppsScreen(
                             pagerState = pagerState,
@@ -557,7 +567,8 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             isRootGranted = isRootGranted,
                             selinuxStatus = selinuxStatus,
                             onRequestRebootDialog = { showRebootDialog = true },
-                            onRestartDaemon = restartAction
+                            onRestartDaemon = restartAction,
+                            onProfileChanged = selectProfile
                         )
                         1 -> AppsScreen(
                             pagerState = pagerState,
@@ -719,12 +730,14 @@ fun HomeDashboardContent(
     selinuxStatus: String,
     onRequestRebootDialog: () -> Unit,
     onRestartDaemon: suspend () -> Unit,
+    onProfileChanged: (String) -> Unit = {},
     onNavigateToPersonalisasi: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     var isRestarting by remember { mutableStateOf(false) }
     var showPowerDialog by remember { mutableStateOf(false) }
+    var showProfileDialog by remember { mutableStateOf(false) }
     val isRunning = daemonPid != null
 
     val restartScope = rememberCoroutineScope()
@@ -742,6 +755,66 @@ fun HomeDashboardContent(
     var powerDialogOriginPoint by remember { mutableStateOf(Offset(0.5f, 0.5f)) }
     val heroOrigin = rememberDialogOrigin()
     val topBarPowerOrigin = rememberDialogOrigin()
+    val profileOrigin = rememberDialogOrigin()
+
+    val profileOptions = listOf(
+        Triple("Powersave", R.string.profile_desc_powersave, Icons.Rounded.BatterySaver),
+        Triple("Balanced", R.string.profile_desc_balanced, Icons.Rounded.Speed),
+        Triple("Performance", R.string.profile_desc_performance, Icons.Rounded.Bolt),
+        Triple("Maestro", R.string.profile_desc_maestro, Icons.Rounded.AutoAwesome)
+    )
+    val profileDisplayValue = if (currentProfile.equals("Eco", ignoreCase = true)) {
+        "Powersave"
+    } else {
+        currentProfile
+    }
+
+    TouchOriginDialog(
+        visible = showProfileDialog,
+        onDismiss = { showProfileDialog = false },
+        origin = profileOrigin.origin
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            HomeSquircleIcon(icon = Icons.Rounded.Speed)
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = stringResource(R.string.dialog_select_profile),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            profileOptions.forEachIndexed { index, option ->
+                val isActive = when (option.first) {
+                    "Powersave" -> currentProfile.equals("Powersave", ignoreCase = true) ||
+                        currentProfile.equals("Eco", ignoreCase = true)
+                    "Balanced" -> currentProfile.equals("Balanced", ignoreCase = true) ||
+                        currentProfile.equals("Balance", ignoreCase = true)
+                    "Performance" -> currentProfile.equals("Performance", ignoreCase = true) ||
+                        currentProfile.equals("Performance Lite", ignoreCase = true)
+                    else -> currentProfile.equals(option.first, ignoreCase = true)
+                }
+                HomeActionRow(
+                    index = index,
+                    count = profileOptions.size,
+                    icon = if (isActive) Icons.Outlined.CheckCircle else option.third,
+                    title = option.first,
+                    subtitle = stringResource(option.second),
+                    onClick = {
+                        showProfileDialog = false
+                        onProfileChanged(option.first)
+                    }
+                )
+            }
+        }
+    }
 
     TouchOriginDialog(
         visible = showPowerDialog,
@@ -908,10 +981,14 @@ fun HomeDashboardContent(
                     )
                     HomeHardwareTile(
                         label = stringResource(R.string.home_profile),
-                        value = currentProfile,
+                        value = profileDisplayValue,
                         icon = Icons.Rounded.Speed,
                         highlight = true,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f).then(profileOrigin.trackedModifier()),
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            showProfileDialog = true
+                        }
                     )
                 }
             }
@@ -1125,7 +1202,8 @@ private fun HomeHardwareTile(
     value: String,
     icon: ImageVector,
     highlight: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val iconBoxBgColor by animateColorAsState(
@@ -1150,7 +1228,9 @@ private fun HomeHardwareTile(
     Surface(
         shape = RoundedCornerShape(26.dp),
         color = colorScheme.surfaceColorAtElevation(1.dp),
-        modifier = modifier
+        modifier = modifier.then(
+            if (onClick != null) Modifier.clickable { onClick() } else Modifier
+        )
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Box(

@@ -69,6 +69,7 @@ data class TweaksUiState(
     val currentRrId: Int? = null,
     val currentRendererId: String = "default",
     val isAutoDnd: Boolean = false,
+    val isAutoProfile: Boolean = true,
     val currentIoScheduler: String = "mq-deadline",
     val zramSizeGb: Int = 8,
     val zramAlgorithm: String = "zstd",
@@ -264,6 +265,7 @@ object ConfigRepository {
 
         val isLite = globalJson?.optBoolean("lite_mode_global", false) ?: false
         val isAutoDnd = globalJson?.optBoolean("auto_dnd", false) ?: false
+        val isAutoProfile = globalJson?.optBoolean("auto_profile", true) ?: true
         val currentIoSched = globalJson?.optString("io_scheduler", "mq-deadline")?.takeIf { it.isNotBlank() } ?: "mq-deadline"
         val zramSize = globalJson?.optInt("zram_size_gb", 8) ?: 8
         val zramAlgo = globalJson?.optString("zram_algorithm", "zstd")?.takeIf { it.isNotBlank() } ?: "zstd"
@@ -322,6 +324,7 @@ object ConfigRepository {
             currentRrId = currentRr,
             currentRendererId = currentRenderer,
             isAutoDnd = isAutoDnd,
+            isAutoProfile = isAutoProfile,
             currentIoScheduler = currentIoSched,
             zramSizeGb = zramSize,
             zramAlgorithm = zramAlgo,
@@ -366,6 +369,15 @@ object ConfigRepository {
             updateGlobalConfigInternal { it.put("lite_mode_global", enabled) }
             val propVal = if (enabled) "1" else "0"
             runSuCmd("setprop persist.lumina.litemode $propVal && echo '$propVal' > $CONFIG_DIR/lite_mode.conf", 4)
+        }
+    }
+
+    suspend fun setAutoProfile(enabled: Boolean) = withContext(Dispatchers.IO) {
+        cachedTweaksState = cachedTweaksState?.copy(isAutoProfile = enabled)
+        fileMutex.withLock {
+            updateGlobalConfigInternal { it.put("auto_profile", enabled) }
+            val propVal = if (enabled) "1" else "0"
+            runSuCmd("setprop persist.lumina.autoprofile $propVal", 4)
         }
     }
 
@@ -472,6 +484,7 @@ object ConfigRepository {
                         } else {
                             obj.optBoolean("saklar_utama", false)
                         },
+                        profile = obj.optString("profile", "default"),
                         liteMode = obj.optString("lite_mode", "default"),
                         refreshRate = obj.optString("refresh_rate", "default"),
                         renderer = obj.optString("renderer", "default"),
@@ -529,6 +542,7 @@ object ConfigRepository {
                 put("saklar_utama", item.saklarUtama)
                 put("disabled", item.disabled)
                 put("custom", item.custom)
+                put("profile", item.profile)
                 put("lite_mode", item.liteMode)
                 put("refresh_rate", item.refreshRate)
                 put("renderer", item.renderer)

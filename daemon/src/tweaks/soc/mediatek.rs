@@ -3,6 +3,8 @@ use std::fs;
 use std::path::Path;
 
 const FPSGO_PATH: &str = "/sys/kernel/fpsgo/common/force_onoff";
+const FPSGO_FBT_DIR: &str = "/sys/kernel/fpsgo/fbt";
+const GED_HAL_DIR: &str = "/sys/kernel/ged/hal";
 const CCI_MODE_PATH: &str = "/proc/cpufreq/cpufreq_cci_mode";
 const POWER_MODE_PATH: &str = "/proc/cpufreq/cpufreq_power_mode";
 const DRAMBOOST_PATH: &str = "/sys/devices/platform/boot_dramboost/dramboost/dramboost";
@@ -14,6 +16,17 @@ const FIX_OPP_PATH: &str = "/proc/gpufreqv2/fix_target_opp_index";
 const GPUFREQ_V2_TABLE: &str = "/proc/gpufreqv2/gpu_working_opp_table";
 const GPUFREQ_V1_TABLE: &str = "/proc/gpufreq/gpufreq_opp_dump";
 const POWER_LIMITED_PATH: &str = "/proc/gpufreq/gpufreq_power_limited";
+const POWER_LIMITED_V2_PATHS: &[&str] = &[
+    "/proc/gpufreqv2/power_limited",
+    "/proc/gpufreqv2/gpufreq_power_limited",
+];
+const TARGET_FPS_PATHS: &[&str] = &[
+    "/sys/kernel/fpsgo/fstb/fstb_target_fps_hi",
+    "/sys/kernel/fpsgo/fstb/fstb_target_fps_lo",
+    "/sys/kernel/fpsgo/fstb/gx_dfps",
+    "/sys/kernel/fpsgo/common/gx_dfps",
+    "/sys/kernel/ged/hal/gx_dfps",
+];
 const GED_BOOST_PATH: &str = "/sys/kernel/ged/hal/custom_boost_gpu_freq";
 const BATOC_PATH: &str = "/proc/mtk_batoc_throttling/battery_oc_protect_stop";
 const HELIO_FORCE_PATH: &str = "/sys/kernel/helio-dvfsrc/dvfsrc_force_vcore_dvfs_opp";
@@ -132,13 +145,6 @@ fn ddr_performance(lite: bool) -> usize {
     applied
 }
 
-fn helio_restore_value() -> String {
-    match super::read_node(HELIO_FORCE_PATH) {
-        Some(value) if value != "-1" && value.parse::<u32>().is_ok() => value,
-        _ => "255".to_string(),
-    }
-}
-
 fn ddr_balance() -> usize {
     let mut applied = 0;
     for path in dvfsrc_platform_nodes() {
@@ -146,12 +152,52 @@ fn ddr_balance() -> usize {
             applied += 1;
         }
     }
-    if crate::tweaks::state::write_tracked_quiet(HELIO_FORCE_PATH, &helio_restore_value(), false) {
-        applied += 1;
-    }
     if let Some(base) = super::find_devfreq(&["mtk-dvfsrc-devfreq"]) {
         applied += super::devfreq_unlock(&base);
     }
+    applied
+}
+
+fn maestro_profile() -> usize {
+    let mut applied = ppm_policies(false);
+    if super::apply_node(FPSGO_PATH, "1") {
+        applied += 1;
+    }
+    for (name, value) in [
+        ("enable_ceiling", "0"),
+        ("engine_cooler_enable", "0"),
+        ("boost_ta", "1"),
+        ("boost_VIP", "1"),
+    ] {
+        if super::apply_node(&format!("{}/{}", FPSGO_FBT_DIR, name), value) {
+            applied += 1;
+        }
+    }
+    for (name, value) in [
+        ("gx_game_mode", "1"),
+        ("gx_force_cpu_boost", "1"),
+        ("disp_dejitter", "1"),
+    ] {
+        if super::apply_node(&format!("{}/{}", GED_HAL_DIR, name), value) {
+            applied += 1;
+        }
+    }
+    if let Some(hz) = crate::tweaks::display::saved_mode_hz().filter(|hz| *hz >= 30) {
+        let target = hz.to_string();
+        for path in TARGET_FPS_PATHS {
+            if super::apply_node(path, &target) {
+                applied += 1;
+            }
+        }
+    }
+    for path in POWER_LIMITED_V2_PATHS {
+        if super::apply_node(path, "0") {
+            applied += 1;
+        }
+    }
+    applied += power_limited("0");
+    applied += super::mali_power_policy(SocProfile::Maestro);
+    applied += ddr_performance(false);
     applied
 }
 
@@ -268,6 +314,7 @@ pub fn apply(profile: SocProfile) -> usize {
         SocProfile::Lite => performance_profile(true),
         SocProfile::Balance => balance_profile(),
         SocProfile::Eco => powersave_profile(),
+        SocProfile::Maestro => maestro_profile(),
     }
 }
 

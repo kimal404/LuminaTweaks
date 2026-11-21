@@ -49,6 +49,7 @@ import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -56,6 +57,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -80,6 +82,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.luminatweaks.R
+import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.ui.component.TouchOriginDialog
 import com.luminatweaks.ui.component.appBarFade
 import com.luminatweaks.ui.component.pressScale
@@ -122,8 +125,15 @@ fun SettingsScreen(
     var showPersonalisasiScreen by remember { mutableStateOf(false) }
     var showUninstallDialog by remember { mutableStateOf(false) }
     var isUninstalling by remember { mutableStateOf(false) }
+    var isAutoProfile by remember { mutableStateOf(true) }
+    var autoProfileLoaded by remember { mutableStateOf(false) }
     var uninstallOriginPoint by remember { mutableStateOf(Offset(0.5f, 0.5f)) }
     val uninstallOrigin = rememberDialogOrigin()
+
+    LaunchedEffect(Unit) {
+        isAutoProfile = ConfigRepository.getTweaksState().isAutoProfile
+        autoProfileLoaded = true
+    }
 
     val activeSettingsSubscreen = when {
         showAboutScreen && onNavigateToAbout == null -> "about"
@@ -197,6 +207,27 @@ fun SettingsScreen(
                                             onNavigateToPersonalisasi()
                                         } else {
                                             showPersonalisasiScreen = true
+                                        }
+                                    }
+                                )
+                            }
+                        }
+
+                        item(key = "automation") {
+                            SettingsSectionHeader(title = stringResource(R.string.section_automation))
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                SettingsSwitchRow(
+                                    index = 0,
+                                    count = 1,
+                                    icon = Icons.Rounded.AutoFixHigh,
+                                    title = stringResource(R.string.settings_disable_auto_title),
+                                    subtitle = stringResource(R.string.settings_disable_auto_desc),
+                                    checked = !isAutoProfile,
+                                    enabled = autoProfileLoaded,
+                                    onCheckedChange = { disabled ->
+                                        isAutoProfile = !disabled
+                                        coroutineScope.launch {
+                                            ConfigRepository.setAutoProfile(!disabled)
                                         }
                                     }
                                 )
@@ -446,6 +477,91 @@ private fun SettingsSectionHeader(title: String) {
             bottom = 8.dp
         )
     )
+}
+
+@Composable
+private fun SettingsSwitchRow(
+    index: Int,
+    count: Int,
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true
+) {
+    val haptic = LocalHapticFeedback.current
+    val shape = connectedContainerShape(index = index, count = count)
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressScaleModifier = pressScale(interactionSource, 0.975f, enabled)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(pressScaleModifier)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = enabled
+            ) {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onCheckedChange(!checked)
+            }
+            .alpha(if (enabled) 1f else 0.55f)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.padding(end = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 8.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Box(
+            modifier = Modifier.padding(start = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                enabled = enabled,
+                interactionSource = interactionSource
+            )
+        }
+    }
 }
 
 @Composable

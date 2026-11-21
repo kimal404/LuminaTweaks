@@ -1,19 +1,3 @@
-/*
- * Copyright (C) 2026 kimal
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::PermissionsExt;
@@ -23,10 +7,6 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-/// `/dev/socket` is reserved for init on modern Android and SELinux denies
-/// non-init daemons from binding there. The module runtime directory is
-/// writable by both luminad and the Manager (through su), so it is the
-/// primary location; `/data/local/tmp` remains as a last-resort fallback.
 pub const IPC_SOCKET_PRIMARY: &str = "/data/adb/.config/lumina/lumina.sock";
 pub const IPC_SOCKET_FALLBACK: &str = "/data/local/tmp/lumina_ipc.sock";
 
@@ -39,9 +19,8 @@ fn ensure_parent_dir(path: &str) {
 pub struct SharedState {
     pub current_profile: std::sync::Mutex<String>,
     pub active_package: std::sync::Mutex<Option<String>>,
+    pub requested_profile: std::sync::Mutex<Option<String>>,
     pub reload_flag: AtomicBool,
-    /// Epoch milliseconds until which the FPS sampler keeps running even
-    /// without a whitelisted game (Manager preview / always-on overlay).
     pub fps_preview_until_ms: AtomicU64,
 }
 
@@ -50,9 +29,23 @@ impl SharedState {
         Self {
             current_profile: std::sync::Mutex::new("Balanced".to_string()),
             active_package: std::sync::Mutex::new(None),
+            requested_profile: std::sync::Mutex::new(None),
             reload_flag: AtomicBool::new(false),
             fps_preview_until_ms: AtomicU64::new(0),
         }
+    }
+
+    pub fn request_profile(&self, name: &str) {
+        if let Ok(mut slot) = self.requested_profile.lock() {
+            *slot = Some(name.trim().to_string());
+        }
+    }
+
+    pub fn take_requested_profile(&self) -> Option<String> {
+        self.requested_profile
+            .lock()
+            .ok()
+            .and_then(|mut slot| slot.take())
     }
 
     pub fn request_fps_preview(&self, seconds: u64) {
@@ -96,8 +89,6 @@ pub fn cleanup_socket() {
     for path in [IPC_SOCKET_PRIMARY, IPC_SOCKET_FALLBACK] {
         let _ = fs::remove_file(path);
     }
-    // The Manager bridge now listens from the daemon side; drop the node so a
-    // restart never inherits a stale, unbindable socket.
     for path in [
         "/dev/socket/lumina_bridge.sock",
         "/data/adb/.config/lumina/lumina_bridge.sock",
@@ -196,6 +187,38 @@ fn handle_client(stream: UnixStream, shared_state: Arc<SharedState>) {
                     }
                     let writer = reader.get_mut();
                     let _ = writer.write_all(b"OK\n");
+                    let _ = writer.flush();
+                } else if let Some(rest) = trimmed.strip_prefix("SET_PROFILE ") {
+                    let name = rest.trim();
+                    if !name.is_empty()
+                        && name
+                            .chars()
+                            .all(|c| c.is_ascii_alphanumeric() || c == ' ' || c == '_')
+                    {
+                        shared_state.request_profile(name);
+                        let writer = reader.get_mut();
+                        let _ = writer.write_all(b"OK\n");
+                        let _ = writer.flush();
+                    } else {
+                        let writer = reader.get_mut();
+                        let _ = writer.write_all(b"ERR invalid profile\n");
+                        let _ = writer.flush();
+                    }
+                } else if trimmed == "GET_AUTO_PROFILE" {
+                    let enabled = crate::core::detector::is_auto_profile_enabled();
+                    let resp = format!("AUTO_PROFILE {}\n", enabled);
+                    let writer = reader.get_mut();
+                    let _ = writer.write_all(resp.as_bytes());
+                    let _ = writer.flush();
+                } else if let Some(rest) = trimmed.strip_prefix("SET_AUTO_PROFILE ") {
+                    let enabled = matches!(
+                        rest.trim().to_ascii_lowercase().as_str(),
+                        "1" | "on" | "true" | "enable" | "enabled"
+                    );
+                    let ok = crate::core::detector::set_auto_profile(enabled);
+                    let writer = reader.get_mut();
+                    let response = if ok { "OK\n" } else { "ERR write failed\n" };
+                    let _ = writer.write_all(response.as_bytes());
                     let _ = writer.flush();
                 } else if trimmed == "RELOAD" || trimmed == "RELOAD_CONFIG" {
                     shared_state.reload_flag.store(true, Ordering::Relaxed);

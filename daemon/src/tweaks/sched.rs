@@ -7,6 +7,9 @@ const UCLAMP_DIRS: &[&str] = &[
 const SCHED_FEATURES_PATH: &str = "/sys/kernel/debug/sched_features";
 const SPLIT_LOCK_PATH: &str = "/proc/sys/kernel/split_lock_mitigate";
 const TOUCHPANEL_DIR: &str = "/proc/touchpanel";
+const CPUSET_DIR: &str = "/dev/cpuset";
+const CPU_POLICY_DIR: &str = "/sys/devices/system/cpu/cpufreq";
+const CPU_ONLINE_PATH: &str = "/sys/devices/system/cpu/online";
 
 fn exists(path: &str) -> bool {
     std::path::Path::new(path).exists()
@@ -86,11 +89,115 @@ fn tune_touchpanel(performance: bool) {
     }
 }
 
+fn parse_cpu_list(raw: &str) -> Vec<u32> {
+    let mut cpus = Vec::new();
+    for part in raw.split([',', ' ', '\n', '\t']) {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        if let Some((start, end)) = part.split_once('-') {
+            if let (Ok(start), Ok(end)) = (start.trim().parse::<u32>(), end.trim().parse::<u32>()) {
+                for cpu in start..=end {
+                    cpus.push(cpu);
+                }
+            }
+        } else if let Ok(cpu) = part.parse::<u32>() {
+            cpus.push(cpu);
+        }
+    }
+    cpus.sort_unstable();
+    cpus.dedup();
+    cpus
+}
+
+fn format_cpu_list(cpus: &[u32]) -> String {
+    let mut parts = Vec::new();
+    let mut index = 0;
+    while index < cpus.len() {
+        let start = cpus[index];
+        let mut end = start;
+        while index + 1 < cpus.len() && cpus[index + 1] == end + 1 {
+            index += 1;
+            end = cpus[index];
+        }
+        if start == end {
+            parts.push(start.to_string());
+        } else {
+            parts.push(format!("{}-{}", start, end));
+        }
+        index += 1;
+    }
+    parts.join(",")
+}
+
+fn policy_dirs() -> Vec<String> {
+    let mut dirs = Vec::new();
+    let Ok(entries) = std::fs::read_dir(CPU_POLICY_DIR) else {
+        return dirs;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !name.starts_with("policy") {
+            continue;
+        }
+        dirs.push(name);
+    }
+    dirs.sort_by_key(|name| {
+        name.trim_start_matches("policy")
+            .parse::<u32>()
+            .unwrap_or(u32::MAX)
+    });
+    dirs.into_iter()
+        .map(|name| format!("{}/{}", CPU_POLICY_DIR, name))
+        .collect()
+}
+
+fn first_policy_cpus() -> Vec<u32> {
+    let Some(base) = policy_dirs().into_iter().next() else {
+        return Vec::new();
+    };
+    let raw = std::fs::read_to_string(format!("{}/related_cpus", base))
+        .or_else(|_| std::fs::read_to_string(format!("{}/cpus", base)))
+        .unwrap_or_default();
+    parse_cpu_list(&raw)
+}
+
+fn active_cpus() -> Vec<u32> {
+    let raw = std::fs::read_to_string(CPU_ONLINE_PATH).unwrap_or_default();
+    let online = parse_cpu_list(&raw);
+    if !online.is_empty() {
+        return online;
+    }
+    first_policy_cpus()
+}
+
+fn apply_cpuset_isolation() {
+    let first = first_policy_cpus();
+    if first.is_empty() {
+        return;
+    }
+    let first_list = format_cpu_list(&first);
+    let active_list = format_cpu_list(&active_cpus());
+    for group in ["background", "system-background"] {
+        write_node(&format!("{}/{}/cpus", CPUSET_DIR, group), &first_list);
+    }
+    write_node(&format!("{}/top-app/cpus", CPUSET_DIR), &active_list);
+}
+
 pub fn apply_performance() {
     set_split_lock(false);
     set_sched_features(&["NEXT_BUDDY", "NO_TTWU_QUEUE"]);
-    tune_top_app("1", "1", Some(("max", "max", "1")));
+    tune_top_app("1", "1", Some(("75", "max", "1")));
     tune_touchpanel(true);
+}
+
+pub fn apply_maestro() {
+    set_split_lock(false);
+    set_sched_features(&["NEXT_BUDDY", "NO_TTWU_QUEUE"]);
+    tune_top_app("1", "1", Some(("75", "max", "1")));
+    tune_touchpanel(true);
+    apply_cpuset_isolation();
 }
 
 pub fn apply_balance() {
@@ -111,5 +218,25 @@ pub fn tune_daemon() {
     unsafe {
         libc::setpriority(libc::PRIO_PROCESS, 0, 10);
         libc::syscall(libc::SYS_ioprio_set, 1, 0, (2 << 13) | 7);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{format_cpu_list, parse_cpu_list};
+
+    #[test]
+    fn parses_cpu_lists() {
+        assert_eq!(parse_cpu_list("0 1 2 3"), vec![0, 1, 2, 3]);
+        assert_eq!(parse_cpu_list("0-3"), vec![0, 1, 2, 3]);
+        assert_eq!(parse_cpu_list("0,2-4"), vec![0, 2, 3, 4]);
+        assert!(parse_cpu_list("").is_empty());
+    }
+
+    #[test]
+    fn formats_cpu_ranges() {
+        assert_eq!(format_cpu_list(&[0, 1, 2, 3]), "0-3");
+        assert_eq!(format_cpu_list(&[0, 1, 4]), "0-1,4");
+        assert_eq!(format_cpu_list(&[7]), "7");
     }
 }

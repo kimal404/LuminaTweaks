@@ -33,6 +33,7 @@ pub fn apply(profile: SocProfile) -> usize {
         SocProfile::Lite => (min, max),
         SocProfile::Balance => (min, max),
         SocProfile::Eco => (min, min),
+        SocProfile::Maestro => (min, max),
     };
 
     let mut applied = set_rate(dir, "gpu_cap_rate", cap);

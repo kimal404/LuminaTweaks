@@ -261,6 +261,21 @@ object DaemonManager {
         runSuCmd(ipcCommand("FPS_PREVIEW_STOP"), 4).contains("OK")
     }
 
+    suspend fun setProfile(name: String): Boolean = withContext(Dispatchers.IO) {
+        val safe = name.trim().filter { it.isLetter() || it == ' ' || it == '_' || it == '-' }
+        if (safe.isBlank()) return@withContext false
+        runSuCmd(ipcCommand("SET_PROFILE $safe"), 4).contains("OK")
+    }
+
+    suspend fun getAutoProfileEnabled(): Boolean? = withContext(Dispatchers.IO) {
+        val output = runSuCmd(ipcCommand("GET_AUTO_PROFILE"), 4)
+        when {
+            output.contains("AUTO_PROFILE true", ignoreCase = true) -> true
+            output.contains("AUTO_PROFILE false", ignoreCase = true) -> false
+            else -> null
+        }
+    }
+
     suspend fun getDaemonPid(): String? = withContext(Dispatchers.IO) {
         readPidFromFile() ?: probeDaemon()
     }

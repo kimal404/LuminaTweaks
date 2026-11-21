@@ -163,6 +163,7 @@ fun AppProfileScreen(
 
             var rrModes by remember { mutableStateOf<List<DisplayRrMode>>(emptyList()) }
 
+            var showProfileSheet by remember { mutableStateOf(false) }
             var showLiteModeSheet by remember { mutableStateOf(false) }
             var showRefreshRateSheet by remember { mutableStateOf(false) }
             var showRendererSheet by remember { mutableStateOf(false) }
@@ -209,6 +210,17 @@ fun AppProfileScreen(
                     RendererOption("vulkan", "Vulkan")
                 )
             }
+
+            val profileOptions = listOf(
+                ProfileSheetOption("default", stringResource(R.string.opt_default)),
+                ProfileSheetOption("powersave", stringResource(R.string.aosp_profile_powersave)),
+                ProfileSheetOption("balanced", stringResource(R.string.aosp_profile_balanced)),
+                ProfileSheetOption("performance", stringResource(R.string.aosp_profile_performance)),
+                ProfileSheetOption("maestro", stringResource(R.string.aosp_profile_maestro))
+            )
+            val currentAppProfileLabel = profileOptions
+                .find { it.value == profile.profile }?.label
+                ?: stringResource(R.string.opt_default)
 
             val isTextureLocked = profile.textureEnabled || profile.textureLod > 0
 
@@ -453,7 +465,16 @@ fun AppProfileScreen(
                                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     ProfileActionRow(
                                         index = 0,
-                                        count = 1,
+                                        count = 2,
+                                        icon = Icons.Rounded.Speed,
+                                        title = stringResource(R.string.profile_app_profile),
+                                        subtitle = currentAppProfileLabel,
+                                        highlightSubtitle = true,
+                                        onClick = { showProfileSheet = true }
+                                    )
+                                    ProfileActionRow(
+                                        index = 1,
+                                        count = 2,
                                         icon = Icons.Rounded.BatterySaver,
                                         title = stringResource(R.string.profile_lite_mode),
                                         subtitle = OptionItem.fromValue(profile.liteMode).getLabel(),
@@ -529,6 +550,17 @@ fun AppProfileScreen(
                     }
                 }
             }
+
+            ProfileOptionSheet(
+                show = showProfileSheet,
+                title = stringResource(R.string.dialog_select_profile),
+                options = profileOptions,
+                isSelected = { it == profile.profile },
+                onSelect = { value ->
+                    onProfileChanged(profile.copy(profile = value))
+                },
+                onDismiss = { showProfileSheet = false }
+            )
 
             ProfileOptionSheet(
                 show = showLiteModeSheet,

@@ -115,6 +115,16 @@ fn performance_profile(lite: bool) -> usize {
     applied
 }
 
+fn maestro_profile() -> usize {
+    let mut applied = ddr_profile(false);
+    if let Some(base) = kgsl_devfreq() {
+        applied += super::devfreq_unlock(&base);
+    }
+    applied += set_pwrlevels(false);
+    applied += kgsl_flags("1", "0");
+    applied
+}
+
 fn balance_profile() -> usize {
     let mut applied = ddr_balance();
     if let Some(base) = kgsl_devfreq() {
@@ -138,6 +148,7 @@ pub fn apply(profile: SocProfile) -> usize {
         SocProfile::Lite => performance_profile(true),
         SocProfile::Balance => balance_profile(),
         SocProfile::Eco => powersave_profile(),
+        SocProfile::Maestro => maestro_profile(),
     }
 }
 

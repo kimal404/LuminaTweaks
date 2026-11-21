@@ -384,4 +384,14 @@ Features on this page are only active when the system is in the Performance prof
     <string name="aosp_section_override">Per-App Profile Override</string>
     <string name="aosp_push_badge_live">LIVE</string>
     <string name="aosp_games_scan_running">Scanning games…</string>
+    <string name="profile_app_profile">App Profile</string>
+    <string name="dialog_select_profile">Select Profile</string>
+    <string name="aosp_profile_maestro">Maestro</string>
+    <string name="profile_desc_powersave">Maximum power saving with low clocks and basic responsiveness</string>
+    <string name="profile_desc_balanced">Balanced performance, thermals, and power consumption</string>
+    <string name="profile_desc_performance">Locks peak performance for stable frame rates while gaming</string>
+    <string name="profile_desc_maestro">Dynamic EAS governor with frame-pacing driven by the active refresh rate</string>
+    <string name="section_automation">Automation</string>
+    <string name="settings_disable_auto_title">Disable Automatic Mode</string>
+    <string name="settings_disable_auto_desc">Stops per-app automatic profile switching. The profile follows the manual selection on Home.</string>
 </resources>
