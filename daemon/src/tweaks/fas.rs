@@ -1,13 +1,18 @@
 use crate::tweaks::devfreq::nearest_frequency;
 use crate::tweaks::engine::{cpu_policy_dirs, hardware_limits, set_ppm_hard_max};
 use crate::tweaks::fps::FrameTap;
+use crate::tweaks::soc;
 use crate::tweaks::state;
 use crate::tweaks::thermal::ThermalPressure;
+use serde_json;
+use std::collections::HashMap;
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::time::Instant;
 
 const PPM_MAX_PATH: &str = "/proc/ppm/policy/hard_userlimit_max_cpu_freq";
+const MEMORY_PATH: &str = "/data/adb/.config/lumina/maestro_memory.json";
 const STEP_FLOOR_PERCENT: u64 = 65;
 const LITE_CAP_PERCENT: u64 = 78;
 const BUDGET_TOLERANCE_PERCENT: f32 = 105.0;
@@ -25,12 +30,38 @@ const WARM_TRIM_HOLD_MS: u128 = 2_000;
 const SAFETY_STEP_MS: u128 = 2_000;
 const RECOVER_HOLD_MS: u128 = 5_000;
 const STALE_AFTER_MS: u128 = 1_500;
+const STATS_INTERVAL_MS: u128 = 60_000;
 const MIN_WINDOW_FRAMES: usize = 12;
 const MIN_BASELINE_FRAMES: usize = 60;
 const FRAME_WINDOW: usize = 4096;
 const BASELINE_LOWER_PERCENT: u64 = 20;
 const BASELINE_DECREASE_PERCENT: f32 = 98.0;
 const BASELINE_INCREASE_PERCENT: f32 = 102.0;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FasState {
+    Idle,
+    Arm,
+    Hold,
+    Boost,
+    Trim,
+    Safety,
+    Recover,
+}
+
+impl FasState {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Idle => "idle",
+            Self::Arm => "arm",
+            Self::Hold => "hold",
+            Self::Boost => "boost",
+            Self::Trim => "trim",
+            Self::Safety => "safety",
+            Self::Recover => "recover",
+        }
+    }
+}
 
 #[derive(Clone)]
 struct Cluster {
@@ -120,6 +151,56 @@ fn percentile(frames: &[f32], percent: u64) -> Option<f32> {
     Some(values[index])
 }
 
+fn classify_state(
+    safety: bool,
+    recovering: bool,
+    has_baseline: bool,
+    boost: bool,
+    trim: bool,
+) -> FasState {
+    if safety {
+        if recovering {
+            FasState::Recover
+        } else {
+            FasState::Safety
+        }
+    } else if !has_baseline {
+        FasState::Arm
+    } else if boost {
+        FasState::Boost
+    } else if trim {
+        FasState::Trim
+    } else {
+        FasState::Hold
+    }
+}
+
+fn load_memory() -> HashMap<String, f32> {
+    fs::read_to_string(MEMORY_PATH)
+        .ok()
+        .and_then(|content| serde_json::from_str(&content).ok())
+        .unwrap_or_default()
+}
+
+fn save_memory(memory: &HashMap<String, f32>) {
+    let Ok(content) = serde_json::to_string(memory) else {
+        return;
+    };
+    let Some(parent) = Path::new(MEMORY_PATH).parent() else {
+        return;
+    };
+    let _ = fs::create_dir_all(parent);
+    let temp = format!("{}.tmp", MEMORY_PATH);
+    if fs::write(&temp, content).is_err() {
+        let _ = fs::remove_file(&temp);
+        return;
+    }
+    let _ = fs::set_permissions(&temp, fs::Permissions::from_mode(0o644));
+    if fs::rename(&temp, MEMORY_PATH).is_err() {
+        let _ = fs::remove_file(&temp);
+    }
+}
+
 pub struct FasController {
     tap: FrameTap,
     clusters: Vec<Cluster>,
@@ -137,6 +218,15 @@ pub struct FasController {
     active: bool,
     sampled: bool,
     lite: Option<bool>,
+    state: FasState,
+    package: Option<String>,
+    memory: HashMap<String, f32>,
+    stats_at: Instant,
+    boost_count: u64,
+    trim_count: u64,
+    safety_count: u64,
+    ppm_failed: bool,
+    soc_level: i8,
 }
 
 impl FasController {
@@ -163,7 +253,32 @@ impl FasController {
             active: false,
             sampled: false,
             lite: None,
+            state: FasState::Idle,
+            package: None,
+            memory: load_memory(),
+            stats_at: Instant::now(),
+            boost_count: 0,
+            trim_count: 0,
+            safety_count: 0,
+            ppm_failed: false,
+            soc_level: 0,
         }
+    }
+
+    fn set_state(&mut self, next: FasState) {
+        if self.state == next {
+            return;
+        }
+        if next == FasState::Safety {
+            self.safety_count = self.safety_count.saturating_add(1);
+        }
+        log!(
+            "[FAS] state {} -> {} | pkg {}",
+            self.state.as_str(),
+            next.as_str(),
+            self.package.as_deref().unwrap_or("-")
+        );
+        self.state = next;
     }
 
     fn apply_caps(&mut self, lite: bool) {
@@ -195,7 +310,13 @@ impl FasController {
             return false;
         }
         if Path::new(PPM_MAX_PATH).exists() {
-            set_ppm_hard_max(cluster_id, freq);
+            let ppm_ok = set_ppm_hard_max(cluster_id, freq);
+            if !ppm_ok && !self.ppm_failed {
+                self.ppm_failed = true;
+                log!("[FAS] PPM hard limit unavailable; cpufreq ceiling only");
+            } else if ppm_ok {
+                self.ppm_failed = false;
+            }
         }
         if let Some(cluster) = self.clusters.get_mut(index) {
             cluster.last_written = Some(freq);
@@ -210,6 +331,22 @@ impl FasController {
         }
     }
 
+    fn dynamic_boost(&mut self) {
+        if self.soc_level >= 1 {
+            return;
+        }
+        soc::frame_boost();
+        self.soc_level = 1;
+    }
+
+    fn dynamic_relax(&mut self) {
+        if self.soc_level <= -1 {
+            return;
+        }
+        soc::frame_relax();
+        self.soc_level = -1;
+    }
+
     fn boost(&mut self) {
         for index in 0..self.clusters.len() {
             if !self.clusters[index].performance {
@@ -218,6 +355,8 @@ impl FasController {
             let cap = self.clusters[index].cap;
             self.write(index, cap);
         }
+        self.dynamic_boost();
+        self.boost_count = self.boost_count.saturating_add(1);
     }
 
     fn step_down(&mut self) {
@@ -232,6 +371,17 @@ impl FasController {
                 self.write(index, target);
             }
         }
+    }
+
+    fn remember_baseline(&mut self) {
+        let Some(package) = self.package.clone() else {
+            return;
+        };
+        let Some(baseline) = self.baseline_period else {
+            return;
+        };
+        self.memory.insert(package, baseline);
+        save_memory(&self.memory);
     }
 
     fn update_baseline(&mut self, frames: &[f32], now: Instant) {
@@ -250,7 +400,10 @@ impl FasController {
             }
             Some(current) if candidate <= current * BASELINE_DECREASE_PERCENT / 100.0 => {
                 match self.baseline_lowered_at {
-                    Some(at) if now.saturating_duration_since(at).as_millis() >= BASELINE_LOWER_HOLD_MS => {
+                    Some(at)
+                        if now.saturating_duration_since(at).as_millis()
+                            >= BASELINE_LOWER_HOLD_MS =>
+                    {
                         self.baseline_period = Some(candidate);
                         self.baseline_raised_at = None;
                         self.baseline_lowered_at = None;
@@ -261,7 +414,10 @@ impl FasController {
             }
             Some(current) if candidate >= current * BASELINE_INCREASE_PERCENT / 100.0 => {
                 match self.baseline_raised_at {
-                    Some(at) if now.saturating_duration_since(at).as_millis() >= BASELINE_RAISE_HOLD_MS => {
+                    Some(at)
+                        if now.saturating_duration_since(at).as_millis()
+                            >= BASELINE_RAISE_HOLD_MS =>
+                    {
                         self.baseline_period = Some(candidate);
                         self.baseline_raised_at = None;
                         self.baseline_lowered_at = None;
@@ -318,6 +474,29 @@ impl FasController {
         }
     }
 
+    fn log_stats(&mut self, frames: &[f32], thermal: ThermalPressure, now: Instant) {
+        if now.saturating_duration_since(self.stats_at).as_millis() < STATS_INTERVAL_MS {
+            return;
+        }
+        self.stats_at = now;
+        let window = last_window(frames, SLOW_WINDOW_MS);
+        let p50 = percentile(window, 50).unwrap_or(0.0);
+        let p95 = percentile(window, 95).unwrap_or(0.0);
+        let p99 = percentile(window, 99).unwrap_or(0.0);
+        let low_fps = if p99 > 0.0 { 1000.0 / p99 } else { 0.0 };
+        log!(
+            "[FAS] p50={:.1}ms p95={:.1}ms p99={:.1}ms 1%low={:.1}fps thermal={:?} boost={} trim={} safety={}",
+            p50,
+            p95,
+            p99,
+            low_fps,
+            thermal,
+            self.boost_count,
+            self.trim_count,
+            self.safety_count
+        );
+    }
+
     fn clear_runtime(&mut self) {
         self.trim_since = None;
         self.heavy_streak = 0;
@@ -327,16 +506,23 @@ impl FasController {
         self.last_safety_step = None;
         self.sampled = false;
         self.seen_seq = self.tap.measured_snapshot(1).seq;
+        self.state = FasState::Idle;
     }
 
-    pub fn reset(&mut self) {
+    pub fn reset(&mut self, package: Option<&str>) {
+        self.remember_baseline();
         if self.active {
             self.restore_caps();
         }
-        self.baseline_period = None;
+        let next_package = package.map(str::to_string);
+        self.baseline_period = next_package
+            .as_ref()
+            .and_then(|pkg| self.memory.get(pkg).copied());
         self.baseline_raised_at = None;
         self.baseline_lowered_at = None;
+        self.package = next_package;
         self.active = false;
+        self.soc_level = 0;
         self.clear_runtime();
     }
 
@@ -349,10 +535,13 @@ impl FasController {
         thermal: ThermalPressure,
     ) {
         if !maestro {
+            self.remember_baseline();
             self.baseline_period = None;
             self.baseline_raised_at = None;
             self.baseline_lowered_at = None;
             self.last_hz = None;
+            self.package = None;
+            self.soc_level = 0;
             self.active = false;
             self.clear_runtime();
             return;
@@ -398,8 +587,13 @@ impl FasController {
         }
 
         if self.safety {
+            if self.recover_since.is_some() {
+                self.set_state(FasState::Recover);
+                return;
+            }
             self.heavy_streak = 0;
             self.trim_since = None;
+            self.dynamic_relax();
             let step_due = self
                 .last_safety_step
                 .map(|at| now.saturating_duration_since(at).as_millis() >= SAFETY_STEP_MS)
@@ -408,6 +602,7 @@ impl FasController {
                 self.step_down();
                 self.last_safety_step = Some(now);
             }
+            self.set_state(FasState::Safety);
             return;
         }
         self.last_safety_step = None;
@@ -420,6 +615,7 @@ impl FasController {
             .unwrap_or(true)
         {
             self.restore_caps();
+            self.set_state(FasState::Arm);
             self.clear_runtime();
             return;
         } else {
@@ -432,6 +628,7 @@ impl FasController {
         }
 
         let Some(target_ms) = self.target_period(active_hz) else {
+            self.set_state(FasState::Arm);
             self.restore_caps();
             return;
         };
@@ -441,6 +638,8 @@ impl FasController {
         if new_count == 0 {
             return;
         }
+
+        self.log_stats(&sample.frames, thermal, now);
 
         let budget_ms = target_ms * BUDGET_TOLERANCE_PERCENT / 100.0;
         let fast_window = last_window(&sample.frames, FAST_WINDOW_MS);
@@ -466,9 +665,11 @@ impl FasController {
             self.heavy_streak = 0;
             self.trim_since = None;
             self.boost();
+            self.set_state(FasState::Boost);
             return;
         }
 
+        let mut trimmed = false;
         if let Some(value) = p95_slow {
             if value <= budget_ms * TRIM_P95_PERCENT / 100.0 {
                 let since = *self.trim_since.get_or_insert(now);
@@ -480,6 +681,9 @@ impl FasController {
                 if now.saturating_duration_since(since).as_millis() >= hold {
                     self.trim_since = None;
                     self.step_down();
+                    self.dynamic_relax();
+                    self.trim_count = self.trim_count.saturating_add(1);
+                    trimmed = true;
                 }
             } else {
                 self.trim_since = None;
@@ -487,12 +691,21 @@ impl FasController {
         } else {
             self.trim_since = None;
         }
+
+        let next = classify_state(
+            self.safety,
+            self.recover_since.is_some(),
+            self.baseline_period.is_some(),
+            boost,
+            trimmed,
+        );
+        self.set_state(next);
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{last_window, percentile, Cluster};
+    use super::{classify_state, last_window, percentile, Cluster, FasState};
 
     fn cluster(freqs: Vec<u64>, hw_max: u64, floor: u64) -> Cluster {
         Cluster {
@@ -536,5 +749,21 @@ mod tests {
     fn accumulates_time_window_from_newest_frames() {
         let frames = [100.0, 10.0, 10.0, 10.0, 10.0];
         assert_eq!(last_window(&frames, 30.0), &[10.0, 10.0, 10.0]);
+    }
+
+    #[test]
+    fn prioritizes_safety_and_recovery_states() {
+        assert_eq!(
+            classify_state(true, false, true, true, true),
+            FasState::Safety
+        );
+        assert_eq!(
+            classify_state(true, true, true, true, true),
+            FasState::Recover
+        );
+        assert_eq!(classify_state(false, false, false, true, true), FasState::Arm);
+        assert_eq!(classify_state(false, false, true, true, false), FasState::Boost);
+        assert_eq!(classify_state(false, false, true, false, true), FasState::Trim);
+        assert_eq!(classify_state(false, false, true, false, false), FasState::Hold);
     }
 }

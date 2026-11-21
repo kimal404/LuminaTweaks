@@ -156,6 +156,14 @@ fn ddr_performance(lite: bool) -> usize {
 
 fn ddr_balance() -> usize {
     let mut applied = 0;
+    if crate::tweaks::state::restore_path(HELIO_FORCE_PATH) {
+        applied += 1;
+    }
+    for path in dvfsrc_platform_nodes() {
+        if crate::tweaks::state::restore_path(&path) {
+            applied += 1;
+        }
+    }
     if let Some(base) = super::find_devfreq(&["mtk-dvfsrc-devfreq"]) {
         applied += super::devfreq_unlock(&base);
     }
@@ -261,6 +269,14 @@ fn powersave_profile() -> usize {
     }
     applied += super::mali_power_policy(SocProfile::Eco);
     applied
+}
+
+pub(crate) fn frame_boost() -> usize {
+    ddr_performance(false)
+}
+
+pub(crate) fn frame_relax() -> usize {
+    ddr_balance()
 }
 
 pub fn apply(profile: SocProfile) -> usize {

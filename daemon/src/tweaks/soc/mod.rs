@@ -88,6 +88,32 @@ pub enum SocProfile {
     Maestro,
 }
 
+pub fn frame_boost() -> usize {
+    match vendor() {
+        Vendor::Mediatek => mediatek::frame_boost(),
+        Vendor::Snapdragon => snapdragon::frame_boost(),
+        Vendor::Exynos => exynos::frame_boost(),
+        Vendor::Unisoc => unisoc::frame_boost(),
+        Vendor::Tensor => tensor::frame_boost(),
+        Vendor::Tegra => tegra::frame_boost(),
+        Vendor::Kirin => kirin::frame_boost(),
+        Vendor::Generic => generic::frame_boost(),
+    }
+}
+
+pub fn frame_relax() -> usize {
+    match vendor() {
+        Vendor::Mediatek => mediatek::frame_relax(),
+        Vendor::Snapdragon => snapdragon::frame_relax(),
+        Vendor::Exynos => exynos::frame_relax(),
+        Vendor::Unisoc => unisoc::frame_relax(),
+        Vendor::Tensor => tensor::frame_relax(),
+        Vendor::Tegra => tegra::frame_relax(),
+        Vendor::Kirin => kirin::frame_relax(),
+        Vendor::Generic => generic::frame_relax(),
+    }
+}
+
 pub fn apply(profile: SocProfile) -> usize {
     let vendor = vendor();
     let applied = match vendor {

@@ -160,6 +160,21 @@ pub fn write_tracked_quiet(path: &str, value: &str, lock: bool) -> bool {
     crate::tweaks::engine::write_sysfs_quiet(path, value, lock)
 }
 
+pub fn restore_path(path: &str) -> bool {
+    if is_forbidden_node(path) || !Path::new(path).exists() {
+        return false;
+    }
+    let mut guard = STATE.lock().unwrap_or_else(|error| error.into_inner());
+    let snapshot = guard.get_or_insert_with(load_snapshot);
+    let Some(entry) = snapshot.entries.get(path) else {
+        return false;
+    };
+    let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o644));
+    let ok = fs::write(path, entry.value.as_bytes()).is_ok();
+    let _ = fs::set_permissions(path, fs::Permissions::from_mode(entry.mode));
+    ok
+}
+
 pub fn discard() {
     let mut guard = STATE.lock().unwrap_or_else(|error| error.into_inner());
     *guard = None;

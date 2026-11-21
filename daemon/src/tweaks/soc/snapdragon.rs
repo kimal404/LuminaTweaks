@@ -138,6 +138,22 @@ fn powersave_profile() -> usize {
     super::devfreq_min_perf(&base)
 }
 
+pub(crate) fn frame_boost() -> usize {
+    let mut applied = ddr_profile(false);
+    if let Some(base) = kgsl_devfreq() {
+        applied += super::devfreq_max_perf(&base);
+    }
+    applied
+}
+
+pub(crate) fn frame_relax() -> usize {
+    let mut applied = ddr_balance();
+    if let Some(base) = kgsl_devfreq() {
+        applied += super::devfreq_unlock(&base);
+    }
+    applied
+}
+
 pub fn apply(profile: SocProfile) -> usize {
     match profile {
         SocProfile::Lite => lite_profile(),

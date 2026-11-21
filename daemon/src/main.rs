@@ -833,7 +833,7 @@ fn main() {
             };
 
             if target != last_pkg_for_texture {
-                fas_controller.reset();
+                fas_controller.reset(target.as_deref());
                 if let Some(ref pkg) = target {
                     TextureController::apply_foreground(pkg);
                     if TextureController::is_angle_active_for(pkg) {

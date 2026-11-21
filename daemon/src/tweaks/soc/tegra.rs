@@ -17,6 +17,31 @@ fn set_rate(dir: &str, node: &str, value: u64) -> usize {
     ))
 }
 
+pub(crate) fn frame_boost() -> usize {
+    let Some(dir) = gpu_dir() else {
+        return 0;
+    };
+    let values = super::read_frequencies(&format!("{}/available_frequencies", dir));
+    let Some(max) = crate::tweaks::devfreq::max_frequency(&values) else {
+        return 0;
+    };
+    set_rate(dir, "gpu_cap_rate", max)
+}
+
+pub(crate) fn frame_relax() -> usize {
+    let Some(dir) = gpu_dir() else {
+        return 0;
+    };
+    let values = super::read_frequencies(&format!("{}/available_frequencies", dir));
+    let (Some(min), Some(max)) = (
+        crate::tweaks::devfreq::min_frequency(&values),
+        crate::tweaks::devfreq::max_frequency(&values),
+    ) else {
+        return 0;
+    };
+    set_rate(dir, "gpu_cap_rate", max) + set_rate(dir, "gpu_floor_rate", min)
+}
+
 pub fn apply(profile: SocProfile) -> usize {
     let Some(dir) = gpu_dir() else {
         return 0;

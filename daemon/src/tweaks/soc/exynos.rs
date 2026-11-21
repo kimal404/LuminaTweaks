@@ -72,6 +72,14 @@ fn mif(profile: SocProfile) -> usize {
     applied
 }
 
+pub(crate) fn frame_boost() -> usize {
+    mif(SocProfile::Maestro)
+}
+
+pub(crate) fn frame_relax() -> usize {
+    mif(SocProfile::Balance)
+}
+
 pub fn apply(profile: SocProfile) -> usize {
     let mut applied = apply_gpu(profile);
     let policy = match profile {
