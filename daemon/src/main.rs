@@ -89,14 +89,20 @@ impl Profile {
         }
     }
 
+    pub fn display_name(&self, lite: bool) -> &'static str {
+        match (self, lite) {
+            (Profile::Performance, true) => "Performance Lite",
+            _ => self.as_str(),
+        }
+    }
+
     pub fn from_name(name: &str) -> Option<Profile> {
         match name.trim().to_ascii_lowercase().as_str() {
             "eco" | "powersave" | "power save" | "hemat daya" => Some(Profile::Eco),
             "balanced" | "balance" | "seimbang" => Some(Profile::Balance),
-            "performance" | "performa" => Some(Profile::Performance),
-            "performance lite" | "performance_lite" | "performance-lite" | "maestro" => {
-                Some(Profile::Maestro)
-            }
+            "performance" | "performa" | "performance lite" | "performance_lite"
+            | "performance-lite" => Some(Profile::Performance),
+            "maestro" => Some(Profile::Maestro),
             _ => None,
         }
     }
@@ -107,7 +113,7 @@ fn apply_profile(profile: Profile, lite: bool) {
         Profile::Eco => engine::eco_profile(),
         Profile::Balance => engine::balance_profile(),
         Profile::Maestro => engine::maestro_profile(lite),
-        Profile::Performance => engine::performance_profile(),
+        Profile::Performance => engine::performance_profile(lite),
     }
 }
 
@@ -274,9 +280,9 @@ impl EngineRuntime {
         }
     }
 
-    fn update_shared_state(&self, profile: Profile, target_pkg: Option<&str>) {
+    fn update_shared_state(&self, profile: Profile, lite: bool, target_pkg: Option<&str>) {
         if let Ok(mut p) = self.shared_state.current_profile.lock() {
-            *p = profile.as_str().to_string();
+            *p = profile.display_name(lite).to_string();
         }
         if let Ok(mut pkg) = self.shared_state.active_package.lock() {
             *pkg = target_pkg.map(|s| s.to_string());
@@ -340,7 +346,7 @@ impl EngineRuntime {
 
             if is_profile_changing {
                 apply_profile(target_profile, target_lite);
-                set_system_profile_prop(target_profile.as_str());
+                set_system_profile_prop(target_profile.display_name(target_lite));
                 match target_profile {
                     Profile::Eco => {
                         log!("[POWER] ECO \u{2794} CPU powersave");
@@ -362,15 +368,16 @@ impl EngineRuntime {
                     }
                     Profile::Performance => {
                         log!(
-                            "[BOOST]  {} ({}) \u{2794} PERFORMANCE [Static Peak | Thermal Guard]",
+                            "[BOOST]  {} ({}) \u{2794} PERFORMANCE{} [Static Peak | Thermal Guard]",
                             target_pkg.unwrap_or("system"),
-                            self.active_target_pid
+                            self.active_target_pid,
+                            if target_lite { " LITE" } else { "" }
                         );
                     }
                 }
                 self.current_profile = Some(target_profile);
                 self.current_lite = target_lite;
-                self.update_shared_state(target_profile, target_pkg);
+                self.update_shared_state(target_profile, target_lite, target_pkg);
             }
         }
 
@@ -468,7 +475,7 @@ impl EngineRuntime {
         self.active_target_pkg = None;
         self.active_target_pid = 0;
         self.target_game_pid = 0;
-        self.update_shared_state(Profile::Balance, None);
+        self.update_shared_state(Profile::Balance, false, None);
 
         let global_rr = display::get_saved_mode_id();
         if global_rr != self.current_applied_rr {
@@ -547,12 +554,11 @@ fn main() {
             apply_profile(profile, lite);
             runtime.current_profile = Some(profile);
             runtime.current_lite = lite;
-            runtime.update_shared_state(profile, None);
-            set_system_profile_prop(profile.as_str());
+            runtime.update_shared_state(profile, lite, None);
+            set_system_profile_prop(profile.display_name(lite));
             log!(
-                "[PROFILE] Manual mode active -> {}{}",
-                profile.as_str(),
-                if lite { " Lite" } else { "" }
+                "[PROFILE] Manual mode active -> {}",
+                profile.display_name(lite)
             );
         }
     }
@@ -606,12 +612,11 @@ fn main() {
                 runtime.current_profile = Some(profile);
                 runtime.current_lite = lite;
                 persist_manual_profile(profile);
-                set_system_profile_prop(profile.as_str());
-                runtime.update_shared_state(profile, runtime.active_target_pkg.as_deref());
+                set_system_profile_prop(profile.display_name(lite));
+                runtime.update_shared_state(profile, lite, runtime.active_target_pkg.as_deref());
                 log!(
-                    "[PROFILE] Manual selection -> {}{}",
-                    profile.as_str(),
-                    if lite { " Lite" } else { "" }
+                    "[PROFILE] Manual selection -> {}",
+                    profile.display_name(lite)
                 );
             }
         }
@@ -663,9 +668,10 @@ fn main() {
                         apply_profile(profile, lite);
                         runtime.current_profile = Some(profile);
                         runtime.current_lite = lite;
-                        set_system_profile_prop(profile.as_str());
+                        set_system_profile_prop(profile.display_name(lite));
                         runtime.update_shared_state(
                             profile,
+                            lite,
                             runtime.active_target_pkg.as_deref(),
                         );
                     }
@@ -688,9 +694,10 @@ fn main() {
                         apply_profile(profile, lite);
                         runtime.current_profile = Some(profile);
                         runtime.current_lite = lite;
-                        set_system_profile_prop(profile.as_str());
+                        set_system_profile_prop(profile.display_name(lite));
                         runtime.update_shared_state(
                             profile,
+                            lite,
                             runtime.active_target_pkg.as_deref(),
                         );
                     }
@@ -909,7 +916,7 @@ fn main() {
         let profile_label = runtime
             .current_profile
             .unwrap_or(Profile::Balance)
-            .as_str();
+            .display_name(runtime.current_lite);
         session_recorder.tick(screen_awake, focused.as_deref(), profile_label);
         let session_start_ms = session_recorder
             .active_start_ms()
@@ -980,9 +987,10 @@ mod profile_tests {
         assert_eq!(Profile::from_name("performance"), Some(Profile::Performance));
         assert_eq!(
             Profile::from_name("Performance Lite"),
-            Some(Profile::Maestro)
+            Some(Profile::Performance)
         );
         assert_eq!(Profile::from_name("Maestro"), Some(Profile::Maestro));
         assert_eq!(Profile::Performance.as_str(), "Performance");
+        assert_eq!(Profile::Performance.display_name(true), "Performance Lite");
     }
 }

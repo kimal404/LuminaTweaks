@@ -56,11 +56,16 @@ object ConfigRepository {
     private fun normalizeProfileName(raw: String): String {
         val value = raw.trim()
         return when (value.lowercase()) {
-            "performance", "performa" -> "performance"
-            "performance lite", "performance_lite", "performance-lite" -> "maestro"
+            "performance", "performa", "performance lite", "performance_lite",
+            "performance-lite" -> "performance"
             "" -> "default"
             else -> value
         }
+    }
+
+    private fun isPerformanceLiteProfile(raw: String): Boolean = when (raw.trim().lowercase()) {
+        "performance lite", "performance_lite", "performance-lite" -> true
+        else -> false
     }
 
     private const val CONFIG_DIR = "/data/adb/.config/lumina"
@@ -445,6 +450,13 @@ object ConfigRepository {
                         else -> "native"
                     }
                     val resolvedTextureEnabled = resolvedDriver == "angle" || legacyEnabled
+                    val rawProfile = obj.optString("profile", "default")
+                    val rawLite = obj.optString("lite_mode", "default")
+                    val resolvedLite = if (isPerformanceLiteProfile(rawProfile) && rawLite == "default") {
+                        "on"
+                    } else {
+                        rawLite
+                    }
 
                     result[pkg] = AppProfileConfig(
                         pkg = pkg,
@@ -455,8 +467,8 @@ object ConfigRepository {
                         } else {
                             obj.optBoolean("saklar_utama", false)
                         },
-                        profile = normalizeProfileName(obj.optString("profile", "default")),
-                        liteMode = obj.optString("lite_mode", "default"),
+                        profile = normalizeProfileName(rawProfile),
+                        liteMode = resolvedLite,
                         refreshRate = obj.optString("refresh_rate", "default"),
                         renderer = obj.optString("renderer", "default"),
                         dnd = obj.optString("dnd", "default"),
@@ -550,8 +562,14 @@ object ConfigRepository {
                 profile.textureEnabled || normalizedLod > 0 -> "angle"
                 else -> "native"
             }
+            val resolvedLite = if (isPerformanceLiteProfile(profile.profile) && profile.liteMode == "default") {
+                "on"
+            } else {
+                profile.liteMode
+            }
             val normalizedProfile = profile.copy(
                 profile = normalizeProfileName(profile.profile),
+                liteMode = resolvedLite,
                 textureDriver = normalizedDriver,
                 textureLod = normalizedLod,
                 textureEnabled = normalizedDriver == "angle" || profile.textureEnabled,

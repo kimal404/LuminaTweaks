@@ -334,31 +334,33 @@ fn cpufreq_ppm_maestro(lite: bool) {
     }
 }
 
-fn performance_floor(hw_min: u64, hw_max: u64, freqs: &[u64]) -> u64 {
-    let target = hw_max * 80 / 100;
+fn performance_floor(hw_min: u64, cap: u64, freqs: &[u64]) -> u64 {
+    let target = cap * 80 / 100;
     crate::tweaks::devfreq::nearest_frequency(freqs, target)
         .unwrap_or(target)
-        .clamp(hw_min, hw_max)
+        .clamp(hw_min, cap)
 }
 
-fn cpufreq_performance() {
+fn cpufreq_performance(lite: bool) {
     for base in cpu_policy_dirs() {
         let Some((hw_min, hw_max, freqs)) = hardware_limits(&base) else {
             continue;
         };
-        let floor = performance_floor(hw_min, hw_max, &freqs);
-        profile_write(&format!("{}/scaling_max_freq", base), &hw_max.to_string());
+        let cap = maestro_cap(hw_max, lite, &freqs).max(hw_min);
+        let floor = performance_floor(hw_min, cap, &freqs);
+        profile_write(&format!("{}/scaling_max_freq", base), &cap.to_string());
         profile_write(&format!("{}/scaling_min_freq", base), &floor.to_string());
     }
 }
 
-fn cpufreq_ppm_performance() {
+fn cpufreq_ppm_performance(lite: bool) {
     for (cluster, base) in cpu_policy_dirs().iter().enumerate() {
         let Some((hw_min, hw_max, freqs)) = hardware_limits(base) else {
             continue;
         };
-        let floor = performance_floor(hw_min, hw_max, &freqs);
-        profile_write(PPM_MAX_PATH, &format!("{} {}", cluster, hw_max));
+        let cap = maestro_cap(hw_max, lite, &freqs).max(hw_min);
+        let floor = performance_floor(hw_min, cap, &freqs);
+        profile_write(PPM_MAX_PATH, &format!("{} {}", cluster, cap));
         profile_write(PPM_MIN_PATH, &format!("{} {}", cluster, floor));
     }
 }
@@ -505,14 +507,14 @@ pub fn maestro_profile(lite: bool) {
     drop_caches();
 }
 
-pub fn performance_profile() {
+pub fn performance_profile(lite: bool) {
     apply_battery_saver(false);
     crate::tweaks::sched::apply_maestro();
     apply_vfs_cache_pressure("80");
     apply_performance_governor();
-    cpufreq_performance();
+    cpufreq_performance(lite);
     if ppm_available() {
-        cpufreq_ppm_performance();
+        cpufreq_ppm_performance(lite);
     }
     apply_io_latency(true);
     apply_ufs_antistall();
@@ -1056,7 +1058,7 @@ pub fn sync_global_tweaks() {
 
 #[cfg(test)]
 mod tests {
-    use super::selected_algorithm;
+    use super::{maestro_cap, performance_floor, selected_algorithm};
 
     #[test]
     fn selects_bracketed_compression_algorithm() {
@@ -1065,5 +1067,15 @@ mod tests {
             Some("lz4hc")
         );
         assert_eq!(selected_algorithm("lzo lz4 zstd"), None);
+    }
+
+    #[test]
+    fn performance_lite_reduces_cap_and_floor() {
+        let hw_max = 2_000_000;
+        let lite_cap = maestro_cap(hw_max, true, &[]);
+        assert_eq!(maestro_cap(hw_max, false, &[]), hw_max);
+        assert_eq!(lite_cap, 1_560_000);
+        assert_eq!(performance_floor(300_000, hw_max, &[]), 1_600_000);
+        assert_eq!(performance_floor(300_000, lite_cap, &[]), 1_248_000);
     }
 }

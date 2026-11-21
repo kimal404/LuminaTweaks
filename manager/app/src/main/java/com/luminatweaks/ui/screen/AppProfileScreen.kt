@@ -218,12 +218,8 @@ fun AppProfileScreen(
                 ProfileSheetOption("maestro", stringResource(R.string.aosp_profile_maestro)),
                 ProfileSheetOption("performance", stringResource(R.string.aosp_profile_performance))
             )
-            val effectiveAppProfile = when (profile.profile.lowercase()) {
-                "performance lite", "performance_lite", "performance-lite" -> "maestro"
-                else -> profile.profile
-            }
             val currentAppProfileLabel = profileOptions
-                .find { it.value == effectiveAppProfile }?.label
+                .find { it.value == profile.profile }?.label
                 ?: stringResource(R.string.opt_default)
 
             val isTextureLocked = profile.textureEnabled || profile.textureLod > 0

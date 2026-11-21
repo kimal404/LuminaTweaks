@@ -806,6 +806,7 @@ fn extract_app_config(item: &Value) -> AppConfig {
         .map(is_truthy)
         .unwrap_or(false);
 
+    let mut legacy_performance_lite = false;
     let profile = match item
         .get("profile")
         .or_else(|| item.get("profile_mode"))
@@ -813,9 +814,14 @@ fn extract_app_config(item: &Value) -> AppConfig {
     {
         Some(Value::String(s)) => {
             let value = s.trim();
-            match value.to_ascii_lowercase().as_str() {
+            let lower = value.to_ascii_lowercase();
+            legacy_performance_lite = matches!(
+                lower.as_str(),
+                "performance lite" | "performance_lite" | "performance-lite"
+            );
+            match lower.as_str() {
                 "performance" | "performa" | "performance lite" | "performance_lite"
-                | "performance-lite" => "maestro".to_string(),
+                | "performance-lite" => "performance".to_string(),
                 _ if value.is_empty() => "default".to_string(),
                 _ => value.to_string(),
             }
@@ -833,6 +839,11 @@ fn extract_app_config(item: &Value) -> AppConfig {
         }
         Some(Value::String(s)) => s.clone(),
         _ => "default".to_string(),
+    };
+    let lite_mode = if legacy_performance_lite && lite_mode == "default" {
+        "on".to_string()
+    } else {
+        lite_mode
     };
 
     let dnd = match item.get("dnd") {

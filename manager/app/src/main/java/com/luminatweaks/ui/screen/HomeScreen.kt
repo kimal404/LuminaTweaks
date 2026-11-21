@@ -746,7 +746,6 @@ fun HomeDashboardContent(
 
     val profileDisplayValue = when {
         currentProfile.equals("Eco", ignoreCase = true) -> "Powersave"
-        currentProfile.equals("Performance Lite", ignoreCase = true) -> "Maestro"
         else -> currentProfile
     }
 
