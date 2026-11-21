@@ -1,5 +1,6 @@
 package com.luminatweaks.ui.screen
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -24,8 +25,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.KeyboardArrowLeft
+import androidx.compose.material.icons.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -64,10 +66,24 @@ import com.luminatweaks.data.GameBarSide
 import com.luminatweaks.model.AppItem
 import com.luminatweaks.service.GameBarService
 import com.luminatweaks.ui.component.LuminaBackButton
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+private data class GameBarSizePreset(
+    val label: String,
+    val panelWidthDp: Int,
+    val handleHeightDp: Int,
+    val handleThicknessDp: Int
+)
+
+private val gameBarSizePresets = listOf(
+    GameBarSizePreset("Ringkas", 300, 104, 18),
+    GameBarSizePreset("Standar", 336, 120, 22),
+    GameBarSizePreset("Lebar", 400, 144, 24)
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,10 +93,32 @@ fun GameBarSettingsScreen(onBack: () -> Unit) {
     var config by remember { mutableStateOf(GameBarPrefs.load(context)) }
     var showAppPicker by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
+    val selectedPresetWidth = gameBarSizePresets
+        .minByOrNull { abs(it.panelWidthDp - config.panelWidthDp) }
+        ?.panelWidthDp
 
     fun save(updated: GameBarConfig) {
         config = updated
         GameBarPrefs.save(context, updated)
+    }
+
+    fun setEnabled(enabled: Boolean) {
+        if (enabled) {
+            busy = true
+            scope.launch {
+                val granted = GameBarService.ensureOverlayPermission(context)
+                busy = false
+                if (granted) {
+                    val updated = config.copy(enabled = true)
+                    save(updated)
+                    GameBarService.sync(context, updated)
+                }
+            }
+        } else {
+            val updated = config.copy(enabled = false)
+            save(updated)
+            GameBarService.sync(context, updated)
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -142,93 +180,181 @@ fun GameBarSettingsScreen(onBack: () -> Unit) {
                 start = 16.dp,
                 end = 16.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item(key = "hero") {
-                Surface(
-                    shape = RoundedCornerShape(28.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer
-                ) {
+                GameBarHero(
+                    enabled = config.enabled,
+                    busy = busy,
+                    onEnabledChange = { setEnabled(it) }
+                )
+            }
+
+            item(key = "preview") {
+                GameBarPreview(config)
+            }
+
+            item(key = "behavior") {
+                GameBarSettingsCard {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(18.dp),
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Surface(
-                            shape = RoundedCornerShape(18.dp),
-                            color = MaterialTheme.colorScheme.primary
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.SportsEsports,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.padding(12.dp).size(26.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Game Bar",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                text = "Otomatis saat game",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.SemiBold
                             )
                             Text(
-                                text = "Sidepanel dalam game: profil, FPS, suhu, volume, dan quick apps.",
+                                text = if (config.autoGame) {
+                                    "Panel muncul saat game terdeteksi"
+                                } else {
+                                    "Panel selalu tampil saat diaktifkan"
+                                },
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.76f)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                        }
+                        Switch(
+                            checked = config.autoGame,
+                            onCheckedChange = { save(config.copy(autoGame = it)) }
+                        )
+                    }
+                }
+            }
+
+            item(key = "layout") {
+                GameBarSettingsSection("Tata letak")
+                GameBarSettingsCard {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text(
+                            text = "Posisi panel",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            GameBarSideOption(
+                                label = "Kiri",
+                                selected = config.side == GameBarSide.LEFT,
+                                icon = Icons.Rounded.KeyboardArrowLeft,
+                                modifier = Modifier.weight(1f),
+                                onClick = { save(config.copy(side = GameBarSide.LEFT)) }
+                            )
+                            GameBarSideOption(
+                                label = "Kanan",
+                                selected = config.side == GameBarSide.RIGHT,
+                                icon = Icons.Rounded.KeyboardArrowRight,
+                                modifier = Modifier.weight(1f),
+                                onClick = { save(config.copy(side = GameBarSide.RIGHT)) }
+                            )
+                        }
+                        Text(
+                            text = "Ukuran",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            gameBarSizePresets.forEach { preset ->
+                                GameBarSizeOption(
+                                    preset = preset,
+                                    selected = selectedPresetWidth == preset.panelWidthDp,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = {
+                                        save(
+                                            config.copy(
+                                                panelWidthDp = preset.panelWidthDp,
+                                                handleHeightDp = preset.handleHeightDp,
+                                                handleThicknessDp = preset.handleThicknessDp
+                                            )
+                                        )
+                                    }
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            item(key = "header_behavior") {
-                GameBarSectionHeader("Perilaku")
+            item(key = "appearance") {
+                GameBarSettingsSection("Tampilan")
+                GameBarSettingsCard {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Transparansi panel",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = "${(config.opacity * 100).roundToInt()}%",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Slider(
+                            value = config.opacity.coerceIn(0.55f, 1f),
+                            onValueChange = { save(config.copy(opacity = it)) },
+                            valueRange = 0.55f..1f
+                        )
+                    }
+                }
             }
 
-            item(key = "group_behavior") {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    GameBarSwitchRow(
-                        index = 0,
-                        count = 2,
-                        icon = Icons.Rounded.Settings,
-                        title = "Aktifkan Game Bar",
-                        subtitle = if (config.enabled) "Siap tampil di dalam game" else "Nonaktif",
-                        checked = config.enabled,
-                        enabled = !busy,
-                        onCheckedChange = { enabled ->
-                            if (enabled) {
-                                busy = true
-                                scope.launch {
-                                    val granted = GameBarService.ensureOverlayPermission(context)
-                                    busy = false
-                                    if (granted) {
-                                        val updated = config.copy(enabled = true)
-                                        save(updated)
-                                        GameBarService.sync(context, updated)
-                                    }
-                                }
-                            } else {
-                                val updated = config.copy(enabled = false)
-                                save(updated)
-                                GameBarService.sync(context, updated)
-                            }
+            item(key = "quick_apps") {
+                GameBarSettingsSection("Aplikasi cepat")
+                GameBarSettingsCard {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showAppPicker = true }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Apps,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(9.dp).size(20.dp)
+                            )
                         }
-                    )
-                    GameBarSwitchRow(
-                        index = 1,
-                        count = 2,
-                        icon = Icons.Rounded.SportsEsports,
-                        title = "Tampil otomatis saat game",
-                        subtitle = "Mengikuti daftar game dan deteksi foreground Lumina",
-                        checked = config.autoGame,
-                        enabled = !busy,
-                        onCheckedChange = { auto ->
-                            save(config.copy(autoGame = auto))
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Pilih Quick Apps",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = if (config.quickApps.isEmpty()) {
+                                    "Belum ada aplikasi dipilih"
+                                } else {
+                                    "${config.quickApps.size} aplikasi dipilih"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                    )
+                        Icon(
+                            imageVector = Icons.Rounded.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
@@ -238,7 +364,7 @@ fun GameBarSettingsScreen(onBack: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     GameBarActionButton(
-                        icon = if (busy) Icons.Rounded.VisibilityOff else Icons.Rounded.PlayArrow,
+                        icon = Icons.Rounded.PlayArrow,
                         label = "Tampilkan",
                         enabled = !busy,
                         modifier = Modifier.weight(1f),
@@ -259,115 +385,174 @@ fun GameBarSettingsScreen(onBack: () -> Unit) {
                     )
                 }
             }
-
-            item(key = "header_layout") {
-                GameBarSectionHeader("Tata Letak")
-            }
-
-            item(key = "group_layout") {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    Text(
-                        text = "Sisi layar",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        GameBarSideChip(
-                            label = "Kiri",
-                            selected = config.side == GameBarSide.LEFT,
-                            modifier = Modifier.weight(1f),
-                            onClick = { save(config.copy(side = GameBarSide.LEFT)) }
-                        )
-                        GameBarSideChip(
-                            label = "Kanan",
-                            selected = config.side == GameBarSide.RIGHT,
-                            modifier = Modifier.weight(1f),
-                            onClick = { save(config.copy(side = GameBarSide.RIGHT)) }
-                        )
-                    }
-                    GameBarSliderSetting(
-                        label = "Transparansi panel",
-                        value = config.opacity,
-                        valueRange = 0.55f..1f,
-                        valueLabel = "${(config.opacity * 100).roundToInt()}%",
-                        onValueChange = { save(config.copy(opacity = it)) }
-                    )
-                    GameBarSliderSetting(
-                        label = "Panjang handle",
-                        value = config.handleHeightDp.toFloat(),
-                        valueRange = 88f..220f,
-                        valueLabel = "${config.handleHeightDp} dp",
-                        onValueChange = { save(config.copy(handleHeightDp = it.roundToInt())) }
-                    )
-                    GameBarSliderSetting(
-                        label = "Ketebalan handle",
-                        value = config.handleThicknessDp.toFloat(),
-                        valueRange = 12f..32f,
-                        valueLabel = "${config.handleThicknessDp} dp",
-                        onValueChange = { save(config.copy(handleThicknessDp = it.roundToInt())) }
-                    )
-                    GameBarSliderSetting(
-                        label = "Lebar panel",
-                        value = config.panelWidthDp.toFloat(),
-                        valueRange = 280f..440f,
-                        valueLabel = "${config.panelWidthDp} dp",
-                        onValueChange = { save(config.copy(panelWidthDp = it.roundToInt())) }
-                    )
-                }
-            }
-
-            item(key = "header_quick") {
-                GameBarSectionHeader("Quick Apps")
-            }
-
-            item(key = "group_quick") {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = if (config.quickApps.isEmpty()) {
-                            "Belum ada aplikasi dipilih"
-                        } else {
-                            "${config.quickApps.size} aplikasi dipilih"
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    TextButton(
-                        onClick = { showAppPicker = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Apps,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Pilih Quick Apps")
-                    }
-                }
-            }
         }
     }
 }
 
 @Composable
-private fun GameBarSectionHeader(title: String) {
+private fun GameBarHero(
+    enabled: Boolean,
+    busy: Boolean,
+    onEnabledChange: (Boolean) -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(30.dp),
+        color = MaterialTheme.colorScheme.primaryContainer
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.primary
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.SportsEsports,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.padding(12.dp).size(28.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Game Bar",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Text(
+                    text = if (enabled) "Aktif di dalam game" else "Nonaktif",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.76f)
+                )
+            }
+            Switch(
+                checked = enabled,
+                enabled = !busy,
+                onCheckedChange = onEnabledChange
+            )
+        }
+    }
+}
+
+@Composable
+private fun GameBarPreview(config: GameBarConfig) {
+    val isLeft = config.side == GameBarSide.LEFT
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(192.dp)
+            .clip(RoundedCornerShape(28.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .padding(14.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(20.dp))
+                .background(MaterialTheme.colorScheme.surfaceDim.copy(alpha = 0.55f))
+        )
+        Surface(
+            modifier = Modifier
+                .align(if (isLeft) Alignment.CenterStart else Alignment.CenterEnd)
+                .width(154.dp)
+                .height(154.dp),
+            shape = RoundedCornerShape(
+                topStart = if (isLeft) 8.dp else 24.dp,
+                bottomStart = if (isLeft) 8.dp else 24.dp,
+                topEnd = if (isLeft) 24.dp else 8.dp,
+                bottomEnd = if (isLeft) 24.dp else 8.dp
+            ),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(
+                alpha = config.opacity.coerceIn(0.55f, 1f)
+            ),
+            shadowElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .height(7.dp)
+                            .weight(1f)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.28f))
+                    )
+                }
+                Text(
+                    text = "120",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    repeat(4) { index ->
+                        Box(
+                            modifier = Modifier
+                                .height(18.dp)
+                                .weight(1f)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(
+                                    if (index == 3) {
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceContainerHighest
+                                    }
+                                )
+                        )
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(5.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.20f))
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(5.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.20f))
+                )
+            }
+        }
+        Surface(
+            modifier = Modifier
+                .align(if (isLeft) Alignment.CenterStart else Alignment.CenterEnd)
+                .width(8.dp)
+                .height(74.dp)
+                .padding(vertical = 3.dp),
+            shape = RoundedCornerShape(
+                topStart = if (isLeft) 2.dp else 8.dp,
+                bottomStart = if (isLeft) 2.dp else 8.dp,
+                topEnd = if (isLeft) 8.dp else 2.dp,
+                bottomEnd = if (isLeft) 8.dp else 2.dp
+            ),
+            color = MaterialTheme.colorScheme.primary
+        ) {}
+    }
+}
+
+@Composable
+private fun GameBarSettingsSection(title: String) {
     Text(
         text = title,
-        modifier = Modifier.padding(top = 4.dp, start = 4.dp),
+        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
         style = MaterialTheme.typography.titleSmall,
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -375,63 +560,116 @@ private fun GameBarSectionHeader(title: String) {
 }
 
 @Composable
-private fun GameBarSwitchRow(
-    index: Int,
-    count: Int,
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    enabled: Boolean = true,
-    onCheckedChange: (Boolean) -> Unit
-) {
+private fun GameBarSettingsCard(content: @Composable () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = when {
-            count <= 1 -> RoundedCornerShape(24.dp)
-            index == 0 -> RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
-            index == count - 1 -> RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)
-            else -> RoundedCornerShape(0.dp)
-        },
+        shape = RoundedCornerShape(26.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
+        content()
+    }
+}
+
+@Composable
+private fun GameBarSideOption(
+    label: String,
+    selected: Boolean,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val color by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHighest
+        },
+        label = "gameBarSideColor"
+    )
+    Surface(
+        modifier = modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        color = color
+    ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(enabled = enabled) { onCheckedChange(!checked) }
-                .padding(horizontal = 16.dp, vertical = 13.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
+            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.secondaryContainer
-            ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (selected) {
+                    MaterialTheme.colorScheme.onPrimary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = if (selected) {
+                    MaterialTheme.colorScheme.onPrimary
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun GameBarSizeOption(
+    preset: GameBarSizePreset,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val color by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHighest
+        },
+        label = "gameBarSizeColor"
+    )
+    Surface(
+        modifier = modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        color = color
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            if (selected) {
                 Icon(
-                    imageVector = icon,
+                    imageVector = Icons.Rounded.Check,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.padding(9.dp).size(20.dp)
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(15.dp)
                 )
             }
-            Spacer(modifier = Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Switch(
-                checked = checked,
-                enabled = enabled,
-                onCheckedChange = onCheckedChange
+            Text(
+                text = preset.label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                color = if (selected) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                }
+            )
+            Text(
+                text = "${preset.panelWidthDp} dp",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
             )
         }
     }
@@ -475,80 +713,6 @@ private fun GameBarActionButton(
 }
 
 @Composable
-private fun GameBarSideChip(
-    label: String,
-    selected: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(18.dp),
-        color = if (selected) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            MaterialTheme.colorScheme.surfaceContainerHighest
-        }
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (selected) {
-                Icon(
-                    imageVector = Icons.Rounded.Check,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-            }
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = if (selected) {
-                    MaterialTheme.colorScheme.onPrimary
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                }
-            )
-        }
-    }
-}
-
-@Composable
-private fun GameBarSliderSetting(
-    label: String,
-    value: Float,
-    valueRange: ClosedFloatingPointRange<Float>,
-    valueLabel: String,
-    onValueChange: (Float) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                text = valueLabel,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
-        Slider(
-            value = value.coerceIn(valueRange.start, valueRange.endInclusive),
-            onValueChange = onValueChange,
-            valueRange = valueRange
-        )
-    }
-}
-
-@Composable
 private fun QuickAppsPickerDialog(
     selected: Set<String>,
     onDismiss: () -> Unit,
@@ -582,7 +746,7 @@ private fun QuickAppsPickerDialog(
         text = {
             Column {
                 Text(
-                    text = "Pilih maksimal 12 aplikasi untuk ditampilkan di Game Bar.",
+                    text = "Pilih maksimal 12 aplikasi untuk Game Bar.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

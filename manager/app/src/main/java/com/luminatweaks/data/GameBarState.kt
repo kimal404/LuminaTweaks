@@ -13,6 +13,7 @@ data class GameBarUiState(
     val profile: String = "Balanced",
     val autoProfile: Boolean = true,
     val gameLabel: String? = null,
+    val gamePackage: String? = null,
     val cpuPercent: Int? = null,
     val gpuPercent: Int? = null,
     val tempLabel: String = "--",

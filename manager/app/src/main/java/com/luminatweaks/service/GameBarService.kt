@@ -318,6 +318,7 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
                 profile = metrics.profile,
                 autoProfile = metrics.autoProfile,
                 gameLabel = cachedGameLabel,
+                gamePackage = cachedGamePackage,
                 cpuPercent = metrics.cpuPercent,
                 gpuPercent = metrics.gpuPercent,
                 tempLabel = metrics.tempLabel,
