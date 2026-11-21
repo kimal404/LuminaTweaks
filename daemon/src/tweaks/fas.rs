@@ -2,6 +2,7 @@ use crate::tweaks::devfreq::nearest_frequency;
 use crate::tweaks::engine::{cpu_policy_dirs, hardware_limits, set_ppm_hard_max};
 use crate::tweaks::fps::FrameTap;
 use crate::tweaks::state;
+use crate::tweaks::thermal::ThermalPressure;
 use std::fs;
 use std::path::Path;
 use std::time::Instant;
@@ -20,6 +21,9 @@ const BASELINE_WINDOW_MS: f32 = 10_000.0;
 const BASELINE_RAISE_HOLD_MS: u128 = 15_000;
 const BASELINE_LOWER_HOLD_MS: u128 = 3_000;
 const TRIM_HOLD_MS: u128 = 5_000;
+const WARM_TRIM_HOLD_MS: u128 = 2_000;
+const SAFETY_STEP_MS: u128 = 2_000;
+const RECOVER_HOLD_MS: u128 = 5_000;
 const STALE_AFTER_MS: u128 = 1_500;
 const MIN_WINDOW_FRAMES: usize = 12;
 const MIN_BASELINE_FRAMES: usize = 60;
@@ -127,6 +131,9 @@ pub struct FasController {
     heavy_streak: usize,
     last_frame_at: Option<Instant>,
     last_hz: Option<i32>,
+    safety: bool,
+    recover_since: Option<Instant>,
+    last_safety_step: Option<Instant>,
     active: bool,
     sampled: bool,
     lite: Option<bool>,
@@ -150,6 +157,9 @@ impl FasController {
             heavy_streak: 0,
             last_frame_at: None,
             last_hz: None,
+            safety: false,
+            recover_since: None,
+            last_safety_step: None,
             active: false,
             sampled: false,
             lite: None,
@@ -278,10 +288,43 @@ impl FasController {
         })
     }
 
+    fn update_thermal(&mut self, pressure: ThermalPressure, now: Instant) {
+        match pressure {
+            ThermalPressure::Critical => {
+                self.safety = true;
+                self.recover_since = None;
+            }
+            ThermalPressure::Warm => {
+                self.recover_since = None;
+            }
+            ThermalPressure::Normal => {
+                if self.safety {
+                    match self.recover_since {
+                        Some(at)
+                            if now.saturating_duration_since(at).as_millis()
+                                >= RECOVER_HOLD_MS =>
+                        {
+                            self.safety = false;
+                            self.recover_since = None;
+                            self.last_safety_step = None;
+                            self.sampled = false;
+                            self.restore_caps();
+                        }
+                        Some(_) => {}
+                        None => self.recover_since = Some(now),
+                    }
+                }
+            }
+        }
+    }
+
     fn clear_runtime(&mut self) {
         self.trim_since = None;
         self.heavy_streak = 0;
         self.last_frame_at = None;
+        self.safety = false;
+        self.recover_since = None;
+        self.last_safety_step = None;
         self.sampled = false;
         self.seen_seq = self.tap.measured_snapshot(1).seq;
     }
@@ -297,7 +340,14 @@ impl FasController {
         self.clear_runtime();
     }
 
-    pub fn tick(&mut self, maestro: bool, enabled: bool, active_hz: Option<i32>, lite: bool) {
+    pub fn tick(
+        &mut self,
+        maestro: bool,
+        enabled: bool,
+        active_hz: Option<i32>,
+        lite: bool,
+        thermal: ThermalPressure,
+    ) {
         if !maestro {
             self.baseline_period = None;
             self.baseline_raised_at = None;
@@ -336,13 +386,33 @@ impl FasController {
         }
 
         self.active = true;
-        let sample = self.tap.measured_snapshot(FRAME_WINDOW);
         let now = Instant::now();
+        self.update_thermal(thermal, now);
+
+        let sample = self.tap.measured_snapshot(FRAME_WINDOW);
         let mut new_count = sample.seq.saturating_sub(self.seen_seq) as usize;
         self.seen_seq = sample.seq;
 
         if new_count > 0 {
             self.last_frame_at = Some(now);
+        }
+
+        if self.safety {
+            self.heavy_streak = 0;
+            self.trim_since = None;
+            let step_due = self
+                .last_safety_step
+                .map(|at| now.saturating_duration_since(at).as_millis() >= SAFETY_STEP_MS)
+                .unwrap_or(true);
+            if step_due {
+                self.step_down();
+                self.last_safety_step = Some(now);
+            }
+            return;
+        }
+        self.last_safety_step = None;
+
+        if new_count > 0 {
             self.update_baseline(&sample.frames, now);
         } else if self
             .last_frame_at
@@ -402,7 +472,12 @@ impl FasController {
         if let Some(value) = p95_slow {
             if value <= budget_ms * TRIM_P95_PERCENT / 100.0 {
                 let since = *self.trim_since.get_or_insert(now);
-                if now.saturating_duration_since(since).as_millis() >= TRIM_HOLD_MS {
+                let hold = if thermal == ThermalPressure::Warm {
+                    WARM_TRIM_HOLD_MS
+                } else {
+                    TRIM_HOLD_MS
+                };
+                if now.saturating_duration_since(since).as_millis() >= hold {
                     self.trim_since = None;
                     self.step_down();
                 }

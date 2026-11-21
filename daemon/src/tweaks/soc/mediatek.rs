@@ -163,13 +163,13 @@ fn ddr_balance() -> usize {
 }
 
 fn maestro_profile() -> usize {
-    let mut applied = ppm_policies(false);
+    let mut applied = ppm_policies(true);
     if super::apply_node(FPSGO_PATH, "1") {
         applied += 1;
     }
     for (name, value) in [
         ("enable_ceiling", "0"),
-        ("engine_cooler_enable", "0"),
+        ("engine_cooler_enable", "1"),
         ("boost_ta", "1"),
         ("boost_VIP", "1"),
     ] {
@@ -202,6 +202,9 @@ fn maestro_profile() -> usize {
         }
     }
     applied += power_limited("0");
+    if super::apply_node(EARA_THERMAL_PATH, "1") {
+        applied += 1;
+    }
     applied += super::mali_power_policy(SocProfile::Maestro);
     applied += ddr_performance(false);
     applied

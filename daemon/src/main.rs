@@ -23,7 +23,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tweaks::texture::TextureController;
 use tweaks::utility::UtilityController;
-use tweaks::{display, engine, fas, fps, renderer, sched, soc};
+use tweaks::{display, engine, fas, fps, renderer, sched, soc, thermal};
 
 static SHUTDOWN: AtomicBool = AtomicBool::new(false);
 
@@ -556,6 +556,7 @@ fn main() {
     let mut last_screen_state: Option<bool> = None;
     let mut fps_monitor = fps::FpsMonitor::new();
     let mut fas_controller = fas::FasController::new(fps_monitor.tap());
+    let mut thermal_monitor = thermal::ThermalMonitor::new();
     let mut session_recorder = session::SessionRecorder::new(fps_monitor.tap());
     let mut last_heartbeat = Instant::now();
     let mut reload_pending_at: Option<Instant> = None;
@@ -905,11 +906,13 @@ fn main() {
             session_start_ms,
         );
 
+        let thermal_pressure = thermal_monitor.sample();
         fas_controller.tick(
             runtime.current_profile == Some(Profile::Maestro),
             screen_awake && current_target.is_some(),
             display::saved_mode_hz().filter(|hz| *hz >= 30),
             runtime.current_lite,
+            thermal_pressure,
         );
 
         let sleep_ms = if binder_client.is_push() {
