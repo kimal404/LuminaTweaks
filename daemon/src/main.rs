@@ -8,7 +8,7 @@ mod tweaks;
 use binder::client as binder_client;
 use core::detector::{
     get_app_config, get_focused_package, is_app_enabled, is_auto_dnd_enabled, is_lite_mode_active,
-    is_low_power_active, is_master_enabled, is_process_alive,
+    is_low_power_active, is_master_enabled,
 };
 use core::ipc::{IpcServer, SharedState};
 use core::{detector, perf, watcher};
@@ -603,7 +603,13 @@ fn main() {
                     || (runtime.target_game_pid > 0 && runtime.target_game_pid == died.pid)
                     || (active_pid > 0 && active_pid == died.pid));
 
-            if matches_target {
+            let confirmed_dead = died.pid <= 0
+                || !detector::pid_matches_package(
+                    died.pid,
+                    died.package.as_deref().unwrap_or(""),
+                );
+
+            if matches_target && confirmed_dead {
                 log!(
                     "[RESET]  {} ({}) \u{2794} BALANCED [Trigger: Died 0ms | uid {}]",
                     active_pkg.as_deref().or(died.package.as_deref()).unwrap_or("-"),
@@ -668,32 +674,43 @@ fn main() {
                 }
                 Some(pkg_str)
             } else if let Some(ref saved_pkg) = runtime.active_target_pkg {
-                if !is_process_alive(saved_pkg) {
-                    log!("[SYSTEM] Process {} gone -> BALANCED", saved_pkg);
-                    runtime.active_target_pkg = None;
-                    runtime.target_game_pid = 0;
-                    runtime.left_foreground_at = None;
-                    None
-                } else if is_app_enabled(saved_pkg) {
-                    if runtime.left_foreground_at.is_none() {
-                        log!("[SYSTEM] Focus lost -> {} grace 15s", saved_pkg);
-                        runtime.left_foreground_at = Some(Instant::now());
-                    }
+                let verified_pid = if runtime.target_game_pid > 0
+                    && detector::pid_matches_package(runtime.target_game_pid, saved_pkg)
+                {
+                    Some(runtime.target_game_pid)
+                } else {
+                    detector::find_pid_for_pkg(saved_pkg)
+                };
 
-                    if let Some(left_time) = runtime.left_foreground_at {
-                        if left_time.elapsed() < Duration::from_secs(15) {
-                            Some(saved_pkg.clone())
+                if let Some(pid) = verified_pid {
+                    runtime.target_game_pid = pid;
+                    if is_app_enabled(saved_pkg) {
+                        if runtime.left_foreground_at.is_none() {
+                            log!("[SYSTEM] Focus lost -> {} grace 15s", saved_pkg);
+                            runtime.left_foreground_at = Some(Instant::now());
+                        }
+
+                        if let Some(left_time) = runtime.left_foreground_at {
+                            if left_time.elapsed() < Duration::from_secs(15) {
+                                Some(saved_pkg.clone())
+                            } else {
+                                log!("[SYSTEM] Grace expired -> {}", saved_pkg);
+                                runtime.active_target_pkg = None;
+                                runtime.target_game_pid = 0;
+                                runtime.left_foreground_at = None;
+                                None
+                            }
                         } else {
-                            log!("[SYSTEM] Grace expired -> {}", saved_pkg);
-                            runtime.active_target_pkg = None;
-                            runtime.target_game_pid = 0;
-                            runtime.left_foreground_at = None;
                             None
                         }
                     } else {
+                        runtime.active_target_pkg = None;
+                        runtime.target_game_pid = 0;
+                        runtime.left_foreground_at = None;
                         None
                     }
                 } else {
+                    log!("[SYSTEM] Process {} gone -> BALANCED", saved_pkg);
                     runtime.active_target_pkg = None;
                     runtime.target_game_pid = 0;
                     runtime.left_foreground_at = None;
@@ -743,10 +760,21 @@ fn main() {
         };
         let fps_game_active =
             screen_awake && (current_target.is_some() || record_candidate.is_some());
-        let fps_pid = if fps_game_active && runtime.target_game_pid > 0 {
-            runtime.target_game_pid
+        let fps_pid = if fps_game_active {
+            fps_package
+                .as_deref()
+                .map(|pkg| {
+                    if runtime.target_game_pid > 0
+                        && detector::pid_matches_package(runtime.target_game_pid, pkg)
+                    {
+                        runtime.target_game_pid
+                    } else {
+                        detector::find_pid_for_pkg(pkg).unwrap_or(0)
+                    }
+                })
+                .unwrap_or(0)
         } else {
-            active_pid
+            0
         };
 
         let profile_label = runtime

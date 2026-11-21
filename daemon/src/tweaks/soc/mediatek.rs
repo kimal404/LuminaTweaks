@@ -132,6 +132,13 @@ fn ddr_performance(lite: bool) -> usize {
     applied
 }
 
+fn helio_restore_value() -> String {
+    match super::read_node(HELIO_FORCE_PATH) {
+        Some(value) if value != "-1" && value.parse::<u32>().is_ok() => value,
+        _ => "255".to_string(),
+    }
+}
+
 fn ddr_balance() -> usize {
     let mut applied = 0;
     for path in dvfsrc_platform_nodes() {
@@ -139,7 +146,7 @@ fn ddr_balance() -> usize {
             applied += 1;
         }
     }
-    if super::write_node(HELIO_FORCE_PATH, "-1") {
+    if crate::tweaks::state::write_tracked_quiet(HELIO_FORCE_PATH, &helio_restore_value(), false) {
         applied += 1;
     }
     if let Some(base) = super::find_devfreq(&["mtk-dvfsrc-devfreq"]) {

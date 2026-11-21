@@ -45,9 +45,7 @@ fn set_split_lock(enabled: bool) {
 fn tune_top_app(
     boost: &str,
     prefer_idle: &str,
-    uclamp_min: &str,
-    uclamp_max: &str,
-    latency_sensitive: &str,
+    uclamp: Option<(&str, &str, &str)>,
 ) {
     write_first_available(
         STUNE_DIRS,
@@ -57,14 +55,16 @@ fn tune_top_app(
         ],
     );
 
-    write_first_available(
-        UCLAMP_DIRS,
-        &[
-            ("cpu.uclamp.min", uclamp_min),
-            ("cpu.uclamp.max", uclamp_max),
-            ("cpu.uclamp.latency_sensitive", latency_sensitive),
-        ],
-    );
+    if let Some((uclamp_min, uclamp_max, latency_sensitive)) = uclamp {
+        write_first_available(
+            UCLAMP_DIRS,
+            &[
+                ("cpu.uclamp.min", uclamp_min),
+                ("cpu.uclamp.max", uclamp_max),
+                ("cpu.uclamp.latency_sensitive", latency_sensitive),
+            ],
+        );
+    }
 }
 
 fn tune_touchpanel(performance: bool) {
@@ -89,21 +89,21 @@ fn tune_touchpanel(performance: bool) {
 pub fn apply_performance() {
     set_split_lock(false);
     set_sched_features(&["NEXT_BUDDY", "NO_TTWU_QUEUE"]);
-    tune_top_app("1", "1", "1024", "max", "1");
+    tune_top_app("1", "1", Some(("max", "max", "1")));
     tune_touchpanel(true);
 }
 
 pub fn apply_balance() {
     set_split_lock(true);
     set_sched_features(&["NEXT_BUDDY", "TTWU_QUEUE"]);
-    tune_top_app("0", "0", "0", "max", "0");
+    tune_top_app("0", "0", None);
     tune_touchpanel(false);
 }
 
 pub fn apply_powersave() {
     set_split_lock(true);
     set_sched_features(&["NEXT_BUDDY", "TTWU_QUEUE"]);
-    tune_top_app("0", "1", "0", "max", "0");
+    tune_top_app("0", "1", None);
     tune_touchpanel(false);
 }
 

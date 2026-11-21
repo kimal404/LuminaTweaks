@@ -966,6 +966,31 @@ pub fn is_process_alive(pkg: &str) -> bool {
     running_packages().contains(target)
 }
 
+pub fn pid_matches_package(pid: i32, pkg: &str) -> bool {
+    if pid <= 0 {
+        return false;
+    }
+    let target = sanitize_pkg_name(pkg);
+    if target.is_empty() {
+        return false;
+    }
+    let Ok(cmd) = std::fs::read(format!("/proc/{}/cmdline", pid)) else {
+        return false;
+    };
+    let Some(first) = cmd.split(|&b| b == 0).next() else {
+        return false;
+    };
+    let Ok(raw) = std::str::from_utf8(first) else {
+        return false;
+    };
+    let name = sanitize_pkg_name(raw);
+    name == target
+        || name
+            .strip_prefix(target)
+            .map(|rest| rest.starts_with(':'))
+            .unwrap_or(false)
+}
+
 /// Returns the PID of the main process for `pkg` (the entry whose cmdline is
 /// the bare package name, not a `:sub` process).
 pub fn find_pid_for_pkg(pkg: &str) -> Option<i32> {

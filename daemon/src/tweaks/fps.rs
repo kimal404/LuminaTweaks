@@ -799,7 +799,10 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>, tap: FrameTap)
             continue;
         };
 
-        maintain_ebpf(&mut ebpf, &mut ebpf_failed_at, Some(pid));
+        let target_pid = package.as_deref().and_then(|pkg| {
+            (pid > 0 && crate::core::detector::pid_matches_package(pid, pkg)).then_some(pid)
+        });
+        maintain_ebpf(&mut ebpf, &mut ebpf_failed_at, target_pid);
         if let Some(probe) = ebpf.as_mut() {
             probe.drain(&tap);
         }

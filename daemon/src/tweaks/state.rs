@@ -131,6 +131,11 @@ pub fn write_tracked(path: &str, value: &str, lock: bool) -> bool {
     crate::tweaks::engine::write_sysfs(path, value, lock)
 }
 
+pub fn write_tracked_quiet(path: &str, value: &str, lock: bool) -> bool {
+    capture(path);
+    crate::tweaks::engine::write_sysfs_quiet(path, value, lock)
+}
+
 pub fn discard() {
     let mut guard = STATE.lock().unwrap_or_else(|error| error.into_inner());
     *guard = None;

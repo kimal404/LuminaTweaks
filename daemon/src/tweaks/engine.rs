@@ -61,6 +61,17 @@ pub fn write_sysfs(path: &str, val: &str, lock: bool) -> bool {
     res
 }
 
+pub fn write_sysfs_quiet(path: &str, val: &str, lock: bool) -> bool {
+    if !Path::new(path).exists() {
+        return false;
+    }
+    let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o644));
+    let res = fs::write(path, val.as_bytes()).is_ok();
+    let mode = if lock { 0o444 } else { 0o644 };
+    let _ = fs::set_permissions(path, fs::Permissions::from_mode(mode));
+    res
+}
+
 fn profile_write(path: &str, value: &str) -> bool {
     crate::tweaks::state::write_tracked(path, value, false)
 }
@@ -352,7 +363,11 @@ fn apply_io_latency(performance: bool) {
             &format!("{}/queue/read_ahead_kb", base),
             read_ahead,
         );
-        profile_apply(&format!("{}/queue/nr_requests", base), nr_requests);
+        let nr_path = format!("{}/queue/nr_requests", base);
+        if !crate::tweaks::state::write_tracked_quiet(&nr_path, nr_requests, true) && !performance
+        {
+            crate::tweaks::state::write_tracked_quiet(&nr_path, "32", true);
+        }
     }
 }
 
