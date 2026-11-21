@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 const PPM_MAX_PATH: &str = "/proc/ppm/policy/hard_userlimit_max_cpu_freq";
 const MEMORY_PATH: &str = "/data/adb/.config/lumina/maestro_memory.json";
@@ -25,6 +25,8 @@ const SLOW_WINDOW_MS: f32 = 5000.0;
 const BASELINE_WINDOW_MS: f32 = 10_000.0;
 const BASELINE_RAISE_HOLD_MS: u128 = 15_000;
 const BASELINE_LOWER_HOLD_MS: u128 = 3_000;
+const BOOST_HOLD_MS: u128 = 3_000;
+const SUSTAINED_BOOST_MS: u128 = 4_000;
 const TRIM_HOLD_MS: u128 = 5_000;
 const WARM_TRIM_HOLD_MS: u128 = 2_000;
 const SAFETY_STEP_MS: u128 = 2_000;
@@ -175,6 +177,24 @@ fn classify_state(
     }
 }
 
+fn trim_limit(budget_ms: f32, thermal: ThermalPressure) -> f32 {
+    match thermal {
+        ThermalPressure::Warm => budget_ms,
+        _ => budget_ms * TRIM_P95_PERCENT / 100.0,
+    }
+}
+
+fn sustainable_target(current: Option<f32>, p95: f32, budget: f32) -> Option<f32> {
+    if p95 <= budget {
+        return None;
+    }
+    let next = current.map(|value| value.max(p95)).unwrap_or(p95);
+    match current {
+        Some(value) if next <= value * 101.0 / 100.0 => None,
+        _ => Some(next),
+    }
+}
+
 fn load_memory() -> HashMap<String, f32> {
     fs::read_to_string(MEMORY_PATH)
         .ok()
@@ -206,8 +226,11 @@ pub struct FasController {
     clusters: Vec<Cluster>,
     seen_seq: u64,
     baseline_period: Option<f32>,
+    sustainable_period: Option<f32>,
     baseline_raised_at: Option<Instant>,
     baseline_lowered_at: Option<Instant>,
+    boost_since: Option<Instant>,
+    boost_until: Option<Instant>,
     trim_since: Option<Instant>,
     heavy_streak: usize,
     last_frame_at: Option<Instant>,
@@ -241,8 +264,11 @@ impl FasController {
             clusters,
             seen_seq: 0,
             baseline_period: None,
+            sustainable_period: None,
             baseline_raised_at: None,
             baseline_lowered_at: None,
+            boost_since: None,
+            boost_until: None,
             trim_since: None,
             heavy_streak: 0,
             last_frame_at: None,
@@ -435,12 +461,13 @@ impl FasController {
 
     fn target_period(&self, active_hz: Option<i32>) -> Option<f32> {
         let baseline = self.baseline_period?;
+        let sustainable = self.sustainable_period.unwrap_or(0.0);
         let display_period = active_hz
             .filter(|hz| *hz >= 30)
             .map(|hz| 1000.0 / hz as f32);
         Some(match display_period {
-            Some(period) => baseline.max(period),
-            None => baseline,
+            Some(period) => baseline.max(sustainable).max(period),
+            None => baseline.max(sustainable),
         })
     }
 
@@ -498,6 +525,8 @@ impl FasController {
     }
 
     fn clear_runtime(&mut self) {
+        self.boost_since = None;
+        self.boost_until = None;
         self.trim_since = None;
         self.heavy_streak = 0;
         self.last_frame_at = None;
@@ -506,7 +535,6 @@ impl FasController {
         self.last_safety_step = None;
         self.sampled = false;
         self.seen_seq = self.tap.measured_snapshot(1).seq;
-        self.state = FasState::Idle;
     }
 
     pub fn reset(&mut self, package: Option<&str>) {
@@ -518,12 +546,14 @@ impl FasController {
         self.baseline_period = next_package
             .as_ref()
             .and_then(|pkg| self.memory.get(pkg).copied());
+        self.sustainable_period = None;
         self.baseline_raised_at = None;
         self.baseline_lowered_at = None;
         self.package = next_package;
         self.active = false;
         self.soc_level = 0;
         self.clear_runtime();
+        self.set_state(FasState::Idle);
     }
 
     pub fn tick(
@@ -537,6 +567,7 @@ impl FasController {
         if !maestro {
             self.remember_baseline();
             self.baseline_period = None;
+            self.sustainable_period = None;
             self.baseline_raised_at = None;
             self.baseline_lowered_at = None;
             self.last_hz = None;
@@ -544,11 +575,15 @@ impl FasController {
             self.soc_level = 0;
             self.active = false;
             self.clear_runtime();
+            self.set_state(FasState::Idle);
             return;
         }
 
         if self.lite != Some(lite) {
             self.lite = Some(lite);
+            self.sustainable_period = None;
+            self.boost_since = None;
+            self.boost_until = None;
             self.apply_caps(lite);
             if self.active {
                 self.restore_caps();
@@ -558,8 +593,11 @@ impl FasController {
         if let Some(hz) = active_hz.filter(|hz| *hz >= 30) {
             if self.last_hz != Some(hz) {
                 self.baseline_period = None;
+                self.sustainable_period = None;
                 self.baseline_raised_at = None;
                 self.baseline_lowered_at = None;
+                self.boost_since = None;
+                self.boost_until = None;
                 self.trim_since = None;
                 self.last_hz = Some(hz);
             }
@@ -571,6 +609,7 @@ impl FasController {
             }
             self.active = false;
             self.clear_runtime();
+            self.set_state(FasState::Idle);
             return;
         }
 
@@ -587,6 +626,7 @@ impl FasController {
         }
 
         if self.safety {
+            self.log_stats(&sample.frames, thermal, now);
             if self.recover_since.is_some() {
                 self.set_state(FasState::Recover);
                 return;
@@ -615,8 +655,8 @@ impl FasController {
             .unwrap_or(true)
         {
             self.restore_caps();
-            self.set_state(FasState::Arm);
             self.clear_runtime();
+            self.set_state(FasState::Arm);
             return;
         } else {
             return;
@@ -656,12 +696,45 @@ impl FasController {
             }
         }
 
-        let boost = self.heavy_streak >= HEAVY_FRAME_STREAK
+        let boost_requested = self.heavy_streak >= HEAVY_FRAME_STREAK
             || p95_fast
                 .map(|value| value >= budget_ms * BOOST_P95_PERCENT / 100.0)
                 .unwrap_or(false);
+        let hold_active = self.boost_until.map(|at| now < at).unwrap_or(false);
+
+        if boost_requested {
+            if !hold_active {
+                self.boost_until = Some(now + Duration::from_millis(BOOST_HOLD_MS as u64));
+            }
+            if self.boost_since.is_none() {
+                self.boost_since = Some(now);
+            }
+        } else if !hold_active {
+            self.boost_until = None;
+            self.boost_since = None;
+        }
+
+        let boost = boost_requested || hold_active;
 
         if boost {
+            if let Some(at) = self.boost_since {
+                if now.saturating_duration_since(at).as_millis() >= SUSTAINED_BOOST_MS {
+                    let p95 = p95_slow.or(p95_fast).unwrap_or(0.0);
+                    if let Some(next) = sustainable_target(self.sustainable_period, p95, budget_ms)
+                    {
+                        self.sustainable_period = Some(next);
+                        self.boost_since = None;
+                        self.boost_until = None;
+                        log!(
+                            "[FAS] sustainable target {:.1}ms ({:.1}fps) | p95={:.1}ms budget={:.1}ms",
+                            next,
+                            1000.0 / next,
+                            p95,
+                            budget_ms
+                        );
+                    }
+                }
+            }
             self.heavy_streak = 0;
             self.trim_since = None;
             self.boost();
@@ -671,7 +744,7 @@ impl FasController {
 
         let mut trimmed = false;
         if let Some(value) = p95_slow {
-            if value <= budget_ms * TRIM_P95_PERCENT / 100.0 {
+            if value <= trim_limit(budget_ms, thermal) {
                 let since = *self.trim_since.get_or_insert(now);
                 let hold = if thermal == ThermalPressure::Warm {
                     WARM_TRIM_HOLD_MS
@@ -705,7 +778,10 @@ impl FasController {
 
 #[cfg(test)]
 mod tests {
-    use super::{classify_state, last_window, percentile, Cluster, FasState};
+    use super::{
+        classify_state, last_window, percentile, sustainable_target, trim_limit, Cluster, FasState,
+    };
+    use crate::tweaks::thermal::ThermalPressure;
 
     fn cluster(freqs: Vec<u64>, hw_max: u64, floor: u64) -> Cluster {
         Cluster {
@@ -749,6 +825,20 @@ mod tests {
     fn accumulates_time_window_from_newest_frames() {
         let frames = [100.0, 10.0, 10.0, 10.0, 10.0];
         assert_eq!(last_window(&frames, 30.0), &[10.0, 10.0, 10.0]);
+    }
+
+    #[test]
+    fn lowers_target_when_boost_is_not_sustainable() {
+        assert_eq!(sustainable_target(None, 10.0, 10.5), None);
+        assert_eq!(sustainable_target(None, 12.0, 10.5), Some(12.0));
+        assert_eq!(sustainable_target(Some(11.5), 12.0, 10.5), Some(12.0));
+        assert_eq!(sustainable_target(Some(12.0), 12.0, 10.5), None);
+    }
+
+    #[test]
+    fn trims_earlier_under_warm_pressure() {
+        assert_eq!(trim_limit(10.0, ThermalPressure::Normal), 9.5);
+        assert_eq!(trim_limit(10.0, ThermalPressure::Warm), 10.0);
     }
 
     #[test]
