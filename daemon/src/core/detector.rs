@@ -811,7 +811,15 @@ fn extract_app_config(item: &Value) -> AppConfig {
         .or_else(|| item.get("profile_mode"))
         .or_else(|| item.get("profileMode"))
     {
-        Some(Value::String(s)) => s.trim().to_string(),
+        Some(Value::String(s)) => {
+            let value = s.trim();
+            match value.to_ascii_lowercase().as_str() {
+                "performance" | "performa" | "performance lite" | "performance_lite"
+                | "performance-lite" => "maestro".to_string(),
+                _ if value.is_empty() => "default".to_string(),
+                _ => value.to_string(),
+            }
+        }
         _ => "default".to_string(),
     };
 

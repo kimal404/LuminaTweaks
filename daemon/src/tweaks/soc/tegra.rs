@@ -29,7 +29,6 @@ pub fn apply(profile: SocProfile) -> usize {
         return 0;
     };
     let (floor, cap) = match profile {
-        SocProfile::Performance => (max, max),
         SocProfile::Lite => (min, max),
         SocProfile::Balance => (min, max),
         SocProfile::Eco => (min, min),

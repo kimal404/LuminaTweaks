@@ -1,6 +1,7 @@
 pub mod devfreq;
 pub mod display;
 pub mod engine;
+pub mod fas;
 pub mod fps;
 pub mod renderer;
 pub mod sched;

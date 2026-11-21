@@ -60,13 +60,13 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.BatterySaver
-import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.HourglassEmpty
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.PowerSettingsNew
@@ -123,6 +123,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import com.luminatweaks.R
+import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DaemonManager
 import com.luminatweaks.service.FloatingFpsService
 import com.luminatweaks.ui.component.LuminaBottomBar
@@ -156,6 +157,14 @@ private fun readSystemProperty(key: String): String? {
         value?.takeIf { it.isNotBlank() }
     } catch (_: Exception) {
         null
+    }
+}
+
+private fun autoProfileFromProperty(value: String?, fallback: Boolean): Boolean {
+    return when (value?.trim()?.lowercase()) {
+        "1", "true", "on", "enabled" -> true
+        "0", "false", "off", "disabled" -> false
+        else -> fallback
     }
 }
 
@@ -234,6 +243,7 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
     var currentProfile by remember {
         mutableStateOf(readSystemProperty("sys.lumina.profile") ?: "Balanced")
     }
+    var isAutoProfile by remember { mutableStateOf(true) }
     var isRootGranted by remember { mutableStateOf(false) }
     var selinuxStatus by remember { mutableStateOf("Unknown") }
     var showRebootDialog by remember { mutableStateOf(false) }
@@ -277,6 +287,8 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
         withContext(Dispatchers.IO) {
             val initialTemp = DeviceUtil.getBatteryTemperature(context)
             val initialStatus = DaemonManager.getStatus()
+            val initialTweaks = ConfigRepository.getTweaksState()
+            val autoProfileProp = readSystemProperty("persist.lumina.autoprofile")
             val propProfile = readSystemProperty("sys.lumina.profile")
             val initialRoot = RootUtil.checkRootAccess()
             val initialSelinux = DeviceUtil.getSelinuxStatus()
@@ -285,6 +297,7 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                 batteryTemp = initialTemp
                 daemonPid = initialStatus.pid
                 currentProfile = propProfile ?: initialStatus.profile
+                isAutoProfile = autoProfileFromProperty(autoProfileProp, initialTweaks.isAutoProfile)
                 isRootGranted = initialRoot
                 selinuxStatus = initialSelinux
                 isChecking = false
@@ -316,6 +329,7 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                 }
                 val currentTemp = DeviceUtil.getBatteryTemperature(context)
                 val propProfile = readSystemProperty("sys.lumina.profile")
+                val autoProfileProp = readSystemProperty("persist.lumina.autoprofile")
                 val status = DaemonManager.getStatus()
                 val checkFallback = status.pid == null && fallbackChecks % 4 == 0
                 fallbackChecks++
@@ -336,6 +350,7 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                     isRebootRequired = rebootNeeded
                     isModuleInstalled = installed
                     currentProfile = propProfile ?: status.profile
+                    isAutoProfile = autoProfileFromProperty(autoProfileProp, isAutoProfile)
                 }
                 delay(2500L)
             }
@@ -486,6 +501,7 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             isModuleInstalled = isModuleInstalled,
                             isRebootRequired = isRebootRequired,
                             currentProfile = currentProfile,
+                            isAutoProfile = isAutoProfile,
                             kernelVersion = kernelVersion,
                             deviceModel = deviceModel,
                             isRootGranted = isRootGranted,
@@ -562,6 +578,7 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             isModuleInstalled = isModuleInstalled,
                             isRebootRequired = isRebootRequired,
                             currentProfile = currentProfile,
+                            isAutoProfile = isAutoProfile,
                             kernelVersion = kernelVersion,
                             deviceModel = deviceModel,
                             isRootGranted = isRootGranted,
@@ -724,6 +741,7 @@ fun HomeDashboardContent(
     isModuleInstalled: Boolean = true,
     isRebootRequired: Boolean = false,
     currentProfile: String,
+    isAutoProfile: Boolean = true,
     kernelVersion: String,
     deviceModel: String,
     isRootGranted: Boolean,
@@ -760,13 +778,13 @@ fun HomeDashboardContent(
     val profileOptions = listOf(
         Triple("Powersave", R.string.profile_desc_powersave, Icons.Rounded.BatterySaver),
         Triple("Balanced", R.string.profile_desc_balanced, Icons.Rounded.Speed),
-        Triple("Performance", R.string.profile_desc_performance, Icons.Rounded.Bolt),
         Triple("Maestro", R.string.profile_desc_maestro, Icons.Rounded.AutoAwesome)
     )
-    val profileDisplayValue = if (currentProfile.equals("Eco", ignoreCase = true)) {
-        "Powersave"
-    } else {
-        currentProfile
+    val profileDisplayValue = when {
+        currentProfile.equals("Eco", ignoreCase = true) -> "Powersave"
+        currentProfile.equals("Performance", ignoreCase = true) -> "Maestro"
+        currentProfile.equals("Performance Lite", ignoreCase = true) -> "Maestro"
+        else -> currentProfile
     }
 
     TouchOriginDialog(
@@ -797,7 +815,8 @@ fun HomeDashboardContent(
                         currentProfile.equals("Eco", ignoreCase = true)
                     "Balanced" -> currentProfile.equals("Balanced", ignoreCase = true) ||
                         currentProfile.equals("Balance", ignoreCase = true)
-                    "Performance" -> currentProfile.equals("Performance", ignoreCase = true) ||
+                    "Maestro" -> currentProfile.equals("Maestro", ignoreCase = true) ||
+                        currentProfile.equals("Performance", ignoreCase = true) ||
                         currentProfile.equals("Performance Lite", ignoreCase = true)
                     else -> currentProfile.equals(option.first, ignoreCase = true)
                 }
@@ -980,14 +999,24 @@ fun HomeDashboardContent(
                         modifier = Modifier.weight(1f)
                     )
                     HomeHardwareTile(
-                        label = stringResource(R.string.home_profile),
+                        label = stringResource(
+                            if (isAutoProfile) R.string.home_profile_auto else R.string.home_profile
+                        ),
                         value = profileDisplayValue,
-                        icon = Icons.Rounded.Speed,
+                        icon = if (isAutoProfile) Icons.Rounded.Lock else Icons.Rounded.Speed,
                         highlight = true,
                         modifier = Modifier.weight(1f).then(profileOrigin.trackedModifier()),
                         onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            showProfileDialog = true
+                            if (isAutoProfile) {
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.toast_profile_auto_locked),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                showProfileDialog = true
+                            }
                         }
                     )
                 }

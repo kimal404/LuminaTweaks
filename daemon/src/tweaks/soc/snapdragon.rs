@@ -81,7 +81,7 @@ fn ddr_profile(lite: bool) -> usize {
         applied += if lite {
             super::apply_profile_cpudcvs(&base, SocProfile::Lite)
         } else {
-            super::apply_profile_cpudcvs(&base, SocProfile::Performance)
+            super::apply_profile_cpudcvs(&base, SocProfile::Maestro)
         };
     }
     applied
@@ -101,17 +101,13 @@ fn ddr_balance() -> usize {
     applied
 }
 
-fn performance_profile(lite: bool) -> usize {
-    let mut applied = ddr_profile(lite);
+fn lite_profile() -> usize {
+    let mut applied = ddr_profile(true);
     if let Some(base) = kgsl_devfreq() {
-        applied += if lite {
-            super::devfreq_unlock(&base)
-        } else {
-            super::devfreq_max_perf(&base)
-        };
+        applied += super::devfreq_unlock(&base);
     }
-    applied += set_pwrlevels(!lite);
-    applied += kgsl_flags("0", "1");
+    applied += set_pwrlevels(false);
+    applied += kgsl_flags("1", "0");
     applied
 }
 
@@ -144,8 +140,7 @@ fn powersave_profile() -> usize {
 
 pub fn apply(profile: SocProfile) -> usize {
     match profile {
-        SocProfile::Performance => performance_profile(false),
-        SocProfile::Lite => performance_profile(true),
+        SocProfile::Lite => lite_profile(),
         SocProfile::Balance => balance_profile(),
         SocProfile::Eco => powersave_profile(),
         SocProfile::Maestro => maestro_profile(),

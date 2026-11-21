@@ -30,7 +30,6 @@ fn apply_gpu(profile: SocProfile) -> usize {
         return 0;
     };
     let (floor, cap) = match profile {
-        SocProfile::Performance => (max, max),
         SocProfile::Lite => (min, max),
         SocProfile::Balance => (min, max),
         SocProfile::Eco => (min, min),
@@ -40,7 +39,7 @@ fn apply_gpu(profile: SocProfile) -> usize {
     let mut applied = set_freq(&base, "scaling_max_freq", cap);
     applied += set_freq(&base, "scaling_min_freq", floor);
     let policy = match profile {
-        SocProfile::Performance | SocProfile::Lite => SocProfile::Performance,
+        SocProfile::Lite => SocProfile::Lite,
         SocProfile::Balance => SocProfile::Balance,
         SocProfile::Eco => SocProfile::Eco,
         SocProfile::Maestro => SocProfile::Maestro,
@@ -52,14 +51,13 @@ fn apply_gpu(profile: SocProfile) -> usize {
 fn mif(profile: SocProfile) -> usize {
     if !matches!(
         profile,
-        SocProfile::Performance | SocProfile::Lite | SocProfile::Balance | SocProfile::Maestro
+        SocProfile::Lite | SocProfile::Balance | SocProfile::Maestro
     ) {
         return 0;
     }
     let mut applied = 0;
     for base in super::devfreq_matching(MIF_NEEDLES) {
         applied += match profile {
-            SocProfile::Performance => super::devfreq_max_perf(&base),
             SocProfile::Lite => super::devfreq_mid_perf(&base),
             SocProfile::Maestro => super::devfreq_max_perf(&base),
             _ => super::devfreq_unlock(&base),

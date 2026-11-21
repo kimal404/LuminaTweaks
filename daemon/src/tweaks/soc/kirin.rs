@@ -22,7 +22,6 @@ pub fn apply(profile: SocProfile) -> usize {
         return 0;
     };
     match profile {
-        SocProfile::Performance => super::devfreq_max_perf(&base),
         SocProfile::Lite => super::devfreq_mid_perf(&base),
         SocProfile::Balance => super::devfreq_unlock(&base),
         SocProfile::Eco => super::devfreq_min_perf(&base),

@@ -1,19 +1,3 @@
-/*
- * Copyright (C) 2026 kimal
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.luminatweaks.data
 
 import android.content.Context
@@ -40,11 +24,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 data class DisplayRrMode(val id: Int, val hz: Int)
 
-/**
- * Whether this ROM can actually honour ANGLE per-app driver overrides.
- * `usable == false` means texture settings are written but the target keeps
- * rendering with the vendor GLES driver, so the UI must warn the user.
- */
 data class AngleStatus(
     val libraries: Boolean = false,
     val declared: Boolean = false,
@@ -52,11 +31,7 @@ data class AngleStatus(
     val settingsKeys: Boolean = false,
     val usable: Boolean = false,
     val detail: String = "",
-    /**
-     * `false` when the daemon could not be queried at all. The UI must not
-     * claim "no ANGLE support" for an unknown result, otherwise a transient
-     * bridge failure looks like a missing driver.
-     */
+
     val known: Boolean = false
 )
 
@@ -78,6 +53,15 @@ data class TweaksUiState(
 )
 
 object ConfigRepository {
+    private fun normalizeProfileName(raw: String): String {
+        val value = raw.trim()
+        return when (value.lowercase()) {
+            "performance", "performa", "performance lite", "performance_lite", "performance-lite" -> "maestro"
+            "" -> "default"
+            else -> value
+        }
+    }
+
     private const val CONFIG_DIR = "/data/adb/.config/lumina"
     private const val GLOBAL_CONFIG_PATH = "$CONFIG_DIR/config.json"
     private const val APP_CONFIG_PATH = "$CONFIG_DIR/app_config.json"
@@ -109,9 +93,6 @@ object ConfigRepository {
 
     private val fileMutex = Mutex()
 
-    // ZRAM sliders/steps can fire several times per second. Patches are queued
-    // and persisted once after a short quiet window instead of shelling out to
-    // su (read + write + reload) for every interaction.
     private val zramPatches = Channel<JSONObject>(Channel.UNLIMITED)
     private val zramWriterStarted = AtomicBoolean(false)
 
@@ -133,10 +114,6 @@ object ConfigRepository {
     @Volatile
     var customGames: Set<String> = emptySet()
 
-    // Session-stats recording opt-in. Persisted in SharedPreferences (always
-    // readable, even while the privileged helper is restarting), mirrored to
-    // `record_apps.json` locally and pushed to the daemon through the bridge so
-    // the background recorder arms the target package.
     @Volatile
     private var cachedRecordApps: Set<String>? = null
 
@@ -146,12 +123,6 @@ object ConfigRepository {
     @Volatile
     private var cachedAngleStatus: AngleStatus? = null
 
-    /**
-     * Called once from the Activity on startup. Remembers the application
-     * context and re-arms the daemon with the persisted record set, so the
-     * background recorder keeps working after the UI process is killed from
-     * Recents (the daemon outlives it).
-     */
     fun initialize(context: Context) {
         val app = context.applicationContext
         appContext = app
@@ -191,8 +162,7 @@ object ConfigRepository {
     ) {
         val encoded = Base64.encodeToString(content.toByteArray(StandardCharsets.UTF_8), Base64.NO_WRAP)
         val tmpPath = "$targetPath.tmp"
-        // Wrap the backgrounded reload in a subshell so only the notification
-        // runs async; the atomic write itself must finish before su returns.
+
         val notify = if (reloadDaemon) " && ( ${reloadCommand()} )" else ""
         runSuCmd(
             "mkdir -p $CONFIG_DIR && " +
@@ -484,7 +454,7 @@ object ConfigRepository {
                         } else {
                             obj.optBoolean("saklar_utama", false)
                         },
-                        profile = obj.optString("profile", "default"),
+                        profile = normalizeProfileName(obj.optString("profile", "default")),
                         liteMode = obj.optString("lite_mode", "default"),
                         refreshRate = obj.optString("refresh_rate", "default"),
                         renderer = obj.optString("renderer", "default"),
@@ -511,8 +481,7 @@ object ConfigRepository {
             val loaded = loadAppConfigsInternal()
             cachedAppConfigs = loaded
             if (appContext != null) {
-                // Re-derive the blind recorder set from the durable profile
-                // flags, so opted-in packages survive a UI process kill.
+
                 val fromProfiles = loaded.values.filter { it.recordSession }.map { it.pkg }.toSet()
                 if (fromProfiles.isNotEmpty()) {
                     val merged = readRecordApps(appContext!!) + fromProfiles
@@ -542,7 +511,7 @@ object ConfigRepository {
                 put("saklar_utama", item.saklarUtama)
                 put("disabled", item.disabled)
                 put("custom", item.custom)
-                put("profile", item.profile)
+                put("profile", normalizeProfileName(item.profile))
                 put("lite_mode", item.liteMode)
                 put("refresh_rate", item.refreshRate)
                 put("renderer", item.renderer)
@@ -581,6 +550,7 @@ object ConfigRepository {
                 else -> "native"
             }
             val normalizedProfile = profile.copy(
+                profile = normalizeProfileName(profile.profile),
                 textureDriver = normalizedDriver,
                 textureLod = normalizedLod,
                 textureEnabled = normalizedDriver == "angle" || profile.textureEnabled,
@@ -814,20 +784,9 @@ object ConfigRepository {
         notifyDaemonReload()
     }
 
-    // -----------------------------------------------------------------------
-    // Session-stats recording opt-in
-    // -----------------------------------------------------------------------
-
     private fun recordAppsPrefs(context: Context) =
         context.getSharedPreferences(RECORD_PREFS_NAME, Context.MODE_PRIVATE)
 
-    /**
-     * Asks the daemon whether ANGLE is usable on this ROM.
-     *
-     * A failed bridge request returns [AngleStatus.known] == false and is not
-     * cached, so a transient failure never masquerades as "no ANGLE support"
-     * and the next screen entry retries.
-     */
     suspend fun getAngleStatus(context: Context): AngleStatus = withContext(Dispatchers.IO) {
         cachedAngleStatus?.let { return@withContext it }
 
@@ -858,8 +817,7 @@ object ConfigRepository {
             val pkg = packageName.substringBefore(':').trim()
             if (pkg.isEmpty()) return@withContext false
             if (readRecordApps(context).contains(pkg)) return@withContext true
-            // Cold start: the record set may be empty while the profile entry
-            // still carries the flag, so consult app_config.json as well.
+
             val fromProfile = (cachedAppConfigs ?: getAppConfigs())[pkg]?.recordSession
             if (fromProfile == true) {
                 cachedRecordApps = (cachedRecordApps.orEmpty() + pkg)
@@ -869,11 +827,6 @@ object ConfigRepository {
             }
         }
 
-    /**
-     * Persists the toggle immediately (prefs + local mirror) so it survives
-     * leaving/reopening the app, then pushes it to the daemon through the
-     * bridge so the background recorder arms the package.
-     */
     suspend fun setRecordEnabled(
         context: Context,
         packageName: String,
@@ -883,8 +836,7 @@ object ConfigRepository {
         if (pkg.isEmpty()) return@withContext readRecordApps(context)
 
         fileMutex.withLock {
-            // Keep the per-app profile field in the same durable record as
-            // "Saklar Utama" so a cold start can restore it from app_config.json.
+
             val configs = (cachedAppConfigs ?: loadAppConfigsInternal()).toMutableMap()
             val existing = configs[pkg]
             val updatedProfile = (existing ?: AppProfileConfig(pkg = pkg))
@@ -900,8 +852,6 @@ object ConfigRepository {
             val snapshot = current.toSet()
             cachedRecordApps = snapshot
 
-            // `commit()` (not `apply()`): a Recents swipe can kill the process
-            // before the async write lands, which used to reset the toggle.
             recordAppsPrefs(context)
                 .edit()
                 .putStringSet(RECORD_APPS_KEY, snapshot)
@@ -912,12 +862,6 @@ object ConfigRepository {
         }
     }
 
-    /**
-     * Durably stores the record set to the local mirror and the daemon, and
-     * refreshes the per-app profile entries so `recordSession` stays in sync
-     * with the same persistent record used by "Saklar Utama".
-     * Caller must hold [fileMutex].
-     */
     private suspend fun persistRecordAppsLocked(context: Context, snapshot: Set<String>) {
         val json = JSONArray(snapshot.sorted()).toString()
 
@@ -929,18 +873,12 @@ object ConfigRepository {
             cachedAppConfigs = next
         }
 
-        // Write-and-sync the mirror before touching the bridge, so a bridge
-        // hiccup still leaves a readable copy on disk.
         runCatching {
             File(context.filesDir, RECORD_APPS_MIRROR).writeText("$json\n")
         }
         runCatching { LuminaBridge.writeRecordApps(context, json) }
     }
 
-    /**
-     * Daemon-side source of truth first (survives an app data wipe), then the
-     * local mirror, then the preference cache.  Never spawns `su`.
-     */
     suspend fun getRecordedPackages(context: Context): Set<String> = withContext(Dispatchers.IO) {
         readRecordApps(context)
     }

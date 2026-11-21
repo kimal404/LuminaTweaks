@@ -220,7 +220,7 @@
     <string name="tweaks_mtk_info_title">Profile Information</string>
     <string name="tweaks_mtk_info_desc">FPSGO is a MediaTek kernel module that dynamically regulates CPU/GPU clocks based on real-time frame rate. When FPS is stable, clocks are lowered to save power — but in heavy scenes, this limitation can cause frame drops.
 
-Features on this page are only active when the system is in the Performance profile. In Balanced or Eco profiles, the subsystem reverts to the standard baseline.</string>
+Features on this page are only active when the system is in the Maestro profile. In Balanced or Eco profiles, the subsystem reverts to the standard baseline.</string>
     <string name="tweaks_fpsgo_title">Bypass Frame Limiter (FPSGo)</string>
     <string name="tweaks_fpsgo_desc">Disable FPSGO regulation so CPU/GPU clocks can rise freely as needed for rendering, without being capped when FPS seems stable. Higher power consumption and temperature.</string>
     <string name="tweaks_ged_title">Mali GED GPU Boost</string>
@@ -240,7 +240,7 @@ Features on this page are only active when the system is in the Performance prof
     <string name="tweak_memory_zram">Memory &amp; ZRAM</string>
     <string name="tweak_memory_zram_desc">Swap compression, virtual memory swappiness, and RAM allocation</string>
     <string name="tweak_auto_dnd">Automatic DND Mode</string>
-    <string name="tweak_auto_dnd_desc">Automatically enable DND when Performance profile is active</string>
+    <string name="tweak_auto_dnd_desc">Automatically enable DND when Maestro profile is active</string>
     <string name="tweak_io_scheduler">I/O Scheduler</string>
     <string name="tweak_io_scheduler_desc">UFS/eMMC storage I/O queue scheduling algorithm</string>
     <string name="dialog_reboot_required_title">Reboot Required</string>
@@ -348,7 +348,7 @@ Features on this page are only active when the system is in the Performance prof
     <string name="about_logo_content_desc">LuminaTweaks logo</string>
     <string name="about_avatar_content_desc">MalCLA avatar</string>
     <string name="about_license_dialog_title">Apache License 2.0</string>
-    <string name="profile_section_performance">Performance</string>
+    <string name="profile_section_performance">App Profile</string>
     <string name="profile_section_display_render">Display &amp; Render</string>
     <string name="profile_section_additional">Additional Settings</string>
     <string name="aosp_no_options">No options available yet</string>
@@ -360,7 +360,6 @@ Features on this page are only active when the system is in the Performance prof
     <string name="aosp_section_profile">Performance Profile</string>
     <string name="aosp_section_hardware">Hardware Telemetry</string>
     <string name="aosp_profile_balanced">Balanced</string>
-    <string name="aosp_profile_performance">Performance</string>
     <string name="aosp_profile_gaming">Gaming</string>
     <string name="aosp_profile_powersave">Power Save</string>
     <string name="aosp_label_uptime">Battery Temperature</string>
@@ -389,9 +388,10 @@ Features on this page are only active when the system is in the Performance prof
     <string name="aosp_profile_maestro">Maestro</string>
     <string name="profile_desc_powersave">Maximum power saving with low clocks and basic responsiveness</string>
     <string name="profile_desc_balanced">Balanced performance, thermals, and power consumption</string>
-    <string name="profile_desc_performance">Locks peak performance for stable frame rates while gaming</string>
     <string name="profile_desc_maestro">Dynamic EAS governor with frame-pacing driven by the active refresh rate</string>
     <string name="section_automation">Automation</string>
     <string name="settings_disable_auto_title">Disable Automatic Mode</string>
-    <string name="settings_disable_auto_desc">Stops per-app automatic profile switching. The profile follows the manual selection on Home.</string>
+    <string name="settings_disable_auto_desc">Stops per-app automatic profile switching. Once disabled, the Home profile card unlocks for manual selection.</string>
+    <string name="home_profile_auto">Profile (Automatic)</string>
+    <string name="toast_profile_auto_locked">Automatic mode is active. Disable Automatic Mode in Settings to choose a manual profile.</string>
 </resources>

@@ -82,7 +82,6 @@ impl Vendor {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SocProfile {
-    Performance,
     Lite,
     Balance,
     Eco,
@@ -125,6 +124,9 @@ pub(crate) fn write_node(path: &str, value: &str) -> bool {
 }
 
 pub(crate) fn read_node(path: &str) -> Option<String> {
+    if state::is_forbidden_node(path) {
+        return None;
+    }
     fs::read_to_string(path)
         .ok()
         .map(|value| value.trim().to_string())
@@ -282,7 +284,6 @@ fn cpudcvs_mode(base: &str, mode: DevfreqMode) -> usize {
 
 fn profile_devfreq_mode(profile: SocProfile) -> Option<DevfreqMode> {
     match profile {
-        SocProfile::Performance => Some(DevfreqMode::Max),
         SocProfile::Lite => Some(DevfreqMode::Mid),
         SocProfile::Balance => Some(DevfreqMode::Unlock),
         SocProfile::Eco => None,
@@ -323,7 +324,6 @@ pub(crate) fn mali_power_policy(profile: SocProfile) -> usize {
     let path = format!("{}/power_policy", base);
     let available = read_node(&path).unwrap_or_default();
     let value = match profile {
-        SocProfile::Performance => "always_on",
         SocProfile::Balance | SocProfile::Eco => {
             if available.contains("adaptive") {
                 "adaptive"

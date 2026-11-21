@@ -8,6 +8,21 @@ use std::sync::Mutex;
 const STATE_DIR: &str = "/data/adb/.config/lumina";
 const STATE_PATH: &str = "/data/adb/.config/lumina/engine_state.json";
 const BOOT_ID_PATH: &str = "/proc/sys/kernel/random/boot_id";
+const FORBIDDEN_NODES: &[&str] = &["/sys/kernel/ged/hal/ged_kpi_hint_frame_info"];
+const GED_HAL_PREFIX: &str = "/sys/kernel/ged/hal/";
+const GED_HAL_SAFE_NODES: &[&str] = &["gx_game_mode", "gx_force_cpu_boost", "gx_dfps", "disp_dejitter"];
+
+pub fn is_forbidden_node(path: &str) -> bool {
+    let path = path.trim_end_matches('/');
+    if FORBIDDEN_NODES.iter().any(|node| path == *node) {
+        return true;
+    }
+    let Some(rest) = path.strip_prefix(GED_HAL_PREFIX) else {
+        return false;
+    };
+    let name = rest.split('/').next().unwrap_or(rest);
+    !GED_HAL_SAFE_NODES.contains(&name)
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 struct Entry {
@@ -92,6 +107,9 @@ fn persist(snapshot: &Snapshot) {
 }
 
 fn capture(path: &str) -> bool {
+    if is_forbidden_node(path) {
+        return false;
+    }
     let metadata = match fs::metadata(path) {
         Ok(metadata) => metadata,
         Err(_) => return false,
@@ -127,11 +145,17 @@ fn capture(path: &str) -> bool {
 }
 
 pub fn write_tracked(path: &str, value: &str, lock: bool) -> bool {
+    if is_forbidden_node(path) {
+        return false;
+    }
     capture(path);
     crate::tweaks::engine::write_sysfs(path, value, lock)
 }
 
 pub fn write_tracked_quiet(path: &str, value: &str, lock: bool) -> bool {
+    if is_forbidden_node(path) {
+        return false;
+    }
     capture(path);
     crate::tweaks::engine::write_sysfs_quiet(path, value, lock)
 }
@@ -162,7 +186,7 @@ pub fn restore_all() {
 
     let mut restored = 0;
     for (path, entry) in &snapshot.entries {
-        if !Path::new(path).exists() {
+        if is_forbidden_node(path) || !Path::new(path).exists() {
             continue;
         }
         let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o644));
@@ -174,4 +198,20 @@ pub fn restore_all() {
 
     let _ = fs::remove_file(STATE_PATH);
     crate::log!("[ENGINE] Restored {} original node(s)", restored);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_forbidden_node;
+
+    #[test]
+    fn blocks_ged_trap_and_unlisted_nodes() {
+        assert!(is_forbidden_node(
+            "/sys/kernel/ged/hal/ged_kpi_hint_frame_info"
+        ));
+        assert!(is_forbidden_node("/sys/kernel/ged/hal/custom_boost_gpu_freq"));
+        assert!(!is_forbidden_node("/sys/kernel/ged/hal/gx_dfps"));
+        assert!(!is_forbidden_node("/sys/kernel/ged/hal/gx_game_mode"));
+        assert!(!is_forbidden_node("/sys/devices/system/cpu"));
+    }
 }

@@ -5,6 +5,7 @@ use std::path::Path;
 const FPSGO_PATH: &str = "/sys/kernel/fpsgo/common/force_onoff";
 const FPSGO_FBT_DIR: &str = "/sys/kernel/fpsgo/fbt";
 const GED_HAL_DIR: &str = "/sys/kernel/ged/hal";
+const GED_HAL_SAFE_NODES: &[&str] = &["gx_game_mode", "gx_force_cpu_boost", "disp_dejitter"];
 const CCI_MODE_PATH: &str = "/proc/cpufreq/cpufreq_cci_mode";
 const POWER_MODE_PATH: &str = "/proc/cpufreq/cpufreq_power_mode";
 const DRAMBOOST_PATH: &str = "/sys/devices/platform/boot_dramboost/dramboost/dramboost";
@@ -27,7 +28,6 @@ const TARGET_FPS_PATHS: &[&str] = &[
     "/sys/kernel/fpsgo/common/gx_dfps",
     "/sys/kernel/ged/hal/gx_dfps",
 ];
-const GED_BOOST_PATH: &str = "/sys/kernel/ged/hal/custom_boost_gpu_freq";
 const BATOC_PATH: &str = "/proc/mtk_batoc_throttling/battery_oc_protect_stop";
 const HELIO_FORCE_PATH: &str = "/sys/kernel/helio-dvfsrc/dvfsrc_force_vcore_dvfs_opp";
 const EARA_THERMAL_PATH: &str = "/sys/kernel/eara_thermal/enable";
@@ -73,6 +73,7 @@ fn min_opp_index(table: &str) -> Option<usize> {
     parse_opp_table(table).last().map(|(index, _)| *index)
 }
 
+#[cfg(test)]
 fn first_opp_freq(table: &str) -> Option<u64> {
     parse_opp_table(table).first().map(|(_, freq)| *freq)
 }
@@ -108,6 +109,14 @@ fn ppm_policies(enabled: bool) -> usize {
         }
     }
     applied
+}
+
+fn ged_hal_node(name: &str) -> Option<String> {
+    if !GED_HAL_SAFE_NODES.contains(&name) {
+        return None;
+    }
+    let path = format!("{}/{}", GED_HAL_DIR, name);
+    Path::new(&path).exists().then_some(path)
 }
 
 fn power_limited(value: &str) -> usize {
@@ -147,11 +156,6 @@ fn ddr_performance(lite: bool) -> usize {
 
 fn ddr_balance() -> usize {
     let mut applied = 0;
-    for path in dvfsrc_platform_nodes() {
-        if super::apply_node(&path, "-1") {
-            applied += 1;
-        }
-    }
     if let Some(base) = super::find_devfreq(&["mtk-dvfsrc-devfreq"]) {
         applied += super::devfreq_unlock(&base);
     }
@@ -178,8 +182,10 @@ fn maestro_profile() -> usize {
         ("gx_force_cpu_boost", "1"),
         ("disp_dejitter", "1"),
     ] {
-        if super::apply_node(&format!("{}/{}", GED_HAL_DIR, name), value) {
-            applied += 1;
+        if let Some(path) = ged_hal_node(name) {
+            if super::apply_node(&path, value) {
+                applied += 1;
+            }
         }
     }
     if let Some(hz) = crate::tweaks::display::saved_mode_hz().filter(|hz| *hz >= 30) {
@@ -198,49 +204,6 @@ fn maestro_profile() -> usize {
     applied += power_limited("0");
     applied += super::mali_power_policy(SocProfile::Maestro);
     applied += ddr_performance(false);
-    applied
-}
-
-fn performance_profile(lite: bool) -> usize {
-    let mut applied = ppm_policies(false);
-    if super::apply_node(FPSGO_PATH, "0") {
-        applied += 1;
-    }
-    for (path, value) in [
-        (CCI_MODE_PATH, "1"),
-        (POWER_MODE_PATH, "3"),
-        (DRAMBOOST_PATH, "1"),
-        (EAS_PATH, "0"),
-        (GED_KPI_PATH, "0"),
-        (LEGACY_GPUFREQ_PATH, "0"),
-        (FIX_OPP_PATH, "-1"),
-    ] {
-        if super::apply_node(path, value) {
-            applied += 1;
-        }
-    }
-
-    if !lite {
-        if Path::new("/proc/gpufreqv2").is_dir() {
-            if super::apply_node(FIX_OPP_PATH, "0") {
-                applied += 1;
-            }
-        } else if let Some(freq) = first_opp_freq(GPUFREQ_V1_TABLE) {
-            if super::apply_node(LEGACY_GPUFREQ_PATH, &freq.to_string()) {
-                applied += 1;
-            }
-        }
-    }
-
-    applied += power_limited("1");
-    applied += super::mali_power_policy(SocProfile::Performance);
-    if super::apply_node(BATOC_PATH, "stop 1") {
-        applied += 1;
-    }
-    applied += ddr_performance(lite);
-    if super::apply_node(EARA_THERMAL_PATH, "0") {
-        applied += 1;
-    }
     applied
 }
 
@@ -266,17 +229,6 @@ fn balance_profile() -> usize {
     }
     if super::write_node(FIX_OPP_PATH, "-1") {
         applied += 1;
-    }
-
-    let min_index = if Path::new("/proc/gpufreqv2").is_dir() {
-        min_opp_index(GPUFREQ_V2_TABLE)
-    } else {
-        min_opp_index(GPUFREQ_V1_TABLE)
-    };
-    if let Some(index) = min_index {
-        if super::apply_node(GED_BOOST_PATH, &index.to_string()) {
-            applied += 1;
-        }
     }
 
     applied += power_limited("0");
@@ -310,8 +262,7 @@ fn powersave_profile() -> usize {
 
 pub fn apply(profile: SocProfile) -> usize {
     match profile {
-        SocProfile::Performance => performance_profile(false),
-        SocProfile::Lite => performance_profile(true),
+        SocProfile::Lite => super::mali_power_policy(SocProfile::Lite),
         SocProfile::Balance => balance_profile(),
         SocProfile::Eco => powersave_profile(),
         SocProfile::Maestro => maestro_profile(),

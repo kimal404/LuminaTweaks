@@ -1,32 +1,3 @@
-// Copyright (C) 2026 kimal
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-//! Presented-frame sampler.
-//!
-//! Primary source is an eBPF uprobe on `libgui`'s
-//! `android::Surface::queueBuffer`.  It measures the game's own buffer
-//! submission cadence per PID, independent of GPU vendor or display refresh
-//! rate, and works while the game is drawing even when SurfaceFlinger's
-//! TimeStats window is empty.
-//!
-//! Fallback order: SurfaceFlinger TimeStats -> legacy `--latency` ->
-//! `gfxinfo framestats` -> MediaTek `fpsgo_status`.  Every fallback reading is
-//! rejected when its newest timestamp is already stale, so the overlay never
-//! shows a frozen refresh rate as if it were a live game frame.  The sampler
-//! runs only while a whitelisted game is in front, or for a short preview
-//! requested through the IPC socket, so idle cost is zero.
-
 use std::collections::VecDeque;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -41,9 +12,7 @@ use kala_ebpf::FrameProbe;
 
 const STATUS_PATH: &str = "/data/adb/.config/lumina/fps.txt";
 pub const PUBLIC_STATUS_PATH: &str = "/data/local/tmp/lumina.fps";
-/// Manager-private mirror. `/data/local/tmp` is not traversable from the
-/// untrusted_app SELinux domain on every ROM, while both the property and this
-/// file stay readable by the app without spawning `su`.
+
 const APP_FPS_PATH: &str = "/data/data/com.luminatweaks/files/lumina.fps";
 const APP_PACKAGE_DIR: &str = "/data/data/com.luminatweaks";
 const SAMPLE_INTERVAL: Duration = Duration::from_millis(500);
@@ -90,16 +59,17 @@ fn monotonic_ns() -> u64 {
         .saturating_add(value.tv_nsec.max(0) as u64)
 }
 
-/// Shared, bounded tap of per-frame durations.
-///
-/// The sampler worker owns the vendor-specific frame source, while the
-/// session recorder runs inside the main loop.  This tap is the only hand-off
-/// between them: it stores raw frame times when eBPF is active and synthetic
-/// window samples when a vendor fallback is used.  The buffer is bounded so an
-/// idle or non-recorded game can never grow memory without limit.
 #[derive(Default)]
 struct TapState {
     frames: VecDeque<f32>,
+    measured: VecDeque<f32>,
+    measured_seq: u64,
+}
+
+#[derive(Clone)]
+pub struct FrameSample {
+    pub seq: u64,
+    pub frames: Vec<f32>,
 }
 
 #[derive(Clone)]
@@ -115,6 +85,14 @@ impl FrameTap {
     }
 
     fn push(&self, frametime_ms: f32) {
+        self.push_internal(frametime_ms, false);
+    }
+
+    pub fn push_measured(&self, frametime_ms: f32) {
+        self.push_internal(frametime_ms, true);
+    }
+
+    fn push_internal(&self, frametime_ms: f32, measured: bool) {
         if !frametime_ms.is_finite() || frametime_ms <= 0.0 {
             return;
         }
@@ -123,12 +101,16 @@ impl FrameTap {
                 state.frames.pop_front();
             }
             state.frames.push_back(frametime_ms);
+            if measured {
+                if state.measured.len() >= FRAME_TAP_CAPACITY {
+                    state.measured.pop_front();
+                }
+                state.measured.push_back(frametime_ms);
+                state.measured_seq = state.measured_seq.saturating_add(1);
+            }
         }
     }
 
-    /// Vendor fallbacks report a window average instead of individual frames.
-    /// Expand it proportionally so percentile and jank maths still operate on
-    /// frame-sized units; the window duration is approximated as one second.
     fn push_window(&self, fps: f32, frametime_ms: f32) {
         if !fps.is_finite() || !frametime_ms.is_finite() || fps <= 0.0 || frametime_ms <= 0.0 {
             return;
@@ -146,9 +128,30 @@ impl FrameTap {
         }
     }
 
+    pub fn measured_snapshot(&self, limit: usize) -> FrameSample {
+        let Ok(state) = self.state.lock() else {
+            return FrameSample {
+                seq: 0,
+                frames: Vec::new(),
+            };
+        };
+        let take = limit.min(state.measured.len());
+        let frames = state
+            .measured
+            .iter()
+            .skip(state.measured.len().saturating_sub(take))
+            .copied()
+            .collect();
+        FrameSample {
+            seq: state.measured_seq,
+            frames,
+        }
+    }
+
     pub fn clear(&self) {
         if let Ok(mut state) = self.state.lock() {
             state.frames.clear();
+            state.measured.clear();
         }
     }
 }
@@ -175,10 +178,7 @@ fn write_status(
     package: Option<&str>,
     session_start_ms: Option<u64>,
 ) {
-    // The optional fifth and sixth fields expose the sampled package and the
-    // recorder session start to the Manager so the Active Session screen can
-    // resolve the target icon/label without spawning `su`. Consumers that only
-    // understand the original four fields keep parsing the same prefix.
+
     let frame = format!(
         "{:.1} {} {:.1} {} {} {}",
         fps,
@@ -202,9 +202,6 @@ fn write_idle(game_active: bool, package: Option<&str>, session_start_ms: Option
     write_status(IDLE_MARKER, 0.0, game_active, package, session_start_ms);
 }
 
-/// Mirror the newest sample into a system property. The Manager lives in an
-/// untrusted app domain and cannot rely on traversing `/data/local/tmp` on
-/// every Android build, while properties are readable without root.
 fn publish_property(frame: &str) {
     let _ = Command::new("setprop")
         .args(["sys.lumina.fps", frame])
@@ -257,7 +254,6 @@ fn score_layer(name: &str) -> u8 {
     score
 }
 
-/// Parses one TimeStats dump and returns the most relevant layer for `package`.
 fn parse_timestats(text: &str, package: &str) -> Option<RawLayer> {
     let package = package.to_ascii_lowercase();
     let mut best: Option<RawLayer> = None;
@@ -275,7 +271,7 @@ fn parse_timestats(text: &str, package: &str) -> Option<RawLayer> {
         if !layer.to_ascii_lowercase().contains(&package) || frames == 0 || !fps.is_finite() || fps <= 0.0 {
             return;
         }
-        // Ignore non-rendering helper layers that carry the package name.
+
         let lower = layer.to_ascii_lowercase();
         if lower.contains("background for") || lower.contains("dim layer") || lower.contains("screenshot") {
             return;
@@ -334,8 +330,7 @@ fn disable_timestats() {
 }
 
 fn query_timestats(package: &str) -> Option<RawLayer> {
-    // `-dump -clear` emits the window that just ended and resets the counters
-    // in one binder round-trip, so consecutive samples never overlap.
+
     let text = timestats_command("-dump -clear")?;
     parse_timestats(&text, package)
 }
@@ -364,7 +359,6 @@ fn find_layer(package: &str) -> Option<String> {
     best.map(|(_, layer)| layer)
 }
 
-/// Android 12/13 fallback: frame present timestamps from the queue.
 fn query_latency(package: &str) -> Option<(f32, f32)> {
     let layer = find_layer(package)?;
     let text = run_command(&["dumpsys", "SurfaceFlinger", "--latency", &layer])?;
@@ -407,8 +401,6 @@ fn query_latency(package: &str) -> Option<(f32, f32)> {
     Some((fps, frametime))
 }
 
-/// HWUI fallback: works for normal apps, but games drawing into a
-/// SurfaceView usually leave this empty.
 fn query_gfxinfo(package: &str) -> Option<(f32, f32)> {
     let text = run_command(&["dumpsys", "gfxinfo", package, "framestats"])?;
     let mut in_data = false;
@@ -426,8 +418,7 @@ fn query_gfxinfo(package: &str) -> Option<(f32, f32)> {
         if values.len() < 13 {
             continue;
         }
-        // DisplayPresentTime is the last column on Android 12+, SwapBuffers is
-        // the best available timestamp on older builds.
+
         let present = values
             .get(18)
             .and_then(|v| v.trim().parse::<u64>().ok())
@@ -460,8 +451,6 @@ fn query_gfxinfo(package: &str) -> Option<(f32, f32)> {
     Some((fps, frametime))
 }
 
-/// MediaTek fallback: FSTB exposes queue FPS per render thread.  Debugfs is
-/// not mounted everywhere, so this simply returns None when unavailable.
 fn query_fpsgo(pid: i32) -> Option<(f32, f32)> {
     if pid <= 0 {
         return None;
@@ -532,7 +521,7 @@ impl EbpfSource {
             if pid != self.pid || frametime.is_zero() || frametime > EBPF_MAX_FRAME_TIME {
                 continue;
             }
-            tap.push(frametime.as_secs_f32() * 1000.0);
+            tap.push_measured(frametime.as_secs_f32() * 1000.0);
             let now = Instant::now();
             self.frames.push_back((now, frametime));
             self.last_frame = Some(now);
@@ -604,7 +593,7 @@ fn maintain_ebpf(
         .map(|source| Some(source.pid) != want_pid)
         .unwrap_or(false)
     {
-        // Dropping FrameProbe unloads its uprobe automatically.
+
         *ebpf = None;
     }
 
@@ -829,9 +818,7 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>, tap: FrameTap)
             continue;
         }
         if ebpf_fresh || ebpf_warming {
-            // Frames are still arriving but the one-second window is not full
-            // yet. Keep the last valid sample; the overlay ages it to `--` if
-            // the probe goes quiet for longer than 1.5 s.
+
             continue;
         }
 
@@ -867,10 +854,6 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>, tap: FrameTap)
                     let mut fps = raw.average_fps;
                     let mut frametime = if fps > 0.0 { 1000.0 / fps } else { 0.0 };
 
-                    // Prefer the exact frame-count delta over the average that
-                    // SurfaceFlinger computed, as requested by the public file
-                    // contract.  The first sample after a layer change has no
-                    // delta yet, so its average is used once.
                     let window = if last_window_start > 0 && !layer_changed {
                         now.saturating_sub(last_window_start)
                     } else {
@@ -921,9 +904,7 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>, tap: FrameTap)
                     if source == Source::Unavailable {
                         unavailable_at = Some(Instant::now());
                     }
-                    // Only publish the idle marker once the old sample has had
-                    // its 1.5 s grace period; transient misses must not flash
-                    // `--` between two valid frame windows.
+
                     write_idle(game_active, package.as_deref(), session_start_ms);
                 }
             }

@@ -45,7 +45,7 @@ pub fn set_dnd_mode(mode: &str) {
 }
 
 pub fn write_sysfs(path: &str, val: &str, lock: bool) -> bool {
-    if !Path::new(path).exists() {
+    if crate::tweaks::state::is_forbidden_node(path) || !Path::new(path).exists() {
         return false;
     }
     let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o644));
@@ -62,7 +62,7 @@ pub fn write_sysfs(path: &str, val: &str, lock: bool) -> bool {
 }
 
 pub fn write_sysfs_quiet(path: &str, val: &str, lock: bool) -> bool {
-    if !Path::new(path).exists() {
+    if crate::tweaks::state::is_forbidden_node(path) || !Path::new(path).exists() {
         return false;
     }
     let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o644));
@@ -101,7 +101,7 @@ fn cpu_frequencies(base: &str) -> Vec<u64> {
         .collect()
 }
 
-fn hardware_limits(base: &str) -> Option<(u64, u64, Vec<u64>)> {
+pub(crate) fn hardware_limits(base: &str) -> Option<(u64, u64, Vec<u64>)> {
     let freqs = cpu_frequencies(base);
     let hw_min = read_u64(&format!("{}/cpuinfo_min_freq", base))
         .or_else(|| crate::tweaks::devfreq::min_frequency(&freqs))?;
@@ -110,7 +110,7 @@ fn hardware_limits(base: &str) -> Option<(u64, u64, Vec<u64>)> {
     Some((hw_min, hw_max, freqs))
 }
 
-fn cpu_policy_dirs() -> Vec<String> {
+pub(crate) fn cpu_policy_dirs() -> Vec<String> {
     let mut dirs = Vec::new();
     if let Ok(entries) = fs::read_dir("/sys/devices/system/cpu/cpufreq") {
         for entry in entries.flatten() {
@@ -274,36 +274,42 @@ fn apply_maestro_governor() {
 }
 
 fn maestro_floor(hw_min: u64, hw_max: u64, freqs: &[u64]) -> u64 {
-    let target = hw_max / 2;
+    let target = hw_max * 48 / 100;
     crate::tweaks::devfreq::nearest_frequency(freqs, target)
         .unwrap_or(target)
-        .max(hw_min)
+        .clamp(hw_min, hw_max)
 }
 
-fn cpufreq_maestro() {
+fn maestro_cap(hw_max: u64, lite: bool, freqs: &[u64]) -> u64 {
+    if !lite {
+        return hw_max;
+    }
+    let target = hw_max * 78 / 100;
+    crate::tweaks::devfreq::nearest_frequency(freqs, target)
+        .unwrap_or(target)
+        .min(hw_max)
+}
+
+fn cpufreq_maestro(lite: bool) {
     for base in cpu_policy_dirs() {
         let Some((hw_min, hw_max, freqs)) = hardware_limits(&base) else {
             continue;
         };
         let floor = maestro_floor(hw_min, hw_max, &freqs);
-        profile_write(
-            &format!("{}/scaling_max_freq", base),
-            &hw_max.to_string(),
-        );
-        profile_write(
-            &format!("{}/scaling_min_freq", base),
-            &floor.to_string(),
-        );
+        let cap = maestro_cap(hw_max, lite, &freqs).max(floor);
+        profile_write(&format!("{}/scaling_max_freq", base), &cap.to_string());
+        profile_write(&format!("{}/scaling_min_freq", base), &floor.to_string());
     }
 }
 
-fn cpufreq_ppm_maestro() {
+fn cpufreq_ppm_maestro(lite: bool) {
     for (cluster, base) in cpu_policy_dirs().iter().enumerate() {
         let Some((hw_min, hw_max, freqs)) = hardware_limits(base) else {
             continue;
         };
         let floor = maestro_floor(hw_min, hw_max, &freqs);
-        profile_write(PPM_MAX_PATH, &format!("{} {}", cluster, hw_max));
+        let cap = maestro_cap(hw_max, lite, &freqs).max(floor);
+        profile_write(PPM_MAX_PATH, &format!("{} {}", cluster, cap));
         profile_write(PPM_MIN_PATH, &format!("{} {}", cluster, floor));
     }
 }
@@ -347,40 +353,8 @@ fn apply_ufs_antistall() {
     }
 }
 
-fn cpufreq_max_perf(lite: bool) {
-    for base in cpu_policy_dirs() {
-        let Some((hw_min, hw_max, freqs)) = hardware_limits(&base) else {
-            continue;
-        };
-        let min_target = if lite {
-            crate::tweaks::devfreq::mid_frequency(&freqs).unwrap_or(hw_min)
-        } else {
-            hw_max
-        };
-        profile_apply(
-            &format!("{}/scaling_max_freq", base),
-            &hw_max.to_string(),
-        );
-        profile_apply(
-            &format!("{}/scaling_min_freq", base),
-            &min_target.to_string(),
-        );
-    }
-}
-
-fn cpufreq_ppm_max_perf(lite: bool) {
-    for (cluster, base) in cpu_policy_dirs().iter().enumerate() {
-        let Some((hw_min, hw_max, freqs)) = hardware_limits(base) else {
-            continue;
-        };
-        profile_write(PPM_MAX_PATH, &format!("{} {}", cluster, hw_max));
-        let min_target = if lite {
-            crate::tweaks::devfreq::mid_frequency(&freqs).unwrap_or(hw_min)
-        } else {
-            hw_max
-        };
-        profile_write(PPM_MIN_PATH, &format!("{} {}", cluster, min_target));
-    }
+pub(crate) fn set_ppm_hard_max(cluster: usize, freq: u64) -> bool {
+    profile_write(PPM_MAX_PATH, &format!("{} {}", cluster, freq))
 }
 
 fn cpufreq_unlock() {
@@ -433,8 +407,8 @@ fn apply_vfs_cache_pressure(value: &str) {
     profile_apply("/proc/sys/vm/vfs_cache_pressure", value);
 }
 
-fn apply_io_latency(performance: bool) {
-    let read_ahead = if performance { "32" } else { "128" };
+fn apply_io_latency(low_latency: bool) {
+    let read_ahead = if low_latency { "32" } else { "128" };
 
     let Ok(entries) = fs::read_dir("/sys/block") else {
         return;
@@ -454,7 +428,7 @@ fn apply_io_latency(performance: bool) {
             read_ahead,
         );
         let nr_path = format!("{}/queue/nr_requests", base);
-        let nr_primary = if performance { "32" } else { "64" };
+        let nr_primary = if low_latency { "32" } else { "64" };
         if !crate::tweaks::state::write_tracked_quiet(&nr_path, nr_primary, true)
             && nr_primary != "32"
         {
@@ -467,44 +441,14 @@ fn drop_caches() {
     let _ = fs::write("/proc/sys/vm/drop_caches", b"3");
 }
 
-pub fn performance_profile() {
-    apply_battery_saver(false);
-    crate::tweaks::sched::apply_performance();
-    apply_vfs_cache_pressure("80");
-    change_cpu_governor("performance");
-    if ppm_available() {
-        cpufreq_ppm_max_perf(false);
-    } else {
-        cpufreq_max_perf(false);
-    }
-    apply_io_latency(true);
-    soc::apply(SocProfile::Performance);
-    drop_caches();
-}
-
-pub fn performance_lite_profile() {
-    apply_battery_saver(false);
-    crate::tweaks::sched::apply_performance();
-    apply_vfs_cache_pressure("80");
-    change_cpu_governor(&default_governor());
-    if ppm_available() {
-        cpufreq_ppm_max_perf(true);
-    } else {
-        cpufreq_max_perf(true);
-    }
-    apply_io_latency(true);
-    soc::apply(SocProfile::Lite);
-    drop_caches();
-}
-
-pub fn maestro_profile() {
+pub fn maestro_profile(lite: bool) {
     apply_battery_saver(false);
     crate::tweaks::sched::apply_maestro();
     apply_vfs_cache_pressure("80");
     apply_maestro_governor();
-    cpufreq_maestro();
+    cpufreq_maestro(lite);
     if ppm_available() {
-        cpufreq_ppm_maestro();
+        cpufreq_ppm_maestro(lite);
     }
     apply_io_latency(true);
     apply_ufs_antistall();

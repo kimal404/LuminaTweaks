@@ -1,4 +1,3 @@
-
 #[macro_use]
 mod core;
 mod binder;
@@ -24,7 +23,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tweaks::texture::TextureController;
 use tweaks::utility::UtilityController;
-use tweaks::{display, engine, fps, renderer, sched, soc};
+use tweaks::{display, engine, fas, fps, renderer, sched, soc};
 
 static SHUTDOWN: AtomicBool = AtomicBool::new(false);
 
@@ -76,8 +75,6 @@ fn acquire_instance_lock() -> Option<File> {
 pub enum Profile {
     Eco,
     Balance,
-    Performance,
-    PerformanceLite,
     Maestro,
 }
 
@@ -86,8 +83,6 @@ impl Profile {
         match self {
             Profile::Eco => "Eco",
             Profile::Balance => "Balanced",
-            Profile::Performance => "Performance",
-            Profile::PerformanceLite => "Performance Lite",
             Profile::Maestro => "Maestro",
         }
     }
@@ -96,31 +91,18 @@ impl Profile {
         match name.trim().to_ascii_lowercase().as_str() {
             "eco" | "powersave" | "power save" | "hemat daya" => Some(Profile::Eco),
             "balanced" | "balance" | "seimbang" => Some(Profile::Balance),
-            "performance" | "performa" => Some(Profile::Performance),
-            "performance lite" | "performance_lite" | "performance-lite" => {
-                Some(Profile::PerformanceLite)
-            }
-            "maestro" => Some(Profile::Maestro),
+            "performance" | "performa" | "performance lite" | "performance_lite"
+            | "performance-lite" | "maestro" => Some(Profile::Maestro),
             _ => None,
         }
     }
 }
 
-fn apply_profile(profile: Profile) {
+fn apply_profile(profile: Profile, lite: bool) {
     match profile {
-        Profile::Performance => engine::performance_profile(),
-        Profile::PerformanceLite => engine::performance_lite_profile(),
         Profile::Eco => engine::eco_profile(),
         Profile::Balance => engine::balance_profile(),
-        Profile::Maestro => engine::maestro_profile(),
-    }
-}
-
-fn effective_manual_profile(profile: Profile) -> Profile {
-    if profile == Profile::Performance && is_lite_mode_active() {
-        Profile::PerformanceLite
-    } else {
-        profile
+        Profile::Maestro => engine::maestro_profile(lite),
     }
 }
 
@@ -245,6 +227,7 @@ fn publish_selinux_status() {
 
 struct EngineRuntime {
     current_profile: Option<Profile>,
+    current_lite: bool,
     manual_profile: Option<Profile>,
     active_target_pkg: Option<String>,
     active_target_pid: i32,
@@ -268,6 +251,7 @@ impl EngineRuntime {
 
         Self {
             current_profile: None,
+            current_lite: false,
             manual_profile: read_saved_manual_profile(),
             active_target_pkg: None,
             active_target_pid: 0,
@@ -330,43 +314,29 @@ impl EngineRuntime {
                 .and_then(|cfg| Profile::from_name(&cfg.profile));
             let target_profile = if let Some(profile) = selected {
                 profile
-            } else if let Some(ref cfg) = target_cfg {
-                let is_lite = match cfg.lite_mode.as_str() {
-                    "on" => true,
-                    "off" => false,
-                    _ => is_global_lite,
-                };
-                if is_lite {
-                    Profile::PerformanceLite
-                } else {
-                    Profile::Performance
-                }
+            } else if target_cfg.is_some() {
+                Profile::Maestro
             } else if self.low_power {
                 Profile::Eco
             } else {
                 self.manual_profile.unwrap_or(Profile::Balance)
             };
+            let target_lite = match target_cfg.as_ref() {
+                Some(cfg) => match cfg.lite_mode.as_str() {
+                    "on" => true,
+                    "off" => false,
+                    _ => is_global_lite,
+                },
+                None => is_global_lite,
+            };
 
-            let is_profile_changing = self.current_profile != Some(target_profile);
+            let is_profile_changing =
+                self.current_profile != Some(target_profile) || self.current_lite != target_lite;
 
             if is_profile_changing {
-                apply_profile(target_profile);
+                apply_profile(target_profile, target_lite);
                 set_system_profile_prop(target_profile.as_str());
                 match target_profile {
-                    Profile::Performance => {
-                        log!(
-                            "[BOOST]  {} ({}) \u{2794} FULL_PERF [CPU: 100% | Sched: 100%]",
-                            target_pkg.unwrap_or("system"),
-                            self.active_target_pid
-                        );
-                    }
-                    Profile::PerformanceLite => {
-                        log!(
-                            "[BOOST]  {} ({}) \u{2794} FULL_PERF_LITE [CPU: 72% | SoC: 85% | Sched: 0%]",
-                            target_pkg.unwrap_or("system"),
-                            self.active_target_pid
-                        );
-                    }
                     Profile::Eco => {
                         log!("[POWER] ECO \u{2794} CPU powersave");
                     }
@@ -379,13 +349,15 @@ impl EngineRuntime {
                     }
                     Profile::Maestro => {
                         log!(
-                            "[BOOST]  {} ({}) \u{2794} MAESTRO [EAS: Dynamic | Frame-Pacing: VSYNC]",
+                            "[BOOST]  {} ({}) \u{2794} MAESTRO [EAS: Dynamic | Frame-Pacing: VSYNC{}]",
                             target_pkg.unwrap_or("system"),
-                            self.active_target_pid
+                            self.active_target_pid,
+                            if target_lite { " | Lite" } else { "" }
                         );
                     }
                 }
                 self.current_profile = Some(target_profile);
+                self.current_lite = target_lite;
                 self.update_shared_state(target_profile, target_pkg);
             }
         }
@@ -466,7 +438,7 @@ impl EngineRuntime {
             log!("[SYSTEM] DND restored -> {}", restore);
         }
 
-        if self.current_profile != Some(Profile::Balance) {
+        if self.current_profile != Some(Profile::Balance) || self.current_lite {
             engine::balance_profile();
             set_system_profile_prop("Balanced");
             log!(
@@ -478,6 +450,7 @@ impl EngineRuntime {
         }
 
         self.current_profile = Some(Profile::Balance);
+        self.current_lite = false;
         self.left_foreground_at = None;
         self.skipped_renderer_notice_pkg = None;
         self.active_target_pkg = None;
@@ -555,12 +528,17 @@ fn main() {
     let mut runtime = EngineRuntime::new(Arc::clone(&shared_state));
     if !detector::is_auto_profile_enabled() {
         if let Some(profile) = runtime.manual_profile {
-            let effective = effective_manual_profile(profile);
-            apply_profile(effective);
-            runtime.current_profile = Some(effective);
-            runtime.update_shared_state(effective, None);
-            set_system_profile_prop(effective.as_str());
-            log!("[PROFILE] Manual mode active -> {}", effective.as_str());
+            let lite = is_lite_mode_active();
+            apply_profile(profile, lite);
+            runtime.current_profile = Some(profile);
+            runtime.current_lite = lite;
+            runtime.update_shared_state(profile, None);
+            set_system_profile_prop(profile.as_str());
+            log!(
+                "[PROFILE] Manual mode active -> {}{}",
+                profile.as_str(),
+                if lite { " Lite" } else { "" }
+            );
         }
     }
     let mut binder_client = binder_client::BinderClient::new();
@@ -577,6 +555,7 @@ fn main() {
     let mut fallback_blocked_until = Instant::now();
     let mut last_screen_state: Option<bool> = None;
     let mut fps_monitor = fps::FpsMonitor::new();
+    let mut fas_controller = fas::FasController::new(fps_monitor.tap());
     let mut session_recorder = session::SessionRecorder::new(fps_monitor.tap());
     let mut last_heartbeat = Instant::now();
     let mut reload_pending_at: Option<Instant> = None;
@@ -604,14 +583,19 @@ fn main() {
         let auto_profile = detector::is_auto_profile_enabled();
         if let Some(name) = shared_state.take_requested_profile() {
             if let Some(profile) = Profile::from_name(&name) {
-                let effective = effective_manual_profile(profile);
-                apply_profile(effective);
+                let lite = is_lite_mode_active();
+                apply_profile(profile, lite);
                 runtime.manual_profile = Some(profile);
-                runtime.current_profile = Some(effective);
+                runtime.current_profile = Some(profile);
+                runtime.current_lite = lite;
                 persist_manual_profile(profile);
-                set_system_profile_prop(effective.as_str());
-                runtime.update_shared_state(effective, runtime.active_target_pkg.as_deref());
-                log!("[PROFILE] Manual selection -> {}", effective.as_str());
+                set_system_profile_prop(profile.as_str());
+                runtime.update_shared_state(profile, runtime.active_target_pkg.as_deref());
+                log!(
+                    "[PROFILE] Manual selection -> {}{}",
+                    profile.as_str(),
+                    if lite { " Lite" } else { "" }
+                );
             }
         }
 
@@ -658,12 +642,13 @@ fn main() {
                 engine::sync_global_tweaks();
                 if !auto_profile {
                     if let Some(profile) = runtime.manual_profile {
-                        let effective = effective_manual_profile(profile);
-                        apply_profile(effective);
-                        runtime.current_profile = Some(effective);
-                        set_system_profile_prop(effective.as_str());
+                        let lite = is_lite_mode_active();
+                        apply_profile(profile, lite);
+                        runtime.current_profile = Some(profile);
+                        runtime.current_lite = lite;
+                        set_system_profile_prop(profile.as_str());
                         runtime.update_shared_state(
-                            effective,
+                            profile,
                             runtime.active_target_pkg.as_deref(),
                         );
                     }
@@ -682,12 +667,13 @@ fn main() {
                 engine::sync_global_tweaks();
                 if !auto_profile {
                     if let Some(profile) = runtime.manual_profile {
-                        let effective = effective_manual_profile(profile);
-                        apply_profile(effective);
-                        runtime.current_profile = Some(effective);
-                        set_system_profile_prop(effective.as_str());
+                        let lite = is_lite_mode_active();
+                        apply_profile(profile, lite);
+                        runtime.current_profile = Some(profile);
+                        runtime.current_lite = lite;
+                        set_system_profile_prop(profile.as_str());
                         runtime.update_shared_state(
-                            effective,
+                            profile,
                             runtime.active_target_pkg.as_deref(),
                         );
                     }
@@ -846,6 +832,7 @@ fn main() {
             };
 
             if target != last_pkg_for_texture {
+                fas_controller.reset();
                 if let Some(ref pkg) = target {
                     TextureController::apply_foreground(pkg);
                     if TextureController::is_angle_active_for(pkg) {
@@ -916,6 +903,13 @@ fn main() {
             fps_game_active,
             fps_pid,
             session_start_ms,
+        );
+
+        fas_controller.tick(
+            runtime.current_profile == Some(Profile::Maestro),
+            screen_awake && current_target.is_some(),
+            display::saved_mode_hz().filter(|hz| *hz >= 30),
+            runtime.current_lite,
         );
 
         let sleep_ms = if binder_client.is_push() {

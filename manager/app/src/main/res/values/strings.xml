@@ -221,7 +221,7 @@
     <string name="tweaks_mtk_info_title">Informasi Profil</string>
     <string name="tweaks_mtk_info_desc">FPSGO adalah modul kernel MediaTek yang mengatur clock CPU/GPU secara dinamis berdasarkan frame rate real-time. Saat FPS stabil, clock diturunkan untuk hemat daya — namun di adegan berat, pembatasan ini bisa menyebabkan frame drop.
 
-Fitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. Pada profil Balanced atau Eco, subsistem kembali ke baseline standar.</string>
+Fitur di halaman ini hanya aktif ketika sistem berada pada profil Maestro. Pada profil Balanced atau Eco, subsistem kembali ke baseline standar.</string>
     <string name="tweaks_fpsgo_title">Bypass Frame Limiter (FPSGo)</string>
     <string name="tweaks_fpsgo_desc">Nonaktifkan regulasi FPSGO agar clock CPU/GPU bebas naik sesuai kebutuhan render, tanpa dibatasi saat FPS terlihat stabil. Konsumsi daya dan suhu lebih tinggi.</string>
     <string name="tweaks_ged_title">Mali GED GPU Boost</string>
@@ -241,7 +241,7 @@ Fitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. P
     <string name="tweak_memory_zram">Memory &amp; ZRAM</string>
     <string name="tweak_memory_zram_desc">Kompresi swap, swappiness memori virtual, dan alokasi RAM</string>
     <string name="tweak_auto_dnd">DND Mode Otomatis</string>
-    <string name="tweak_auto_dnd_desc">Aktifkan DND otomatis saat profil Performance aktif</string>
+    <string name="tweak_auto_dnd_desc">Aktifkan DND otomatis saat profil Maestro aktif</string>
     <string name="tweak_io_scheduler">I/O Scheduler</string>
     <string name="tweak_io_scheduler_desc">Algoritma antrean I/O penyimpanan UFS/eMMC</string>
     <string name="dialog_select_io_scheduler">Pilih I/O Scheduler</string>
@@ -349,7 +349,7 @@ Fitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. P
     <string name="about_logo_content_desc">Logo LuminaTweaks</string>
     <string name="about_avatar_content_desc">Avatar MalCLA</string>
     <string name="about_license_dialog_title">Apache License 2.0</string>
-    <string name="profile_section_performance">Performa</string>
+    <string name="profile_section_performance">Profil Aplikasi</string>
     <string name="profile_section_display_render">Tampilan &amp; Render</string>
     <string name="profile_section_additional">Pengaturan Tambahan</string>
     <string name="aosp_no_options">Belum ada opsi tersedia</string>
@@ -361,7 +361,6 @@ Fitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. P
     <string name="aosp_section_profile">Profil Performa</string>
     <string name="aosp_section_hardware">Telemetri Perangkat Keras</string>
     <string name="aosp_profile_balanced">Seimbang</string>
-    <string name="aosp_profile_performance">Performa</string>
     <string name="aosp_profile_gaming">Gaming</string>
     <string name="aosp_profile_powersave">Hemat Daya</string>
     <string name="aosp_label_uptime">Suhu Baterai</string>
@@ -390,9 +389,10 @@ Fitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. P
     <string name="aosp_profile_maestro">Maestro</string>
     <string name="profile_desc_powersave">Hemat daya maksimal dengan clock rendah dan responsivitas dasar</string>
     <string name="profile_desc_balanced">Keseimbangan antara performa, suhu, dan konsumsi daya</string>
-    <string name="profile_desc_performance">Kunci performa puncak untuk frame rate stabil saat gaming</string>
     <string name="profile_desc_maestro">Governor EAS dinamis dengan frame-pacing mengikuti refresh rate aktif</string>
     <string name="section_automation">Otomatisasi</string>
     <string name="settings_disable_auto_title">Nonaktifkan Mode Otomatis</string>
-    <string name="settings_disable_auto_desc">Matikan perpindahan profil otomatis per aplikasi. Profil akan mengikuti pilihan manual di Home.</string>
+    <string name="settings_disable_auto_desc">Matikan perpindahan profil otomatis per aplikasi. Setelah nonaktif, kartu profil di Beranda dapat dibuka untuk memilih profil manual.</string>
+    <string name="home_profile_auto">Profil (Otomatis)</string>
+    <string name="toast_profile_auto_locked">Mode otomatis aktif. Nonaktifkan Mode Otomatis di Pengaturan untuk memilih profil manual.</string>
 </resources>

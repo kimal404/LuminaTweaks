@@ -1,35 +1,3 @@
-// Copyright (C) 2026 kimal
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-//! Gameplay session telemetry recorder.
-//!
-//! The state machine is driven from `luminad`'s existing event loop, so no
-//! extra thread or polling loop exists.  Metrics follow the conventions popular
-//! in PC frame-analysis tools (MangoHud-style 1 % / 0.1 % low, Welford frame
-//! pacing variance, frame-budget jank classification) while remaining fully
-//! vendor-neutral:
-//!
-//! * CPU temperatures come from a sysfs probe list cached at daemon startup.
-//!   Zone names differ across MediaTek, Snapdragon, Exynos, Tensor, Kirin and
-//!   Unisoc, so every zone is ranked (CPU > SoC/GPU > generic) and the highest
-//!   available rank that yields a valid reading is used.
-//! * Battery temperature and power are read from the discovered power-supply
-//!   node, normalising millidegrees, decidegrees, microvolts and microwatts.
-//! * Frame times are consumed from the FPS sampler's bounded tap.  Percentile
-//!   lows are computed with a fixed-size histogram, keeping memory constant for
-//!   sessions of any length.
-
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -51,23 +19,16 @@ const LABEL_CACHE_FILES: &[&str] = &[
 const CONFIG_POLL_INTERVAL: Duration = Duration::from_secs(2);
 const SENSOR_INTERVAL: Duration = Duration::from_secs(1);
 const GRACE_PERIOD: Duration = Duration::from_secs(10);
-/// Anything shorter is noise (a stray focus bounce). Ten seconds is the floor
-/// at which a session is still worth keeping even when the frame source never
-/// attached: `finalize` degrades FPS to `0.0` instead of dropping the record.
+
 const MIN_SESSION: Duration = Duration::from_secs(10);
 const IDLE_TAP_CLEAR_INTERVAL: Duration = Duration::from_secs(5);
 const MAX_SESSIONS: usize = 25;
-/// Time-series points stored per session. Buckets are already one per second,
-/// so a normal session keeps its natural resolution; longer sessions are
-/// grouped down to this many entries. The stored JSON therefore grows with
-/// duration only until the cap, keeping SESSION_READ payloads bounded.
+
 const MAX_SAMPLE_POINTS: usize = 300;
 const JANK_FRAME_FACTOR: f32 = 1.5;
 const HIST_BIN_MS: f32 = 0.1;
 const HIST_BINS: usize = 20_000;
-/// Loading screens, draft picks and static menus deliver isolated frame
-/// intervals far above one second. They are not gameplay stutter, so they are
-/// excluded from every statistic instead of dragging 1 % / 0.1 % low to 1 FPS.
+
 const STALL_FRAME_MS: f32 = 250.0;
 const THERMAL_DIR: &str = "/sys/class/thermal";
 const POWER_SUPPLY_DIR: &str = "/sys/class/power_supply";
@@ -87,16 +48,6 @@ fn round2(value: f32) -> f32 {
     (value * 100.0).round() / 100.0
 }
 
-/// Whether any live process still belongs to `package`.
-///
-/// Android names app processes after the package (`com.foo.bar`) or a private
-/// suffix (`com.foo.bar:remote`), so `/proc/<pid>/cmdline` is matched against
-/// the package and its `:`-separated children.  The scan is intentionally
-/// uncached: a Recents swipe must be detected on the same tick that leaves the
-/// foreground, not up to a cache TTL later.  Zombies and kernel threads expose
-/// an empty cmdline and are ignored, and unreadable `/proc` entries are skipped.
-/// When `/proc` itself cannot be listed the caller keeps the regular grace
-/// period instead of finalizing on a transient read failure.
 fn game_process_alive(package: &str) -> bool {
     let Ok(entries) = fs::read_dir("/proc") else {
         return true;
@@ -131,10 +82,6 @@ fn game_process_alive(package: &str) -> bool {
     false
 }
 
-// ---------------------------------------------------------------------------
-// record_apps.json
-// ---------------------------------------------------------------------------
-
 struct RecordApps {
     packages: HashSet<String>,
     mtime: Option<SystemTime>,
@@ -155,9 +102,7 @@ impl RecordApps {
     }
 
     fn refresh(&mut self, force: bool) {
-        // A bridge write (user flipping the toggle) supersedes both the poll
-        // interval and the mtime shortcut, so the recorder reacts on the next
-        // tick instead of up to two seconds later.
+
         let invalidated = crate::core::take_record_apps_stale();
         if !force && !invalidated && self.last_check.elapsed() < CONFIG_POLL_INTERVAL {
             return;
@@ -209,10 +154,6 @@ fn parse_record_apps(raw: &str) -> HashSet<String> {
 
     packages
 }
-
-// ---------------------------------------------------------------------------
-// Optional app-label cache
-// ---------------------------------------------------------------------------
 
 struct LabelCache {
     labels: HashMap<String, String>,
@@ -278,10 +219,6 @@ fn parse_labels(raw: &str, labels: &mut HashMap<String, String>) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Sysfs discovery (startup only)
-// ---------------------------------------------------------------------------
-
 struct ThermalZone {
     path: PathBuf,
     tier: u8,
@@ -344,7 +281,6 @@ impl Sensors {
             return None;
         }
 
-        // `voltage_now` is microvolts on most kernels and millivolts on a few.
         let voltage_mv = if voltage > 100_000.0 {
             voltage / 1_000.0
         } else {
@@ -471,8 +407,6 @@ fn read_number(path: &Path) -> Option<f32> {
         .filter(|value| value.is_finite())
 }
 
-/// Normalises kernel thermal units into Celsius:
-/// > 1000 is millidegrees, > 200 is decidegrees, otherwise plain Celsius.
 fn normalize_temp(raw: f32) -> Option<f32> {
     if !raw.is_finite() || raw < -50.0 {
         return None;
@@ -519,10 +453,6 @@ fn parse_display_hz(text: &str) -> Option<i32> {
     }
     best
 }
-
-// ---------------------------------------------------------------------------
-// Session state
-// ---------------------------------------------------------------------------
 
 #[derive(Default)]
 struct Bucket {
@@ -621,12 +551,7 @@ impl ActiveSession {
         if frames.is_empty() {
             return;
         }
-        // A display can never present more frames than its refresh rate. Two
-        // back-to-back swap buffers (screen transition, rotation) produce
-        // sub-refresh frame times that inflate the average to impossible
-        // values such as 174 FPS on a 120 Hz panel. Clamp every interval to at
-        // least one refresh period so the resulting FPS can never exceed
-        // `display_hz`.
+
         let refresh_ms = 1000.0 / self.display_hz.max(1) as f32;
         let index = self.ensure_bucket(offset_sec);
         let bucket = &mut self.buckets[index];
@@ -893,10 +818,6 @@ fn build_samples(buckets: &[Bucket], display_hz: f32) -> Vec<StoredSample> {
     samples
 }
 
-// ---------------------------------------------------------------------------
-// Persistence (matches SessionStatsScreen.kt JSON contract)
-// ---------------------------------------------------------------------------
-
 #[derive(Serialize, Deserialize, Clone, Default)]
 #[serde(rename_all = "camelCase", default)]
 struct StoredSample {
@@ -977,10 +898,6 @@ fn write_atomic(path: &str, content: &str) -> std::io::Result<()> {
     fs::rename(&temp, path)
 }
 
-// ---------------------------------------------------------------------------
-// Main-loop state machine
-// ---------------------------------------------------------------------------
-
 pub struct SessionRecorder {
     config: RecordApps,
     labels: LabelCache,
@@ -1012,9 +929,6 @@ impl SessionRecorder {
         }
     }
 
-    /// Returns the foreground package when it is opted in for recording.
-    /// The caller uses this to keep the FPS sampler attached to a recorded app
-    /// even when it is not part of the tweak whitelist.
     pub fn candidate(&mut self, screen_on: bool, foreground: Option<&str>) -> Option<String> {
         self.config.refresh(false);
         if !screen_on {
@@ -1124,7 +1038,6 @@ impl SessionRecorder {
         }
     }
 
-    /// Package and epoch start of the session currently being recorded.
     pub fn active_start_ms(&self) -> Option<(String, u64)> {
         self.active
             .as_ref()
@@ -1195,15 +1108,12 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
-    /// A dead frame source (SurfaceFlinger/eBPF never attached) must still
-    /// produce a persisted record once the session clears the floor; FPS
-    /// degrades to 0.0 instead of cancelling the save.
     fn dead_frame_source_session(elapsed: Duration) -> ActiveSession {
         let now = Instant::now();
         ActiveSession {
             package: "com.example.game".to_string(),
             app_name: "Example".to_string(),
-            profile: "Performance".to_string(),
+            profile: "Maestro".to_string(),
             display_hz: 120,
             start_epoch_ms: 1_700_000_000_000,
             started_at: now - elapsed,
@@ -1271,8 +1181,6 @@ mod tests {
         assert!(json.contains("\"packageName\""));
     }
 
-    /// One bucket per second is the natural sampling rate; the cap only kicks
-    /// in for very long sessions, keeping the stored JSON a bounded size.
     #[test]
     fn samples_are_capped_for_long_sessions() {
         let mut buckets = Vec::with_capacity(2_000);
@@ -1285,12 +1193,10 @@ mod tests {
         }
         let samples = build_samples(&buckets, 120.0);
         assert_eq!(samples.len(), MAX_SAMPLE_POINTS);
-        // Offsets stay monotonically increasing after grouping.
+
         assert!(samples.windows(2).all(|pair| pair[0].offset_sec <= pair[1].offset_sec));
     }
 
-    /// A short session keeps one point per second instead of being padded up
-    /// to the cap.
     #[test]
     fn short_sessions_keep_one_point_per_second() {
         let mut buckets = Vec::with_capacity(30);
