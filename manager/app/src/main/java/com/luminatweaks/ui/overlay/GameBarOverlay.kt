@@ -551,6 +551,7 @@ private fun GameBarQuickAppItem(app: GameBarQuickApp, onClick: () -> Unit) {
             }.getOrNull()
         }
     }
+    val iconBitmap = icon
     Column(
         modifier = Modifier
             .width(62.dp)
@@ -563,9 +564,9 @@ private fun GameBarQuickAppItem(app: GameBarQuickApp, onClick: () -> Unit) {
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.surfaceContainerHighest
         ) {
-            if (icon != null) {
+            if (iconBitmap != null) {
                 Image(
-                    bitmap = icon,
+                    bitmap = iconBitmap,
                     contentDescription = app.label,
                     modifier = Modifier.size(44.dp)
                 )
