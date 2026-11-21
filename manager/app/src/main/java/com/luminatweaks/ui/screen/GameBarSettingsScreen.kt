@@ -24,10 +24,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
+import androidx.compose.material.icons.rounded.Autorenew
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -59,6 +62,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.GameBarConfig
 import com.luminatweaks.data.GameBarPrefs
@@ -74,15 +78,13 @@ import kotlinx.coroutines.withContext
 
 private data class GameBarSizePreset(
     val label: String,
-    val panelWidthDp: Int,
-    val handleHeightDp: Int,
-    val handleThicknessDp: Int
+    val panelWidthDp: Int
 )
 
 private val gameBarSizePresets = listOf(
-    GameBarSizePreset("Ringkas", 300, 104, 18),
-    GameBarSizePreset("Standar", 336, 120, 22),
-    GameBarSizePreset("Lebar", 400, 144, 24)
+    GameBarSizePreset("Ringkas", 256),
+    GameBarSizePreset("Standar", 280),
+    GameBarSizePreset("Lebar", 304)
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -176,7 +178,7 @@ fun GameBarSettingsScreen(onBack: () -> Unit) {
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = innerPadding.calculateTopPadding() + 8.dp,
-                bottom = 32.dp,
+                bottom = 110.dp,
                 start = 16.dp,
                 end = 16.dp
             ),
@@ -266,17 +268,30 @@ fun GameBarSettingsScreen(onBack: () -> Unit) {
                                     selected = selectedPresetWidth == preset.panelWidthDp,
                                     modifier = Modifier.weight(1f),
                                     onClick = {
-                                        save(
-                                            config.copy(
-                                                panelWidthDp = preset.panelWidthDp,
-                                                handleHeightDp = preset.handleHeightDp,
-                                                handleThicknessDp = preset.handleThicknessDp
-                                            )
-                                        )
+                                        save(config.copy(panelWidthDp = preset.panelWidthDp))
                                     }
                                 )
                             }
                         }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Posisi vertikal handle",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = "${(config.handlePositionRatio * 100).roundToInt()}%",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Slider(
+                            value = config.handlePositionRatio.coerceIn(0.15f, 0.85f),
+                            onValueChange = { save(config.copy(handlePositionRatio = it)) },
+                            valueRange = 0.15f..0.85f
+                        )
                     }
                 }
             }
@@ -290,7 +305,7 @@ fun GameBarSettingsScreen(onBack: () -> Unit) {
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "Transparansi panel",
+                                text = "Transparansi kartu",
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.SemiBold,
                                 modifier = Modifier.weight(1f)
@@ -303,10 +318,49 @@ fun GameBarSettingsScreen(onBack: () -> Unit) {
                             )
                         }
                         Slider(
-                            value = config.opacity.coerceIn(0.55f, 1f),
+                            value = config.opacity.coerceIn(0.40f, 1f),
                             onValueChange = { save(config.copy(opacity = it)) },
-                            valueRange = 0.55f..1f
+                            valueRange = 0.40f..1f
                         )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Opasitas handle tepi",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = "${(config.handleOpacity * 100).roundToInt()}%",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Slider(
+                            value = config.handleOpacity.coerceIn(0.10f, 0.80f),
+                            onValueChange = { save(config.copy(handleOpacity = it)) },
+                            valueRange = 0.10f..0.80f
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Redupkan handle otomatis",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Handle meredup setelah 2,5 detik tanpa sentuhan",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = config.autoDimHandle,
+                                onCheckedChange = { save(config.copy(autoDimHandle = it)) }
+                            )
+                        }
                     }
                 }
             }
@@ -445,7 +499,7 @@ private fun GameBarPreview(config: GameBarConfig) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(192.dp)
+            .height(216.dp)
             .clip(RoundedCornerShape(28.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .padding(14.dp)
@@ -456,19 +510,32 @@ private fun GameBarPreview(config: GameBarConfig) {
                 .clip(RoundedCornerShape(20.dp))
                 .background(MaterialTheme.colorScheme.surfaceDim.copy(alpha = 0.55f))
         )
-        Surface(
+        Box(
             modifier = Modifier
                 .align(if (isLeft) Alignment.CenterStart else Alignment.CenterEnd)
-                .width(154.dp)
-                .height(154.dp),
-            shape = RoundedCornerShape(
-                topStart = if (isLeft) 8.dp else 24.dp,
-                bottomStart = if (isLeft) 8.dp else 24.dp,
-                topEnd = if (isLeft) 24.dp else 8.dp,
-                bottomEnd = if (isLeft) 24.dp else 8.dp
-            ),
+                .width(4.dp)
+                .height(48.dp)
+                .clip(CircleShape)
+                .background(
+                    MaterialTheme.colorScheme.primary.copy(
+                        alpha = config.handleOpacity.coerceIn(0.10f, 0.80f)
+                    )
+                )
+        )
+        val cardModifier = if (isLeft) {
+            Modifier
+                .align(Alignment.CenterStart)
+                .padding(start = 8.dp)
+        } else {
+            Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 8.dp)
+        }
+        Surface(
+            modifier = cardModifier.width(178.dp),
+            shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(
-                alpha = config.opacity.coerceIn(0.55f, 1f)
+                alpha = config.opacity.coerceIn(0.40f, 1f)
             ),
             shadowElevation = 6.dp
         ) {
@@ -477,74 +544,155 @@ private fun GameBarPreview(config: GameBarConfig) {
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(18.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(MaterialTheme.colorScheme.primaryContainer)
+                    Text(
+                        text = "20:45",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Text(
+                            text = "AUTO",
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                            fontSize = 7.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            maxLines = 1
+                        )
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
                     Box(
                         modifier = Modifier
-                            .height(7.dp)
-                            .weight(1f)
+                            .size(14.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.28f))
+                            .background(MaterialTheme.colorScheme.primary)
+                    )
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(14.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                     )
                 }
-                Text(
-                    text = "120",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.45f)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "120 FPS · 120Hz",
+                            fontSize = 8.sp,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                        Text(
+                            text = "36.8°C",
+                            fontSize = 8.sp,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                        Text(
+                            text = "24%",
+                            fontSize = 8.sp,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    repeat(4) { index ->
+                    listOf("Powersave", "Balanced", "Maestro").forEachIndexed { index, label ->
                         Box(
                             modifier = Modifier
-                                .height(18.dp)
                                 .weight(1f)
-                                .clip(RoundedCornerShape(6.dp))
+                                .height(20.dp)
+                                .clip(CircleShape)
                                 .background(
-                                    if (index == 3) {
-                                        MaterialTheme.colorScheme.primaryContainer
+                                    if (index == 1) {
+                                        MaterialTheme.colorScheme.primary
                                     } else {
                                         MaterialTheme.colorScheme.surfaceContainerHighest
                                     }
-                                )
-                        )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 6.5.sp,
+                                fontWeight = if (index == 1) FontWeight.Bold else FontWeight.Medium,
+                                color = if (index == 1) {
+                                    MaterialTheme.colorScheme.onPrimary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
                     }
                 }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(5.dp)
+                        .height(6.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.20f))
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f))
                 )
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(5.dp)
+                        .height(6.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.20f))
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f))
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    PreviewAction(Icons.Rounded.Speed, active = false)
+                    PreviewAction(Icons.Rounded.NotificationsOff, active = false)
+                    PreviewAction(Icons.Rounded.Autorenew, active = true)
+                    PreviewAction(Icons.Rounded.Apps, active = false)
+                }
             }
         }
-        Surface(
-            modifier = Modifier
-                .align(if (isLeft) Alignment.CenterStart else Alignment.CenterEnd)
-                .width(8.dp)
-                .height(74.dp)
-                .padding(vertical = 3.dp),
-            shape = RoundedCornerShape(
-                topStart = if (isLeft) 2.dp else 8.dp,
-                bottomStart = if (isLeft) 2.dp else 8.dp,
-                topEnd = if (isLeft) 8.dp else 2.dp,
-                bottomEnd = if (isLeft) 8.dp else 2.dp
+    }
+}
+
+@Composable
+private fun PreviewAction(icon: ImageVector, active: Boolean) {
+    Box(
+        modifier = Modifier
+            .size(26.dp)
+            .clip(CircleShape)
+            .background(
+                if (active) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHighest
+                }
             ),
-            color = MaterialTheme.colorScheme.primary
-        ) {}
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (active) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            modifier = Modifier.size(13.dp)
+        )
     }
 }
 

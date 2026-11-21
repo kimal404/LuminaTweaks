@@ -48,6 +48,7 @@ import com.luminatweaks.data.LiveFeedSample
 import com.luminatweaks.data.LiveSessionFeed
 import com.luminatweaks.data.SysfsTelemetry
 import com.luminatweaks.ui.overlay.GameBarRoot
+import com.luminatweaks.ui.screen.FloatingFpsPrefs
 import com.luminatweaks.ui.theme.LuminaTheme
 import com.luminatweaks.util.DeviceUtil
 import com.luminatweaks.util.RootUtil
@@ -140,7 +141,6 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
     private var manualOverride: Boolean? = null
     private var wasGameActive = false
     private var lastGameSeenMs = 0L
-    private var handleY = 0
     private var previewLease = false
     private var lastLeaseRequestMs = 0L
     private var windowConfigKey = ""
@@ -206,7 +206,6 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        handleY = 0
         updateWindowLayout(force = true)
     }
 
@@ -231,6 +230,8 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
                 uiState.value = uiState.value.copy(
                     side = config.side,
                     opacity = config.opacity,
+                    handleOpacity = config.handleOpacity,
+                    autoDimHandle = config.autoDimHandle,
                     autoGame = config.autoGame,
                     manual = manualOverride == true
                 )
@@ -275,7 +276,7 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
                     attachOverlay()
                     updateNotification(true)
                 }
-                val key = "${config.side.key}|${config.handleHeightDp}|${config.handleThicknessDp}|${config.panelWidthDp}"
+                val key = windowKey(config)
                 if (key != windowConfigKey) {
                     windowConfigKey = key
                     updateWindowLayout(force = true)
@@ -328,8 +329,12 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
                 brightnessPercent = metrics.brightnessPercent,
                 side = config.side,
                 opacity = config.opacity,
+                handleOpacity = config.handleOpacity,
+                autoDimHandle = config.autoDimHandle,
                 autoGame = config.autoGame,
                 manual = manualOverride == true,
+                fpsOverlay = metrics.fpsOverlay,
+                dndEnabled = metrics.dndEnabled,
                 quickApps = metrics.quickApps
             )
         }
@@ -348,6 +353,8 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
         val ramPercent: Int?,
         val volumePercent: Int,
         val brightnessPercent: Int,
+        val fpsOverlay: Boolean,
+        val dndEnabled: Boolean,
         val quickApps: List<GameBarQuickApp>
     )
 
@@ -408,6 +415,10 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
             ramPercent = ram,
             volumePercent = (volume * 100f / maxVolume).roundToInt().coerceIn(0, 100),
             brightnessPercent = (brightness * 100f / 255f).roundToInt().coerceIn(0, 100),
+            fpsOverlay = FloatingFpsPrefs.load(this).enabled,
+            dndEnabled = (getSystemService(NotificationManager::class.java)
+                ?.currentInterruptionFilter ?: NotificationManager.INTERRUPTION_FILTER_ALL) !=
+                NotificationManager.INTERRUPTION_FILTER_ALL,
             quickApps = quickApps
         )
     }
@@ -431,6 +442,8 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
         uiState.value = uiState.value.copy(
             side = activeConfig.side,
             opacity = activeConfig.opacity,
+            handleOpacity = activeConfig.handleOpacity,
+            autoDimHandle = activeConfig.autoDimHandle,
             autoGame = activeConfig.autoGame,
             manual = manualOverride == true
         )
@@ -449,6 +462,9 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
                         onVolumeChanged = ::setVolume,
                         onBrightnessChanged = ::setBrightness,
                         onQuickAppClick = ::openApp,
+                        onToggleFpsOverlay = ::toggleFpsOverlay,
+                        onToggleDnd = ::toggleDnd,
+                        onToggleAutoProfile = ::toggleAutoProfile,
                         onOpenManager = ::openManager
                     )
                 }
@@ -461,7 +477,7 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
             composeView = view
             layoutParams = params
             isAttached = true
-            windowConfigKey = "${activeConfig.side.key}|${activeConfig.handleHeightDp}|${activeConfig.handleThicknessDp}|${activeConfig.panelWidthDp}"
+            windowConfigKey = windowKey(activeConfig)
             view.post { updateGestureExclusion() }
         }
     }
@@ -491,11 +507,18 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
         val view = composeView ?: return
         val params = layoutParams ?: return
         val metrics = resources.displayMetrics
-        val height = view.height.coerceAtLeast(1)
-        val margin = (24f * metrics.density).roundToInt()
+        val density = metrics.density
+        val height = (activeConfig.handleHeightDp * density).roundToInt().coerceAtLeast(1)
+        val margin = (14f * density).roundToInt()
         val maxY = (metrics.heightPixels - height - margin).coerceAtLeast(margin)
-        handleY = (handleY + deltaY.roundToInt()).coerceIn(margin, maxY)
-        params.y = handleY
+        val currentY = params.y.coerceIn(margin, maxY)
+        val nextY = (currentY + deltaY.roundToInt()).coerceIn(margin, maxY)
+        val ratio = ((nextY + height / 2f) / metrics.heightPixels.toFloat())
+            .coerceIn(0.15f, 0.85f)
+        val updated = GameBarPrefs.load(this).copy(handlePositionRatio = ratio)
+        activeConfig = updated
+        GameBarPrefs.save(this, updated)
+        params.y = nextY
         runCatching { windowManager.updateViewLayout(view, params) }
     }
 
@@ -505,40 +528,43 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
         val params = layoutParams ?: return
         configureLayoutParams(params, view)
         if (force) {
-            val key = "${activeConfig.side.key}|${activeConfig.handleHeightDp}|${activeConfig.handleThicknessDp}|${activeConfig.panelWidthDp}"
-            windowConfigKey = key
+            windowConfigKey = windowKey(activeConfig)
         }
         runCatching { windowManager.updateViewLayout(view, params) }
         view.post { updateGestureExclusion() }
     }
 
+    private fun windowKey(config: GameBarConfig): String =
+        "${config.side.key}|${config.handleHeightDp}|${config.handleThicknessDp}|" +
+            "${config.panelWidthDp}|${config.handlePositionRatio}"
+
     private fun configureLayoutParams(params: WindowManager.LayoutParams, view: ComposeView) {
         val metrics = resources.displayMetrics
         val density = metrics.density
         val isLeft = activeConfig.side == GameBarSide.LEFT
+        val margin = (14f * density).roundToInt()
         val panelWidth = min(
             (activeConfig.panelWidthDp * density).roundToInt(),
-            (metrics.widthPixels * 0.90f).roundToInt()
-        ).coerceAtLeast((260f * density).roundToInt())
+            (metrics.widthPixels * 0.92f).roundToInt()
+        ).coerceAtLeast((240f * density).roundToInt())
         val handleWidth = (activeConfig.handleThicknessDp * density).roundToInt().coerceAtLeast(1)
         val handleHeight = (activeConfig.handleHeightDp * density).roundToInt().coerceAtLeast(1)
 
-        params.gravity = Gravity.TOP or (if (isLeft) Gravity.LEFT else Gravity.RIGHT)
-        params.x = 0
         if (isExpanded) {
-            params.width = panelWidth
-            params.height = WindowManager.LayoutParams.MATCH_PARENT
+            params.gravity = Gravity.CENTER_VERTICAL or (if (isLeft) Gravity.LEFT else Gravity.RIGHT)
+            params.x = margin
             params.y = 0
+            params.width = panelWidth
+            params.height = WindowManager.LayoutParams.WRAP_CONTENT
         } else {
+            params.gravity = Gravity.TOP or (if (isLeft) Gravity.LEFT else Gravity.RIGHT)
+            params.x = 0
             params.width = handleWidth
             params.height = handleHeight
-            if (handleY == 0) {
-                handleY = ((metrics.heightPixels - handleHeight) / 2).coerceAtLeast(0)
-            }
-            val margin = (24f * density).roundToInt()
+            val ratio = activeConfig.handlePositionRatio.coerceIn(0.15f, 0.85f)
+            val center = metrics.heightPixels * ratio
             val maxY = (metrics.heightPixels - handleHeight - margin).coerceAtLeast(margin)
-            handleY = handleY.coerceIn(margin, maxY)
-            params.y = handleY
+            params.y = (center - handleHeight / 2f).roundToInt().coerceIn(margin, maxY)
         }
         view.requestLayout()
     }
@@ -650,6 +676,91 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
                 withContext(Dispatchers.IO) {
                     runCatching { RootUtil.runAsRoot("settings put system screen_brightness $value") }
                 }
+            }
+        }
+    }
+
+    private fun toggleFpsOverlay() {
+        val current = FloatingFpsPrefs.load(this)
+        if (current.enabled) {
+            val updated = current.copy(enabled = false)
+            FloatingFpsPrefs.save(this, updated)
+            FloatingFpsService.sync(this, updated)
+            uiState.value = uiState.value.copy(fpsOverlay = false)
+            return
+        }
+        serviceScope.launch {
+            val granted = FloatingFpsService.ensureOverlayPermission(this@GameBarService)
+            if (!granted) {
+                Toast.makeText(
+                    this@GameBarService,
+                    localizedText(
+                        "Izin overlay diperlukan untuk FPS Meter",
+                        "Overlay permission is required for FPS Meter"
+                    ),
+                    Toast.LENGTH_SHORT
+                ).show()
+                return@launch
+            }
+            val updated = FloatingFpsPrefs.load(this@GameBarService).copy(enabled = true)
+            FloatingFpsPrefs.save(this@GameBarService, updated)
+            FloatingFpsService.sync(this@GameBarService, updated)
+            uiState.value = uiState.value.copy(fpsOverlay = true)
+        }
+    }
+
+    private fun toggleDnd() {
+        val manager = getSystemService(NotificationManager::class.java) ?: return
+        if (!manager.isNotificationPolicyAccessGranted) {
+            Toast.makeText(
+                this,
+                localizedText(
+                    "Izinkan akses Jangan Ganggu untuk fitur ini",
+                    "Allow Do Not Disturb access for this feature"
+                ),
+                Toast.LENGTH_SHORT
+            ).show()
+            runCatching {
+                startActivity(
+                    Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }
+            return
+        }
+        val enable = manager.currentInterruptionFilter ==
+            NotificationManager.INTERRUPTION_FILTER_ALL
+        val target = if (enable) {
+            NotificationManager.INTERRUPTION_FILTER_PRIORITY
+        } else {
+            NotificationManager.INTERRUPTION_FILTER_ALL
+        }
+        val ok = runCatching {
+            manager.setInterruptionFilter(target)
+            true
+        }.getOrDefault(false)
+        if (ok) {
+            uiState.value = uiState.value.copy(dndEnabled = enable)
+        }
+    }
+
+    private fun toggleAutoProfile() {
+        val target = !uiState.value.autoProfile
+        serviceScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching { ConfigRepository.setAutoProfile(target) }.isSuccess
+            }
+            if (ok) {
+                uiState.value = uiState.value.copy(autoProfile = target)
+                Toast.makeText(
+                    this@GameBarService,
+                    if (target) {
+                        localizedText("Mode otomatis aktif", "Automatic mode enabled")
+                    } else {
+                        localizedText("Mode otomatis nonaktif", "Automatic mode disabled")
+                    },
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }

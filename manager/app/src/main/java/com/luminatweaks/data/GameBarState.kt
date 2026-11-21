@@ -23,7 +23,11 @@ data class GameBarUiState(
     val brightnessPercent: Int = 50,
     val side: GameBarSide = GameBarSide.LEFT,
     val opacity: Float = 0.94f,
+    val handleOpacity: Float = 0.45f,
+    val autoDimHandle: Boolean = true,
     val autoGame: Boolean = true,
     val manual: Boolean = false,
+    val fpsOverlay: Boolean = false,
+    val dndEnabled: Boolean = false,
     val quickApps: List<GameBarQuickApp> = emptyList()
 )
