@@ -31,6 +31,8 @@ const TRIM_HOLD_MS: u128 = 5_000;
 const WARM_TRIM_HOLD_MS: u128 = 2_000;
 const SAFETY_STEP_MS: u128 = 2_000;
 const RECOVER_HOLD_MS: u128 = 5_000;
+const STALL_START_MS: u128 = 100;
+const STALL_FRAME_CAP_MS: f32 = 500.0;
 const STALE_AFTER_MS: u128 = 1_500;
 const STATS_INTERVAL_MS: u128 = 60_000;
 const MIN_WINDOW_FRAMES: usize = 12;
@@ -39,6 +41,12 @@ const FRAME_WINDOW: usize = 4096;
 const BASELINE_LOWER_PERCENT: u64 = 20;
 const BASELINE_DECREASE_PERCENT: f32 = 98.0;
 const BASELINE_INCREASE_PERCENT: f32 = 102.0;
+const P_KP: f64 = 1.5e-4;
+const P_DEADBAND_KHZ: f64 = 50_000.0;
+const CV_THRESHOLD: f32 = 0.15;
+const BOTTLENECK_DEBOUNCE_FRAMES: u32 = 3;
+const BOTTLENECK_WINDOW: usize = 60;
+const MIN_BOTTLENECK_FRAMES: usize = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FasState {
@@ -62,6 +70,98 @@ impl FasState {
             Self::Safety => "safety",
             Self::Recover => "recover",
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum FasBottleneck {
+    #[default]
+    Unknown,
+    Gpu,
+    Cpu,
+    Balanced,
+}
+
+impl FasBottleneck {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Unknown => "unknown",
+            Self::Gpu => "gpu",
+            Self::Cpu => "cpu",
+            Self::Balanced => "balanced",
+        }
+    }
+}
+
+struct BottleneckDetector {
+    current: FasBottleneck,
+    counter: u32,
+}
+
+impl BottleneckDetector {
+    fn new() -> Self {
+        Self {
+            current: FasBottleneck::Unknown,
+            counter: 0,
+        }
+    }
+
+    fn current(&self) -> FasBottleneck {
+        self.current
+    }
+
+    fn reset(&mut self) {
+        self.current = FasBottleneck::Unknown;
+        self.counter = 0;
+    }
+
+    fn classify(&mut self, frames: &[f32], target_ms: f32) -> FasBottleneck {
+        if !target_ms.is_finite() || target_ms <= 0.0 {
+            return self.current;
+        }
+        let mut count = 0usize;
+        let mut sum = 0.0f64;
+        for value in frames {
+            if value.is_finite() && *value > 0.0 {
+                sum += *value as f64;
+                count += 1;
+            }
+        }
+        if count < MIN_BOTTLENECK_FRAMES {
+            return self.current;
+        }
+        let mean = sum / count as f64;
+        if mean <= target_ms as f64 {
+            return self.debounce(FasBottleneck::Balanced);
+        }
+        let mut variance = 0.0f64;
+        for value in frames {
+            if value.is_finite() && *value > 0.0 {
+                let diff = *value as f64 - mean;
+                variance += diff * diff;
+            }
+        }
+        let cv = (variance / count as f64).sqrt() / mean;
+        let raw = if cv < CV_THRESHOLD as f64 {
+            FasBottleneck::Gpu
+        } else {
+            FasBottleneck::Cpu
+        };
+        self.debounce(raw)
+    }
+
+    fn debounce(&mut self, raw: FasBottleneck) -> FasBottleneck {
+        if self.current == FasBottleneck::Unknown || raw == self.current {
+            self.current = raw;
+            self.counter = 0;
+            return self.current;
+        }
+        self.counter = self.counter.saturating_add(1);
+        if self.counter >= BOTTLENECK_DEBOUNCE_FRAMES {
+            self.current = raw;
+            self.counter = 0;
+        }
+        self.current
     }
 }
 
@@ -195,6 +295,19 @@ fn sustainable_target(current: Option<f32>, p95: f32, budget: f32) -> Option<f32
     }
 }
 
+fn control_khz(frametime_ms: f32, target_ms: f32) -> f64 {
+    if !frametime_ms.is_finite()
+        || !target_ms.is_finite()
+        || frametime_ms <= 0.0
+        || target_ms <= 0.0
+    {
+        return 0.0;
+    }
+    let target_fps = 1000.0 / target_ms as f64;
+    let normalized_ns = frametime_ms as f64 * 1_000_000.0 * target_fps;
+    (normalized_ns - 1_000_000_000.0) * P_KP
+}
+
 fn load_memory() -> HashMap<String, f32> {
     fs::read_to_string(MEMORY_PATH)
         .ok()
@@ -231,6 +344,9 @@ pub struct FasController {
     baseline_lowered_at: Option<Instant>,
     boost_since: Option<Instant>,
     boost_until: Option<Instant>,
+    cpu_boosted: bool,
+    stall_frame: Option<f32>,
+    bottleneck: BottleneckDetector,
     trim_since: Option<Instant>,
     heavy_streak: usize,
     last_frame_at: Option<Instant>,
@@ -269,6 +385,9 @@ impl FasController {
             baseline_lowered_at: None,
             boost_since: None,
             boost_until: None,
+            cpu_boosted: false,
+            stall_frame: None,
+            bottleneck: BottleneckDetector::new(),
             trim_since: None,
             heavy_streak: 0,
             last_frame_at: None,
@@ -355,6 +474,7 @@ impl FasController {
             let cap = self.clusters[index].cap;
             self.write(index, cap);
         }
+        self.cpu_boosted = false;
     }
 
     fn dynamic_boost(&mut self) {
@@ -373,7 +493,10 @@ impl FasController {
         self.soc_level = -1;
     }
 
-    fn boost(&mut self) {
+    fn apply_cpu_boost(&mut self) -> bool {
+        if self.cpu_boosted {
+            return false;
+        }
         for index in 0..self.clusters.len() {
             if !self.clusters[index].performance {
                 continue;
@@ -381,8 +504,23 @@ impl FasController {
             let cap = self.clusters[index].cap;
             self.write(index, cap);
         }
-        self.dynamic_boost();
-        self.boost_count = self.boost_count.saturating_add(1);
+        self.cpu_boosted = true;
+        true
+    }
+
+    fn boost(&mut self, bottleneck: FasBottleneck) {
+        let mut applied = false;
+        if bottleneck != FasBottleneck::Gpu {
+            applied |= self.apply_cpu_boost();
+        }
+        if bottleneck != FasBottleneck::Cpu {
+            let before = self.soc_level;
+            self.dynamic_boost();
+            applied |= before < 1 && self.soc_level >= 1;
+        }
+        if applied {
+            self.boost_count = self.boost_count.saturating_add(1);
+        }
     }
 
     fn step_down(&mut self) {
@@ -397,6 +535,7 @@ impl FasController {
                 self.write(index, target);
             }
         }
+        self.cpu_boosted = false;
     }
 
     fn remember_baseline(&mut self) {
@@ -512,12 +651,13 @@ impl FasController {
         let p99 = percentile(window, 99).unwrap_or(0.0);
         let low_fps = if p99 > 0.0 { 1000.0 / p99 } else { 0.0 };
         log!(
-            "[FAS] p50={:.1}ms p95={:.1}ms p99={:.1}ms 1%low={:.1}fps thermal={:?} boost={} trim={} safety={}",
+            "[FAS] p50={:.1}ms p95={:.1}ms p99={:.1}ms 1%low={:.1}fps thermal={:?} bottleneck={} boost={} trim={} safety={}",
             p50,
             p95,
             p99,
             low_fps,
             thermal,
+            self.bottleneck.current().as_str(),
             self.boost_count,
             self.trim_count,
             self.safety_count
@@ -527,6 +667,9 @@ impl FasController {
     fn clear_runtime(&mut self) {
         self.boost_since = None;
         self.boost_until = None;
+        self.cpu_boosted = false;
+        self.stall_frame = None;
+        self.bottleneck.reset();
         self.trim_since = None;
         self.heavy_streak = 0;
         self.last_frame_at = None;
@@ -584,6 +727,8 @@ impl FasController {
             self.sustainable_period = None;
             self.boost_since = None;
             self.boost_until = None;
+            self.stall_frame = None;
+            self.bottleneck.reset();
             self.apply_caps(lite);
             if self.active {
                 self.restore_caps();
@@ -598,6 +743,8 @@ impl FasController {
                 self.baseline_lowered_at = None;
                 self.boost_since = None;
                 self.boost_until = None;
+                self.stall_frame = None;
+                self.bottleneck.reset();
                 self.trim_since = None;
                 self.last_hz = Some(hz);
             }
@@ -623,6 +770,7 @@ impl FasController {
 
         if new_count > 0 {
             self.last_frame_at = Some(now);
+            self.stall_frame = None;
         }
 
         if self.safety {
@@ -647,18 +795,26 @@ impl FasController {
         }
         self.last_safety_step = None;
 
+        let gap_ms = self
+            .last_frame_at
+            .map(|at| now.saturating_duration_since(at).as_millis())
+            .unwrap_or(u128::MAX);
+        if new_count == 0
+            && gap_ms >= STALL_START_MS
+            && gap_ms < STALE_AFTER_MS
+            && self.stall_frame.is_none()
+        {
+            self.stall_frame = Some((gap_ms as f32).min(STALL_FRAME_CAP_MS));
+        }
+
         if new_count > 0 {
             self.update_baseline(&sample.frames, now);
-        } else if self
-            .last_frame_at
-            .map(|at| now.saturating_duration_since(at).as_millis() >= STALE_AFTER_MS)
-            .unwrap_or(true)
-        {
+        } else if gap_ms >= STALE_AFTER_MS {
             self.restore_caps();
             self.clear_runtime();
             self.set_state(FasState::Arm);
             return;
-        } else {
+        } else if self.stall_frame.is_none() {
             return;
         }
 
@@ -675,11 +831,17 @@ impl FasController {
         if new_count > sample.frames.len() {
             new_count = sample.frames.len();
         }
-        if new_count == 0 {
+        if new_count == 0 && self.stall_frame.is_none() {
             return;
         }
 
         self.log_stats(&sample.frames, thermal, now);
+
+        if new_count > 0 {
+            let recent_start = sample.frames.len().saturating_sub(BOTTLENECK_WINDOW);
+            self.bottleneck
+                .classify(&sample.frames[recent_start..], target_ms);
+        }
 
         let budget_ms = target_ms * BUDGET_TOLERANCE_PERCENT / 100.0;
         let fast_window = last_window(&sample.frames, FAST_WINDOW_MS);
@@ -687,9 +849,28 @@ impl FasController {
         let p95_fast = percentile(fast_window, 95);
         let p95_slow = percentile(slow_window, 95);
         let start = sample.frames.len().saturating_sub(new_count);
+        let latest_frame_ms = if new_count > 0 {
+            sample.frames.last().copied()
+        } else {
+            self.stall_frame
+        };
+        let control = latest_frame_ms
+            .map(|value| control_khz(value, target_ms))
+            .unwrap_or(0.0);
+        let p_boost = control > P_DEADBAND_KHZ;
+        let p_reduce = control < -P_DEADBAND_KHZ;
+        let bottleneck = self.bottleneck.current();
 
-        for frametime in &sample.frames[start..] {
-            if *frametime >= budget_ms * HEAVY_FRAME_PERCENT / 100.0 {
+        if new_count > 0 {
+            for frametime in &sample.frames[start..] {
+                if *frametime >= budget_ms * HEAVY_FRAME_PERCENT / 100.0 {
+                    self.heavy_streak = self.heavy_streak.saturating_add(1);
+                } else {
+                    self.heavy_streak = 0;
+                }
+            }
+        } else if let Some(stall) = self.stall_frame {
+            if stall >= budget_ms * HEAVY_FRAME_PERCENT / 100.0 {
                 self.heavy_streak = self.heavy_streak.saturating_add(1);
             } else {
                 self.heavy_streak = 0;
@@ -697,6 +878,7 @@ impl FasController {
         }
 
         let boost_requested = self.heavy_streak >= HEAVY_FRAME_STREAK
+            || p_boost
             || p95_fast
                 .map(|value| value >= budget_ms * BOOST_P95_PERCENT / 100.0)
                 .unwrap_or(false);
@@ -737,14 +919,14 @@ impl FasController {
             }
             self.heavy_streak = 0;
             self.trim_since = None;
-            self.boost();
+            self.boost(bottleneck);
             self.set_state(FasState::Boost);
             return;
         }
 
         let mut trimmed = false;
         if let Some(value) = p95_slow {
-            if value <= trim_limit(budget_ms, thermal) {
+            if value <= trim_limit(budget_ms, thermal) || (p_reduce && value <= target_ms) {
                 let since = *self.trim_since.get_or_insert(now);
                 let hold = if thermal == ThermalPressure::Warm {
                     WARM_TRIM_HOLD_MS
@@ -779,7 +961,8 @@ impl FasController {
 #[cfg(test)]
 mod tests {
     use super::{
-        classify_state, last_window, percentile, sustainable_target, trim_limit, Cluster, FasState,
+        classify_state, control_khz, last_window, percentile, sustainable_target, trim_limit,
+        BottleneckDetector, Cluster, FasBottleneck, FasState,
     };
     use crate::tweaks::thermal::ThermalPressure;
 
@@ -839,6 +1022,35 @@ mod tests {
     fn trims_earlier_under_warm_pressure() {
         assert_eq!(trim_limit(10.0, ThermalPressure::Normal), 9.5);
         assert_eq!(trim_limit(10.0, ThermalPressure::Warm), 10.0);
+    }
+
+    #[test]
+    fn p_controller_tracks_overshoot_with_deadband() {
+        let target = 1000.0 / 120.0;
+        assert!(control_khz(target, target).abs() < 1.0);
+        assert!(control_khz(target * 1.34, target) > 50_000.0);
+        assert!(control_khz(target * 0.66, target) < -50_000.0);
+    }
+
+    #[test]
+    fn classifies_stable_gpu_and_variable_cpu() {
+        let target = 1000.0 / 120.0;
+        let stable = [12.0f32; 60];
+        let mut detector = BottleneckDetector::new();
+        assert_eq!(detector.classify(&stable, target), FasBottleneck::Gpu);
+
+        let mixed: Vec<f32> = (0..60)
+            .map(|index| if index % 2 == 0 { 6.0 } else { 18.0 })
+            .collect();
+        let mut detector = BottleneckDetector::new();
+        assert_eq!(detector.classify(&mixed, target), FasBottleneck::Cpu);
+
+        let fast = [6.0f32; 60];
+        let mut detector = BottleneckDetector::new();
+        assert_eq!(
+            detector.classify(&fast, target),
+            FasBottleneck::Balanced
+        );
     }
 
     #[test]
