@@ -273,6 +273,26 @@ fn apply_maestro_governor() {
     }
 }
 
+fn performance_governor(base: &str) -> String {
+    let available = fs::read_to_string(format!("{}/scaling_available_governors", base))
+        .unwrap_or_default();
+    if !crate::tweaks::mitigation::has("NO_PERFORMANCE_CPUGOV")
+        && available.split_whitespace().any(|item| item == "performance")
+    {
+        return "performance".to_string();
+    }
+    maestro_governor(base)
+}
+
+fn apply_performance_governor() {
+    for base in cpu_policy_dirs() {
+        let governor = performance_governor(&base);
+        if !governor.is_empty() {
+            profile_write(&format!("{}/scaling_governor", base), &governor);
+        }
+    }
+}
+
 fn maestro_floor(hw_min: u64, hw_max: u64, freqs: &[u64]) -> u64 {
     let target = hw_max * 48 / 100;
     crate::tweaks::devfreq::nearest_frequency(freqs, target)
@@ -310,6 +330,35 @@ fn cpufreq_ppm_maestro(lite: bool) {
         let floor = maestro_floor(hw_min, hw_max, &freqs);
         let cap = maestro_cap(hw_max, lite, &freqs).max(floor);
         profile_write(PPM_MAX_PATH, &format!("{} {}", cluster, cap));
+        profile_write(PPM_MIN_PATH, &format!("{} {}", cluster, floor));
+    }
+}
+
+fn performance_floor(hw_min: u64, hw_max: u64, freqs: &[u64]) -> u64 {
+    let target = hw_max * 80 / 100;
+    crate::tweaks::devfreq::nearest_frequency(freqs, target)
+        .unwrap_or(target)
+        .clamp(hw_min, hw_max)
+}
+
+fn cpufreq_performance() {
+    for base in cpu_policy_dirs() {
+        let Some((hw_min, hw_max, freqs)) = hardware_limits(&base) else {
+            continue;
+        };
+        let floor = performance_floor(hw_min, hw_max, &freqs);
+        profile_write(&format!("{}/scaling_max_freq", base), &hw_max.to_string());
+        profile_write(&format!("{}/scaling_min_freq", base), &floor.to_string());
+    }
+}
+
+fn cpufreq_ppm_performance() {
+    for (cluster, base) in cpu_policy_dirs().iter().enumerate() {
+        let Some((hw_min, hw_max, freqs)) = hardware_limits(base) else {
+            continue;
+        };
+        let floor = performance_floor(hw_min, hw_max, &freqs);
+        profile_write(PPM_MAX_PATH, &format!("{} {}", cluster, hw_max));
         profile_write(PPM_MIN_PATH, &format!("{} {}", cluster, floor));
     }
 }
@@ -456,6 +505,42 @@ pub fn maestro_profile(lite: bool) {
     drop_caches();
 }
 
+pub fn performance_profile() {
+    apply_battery_saver(false);
+    crate::tweaks::sched::apply_maestro();
+    apply_vfs_cache_pressure("80");
+    apply_performance_governor();
+    cpufreq_performance();
+    if ppm_available() {
+        cpufreq_ppm_performance();
+    }
+    apply_io_latency(true);
+    apply_ufs_antistall();
+    soc::apply(SocProfile::Performance);
+    drop_caches();
+}
+
+pub fn performance_safety_relax() -> bool {
+    let mut applied = false;
+    for (cluster, base) in cpu_policy_dirs().iter().enumerate() {
+        let Some((hw_min, hw_max, freqs)) = hardware_limits(base) else {
+            continue;
+        };
+        let target = hw_max * 70 / 100;
+        let cap = crate::tweaks::devfreq::nearest_frequency(&freqs, target)
+            .unwrap_or(target)
+            .clamp(hw_min, hw_max);
+        applied |= profile_write(&format!("{}/scaling_max_freq", base), &cap.to_string());
+        applied |= profile_write(&format!("{}/scaling_min_freq", base), &hw_min.to_string());
+        if Path::new(PPM_MAX_PATH).exists() {
+            applied |= profile_write(PPM_MAX_PATH, &format!("{} {}", cluster, cap));
+            applied |= profile_write(PPM_MIN_PATH, &format!("{} {}", cluster, hw_min));
+        }
+    }
+    applied |= soc::frame_relax() > 0;
+    applied
+}
+
 pub fn balance_profile() {
     crate::tweaks::state::restore_all();
     apply_battery_saver(false);
@@ -519,10 +604,6 @@ fn thermal_paths() -> Vec<String> {
 
 fn boot_tuned_paths() -> Vec<String> {
     let mut paths: Vec<String> = [
-        "/proc/sys/kernel/panic",
-        "/proc/sys/kernel/panic_on_oops",
-        "/proc/sys/kernel/panic_on_warn",
-        "/proc/sys/kernel/softlockup_panic",
         "/proc/sys/net/ipv4/tcp_congestion_control",
         "/proc/sys/net/ipv4/tcp_low_latency",
         "/proc/sys/net/ipv4/tcp_ecn",
@@ -607,11 +688,6 @@ pub fn apply_boot_profile() {
             );
         }
     }
-
-    write_sysfs("/proc/sys/kernel/panic", "0", false);
-    write_sysfs("/proc/sys/kernel/panic_on_oops", "0", false);
-    write_sysfs("/proc/sys/kernel/panic_on_warn", "0", false);
-    write_sysfs("/proc/sys/kernel/softlockup_panic", "0", false);
 
     let _ = Command::new("sync").status();
 

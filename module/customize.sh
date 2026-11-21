@@ -46,6 +46,13 @@ esac
 ui_print "- SoC terdeteksi: $SOC_LABEL"
 ui_print "- Tweak SoC: ${SOC}.rs"
 
+MITIGATION_SRC="$MODPATH/config/device_mitigation.json"
+MITIGATION_DST="/data/adb/.config/lumina/device_mitigation.json"
+if [ -f "$MITIGATION_SRC" ] && [ ! -f "$MITIGATION_DST" ]; then
+    cp -f "$MITIGATION_SRC" "$MITIGATION_DST"
+    chmod 644 "$MITIGATION_DST"
+fi
+
 BASE_GAMELIST="$MODPATH/config/gamelist.txt"
 GEN_GAMELIST="/data/adb/.config/lumina/gamelist.json"
 

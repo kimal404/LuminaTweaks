@@ -34,6 +34,7 @@ fn apply_gpu(profile: SocProfile) -> usize {
         SocProfile::Balance => (min, max),
         SocProfile::Eco => (min, min),
         SocProfile::Maestro => (min, max),
+        SocProfile::Performance => (max, max),
     };
 
     let mut applied = set_freq(&base, "scaling_max_freq", cap);
@@ -43,15 +44,19 @@ fn apply_gpu(profile: SocProfile) -> usize {
         SocProfile::Balance => SocProfile::Balance,
         SocProfile::Eco => SocProfile::Eco,
         SocProfile::Maestro => SocProfile::Maestro,
+        SocProfile::Performance => SocProfile::Performance,
     };
     applied += super::mali::apply_power_policy(policy);
     applied
 }
 
 fn mif(profile: SocProfile) -> usize {
+    if crate::tweaks::mitigation::has("DISABLE_DDR_TWEAK") {
+        return 0;
+    }
     if !matches!(
         profile,
-        SocProfile::Lite | SocProfile::Balance | SocProfile::Maestro
+        SocProfile::Lite | SocProfile::Balance | SocProfile::Maestro | SocProfile::Performance
     ) {
         return 0;
     }
@@ -59,7 +64,7 @@ fn mif(profile: SocProfile) -> usize {
     for base in super::devfreq_matching(MIF_NEEDLES) {
         applied += match profile {
             SocProfile::Lite => super::devfreq_mid_perf(&base),
-            SocProfile::Maestro => super::devfreq_max_perf(&base),
+            SocProfile::Maestro | SocProfile::Performance => super::devfreq_max_perf(&base),
             _ => super::devfreq_unlock(&base),
         };
     }

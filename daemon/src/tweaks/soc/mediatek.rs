@@ -73,6 +73,10 @@ fn min_opp_index(table: &str) -> Option<usize> {
     parse_opp_table(table).last().map(|(index, _)| *index)
 }
 
+fn max_opp_index(table: &str) -> Option<usize> {
+    parse_opp_table(table).first().map(|(index, _)| *index)
+}
+
 #[cfg(test)]
 fn first_opp_freq(table: &str) -> Option<u64> {
     parse_opp_table(table).first().map(|(_, freq)| *freq)
@@ -138,6 +142,9 @@ fn dvfsrc_platform_nodes() -> Vec<String> {
 }
 
 fn ddr_performance(lite: bool) -> usize {
+    if crate::tweaks::mitigation::has("DISABLE_DDR_TWEAK") {
+        return 0;
+    }
     let mut applied = usize::from(super::apply_node(HELIO_FORCE_PATH, "0"));
     for path in dvfsrc_platform_nodes() {
         if super::apply_node(&path, "0") {
@@ -168,6 +175,18 @@ fn ddr_balance() -> usize {
         applied += super::devfreq_unlock(&base);
     }
     applied
+}
+
+fn gpu_max_performance() -> usize {
+    if Path::new("/proc/gpufreqv2").is_dir() {
+        if let Some(index) = max_opp_index(GPUFREQ_V2_TABLE) {
+            return usize::from(super::apply_node(FIX_OPP_PATH, &index.to_string()));
+        }
+    }
+    let Some(freq) = parse_opp_table(GPUFREQ_V1_TABLE).first().map(|(_, freq)| *freq) else {
+        return 0;
+    };
+    usize::from(super::apply_node(LEGACY_GPUFREQ_PATH, &freq.to_string()))
 }
 
 fn maestro_profile() -> usize {
@@ -215,6 +234,16 @@ fn maestro_profile() -> usize {
     }
     applied += super::mali_power_policy(SocProfile::Maestro);
     applied += ddr_performance(false);
+    applied
+}
+
+fn performance_profile() -> usize {
+    let mut applied = maestro_profile();
+    applied += usize::from(super::apply_node(CCI_MODE_PATH, "1"));
+    applied += usize::from(super::apply_node(POWER_MODE_PATH, "3"));
+    applied += usize::from(super::apply_node(DRAMBOOST_PATH, "1"));
+    applied += gpu_max_performance();
+    applied += super::mali_power_policy(SocProfile::Performance);
     applied
 }
 
@@ -285,6 +314,7 @@ pub fn apply(profile: SocProfile) -> usize {
         SocProfile::Balance => balance_profile(),
         SocProfile::Eco => powersave_profile(),
         SocProfile::Maestro => maestro_profile(),
+        SocProfile::Performance => performance_profile(),
     }
 }
 

@@ -389,6 +389,7 @@ Features on this page are only active when the system is in the Maestro profile.
     <string name="profile_desc_powersave">Maximum power saving with low clocks and basic responsiveness</string>
     <string name="profile_desc_balanced">Balanced performance, thermals, and power consumption</string>
     <string name="profile_desc_maestro">Dynamic EAS governor with frame-pacing driven by the active refresh rate</string>
+    <string name="profile_desc_performance">Static peak gaming: high CPU/GPU, anti-throttle, and thermal guard</string>
     <string name="section_automation">Automation</string>
     <string name="settings_disable_auto_title">Disable Automatic Mode</string>
     <string name="settings_disable_auto_desc">Stops per-app automatic profile switching. Once disabled, the Home profile card unlocks for manual selection.</string>

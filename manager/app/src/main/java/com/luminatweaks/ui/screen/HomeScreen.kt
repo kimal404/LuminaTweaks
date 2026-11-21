@@ -71,6 +71,7 @@ import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.Speed
@@ -778,11 +779,11 @@ fun HomeDashboardContent(
     val profileOptions = listOf(
         Triple("Powersave", R.string.profile_desc_powersave, Icons.Rounded.BatterySaver),
         Triple("Balanced", R.string.profile_desc_balanced, Icons.Rounded.Speed),
-        Triple("Maestro", R.string.profile_desc_maestro, Icons.Rounded.AutoAwesome)
+        Triple("Maestro", R.string.profile_desc_maestro, Icons.Rounded.AutoAwesome),
+        Triple("Performance", R.string.profile_desc_performance, Icons.Rounded.RocketLaunch)
     )
     val profileDisplayValue = when {
         currentProfile.equals("Eco", ignoreCase = true) -> "Powersave"
-        currentProfile.equals("Performance", ignoreCase = true) -> "Maestro"
         currentProfile.equals("Performance Lite", ignoreCase = true) -> "Maestro"
         else -> currentProfile
     }
@@ -816,8 +817,8 @@ fun HomeDashboardContent(
                     "Balanced" -> currentProfile.equals("Balanced", ignoreCase = true) ||
                         currentProfile.equals("Balance", ignoreCase = true)
                     "Maestro" -> currentProfile.equals("Maestro", ignoreCase = true) ||
-                        currentProfile.equals("Performance", ignoreCase = true) ||
                         currentProfile.equals("Performance Lite", ignoreCase = true)
+                    "Performance" -> currentProfile.equals("Performance", ignoreCase = true)
                     else -> currentProfile.equals(option.first, ignoreCase = true)
                 }
                 HomeActionRow(

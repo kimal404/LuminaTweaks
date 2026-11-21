@@ -65,6 +65,9 @@ fn kgsl_flags(bus_split: &str, force_clk_on: &str) -> usize {
 }
 
 fn ddr_profile(lite: bool) -> usize {
+    if crate::tweaks::mitigation::has("DISABLE_DDR_TWEAK") {
+        return 0;
+    }
     let mut applied = 0;
     for base in super::devfreq_matching(DDR_NEEDLES) {
         applied += if lite {
@@ -121,6 +124,16 @@ fn maestro_profile() -> usize {
     applied
 }
 
+fn performance_profile() -> usize {
+    let mut applied = ddr_profile(false);
+    if let Some(base) = kgsl_devfreq() {
+        applied += super::devfreq_max_perf(&base);
+    }
+    applied += set_pwrlevels(true);
+    applied += kgsl_flags("0", "1");
+    applied
+}
+
 fn balance_profile() -> usize {
     let mut applied = ddr_balance();
     if let Some(base) = kgsl_devfreq() {
@@ -132,6 +145,9 @@ fn balance_profile() -> usize {
 }
 
 fn powersave_profile() -> usize {
+    if crate::tweaks::mitigation::has("QCOM_NO_GPU_POWERSAVE") {
+        return 0;
+    }
     let Some(base) = kgsl_devfreq() else {
         return 0;
     };
@@ -160,6 +176,7 @@ pub fn apply(profile: SocProfile) -> usize {
         SocProfile::Balance => balance_profile(),
         SocProfile::Eco => powersave_profile(),
         SocProfile::Maestro => maestro_profile(),
+        SocProfile::Performance => performance_profile(),
     }
 }
 

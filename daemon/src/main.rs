@@ -76,6 +76,7 @@ pub enum Profile {
     Eco,
     Balance,
     Maestro,
+    Performance,
 }
 
 impl Profile {
@@ -84,6 +85,7 @@ impl Profile {
             Profile::Eco => "Eco",
             Profile::Balance => "Balanced",
             Profile::Maestro => "Maestro",
+            Profile::Performance => "Performance",
         }
     }
 
@@ -91,8 +93,10 @@ impl Profile {
         match name.trim().to_ascii_lowercase().as_str() {
             "eco" | "powersave" | "power save" | "hemat daya" => Some(Profile::Eco),
             "balanced" | "balance" | "seimbang" => Some(Profile::Balance),
-            "performance" | "performa" | "performance lite" | "performance_lite"
-            | "performance-lite" | "maestro" => Some(Profile::Maestro),
+            "performance" | "performa" => Some(Profile::Performance),
+            "performance lite" | "performance_lite" | "performance-lite" | "maestro" => {
+                Some(Profile::Maestro)
+            }
             _ => None,
         }
     }
@@ -103,6 +107,7 @@ fn apply_profile(profile: Profile, lite: bool) {
         Profile::Eco => engine::eco_profile(),
         Profile::Balance => engine::balance_profile(),
         Profile::Maestro => engine::maestro_profile(lite),
+        Profile::Performance => engine::performance_profile(),
     }
 }
 
@@ -355,6 +360,13 @@ impl EngineRuntime {
                             if target_lite { " | Lite" } else { "" }
                         );
                     }
+                    Profile::Performance => {
+                        log!(
+                            "[BOOST]  {} ({}) \u{2794} PERFORMANCE [Static Peak | Thermal Guard]",
+                            target_pkg.unwrap_or("system"),
+                            self.active_target_pid
+                        );
+                    }
                 }
                 self.current_profile = Some(target_profile);
                 self.current_lite = target_lite;
@@ -518,6 +530,9 @@ fn main() {
     engine::sync_global_tweaks();
     engine::apply_boot_profile();
     soc::vendor();
+    if !crate::tweaks::mitigation::active_items().is_empty() {
+        log!("[MITIGATION] {}", crate::tweaks::mitigation::summary());
+    }
 
     let shared_state = Arc::new(SharedState::new());
     IpcServer::start(Arc::clone(&shared_state));
@@ -557,6 +572,7 @@ fn main() {
     let mut fps_monitor = fps::FpsMonitor::new();
     let mut fas_controller = fas::FasController::new(fps_monitor.tap());
     let mut thermal_monitor = thermal::ThermalMonitor::new();
+    let mut performance_guard = false;
     let mut session_recorder = session::SessionRecorder::new(fps_monitor.tap());
     let mut last_heartbeat = Instant::now();
     let mut reload_pending_at: Option<Instant> = None;
@@ -907,6 +923,23 @@ fn main() {
         );
 
         let thermal_pressure = thermal_monitor.sample();
+        if runtime.current_profile == Some(Profile::Performance) {
+            match thermal_pressure {
+                thermal::ThermalPressure::Critical if !performance_guard => {
+                    engine::performance_safety_relax();
+                    performance_guard = true;
+                    log!("[THERMAL] PERFORMANCE guard engaged | clocks relaxed");
+                }
+                thermal::ThermalPressure::Normal if performance_guard => {
+                    apply_profile(Profile::Performance, runtime.current_lite);
+                    performance_guard = false;
+                    log!("[THERMAL] PERFORMANCE guard released | peak restored");
+                }
+                _ => {}
+            }
+        } else {
+            performance_guard = false;
+        }
         fas_controller.tick(
             runtime.current_profile == Some(Profile::Maestro),
             screen_awake && current_target.is_some(),
@@ -934,5 +967,22 @@ fn main() {
                 thread::sleep(timeout - elapsed);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod profile_tests {
+    use super::Profile;
+
+    #[test]
+    fn separates_performance_from_maestro() {
+        assert_eq!(Profile::from_name("Performance"), Some(Profile::Performance));
+        assert_eq!(Profile::from_name("performance"), Some(Profile::Performance));
+        assert_eq!(
+            Profile::from_name("Performance Lite"),
+            Some(Profile::Maestro)
+        );
+        assert_eq!(Profile::from_name("Maestro"), Some(Profile::Maestro));
+        assert_eq!(Profile::Performance.as_str(), "Performance");
     }
 }

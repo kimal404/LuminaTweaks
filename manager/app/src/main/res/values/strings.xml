@@ -390,6 +390,7 @@ Fitur di halaman ini hanya aktif ketika sistem berada pada profil Maestro. Pada 
     <string name="profile_desc_powersave">Hemat daya maksimal dengan clock rendah dan responsivitas dasar</string>
     <string name="profile_desc_balanced">Keseimbangan antara performa, suhu, dan konsumsi daya</string>
     <string name="profile_desc_maestro">Governor EAS dinamis dengan frame-pacing mengikuti refresh rate aktif</string>
+    <string name="profile_desc_performance">Peak gaming statis: CPU/GPU tinggi, anti-throttle, dan thermal guard</string>
     <string name="section_automation">Otomatisasi</string>
     <string name="settings_disable_auto_title">Nonaktifkan Mode Otomatis</string>
     <string name="settings_disable_auto_desc">Matikan perpindahan profil otomatis per aplikasi. Setelah nonaktif, kartu profil di Beranda dapat dibuka untuk memilih profil manual.</string>
