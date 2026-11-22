@@ -54,8 +54,25 @@
                 android:value="Real-time game FPS and frametime overlay monitor" />
         </service>
 
+        <service
+            android:name=".gamedeck.GameDeckService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="In-game DockRail and DeckCard overlay with device telemetry" />
+        </service>
 
-<provider
+        <receiver
+            android:name=".gamedeck.GameDeckBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.provider"
             android:exported="false"
