@@ -162,8 +162,8 @@ private fun EdgeHandlePill(
     )
 
     LaunchedEffect(Unit) {
-        delay(2_800L)
-        targetAlpha = 0.25f
+        delay(3_000L)
+        targetAlpha = 0.48f
     }
 
     Box(
@@ -201,13 +201,13 @@ private fun EdgeHandlePill(
         Surface(
             modifier = Modifier
                 .padding(horizontal = 3.dp)
-                .width(4.5.dp)
-                .height(44.dp)
+                .width(5.dp)
+                .height(48.dp)
                 .graphicsLayer { alpha = alphaAnim },
             shape = CircleShape,
-            color = Color.White,
-            border = BorderStroke(0.8.dp, Color.Black.copy(alpha = 0.35f)),
-            shadowElevation = 2.dp
+            color = MaterialTheme.colorScheme.primary,
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.7f)),
+            shadowElevation = 4.dp
         ) {}
     }
 }

@@ -23,8 +23,14 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.WindowManager
 import android.widget.Toast
+import android.app.usage.UsageEvents
+import android.app.usage.UsageStatsManager
+import android.content.pm.ApplicationInfo
+import androidx.compose.runtime.Recomposer
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.platform.AndroidUiDispatcher
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.compositionContext
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -127,6 +133,10 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     private var telemetryJob: Job? = null
     private var transitionJob: Job? = null
     private var profileJob: Job? = null
+    private var recomposer: Recomposer? = null
+    private var recomposerJob: Job? = null
+    private var lastForegroundPkg: String? = null
+    private var lastForegroundTs: Long = 0L
 
     private var activeConfig = GameDeckConfig()
     private var isAttached = false
@@ -223,7 +233,8 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                 activeConfig = config
                 val now = System.currentTimeMillis()
                 val feed = withContext(Dispatchers.IO) { LiveSessionFeed.read(this@GameDeckService) }
-                val gameActive = feed?.gameActive == true
+                val gameActive = (feed?.gameActive == true) ||
+                    withContext(Dispatchers.IO) { isForegroundGameActive(now) }
                 if (gameActive) {
                     lastGameSeenMs = now
                 }
@@ -445,6 +456,36 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         return lastGpuPercent
     }
 
+    private fun isForegroundGameActive(nowMs: Long): Boolean {
+        val usm = getSystemService(UsageStatsManager::class.java) ?: return false
+        val lookback = if (lastForegroundPkg == null) 120_000L else 10_000L
+        val events = runCatching { usm.queryEvents(nowMs - lookback, nowMs) }.getOrNull()
+        if (events != null) {
+            val ev = UsageEvents.Event()
+            while (events.hasNextEvent()) {
+                events.getNextEvent(ev)
+                if (ev.eventType == UsageEvents.Event.ACTIVITY_RESUMED && ev.timeStamp >= lastForegroundTs) {
+                    val pkg = ev.packageName
+                    if (!pkg.isNullOrBlank() && pkg != "android" && pkg != "com.android.systemui") {
+                        lastForegroundTs = ev.timeStamp
+                        lastForegroundPkg = pkg
+                    }
+                }
+            }
+        }
+        val fg = lastForegroundPkg ?: return false
+        if (fg == packageName) return false
+        val configured = ConfigRepository.cachedAppConfigs?.get(fg)
+        if (configured != null && !configured.disabled && (configured.saklarUtama || configured.custom)) {
+            return true
+        }
+        return runCatching {
+            val info = packageManager.getApplicationInfo(fg, 0)
+            (info.flags and ApplicationInfo.FLAG_IS_GAME) != 0 ||
+                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && info.category == ApplicationInfo.CATEGORY_GAME)
+        }.getOrDefault(false)
+    }
+
     private fun isKeyguardLocked(): Boolean {
         val keyguard = getSystemService(KeyguardManager::class.java) ?: return false
         return runCatching { keyguard.isKeyguardLocked }.getOrDefault(false)
@@ -457,7 +498,17 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             side = activeConfig.side,
             opacity = activeConfig.opacity
         )
+        recomposerJob?.cancel()
+        runCatching { recomposer?.cancel() }
+        val uiContext = AndroidUiDispatcher.CurrentThread
+        val activeRecomposer = Recomposer(uiContext)
+        recomposer = activeRecomposer
+        recomposerJob = serviceScope.launch(uiContext) {
+            activeRecomposer.runRecomposeAndApplyChanges()
+        }
+
         val view = ComposeView(this).apply {
+            compositionContext = activeRecomposer
             setViewTreeLifecycleOwner(this@GameDeckService)
             setViewTreeViewModelStoreOwner(this@GameDeckService)
             setViewTreeSavedStateRegistryOwner(this@GameDeckService)
@@ -501,6 +552,9 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     private fun detachOverlay() {
         if (!isAttached) return
         transitionJob?.cancel()
+        recomposerJob?.cancel()
+        runCatching { recomposer?.cancel() }
+        recomposer = null
         val view = composeView
         if (view != null) {
             runCatching { windowManager.removeViewImmediate(view) }
