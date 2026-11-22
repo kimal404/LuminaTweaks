@@ -934,9 +934,11 @@ private fun QuickAppsPickerDialog(
     onToggle: (String) -> Unit
 ) {
     val context = LocalContext.current
-    var apps by remember { mutableStateOf<List<AppItem>>(emptyList()) }
+    val initialApps: List<AppItem> = emptyList()
+    val initialIcons: Map<String, ImageBitmap> = emptyMap()
+    var apps by remember { mutableStateOf(initialApps) }
     var loading by remember { mutableStateOf(true) }
-    var icons by remember { mutableStateOf>(emptyMap()) }
+    var icons by remember { mutableStateOf(initialIcons) }
 
     LaunchedEffect(Unit) {
         apps = withContext(Dispatchers.IO) {
