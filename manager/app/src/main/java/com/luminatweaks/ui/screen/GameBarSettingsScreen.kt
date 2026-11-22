@@ -18,6 +18,7 @@ package com.luminatweaks.ui.screen
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -41,13 +42,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
+import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SportsEsports
-import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
@@ -73,6 +75,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -106,9 +112,9 @@ private data class GameBarSizePreset(
 private val appIconCache = mutableMapOf<String, Drawable?>()
 
 private val gameBarSizePresets = listOf(
-    GameBarSizePreset("Ringkas", 256),
-    GameBarSizePreset("Standar", 280),
-    GameBarSizePreset("Lebar", 304)
+    GameBarSizePreset("Ringkas", 272),
+    GameBarSizePreset("Standar", 292),
+    GameBarSizePreset("Lebar", 316)
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -297,25 +303,30 @@ fun GameBarSettingsScreen(onBack: () -> Unit) {
                                 )
                             }
                         }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "Posisi vertikal handle",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                text = "${(config.handlePositionRatio * 100).roundToInt()}%",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                        Surface(
+                            shape = RoundedCornerShape(18.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.KeyboardArrowRight,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = "Geser dari tepi layar ke arah dalam atau ketuk tepi untuk membuka Lumina Game.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
-                        Slider(
-                            value = config.handlePositionRatio.coerceIn(0.15f, 0.85f),
-                            onValueChange = { save(config.copy(handlePositionRatio = it)) },
-                            valueRange = 0.15f..0.85f
-                        )
                     }
                 }
             }
@@ -346,45 +357,12 @@ fun GameBarSettingsScreen(onBack: () -> Unit) {
                             onValueChange = { save(config.copy(opacity = it)) },
                             valueRange = 0.40f..1f
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "Opasitas handle tepi",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                text = "${(config.handleOpacity * 100).roundToInt()}%",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        Slider(
-                            value = config.handleOpacity.coerceIn(0.10f, 0.80f),
-                            onValueChange = { save(config.copy(handleOpacity = it)) },
-                            valueRange = 0.10f..0.80f
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Area gestur tepi tidak terlihat dan hanya aktif saat panel tertutup.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Redupkan handle otomatis",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    text = "Handle meredup setelah 2,5 detik tanpa sentuhan",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Switch(
-                                checked = config.autoDimHandle,
-                                onCheckedChange = { save(config.copy(autoDimHandle = it)) }
-                            )
-                        }
                     }
                 }
             }
@@ -519,58 +497,32 @@ private fun GameBarHero(
 
 @Composable
 private fun GameBarPreview(config: GameBarConfig) {
-    val isLeft = config.side == GameBarSide.LEFT
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(232.dp)
+            .height(238.dp)
             .clip(RoundedCornerShape(28.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
-            .padding(12.dp)
+            .padding(14.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(RoundedCornerShape(20.dp))
-                .background(MaterialTheme.colorScheme.surfaceDim.copy(alpha = 0.55f))
-        )
-        Box(
-            modifier = Modifier
-                .align(if (isLeft) Alignment.CenterStart else Alignment.CenterEnd)
-                .width(4.dp)
-                .height(44.dp)
-                .clip(CircleShape)
-                .background(
-                    MaterialTheme.colorScheme.primary.copy(
-                        alpha = config.handleOpacity.coerceIn(0.10f, 0.80f)
-                    )
-                )
-        )
-        Row(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Surface(
+            modifier = Modifier.width(196.dp),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(
+                alpha = config.opacity.coerceIn(0.40f, 1f)
+            ),
+            shadowElevation = 6.dp
         ) {
-            if (isLeft) {
-                PreviewRail(config)
-            }
-            Surface(
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(18.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(
-                    alpha = config.opacity.coerceIn(0.40f, 1f)
-                ),
-                shadowElevation = 6.dp
+            Column(
+                modifier = Modifier.padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Spacer(modifier = Modifier.width(12.dp))
                     Text(
                         text = "Lumina Game",
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.weight(1f),
                         fontSize = 8.5.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 0.4.sp,
@@ -578,211 +530,243 @@ private fun GameBarPreview(config: GameBarConfig) {
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1
                     )
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    PreviewGauge(size = 30.dp, progress = 0.45f, text = "45", main = false)
+                    PreviewGauge(size = 38.dp, progress = 0.8f, text = "96", main = true)
+                    PreviewGauge(size = 30.dp, progress = 0.62f, text = "62", main = false)
+                }
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "41.6°C   ·   31%",
+                            fontSize = 6.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    listOf(
+                        listOf("Eco", "Balanced"),
+                        listOf("Maestro", "Performance")
+                    ).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                            row.forEach { label ->
+                                val selected = label == "Balanced"
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(14.dp)
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(
+                                            if (selected) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.surfaceContainerHighest
+                                            }
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        fontSize = 5.5.sp,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (selected) {
+                                            MaterialTheme.colorScheme.onPrimary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        },
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 6.dp, vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "42%",
-                                fontSize = 7.sp,
+                                text = "Refresh rate",
+                                modifier = Modifier.weight(1f),
+                                fontSize = 6.5.sp,
+                                fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
-                                softWrap = false,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                softWrap = false
                             )
                             Text(
-                                text = "120",
-                                fontSize = 11.sp,
+                                text = "120 Hz",
+                                fontSize = 6.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary,
                                 maxLines = 1,
                                 softWrap = false
                             )
-                            Text(
-                                text = "37.0°C",
-                                fontSize = 7.sp,
-                                maxLines = 1,
-                                softWrap = false,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                            listOf("Auto", "60", "120").forEachIndexed { index, label ->
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(11.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (index == 2) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.surfaceContainerHigh
+                                            }
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        fontSize = 5.sp,
+                                        fontWeight = if (index == 2) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (index == 2) {
+                                            MaterialTheme.colorScheme.onPrimary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    listOf(0.7f, 0.4f).forEach { fill ->
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(8.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(fill)
+                                    .height(8.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
                             )
                         }
                     }
-                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        listOf(
-                            listOf("Eco", "Balanced"),
-                            listOf("Maestro", "Performance")
-                        ).forEach { row ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                                row.forEach { label ->
-                                    val selected = label == "Balanced"
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(15.dp)
-                                            .clip(RoundedCornerShape(5.dp))
-                                            .background(
-                                                if (selected) {
-                                                    MaterialTheme.colorScheme.primary
-                                                } else {
-                                                    MaterialTheme.colorScheme.surfaceContainerHighest
-                                                }
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = label,
-                                            fontSize = 6.sp,
-                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (selected) {
-                                                MaterialTheme.colorScheme.onPrimary
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurface
-                                            },
-                                            maxLines = 1,
-                                            softWrap = false
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)
-                    ) {
-                        Column(
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    listOf(
+                        Icons.Rounded.Speed,
+                        Icons.Rounded.Bolt,
+                        Icons.Rounded.NotificationsOff,
+                        Icons.Rounded.Apps
+                    ).forEach { icon ->
+                        Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 6.dp, vertical = 4.dp),
-                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                                .weight(1f)
+                                .height(16.dp)
+                                .clip(RoundedCornerShape(5.dp))
+                                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Refresh rate",
-                                    modifier = Modifier.weight(1f),
-                                    fontSize = 7.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1,
-                                    softWrap = false
-                                )
-                                Text(
-                                    text = "120 Hz",
-                                    fontSize = 7.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    maxLines = 1,
-                                    softWrap = false
-                                )
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                                listOf("Auto", "60", "120").forEachIndexed { index, label ->
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(12.dp)
-                                            .clip(CircleShape)
-                                            .background(
-                                                if (index == 2) {
-                                                    MaterialTheme.colorScheme.primary
-                                                } else {
-                                                    MaterialTheme.colorScheme.surfaceContainerHigh
-                                                }
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = label,
-                                            fontSize = 5.5.sp,
-                                            fontWeight = if (index == 2) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (index == 2) {
-                                                MaterialTheme.colorScheme.onPrimary
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurfaceVariant
-                                            },
-                                            maxLines = 1,
-                                            softWrap = false
-                                        )
-                                    }
-                                }
-                            }
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(8.dp)
+                            )
                         }
                     }
                 }
             }
-            if (!isLeft) {
-                PreviewRail(config)
-            }
         }
     }
 }
 
 @Composable
-private fun PreviewRail(config: GameBarConfig) {
-    Surface(
-        modifier = Modifier.width(20.dp),
-        shape = RoundedCornerShape(9.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(
-            alpha = config.opacity.coerceIn(0.40f, 1f)
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(vertical = 5.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            PreviewAction(Icons.Rounded.Speed, active = true, size = 13.dp, iconSize = 8.dp)
-            PreviewAction(Icons.Rounded.Apps, active = false, size = 13.dp, iconSize = 8.dp)
-            PreviewAction(Icons.Rounded.Tune, active = false, size = 13.dp, iconSize = 8.dp)
-            Box(
-                modifier = Modifier
-                    .width(11.dp)
-                    .height(1.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-            )
-            PreviewAction(Icons.Rounded.Speed, active = false, size = 12.dp, iconSize = 7.dp)
-            PreviewAction(Icons.Rounded.Apps, active = false, size = 12.dp, iconSize = 7.dp)
-        }
-    }
-}
-
-@Composable
-private fun PreviewAction(
-    icon: ImageVector,
-    active: Boolean,
-    size: Dp = 26.dp,
-    iconSize: Dp = 13.dp
+private fun PreviewGauge(
+    size: Dp,
+    progress: Float,
+    text: String,
+    main: Boolean
 ) {
+    val accent = MaterialTheme.colorScheme.primary
+    val track = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
     Box(
-        modifier = Modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(
-                if (active) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surfaceContainerHighest
-                }
-            ),
+        modifier = Modifier.size(size),
         contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = if (active) {
-                MaterialTheme.colorScheme.onPrimaryContainer
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val strokeWidth = (if (main) 4.dp else 3.dp).toPx()
+            val arcSize = Size(
+                width = this.size.width - strokeWidth,
+                height = this.size.height - strokeWidth
+            )
+            val topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f)
+            drawArc(
+                color = track,
+                startAngle = -90f,
+                sweepAngle = 360f,
+                useCenter = false,
+                topLeft = topLeft,
+                size = arcSize,
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+            )
+            drawArc(
+                color = accent,
+                startAngle = -90f,
+                sweepAngle = 360f * progress.coerceIn(0f, 1f),
+                useCenter = false,
+                topLeft = topLeft,
+                size = arcSize,
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+            )
+        }
+        Text(
+            text = text,
+            fontSize = if (main) 9.sp else 6.5.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (main) {
+                MaterialTheme.colorScheme.primary
             } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
+                MaterialTheme.colorScheme.onSurface
             },
-            modifier = Modifier.size(iconSize)
+            maxLines = 1,
+            softWrap = false
         )
     }
 }
@@ -1003,7 +987,7 @@ private fun QuickAppsPickerDialog(
         text = {
             Column {
                 Text(
-                    text = "Pilih aplikasi untuk Game Bar. Maksimal 3 ikon tampil di rail.",
+                    text = "Ikon aplikasi terpilih tampil di baris bawah kartu Lumina Game.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

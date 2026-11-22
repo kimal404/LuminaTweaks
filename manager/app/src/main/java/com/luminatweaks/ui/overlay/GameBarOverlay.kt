@@ -17,12 +17,13 @@
 package com.luminatweaks.ui.overlay
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -35,7 +36,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -45,6 +45,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
+import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.BatteryFull
 import androidx.compose.material.icons.rounded.Brightness6
 import androidx.compose.material.icons.rounded.Close
@@ -53,7 +54,6 @@ import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -61,18 +61,17 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
@@ -80,7 +79,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -91,11 +89,6 @@ import com.luminatweaks.data.GameBarUiState
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
-import kotlinx.coroutines.delay
-
-private const val TAB_PERFORMANCE = 0
-private const val TAB_TOOLS = 1
-private const val TAB_CONTROLS = 2
 
 private data class GameBarProfile(
     val value: String,
@@ -110,12 +103,13 @@ private val gameBarProfiles = listOf(
     GameBarProfile("Performance", "Performance", Icons.Rounded.Speed)
 )
 
+private val edgeGestureWidth = 14.dp
+
 @Composable
 fun GameBarRoot(
     state: State<GameBarUiState>,
     onExpand: () -> Unit,
     onCollapse: () -> Unit,
-    onHandleDrag: (Float) -> Unit,
     onProfileSelected: (String) -> Unit,
     onVolumeChanged: (Int) -> Unit,
     onBrightnessChanged: (Int) -> Unit,
@@ -129,7 +123,12 @@ fun GameBarRoot(
     val current by state
     AnimatedContent(
         targetState = current.expanded,
-        transitionSpec = { fadeIn(tween(160)) togetherWith fadeOut(tween(100)) },
+        transitionSpec = {
+            (fadeIn(tween(150)) + scaleIn(initialScale = 0.97f, animationSpec = tween(150)))
+                .togetherWith(
+                    fadeOut(tween(90)) + scaleOut(targetScale = 0.98f, animationSpec = tween(90))
+                )
+        },
         modifier = Modifier.fillMaxWidth(),
         label = "gameBarMode"
     ) { expanded ->
@@ -148,62 +147,33 @@ fun GameBarRoot(
                 onRefreshRateSelected = onRefreshRateSelected
             )
         } else {
-            GameBarHandle(
-                state = current,
-                onExpand = onExpand,
-                onHandleDrag = onHandleDrag
+            EdgeSwipeGesture(
+                side = current.side,
+                onExpand = onExpand
             )
         }
     }
 }
 
 @Composable
-private fun GameBarHandle(
-    state: GameBarUiState,
-    onExpand: () -> Unit,
-    onHandleDrag: (Float) -> Unit
+private fun EdgeSwipeGesture(
+    side: GameBarSide,
+    onExpand: () -> Unit
 ) {
-    val isLeft = state.side == GameBarSide.LEFT
-    var touchTick by remember { mutableStateOf(0) }
-    var dimmed by remember { mutableStateOf(false) }
-    val swipeThreshold = with(LocalDensity.current) { 18.dp.toPx() }
-
-    LaunchedEffect(touchTick, state.autoDimHandle) {
-        dimmed = false
-        if (state.autoDimHandle) {
-            delay(2500L)
-            dimmed = true
-        }
-    }
-
-    val handleAlpha by animateFloatAsState(
-        targetValue = if (dimmed) {
-            state.handleOpacity.coerceAtMost(0.16f)
-        } else {
-            state.handleOpacity.coerceIn(0.10f, 0.80f)
-        },
-        animationSpec = tween(600),
-        label = "gameBarHandleAlpha"
-    )
+    val isLeft = side == GameBarSide.LEFT
+    val swipeThreshold = with(LocalDensity.current) { edgeGestureWidth.toPx() }
 
     Box(
         modifier = Modifier
-            .fillMaxSize()
+            .fillMaxWidth()
             .pointerInput(Unit) {
-                detectTapGestures(
-                    onPress = {
-                        touchTick++
-                        tryAwaitRelease()
-                    },
-                    onTap = { onExpand() }
-                )
+                detectTapGestures(onTap = { onExpand() })
             }
             .pointerInput(isLeft, swipeThreshold) {
                 var totalX = 0f
                 var totalY = 0f
                 detectDragGestures(
                     onDragStart = {
-                        touchTick++
                         totalX = 0f
                         totalY = 0f
                     },
@@ -221,21 +191,9 @@ private fun GameBarHandle(
                     change.consume()
                     totalX += dragAmount.x
                     totalY += dragAmount.y
-                    if (abs(totalY) >= abs(totalX)) {
-                        onHandleDrag(dragAmount.y)
-                    }
                 }
             }
-    ) {
-        Box(
-            modifier = Modifier
-                .align(if (isLeft) Alignment.CenterStart else Alignment.CenterEnd)
-                .width(4.dp)
-                .height(48.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = handleAlpha))
-        )
-    }
+    )
 }
 
 @Composable
@@ -252,224 +210,13 @@ private fun GameBarPanel(
     onOpenManager: () -> Unit,
     onRefreshRateSelected: (Int?) -> Unit
 ) {
-    val maxHeight = (LocalConfiguration.current.screenHeightDp.dp - 28.dp).coerceAtLeast(220.dp)
-    val isLeft = state.side == GameBarSide.LEFT
-    var selectedTab by remember { mutableStateOf(TAB_PERFORMANCE) }
-    val railModifier = Modifier
+    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+    val cardHeight = minOf(310.dp, (screenHeight - 24.dp).coerceAtLeast(220.dp))
 
-    Box(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = maxHeight),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (isLeft) {
-                GameBarRail(
-                    state = state,
-                    selectedTab = selectedTab,
-                    onTabSelected = { selectedTab = it },
-                    onQuickAppClick = onQuickAppClick,
-                    onOpenManager = onOpenManager,
-                    modifier = railModifier
-                )
-            }
-            GameBarCard(
-                state = state,
-                selectedTab = selectedTab,
-                maxHeight = maxHeight,
-                onCollapse = onCollapse,
-                onProfileSelected = onProfileSelected,
-                onVolumeChanged = onVolumeChanged,
-                onBrightnessChanged = onBrightnessChanged,
-                onToggleFpsOverlay = onToggleFpsOverlay,
-                onToggleDnd = onToggleDnd,
-                onToggleLiteMode = onToggleLiteMode,
-                onOpenManager = onOpenManager,
-                onRefreshRateSelected = onRefreshRateSelected,
-                modifier = Modifier.weight(1f)
-            )
-            if (!isLeft) {
-                GameBarRail(
-                    state = state,
-                    selectedTab = selectedTab,
-                    onTabSelected = { selectedTab = it },
-                    onQuickAppClick = onQuickAppClick,
-                    onOpenManager = onOpenManager,
-                    modifier = railModifier
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun GameBarRail(
-    state: GameBarUiState,
-    selectedTab: Int,
-    onTabSelected: (Int) -> Unit,
-    onQuickAppClick: (String) -> Unit,
-    onOpenManager: () -> Unit,
-    modifier: Modifier = Modifier
-) {
     Surface(
-        modifier = modifier.width(48.dp),
-        shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(
-            alpha = state.opacity.coerceIn(0.40f, 1f)
-        ),
-        tonalElevation = 3.dp,
-        shadowElevation = 8.dp,
-        border = BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(vertical = 10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            RailTab(
-                icon = Icons.Rounded.Speed,
-                description = "Performa",
-                selected = selectedTab == TAB_PERFORMANCE,
-                onClick = { onTabSelected(TAB_PERFORMANCE) }
-            )
-            RailTab(
-                icon = Icons.Rounded.Apps,
-                description = "Alat",
-                selected = selectedTab == TAB_TOOLS,
-                onClick = { onTabSelected(TAB_TOOLS) }
-            )
-            RailTab(
-                icon = Icons.Rounded.Tune,
-                description = "Kontrol",
-                selected = selectedTab == TAB_CONTROLS,
-                onClick = { onTabSelected(TAB_CONTROLS) }
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            Box(
-                modifier = Modifier
-                    .width(26.dp)
-                    .height(1.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            val apps = state.quickApps.take(3)
-            if (apps.isEmpty()) {
-                RailQuickApp(
-                    label = null,
-                    icon = Icons.Rounded.Apps,
-                    onClick = onOpenManager
-                )
-            } else {
-                apps.forEach { app ->
-                    RailQuickApp(
-                        app = app,
-                        onClick = { onQuickAppClick(app.packageName) }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun RailTab(
-    icon: ImageVector,
-    description: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        modifier = Modifier.size(34.dp),
-        shape = CircleShape,
-        color = if (selected) {
-            MaterialTheme.colorScheme.primaryContainer
-        } else {
-            Color.Transparent
-        }
-    ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = description,
-                tint = if (selected) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                modifier = Modifier.size(18.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun RailQuickApp(
-    app: GameBarQuickApp? = null,
-    label: String? = null,
-    icon: ImageVector? = null,
-    onClick: () -> Unit
-) {
-    val bitmap = if (app != null) rememberAppIcon(app.packageName) else null
-    Surface(
-        onClick = onClick,
-        modifier = Modifier.size(32.dp),
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.65f)
-    ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            when {
-                icon != null -> Icon(
-                    imageVector = icon,
-                    contentDescription = label,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp)
-                )
-                bitmap != null -> Image(
-                    bitmap = bitmap,
-                    contentDescription = app?.label,
-                    modifier = Modifier.size(22.dp)
-                )
-                app != null -> Text(
-                    text = app.label.take(1).uppercase(Locale.ROOT),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun GameBarCard(
-    state: GameBarUiState,
-    selectedTab: Int,
-    maxHeight: Dp,
-    onCollapse: () -> Unit,
-    onProfileSelected: (String) -> Unit,
-    onVolumeChanged: (Int) -> Unit,
-    onBrightnessChanged: (Int) -> Unit,
-    onToggleFpsOverlay: () -> Unit,
-    onToggleDnd: () -> Unit,
-    onToggleLiteMode: () -> Unit,
-    onOpenManager: () -> Unit,
-    onRefreshRateSelected: (Int?) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(cardHeight),
         shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(
             alpha = state.opacity.coerceIn(0.40f, 1f)
@@ -483,43 +230,53 @@ private fun GameBarCard(
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = maxHeight)
+                .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            GameBarCardHeader(onCollapse = onCollapse)
-            when (selectedTab) {
-                TAB_TOOLS -> ToolsContent(
-                    state = state,
-                    onToggleFpsOverlay = onToggleFpsOverlay,
-                    onToggleLiteMode = onToggleLiteMode,
-                    onToggleDnd = onToggleDnd,
-                    onOpenManager = onOpenManager
-                )
-                TAB_CONTROLS -> ControlsContent(
-                    state = state,
-                    onVolumeChanged = onVolumeChanged,
-                    onBrightnessChanged = onBrightnessChanged
-                )
-                else -> PerformanceContent(
-                    state = state,
-                    onProfileSelected = onProfileSelected,
-                    onRefreshRateSelected = onRefreshRateSelected
-                )
-            }
+            GameBarHeader(onCollapse = onCollapse)
+            MetricGaugeRow(state)
+            InfoStrip(state)
+            ProfileGrid(
+                profile = state.profile,
+                onProfileSelected = onProfileSelected
+            )
+            RefreshRateCard(
+                modes = state.rrModes,
+                currentId = state.currentRrId,
+                liveHz = state.targetHz,
+                onSelect = onRefreshRateSelected
+            )
+            QuickSliders(
+                brightness = state.brightnessPercent,
+                volume = state.volumePercent,
+                onBrightnessChanged = onBrightnessChanged,
+                onVolumeChanged = onVolumeChanged
+            )
+            QuickTools(
+                state = state,
+                onToggleFpsOverlay = onToggleFpsOverlay,
+                onToggleLiteMode = onToggleLiteMode,
+                onToggleDnd = onToggleDnd,
+                onOpenManager = onOpenManager
+            )
+            QuickAppsRow(
+                apps = state.quickApps,
+                onQuickAppClick = onQuickAppClick,
+                onOpenManager = onOpenManager
+            )
         }
     }
 }
 
 @Composable
-private fun GameBarCardHeader(onCollapse: () -> Unit) {
+private fun GameBarHeader(onCollapse: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Spacer(modifier = Modifier.width(28.dp))
+        Spacer(modifier = Modifier.width(30.dp))
         Text(
             text = "Lumina Game",
             modifier = Modifier.weight(1f),
@@ -533,7 +290,7 @@ private fun GameBarCardHeader(onCollapse: () -> Unit) {
         )
         Surface(
             onClick = onCollapse,
-            modifier = Modifier.size(28.dp),
+            modifier = Modifier.size(30.dp),
             shape = CircleShape,
             color = MaterialTheme.colorScheme.surfaceContainerHighest
         ) {
@@ -545,7 +302,7 @@ private fun GameBarCardHeader(onCollapse: () -> Unit) {
                     imageVector = Icons.Rounded.Close,
                     contentDescription = "Tutup Game Bar",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(17.dp)
                 )
             }
         }
@@ -553,164 +310,200 @@ private fun GameBarCardHeader(onCollapse: () -> Unit) {
 }
 
 @Composable
-private fun PerformanceContent(
-    state: GameBarUiState,
-    onProfileSelected: (String) -> Unit,
-    onRefreshRateSelected: (Int?) -> Unit
-) {
-    HeroTelemetry(state)
-    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        gameBarProfiles.chunked(2).forEach { rowProfiles ->
-            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                rowProfiles.forEach { profile ->
-                    ProfileButton(
-                        profile = profile,
-                        selected = profileMatches(state.profile, profile.value),
-                        modifier = Modifier.weight(1f),
-                        onClick = { onProfileSelected(profile.value) }
-                    )
-                }
-            }
-        }
+private fun MetricGaugeRow(state: GameBarUiState) {
+    val fps = state.fps.coerceAtLeast(0)
+    val targetHz = state.targetHz.coerceAtLeast(1)
+    val fpsProgress = (fps.toFloat() / targetHz.toFloat()).coerceIn(0f, 1f)
+    val frametime = when {
+        state.frametimeMs > 0f -> String.format(Locale.US, "%.1f ms", state.frametimeMs)
+        else -> ""
     }
-    RefreshRateCard(
-        modes = state.rrModes,
-        currentId = state.currentRrId,
-        liveHz = state.targetHz,
-        onSelect = onRefreshRateSelected
-    )
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        CircularMetricGauge(
+            size = 68.dp,
+            progress = (state.cpuPercent ?: 0) / 100f,
+            primaryText = "${state.cpuPercent ?: 0}%",
+            label = "CPU",
+            highlighted = false
+        )
+        CircularMetricGauge(
+            size = 82.dp,
+            progress = fpsProgress,
+            primaryText = fps.toString(),
+            label = "FPS",
+            sublabel = frametime,
+            highlighted = true
+        )
+        CircularMetricGauge(
+            size = 68.dp,
+            progress = (state.gpuPercent ?: 0) / 100f,
+            primaryText = "${state.gpuPercent ?: 0}%",
+            label = "GPU",
+            highlighted = false
+        )
+    }
 }
 
 @Composable
-private fun HeroTelemetry(state: GameBarUiState) {
-    val frametimeText = if (state.frametimeMs > 0f) {
-        String.format(Locale.US, "%.1f ms", state.frametimeMs)
+private fun CircularMetricGauge(
+    size: Dp,
+    progress: Float,
+    primaryText: String,
+    label: String,
+    sublabel: String? = null,
+    highlighted: Boolean
+) {
+    val trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+    val accentColor = if (highlighted) {
+        MaterialTheme.colorScheme.primary
     } else {
-        "-- ms"
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
     }
+    Box(
+        modifier = Modifier.size(size),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val strokeWidth = (if (highlighted) 7.dp else 5.dp).toPx()
+            val arcSize = Size(
+                width = this.size.width - strokeWidth,
+                height = this.size.height - strokeWidth
+            )
+            val topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f)
+            drawArc(
+                color = trackColor,
+                startAngle = -90f,
+                sweepAngle = 360f,
+                useCenter = false,
+                topLeft = topLeft,
+                size = arcSize,
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+            )
+            drawArc(
+                color = accentColor,
+                startAngle = -90f,
+                sweepAngle = 360f * progress.coerceIn(0f, 1f),
+                useCenter = false,
+                topLeft = topLeft,
+                size = arcSize,
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+            )
+        }
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = primaryText,
+                fontSize = if (highlighted) 26.sp else 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (highlighted) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+                maxLines = 1,
+                softWrap = false
+            )
+            Text(
+                text = label,
+                fontSize = if (highlighted) 9.sp else 8.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false
+            )
+            if (!sublabel.isNullOrBlank()) {
+                Text(
+                    text = sublabel,
+                    fontSize = 8.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun InfoStrip(state: GameBarUiState) {
     Surface(
-        shape = RoundedCornerShape(16.dp),
+        shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 9.dp),
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Text(
-                    text = "Baterai",
-                    fontSize = 9.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    softWrap = false
-                )
-                Text(
-                    text = "${state.batteryPercent}%",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    softWrap = false
-                )
-                Icon(
-                    imageVector = Icons.Rounded.BatteryFull,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(13.dp)
-                )
-            }
-            Column(
-                modifier = Modifier.weight(1.4f),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "Frame rate",
-                    fontSize = 9.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    softWrap = false
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    HudAccentLine()
-                    Text(
-                        text = if (state.fps > 0) state.fps.toString() else "--",
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                    HudAccentLine()
-                }
-                Text(
-                    text = "FPS",
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    softWrap = false
-                )
-            }
-            Column(
-                modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Thermostat,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(10.dp)
-                    )
-                    Text(
-                        text = "Suhu",
-                        fontSize = 9.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                }
-                Text(
-                    text = state.tempLabel,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    softWrap = false
-                )
-                Text(
-                    text = frametimeText,
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    softWrap = false
-                )
-            }
+            Icon(
+                imageVector = Icons.Rounded.Thermostat,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(13.dp)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = state.tempLabel,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                softWrap = false
+            )
+            Spacer(modifier = Modifier.width(14.dp))
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(11.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+            )
+            Spacer(modifier = Modifier.width(14.dp))
+            Icon(
+                imageVector = Icons.Rounded.BatteryFull,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(13.dp)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = "${state.batteryPercent}%",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                softWrap = false
+            )
         }
     }
 }
 
 @Composable
-private fun HudAccentLine() {
-    Box(
-        modifier = Modifier
-            .width(8.dp)
-            .height(2.dp)
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.7f), CircleShape)
-    )
+private fun ProfileGrid(
+    profile: String,
+    onProfileSelected: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        gameBarProfiles.chunked(2).forEach { rowProfiles ->
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                rowProfiles.forEach { item ->
+                    ProfileButton(
+                        profile = item,
+                        selected = profileMatches(profile, item.value),
+                        modifier = Modifier.weight(1f),
+                        onClick = { onProfileSelected(item.value) }
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -875,7 +668,72 @@ private fun RateCapsule(
 }
 
 @Composable
-private fun ToolsContent(
+private fun QuickSliders(
+    brightness: Int,
+    volume: Int,
+    onBrightnessChanged: (Int) -> Unit,
+    onVolumeChanged: (Int) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        GameBarSlider(
+            icon = Icons.Rounded.Brightness6,
+            value = brightness,
+            onValueChange = onBrightnessChanged
+        )
+        GameBarSlider(
+            icon = Icons.Rounded.VolumeUp,
+            value = volume,
+            onValueChange = onVolumeChanged
+        )
+    }
+}
+
+@Composable
+private fun GameBarSlider(
+    icon: ImageVector,
+    value: Int,
+    onValueChange: (Int) -> Unit
+) {
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(34.dp)
+                .padding(horizontal = 9.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(15.dp)
+            )
+            Slider(
+                value = value.coerceIn(0, 100).toFloat(),
+                onValueChange = { onValueChange(it.roundToInt().coerceIn(0, 100)) },
+                valueRange = 0f..100f,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 2.dp)
+            )
+            Text(
+                text = "$value%",
+                modifier = Modifier.width(32.dp),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.End,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun QuickTools(
     state: GameBarUiState,
     onToggleFpsOverlay: () -> Unit,
     onToggleLiteMode: () -> Unit,
@@ -928,7 +786,7 @@ private fun ToolCard(
 ) {
     Surface(
         onClick = onClick,
-        modifier = modifier.height(76.dp),
+        modifier = modifier.height(58.dp),
         shape = RoundedCornerShape(16.dp),
         color = if (active) {
             MaterialTheme.colorScheme.primaryContainer
@@ -941,12 +799,11 @@ private fun ToolCard(
             null
         }
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(vertical = 10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(7.dp)
+                .padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = icon,
@@ -956,8 +813,9 @@ private fun ToolCard(
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
                 },
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(19.dp)
             )
+            Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = label,
                 fontSize = 10.sp,
@@ -969,78 +827,97 @@ private fun ToolCard(
                 },
                 maxLines = 1,
                 softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
 }
 
 @Composable
-private fun ControlsContent(
-    state: GameBarUiState,
-    onVolumeChanged: (Int) -> Unit,
-    onBrightnessChanged: (Int) -> Unit
+private fun QuickAppsRow(
+    apps: List<GameBarQuickApp>,
+    onQuickAppClick: (String) -> Unit,
+    onOpenManager: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        GameBarSlider(
-            icon = Icons.Rounded.Brightness6,
-            value = state.brightnessPercent,
-            onValueChange = onBrightnessChanged
+    if (apps.isEmpty()) return
+    val visibleApps = apps.take(5)
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = "Quick Apps",
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            softWrap = false
         )
-        GameBarSlider(
-            icon = Icons.Rounded.VolumeUp,
-            value = state.volumePercent,
-            onValueChange = onVolumeChanged
-        )
-    }
-}
-
-@Composable
-private fun GameBarSlider(
-    icon: ImageVector,
-    value: Int,
-    onValueChange: (Int) -> Unit
-) {
-    Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)
-    ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(34.dp)
-                .padding(horizontal = 9.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(15.dp)
-            )
-            Slider(
-                value = value.coerceIn(0, 100).toFloat(),
-                onValueChange = { onValueChange(it.roundToInt().coerceIn(0, 100)) },
-                valueRange = 0f..100f,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 2.dp)
-            )
-            Text(
-                text = "$value%",
-                modifier = Modifier.width(32.dp),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.End,
-                maxLines = 1
-            )
+            visibleApps.forEach { app ->
+                QuickAppButton(
+                    app = app,
+                    onClick = { onQuickAppClick(app.packageName) }
+                )
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            Surface(
+                onClick = onOpenManager,
+                modifier = Modifier.size(38.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Apps,
+                        contentDescription = "Lumina Manager",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(17.dp)
+                    )
+                }
+            }
         }
     }
 }
 
-private fun profileMatches(current: String, option: String): Boolean {
+@Composable
+private fun QuickAppButton(
+    app: GameBarQuickApp,
+    onClick: () -> Unit
+) {
+    val icon = rememberAppIcon(app.packageName)
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.size(38.dp),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f)
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            if (icon != null) {
+                Image(
+                    bitmap = icon,
+                    contentDescription = app.label,
+                    modifier = Modifier.size(26.dp)
+                )
+            } else {
+                Text(
+                    text = app.label.take(1).uppercase(Locale.ROOT),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+internal fun profileMatches(current: String, option: String): Boolean {
     val value = current.lowercase(Locale.ROOT)
     return when (option) {
         "Eco" -> value.contains("eco") || value.contains("power")

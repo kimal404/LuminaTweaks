@@ -163,6 +163,8 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
     private var lastLeaseRequestMs = 0L
     private var windowConfigKey = ""
     private var lastMetricsMs = 0L
+    private var lastFpsValue = 0
+    private var lastFpsAtMs = 0L
     private var cachedGamePackage: String? = null
     private var cachedGameLabel: String? = null
 
@@ -328,14 +330,30 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
 
         serviceScope.launch {
             val metrics = withContext(Dispatchers.IO) { readMetrics(config, feed) }
-            val fps = metrics.fps
+            val nowMs = System.currentTimeMillis()
+            val fps = if (metrics.fps > 0) {
+                lastFpsValue = metrics.fps
+                lastFpsAtMs = nowMs
+                metrics.fps
+            } else if (nowMs - lastFpsAtMs <= 4_000L) {
+                lastFpsValue
+            } else {
+                0
+            }
+            val frametime = if (metrics.frametimeMs > 0f) {
+                metrics.frametimeMs
+            } else if (fps > 0) {
+                1_000f / fps
+            } else {
+                0f
+            }
             uiState.value = uiState.value.copy(
                 expanded = isExpanded,
                 liteMode = metrics.liteMode,
                 rrModes = metrics.rrModes,
                 currentRrId = metrics.currentRrId,
                 fps = fps,
-                frametimeMs = metrics.frametimeMs,
+                frametimeMs = frametime,
                 targetHz = metrics.targetHz,
                 profile = metrics.profile,
                 autoProfile = metrics.autoProfile,
@@ -432,8 +450,8 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
             profile = DeviceUtil.readSystemProperty("sys.lumina.profile") ?: "Balanced",
             autoProfile = DeviceUtil.readSystemProperty("persist.lumina.autoprofile")
                 .let { it == null || (!it.equals("0", true) && !it.equals("false", true)) },
-            cpuPercent = sysfs.cpuPercent()?.roundToInt(),
-            gpuPercent = sysfs.gpuPercent()?.roundToInt(),
+            cpuPercent = sysfs.cpuPercent()?.roundToInt()?.coerceIn(0, 100) ?: 0,
+            gpuPercent = sysfs.gpuPercent()?.roundToInt()?.coerceIn(0, 100) ?: 0,
             tempLabel = DeviceUtil.getBatteryTemperature(this),
             batteryPercent = battery,
             ramPercent = ram,
@@ -489,7 +507,6 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
                         state = uiState,
                         onExpand = { setExpanded(true) },
                         onCollapse = { setExpanded(false) },
-                        onHandleDrag = ::moveHandleBy,
                         onProfileSelected = ::selectProfile,
                         onVolumeChanged = ::setVolume,
                         onBrightnessChanged = ::setBrightness,
@@ -535,26 +552,6 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
         updateWindowLayout(force = true)
     }
 
-    private fun moveHandleBy(deltaY: Float) {
-        if (isExpanded) return
-        val view = composeView ?: return
-        val params = layoutParams ?: return
-        val metrics = resources.displayMetrics
-        val density = metrics.density
-        val height = (activeConfig.handleHeightDp * density).roundToInt().coerceAtLeast(1)
-        val margin = (14f * density).roundToInt()
-        val maxY = (metrics.heightPixels - height - margin).coerceAtLeast(margin)
-        val currentY = params.y.coerceIn(margin, maxY)
-        val nextY = (currentY + deltaY.roundToInt()).coerceIn(margin, maxY)
-        val ratio = ((nextY + height / 2f) / metrics.heightPixels.toFloat())
-            .coerceIn(0.15f, 0.85f)
-        val updated = GameBarPrefs.load(this).copy(handlePositionRatio = ratio)
-        activeConfig = updated
-        GameBarPrefs.save(this, updated)
-        params.y = nextY
-        runCatching { windowManager.updateViewLayout(view, params) }
-    }
-
     private fun updateWindowLayout(force: Boolean = false) {
         if (!isAttached) return
         val view = composeView ?: return
@@ -568,27 +565,18 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
     }
 
     private fun windowKey(config: GameBarConfig): String =
-        "${config.side.key}|${config.handleHeightDp}|${config.handleThicknessDp}|" +
-            "${config.panelWidthDp}|${config.handlePositionRatio}"
+        "${config.side.key}|${config.panelWidthDp}|${isExpanded}"
 
     private fun configureLayoutParams(params: WindowManager.LayoutParams, view: ComposeView) {
         val metrics = resources.displayMetrics
         val density = metrics.density
         val isLeft = activeConfig.side == GameBarSide.LEFT
-        val margin = (14f * density).roundToInt()
-        val railWidthDp = 48
-        val railGapDp = 8
-        val basePanelDp = if (isExpanded) {
-            activeConfig.panelWidthDp + railWidthDp + railGapDp
-        } else {
-            activeConfig.panelWidthDp
-        }
+        val edgeWidth = (14f * density).roundToInt().coerceAtLeast(1)
         val panelWidth = min(
-            (basePanelDp * density).roundToInt(),
+            (activeConfig.panelWidthDp * density).roundToInt(),
             (metrics.widthPixels * 0.92f).roundToInt()
         ).coerceAtLeast((240f * density).roundToInt())
-        val handleWidth = (activeConfig.handleThicknessDp * density).roundToInt().coerceAtLeast(1)
-        val handleHeight = (activeConfig.handleHeightDp * density).roundToInt().coerceAtLeast(1)
+        val margin = (14f * density).roundToInt()
 
         if (isExpanded) {
             params.gravity = Gravity.CENTER_VERTICAL or (if (isLeft) Gravity.LEFT else Gravity.RIGHT)
@@ -599,12 +587,9 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
         } else {
             params.gravity = Gravity.TOP or (if (isLeft) Gravity.LEFT else Gravity.RIGHT)
             params.x = 0
-            params.width = handleWidth
-            params.height = handleHeight
-            val ratio = activeConfig.handlePositionRatio.coerceIn(0.15f, 0.85f)
-            val center = metrics.heightPixels * ratio
-            val maxY = (metrics.heightPixels - handleHeight - margin).coerceAtLeast(margin)
-            params.y = (center - handleHeight / 2f).roundToInt().coerceIn(margin, maxY)
+            params.y = 0
+            params.width = edgeWidth
+            params.height = WindowManager.LayoutParams.MATCH_PARENT
         }
         view.requestLayout()
     }
