@@ -848,7 +848,7 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
         }
     }
 
-    private fun applyRefreshRate(hz: Int?): Boolean {
+    private suspend fun applyRefreshRate(hz: Int?): Boolean {
         if (hz == null) {
             ConfigRepository.setRefreshRate(null)
             return true

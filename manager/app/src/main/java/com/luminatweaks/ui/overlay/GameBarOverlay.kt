@@ -91,9 +91,7 @@ import com.luminatweaks.data.GameBarUiState
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 
 private const val TAB_PERFORMANCE = 0
 private const val TAB_TOOLS = 1
@@ -257,10 +255,8 @@ private fun GameBarPanel(
     val maxHeight = (LocalConfiguration.current.screenHeightDp.dp - 28.dp).coerceAtLeast(220.dp)
     val isLeft = state.side == GameBarSide.LEFT
     var selectedTab by remember { mutableStateOf(TAB_PERFORMANCE) }
-    val railModifier = Modifier.align(Alignment.CenterVertically)
-    val cardModifier = Modifier
-        .align(Alignment.CenterVertically)
-        .weight(1f)
+    val railModifier = Modifier
+    val cardModifier = Modifier.weight(1f)
 
     Box(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -423,9 +419,7 @@ private fun RailQuickApp(
     icon: ImageVector? = null,
     onClick: () -> Unit
 ) {
-    val context = LocalContext.current
-    val isServiceContext = !(context is android.app.Activity)
-    val bitmap = if (app != null && !isServiceContext) rememberAppIcon(app.packageName) else null
+    val bitmap = if (app != null) rememberAppIcon(app.packageName) else null
     Surface(
         onClick = onClick,
         modifier = Modifier.size(32.dp),
@@ -1061,19 +1055,15 @@ private fun profileMatches(current: String, option: String): Boolean {
 @Composable
 private fun rememberAppIcon(packageName: String?): ImageBitmap? {
     val context = LocalContext.current
-    var icon by remember(packageName) { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(packageName) {
-        icon = if (packageName.isNullOrBlank()) {
+    return remember(packageName) {
+        if (packageName.isNullOrBlank()) {
             null
         } else {
-            withContext(Dispatchers.IO) {
-                runCatching {
-                    context.packageManager.getApplicationIcon(packageName)
-                        .toBitmap(96, 96)
-                        .asImageBitmap()
-                }.getOrNull()
-            }
+            runCatching {
+                context.packageManager.getApplicationIcon(packageName)
+                    .toBitmap(96, 96)
+                    .asImageBitmap()
+            }.getOrNull()
         }
     }
-    return icon
 }
