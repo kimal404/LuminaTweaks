@@ -1,11 +1,9 @@
 package com.luminatweaks.gamedeck
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,6 +13,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -35,6 +34,7 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.BatteryFull
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Build
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Memory
@@ -42,41 +42,41 @@ import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.ToggleButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import java.util.Locale
 import kotlin.math.abs
@@ -90,9 +90,9 @@ private data class DeckProfileItem(
 
 private val deckProfiles = listOf(
     DeckProfileItem("Eco", "Eco", Icons.Rounded.Memory),
-    DeckProfileItem("Balanced", "Balanced", Icons.Rounded.Tune),
+    DeckProfileItem("Balanced", "Balance", Icons.Rounded.Tune),
     DeckProfileItem("Maestro", "Maestro", Icons.Rounded.Bolt),
-    DeckProfileItem("Performance", "Performance", Icons.Rounded.Speed)
+    DeckProfileItem("Performance", "Perf", Icons.Rounded.Speed)
 )
 
 @Composable
@@ -109,30 +109,27 @@ fun GameDeckRoot(
     onOpenManager: () -> Unit
 ) {
     val current by state
+    val motion = MaterialTheme.motionScheme
     val isLeft = current.side == GameDeckSide.LEFT
     val openProgress by animateFloatAsState(
         targetValue = if (current.expanded) 1f else 0f,
-        animationSpec = tween(durationMillis = 175, easing = FastOutSlowInEasing),
+        animationSpec = motion.defaultSpatialSpec(),
         label = "deckOpenProgress"
     )
 
     if (!isWindowExpanded && openProgress <= 0.01f) {
-        EdgeHandlePill(
-            isLeft = isLeft,
-            onExpand = onExpand
-        )
+        EdgeDeckHandle(isLeft = isLeft, onExpand = onExpand)
     } else {
-        val slideOffset = with(LocalDensity.current) { 18.dp.toPx() }
+        val slideOffset = with(LocalDensity.current) { 20.dp.toPx() }
         Box(
-            modifier = Modifier
-                .graphicsLayer {
-                    val p = openProgress.coerceIn(0f, 1f)
-                    alpha = p
-                    scaleX = 0.92f + 0.08f * p
-                    scaleY = 0.94f + 0.06f * p
-                    translationX = if (isLeft) -(1f - p) * slideOffset else (1f - p) * slideOffset
-                    transformOrigin = TransformOrigin(if (isLeft) 0f else 1f, 0.5f)
-                }
+            modifier = Modifier.graphicsLayer {
+                val p = openProgress.coerceIn(0f, 1f)
+                alpha = p
+                scaleX = 0.94f + 0.06f * p
+                scaleY = 0.96f + 0.04f * p
+                translationX = if (isLeft) -(1f - p) * slideOffset else (1f - p) * slideOffset
+                transformOrigin = TransformOrigin(if (isLeft) 0f else 1f, 0.5f)
+            }
         ) {
             GameDeckWorkspace(
                 state = current,
@@ -149,21 +146,40 @@ fun GameDeckRoot(
 }
 
 @Composable
-private fun EdgeHandlePill(
+private fun EdgeDeckHandle(
     isLeft: Boolean,
     onExpand: () -> Unit
 ) {
+    val scheme = MaterialTheme.colorScheme
+    val motion = MaterialTheme.motionScheme
     val swipeThreshold = with(LocalDensity.current) { 10.dp.toPx() }
-    var targetAlpha by remember { mutableFloatStateOf(0.55f) }
-    val alphaAnim by animateFloatAsState(
-        targetValue = targetAlpha,
-        animationSpec = tween(350),
-        label = "edgeAlpha"
+    var hinting by remember { mutableStateOf(true) }
+    var dragging by remember { mutableStateOf(false) }
+
+    val handleWidth by animateDpAsState(
+        targetValue = if (hinting || dragging) 10.dp else 6.dp,
+        animationSpec = motion.fastSpatialSpec(),
+        label = "deckHandleWidth"
+    )
+    val handleHeight by animateDpAsState(
+        targetValue = if (hinting || dragging) 74.dp else 54.dp,
+        animationSpec = motion.defaultSpatialSpec(),
+        label = "deckHandleHeight"
+    )
+    val handleAlpha by animateFloatAsState(
+        targetValue = if (hinting || dragging) 1f else 0.78f,
+        animationSpec = motion.fastEffectsSpec(),
+        label = "deckHandleAlpha"
+    )
+    val fillColor by animateColorAsState(
+        targetValue = if (hinting || dragging) scheme.primary else scheme.primary.copy(alpha = 0.82f),
+        animationSpec = motion.defaultEffectsSpec(),
+        label = "deckHandleColor"
     )
 
     LaunchedEffect(Unit) {
-        delay(3_000L)
-        targetAlpha = 0.48f
+        delay(1_400L)
+        hinting = false
     }
 
     Box(
@@ -179,14 +195,17 @@ private fun EdgeHandlePill(
                     onDragStart = {
                         dx = 0f
                         dy = 0f
+                        dragging = true
                     },
                     onDragEnd = {
+                        dragging = false
                         val inward = if (isLeft) dx else -dx
                         if (abs(dx) > abs(dy) && inward > swipeThreshold) {
                             onExpand()
                         }
                     },
                     onDragCancel = {
+                        dragging = false
                         dx = 0f
                         dy = 0f
                     }
@@ -201,14 +220,29 @@ private fun EdgeHandlePill(
         Surface(
             modifier = Modifier
                 .padding(horizontal = 3.dp)
-                .width(5.dp)
-                .height(48.dp)
-                .graphicsLayer { alpha = alphaAnim },
+                .width(handleWidth)
+                .height(handleHeight)
+                .graphicsLayer { alpha = handleAlpha },
             shape = CircleShape,
-            color = MaterialTheme.colorScheme.primary,
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.7f)),
-            shadowElevation = 4.dp
-        ) {}
+            color = fillColor,
+            shadowElevation = 8.dp,
+            border = BorderStroke(1.dp, scheme.onPrimary.copy(alpha = 0.35f))
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.ChevronRight,
+                    contentDescription = null,
+                    tint = scheme.onPrimary.copy(alpha = 0.9f),
+                    modifier = Modifier
+                        .size(10.dp)
+                        .graphicsLayer { scaleX = if (isLeft) 1f else -1f }
+                )
+            }
+        }
     }
 }
 
@@ -223,9 +257,9 @@ private fun GameDeckWorkspace(
     onQuickAppClick: (String) -> Unit,
     onOpenManager: () -> Unit
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedTab by remember { mutableStateOf(0) }
     val isLeft = state.side == GameDeckSide.LEFT
-    val deckHeight = 236.dp
+    val deckHeight = 250.dp
 
     Row(
         modifier = Modifier.height(deckHeight),
@@ -283,101 +317,115 @@ private fun DockRail(
     val scheme = MaterialTheme.colorScheme
     Surface(
         modifier = Modifier
-            .width(64.dp)
+            .width(62.dp)
             .fillMaxHeight(),
-        shape = CircleShape,
+        shape = RoundedCornerShape(30.dp),
         color = scheme.surfaceContainerHigh.copy(alpha = opacity.coerceIn(0.45f, 1f)),
-        tonalElevation = 4.dp,
-        shadowElevation = 10.dp,
-        border = BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.45f))
+        border = BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.4f)),
+        shadowElevation = 8.dp
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(vertical = 10.dp, horizontal = 5.dp),
+                .padding(vertical = 8.dp, horizontal = 5.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            DockRailNavItem(
+            DockRailItem(
                 icon = Icons.Rounded.GridView,
-                label = "Dashboard",
+                label = "Deck",
                 selected = selectedTab == 0,
                 onClick = { onSelectTab(0) }
             )
-            DockRailNavItem(
+            DockRailItem(
                 icon = Icons.Rounded.Build,
                 label = "Tools",
                 selected = selectedTab == 1,
                 onClick = { onSelectTab(1) }
             )
 
-            Box(
-                modifier = Modifier
-                    .padding(vertical = 2.dp)
-                    .width(26.dp)
-                    .height(1.5.dp)
-                    .clip(CircleShape)
-                    .background(scheme.outlineVariant.copy(alpha = 0.65f))
-            )
-
-            quickApps.forEach { app ->
-                DockRailAppIcon(
-                    app = app,
-                    onClick = { onQuickAppClick(app.packageName) }
+            if (quickApps.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .padding(vertical = 2.dp)
+                        .width(24.dp)
+                        .height(1.5.dp)
+                        .clip(CircleShape)
+                        .background(scheme.outlineVariant.copy(alpha = 0.6f))
                 )
+                quickApps.forEach { app ->
+                    DockRailAppIcon(
+                        app = app,
+                        onClick = { onQuickAppClick(app.packageName) }
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun DockRailNavItem(
+private fun DockRailItem(
     icon: ImageVector,
     label: String,
     selected: Boolean,
     onClick: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
-    val pillBg by animateColorAsState(
-        targetValue = if (selected) scheme.primary else Color.Transparent,
-        animationSpec = tween(180),
-        label = "railPillBg"
+    val motion = MaterialTheme.motionScheme
+    val pillColor by animateColorAsState(
+        targetValue = if (selected) scheme.primaryContainer else Color.Transparent,
+        animationSpec = motion.defaultEffectsSpec(),
+        label = "railPillColor"
     )
     val iconTint by animateColorAsState(
-        targetValue = if (selected) scheme.onPrimary else scheme.onSurfaceVariant,
-        animationSpec = tween(180),
+        targetValue = if (selected) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
+        animationSpec = motion.defaultEffectsSpec(),
         label = "railIconTint"
+    )
+    val pillWidth by animateDpAsState(
+        targetValue = if (selected) 46.dp else 38.dp,
+        animationSpec = motion.fastSpatialSpec(),
+        label = "railPillWidth"
+    )
+    val corner by animateDpAsState(
+        targetValue = if (selected) 22.dp else 14.dp,
+        animationSpec = motion.defaultSpatialSpec(),
+        label = "railPillCorner"
     )
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
-            .padding(vertical = 2.dp),
+            .padding(vertical = 3.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp)
+        verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
         Box(
             modifier = Modifier
-                .width(42.dp)
-                .height(26.dp)
-                .clip(CircleShape)
-                .background(pillBg),
+                .width(pillWidth)
+                .height(30.dp)
+                .clip(RoundedCornerShape(corner))
+                .background(pillColor),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = label,
                 tint = iconTint,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(17.dp)
             )
         }
         Text(
             text = label,
-            fontSize = 8.5.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            style = if (selected) {
+                MaterialTheme.typography.labelSmallEmphasized
+            } else {
+                MaterialTheme.typography.labelSmall
+            },
             color = if (selected) scheme.onSurface else scheme.onSurfaceVariant,
             maxLines = 1,
             softWrap = false
@@ -391,12 +439,23 @@ private fun DockRailAppIcon(
     onClick: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
+    val motion = MaterialTheme.motionScheme
     val icon = rememberAppIcon(app.packageName)
+    var pressed by remember { mutableStateOf(false) }
+    val corner by animateDpAsState(
+        targetValue = if (pressed) 18.dp else 12.dp,
+        animationSpec = motion.fastSpatialSpec(),
+        label = "appIconCorner"
+    )
     Surface(
-        onClick = onClick,
+        onClick = {
+            pressed = !pressed
+            onClick()
+        },
         modifier = Modifier.size(38.dp),
-        shape = RoundedCornerShape(13.dp),
-        color = scheme.surfaceContainerHighest.copy(alpha = 0.75f)
+        shape = RoundedCornerShape(corner),
+        color = scheme.surfaceContainerHighest.copy(alpha = 0.8f),
+        border = BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.3f))
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -408,13 +467,12 @@ private fun DockRailAppIcon(
                     contentDescription = app.label,
                     modifier = Modifier
                         .size(26.dp)
-                        .clip(RoundedCornerShape(7.dp))
+                        .clip(RoundedCornerShape(corner))
                 )
             } else {
                 Text(
                     text = app.label.take(1).uppercase(Locale.ROOT),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelLargeEmphasized,
                     color = scheme.onSurface
                 )
             }
@@ -433,16 +491,14 @@ private fun DeckCard(
     onToggleDnd: () -> Unit,
     onOpenManager: () -> Unit
 ) {
-    val scheme = MaterialTheme.colorScheme
     Surface(
         modifier = Modifier
-            .width(284.dp)
+            .width(286.dp)
             .fillMaxHeight(),
-        shape = RoundedCornerShape(24.dp),
-        color = scheme.surfaceContainerHigh.copy(alpha = state.opacity.coerceIn(0.45f, 1f)),
-        tonalElevation = 4.dp,
-        shadowElevation = 10.dp,
-        border = BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.45f))
+        shape = RoundedCornerShape(30.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = state.opacity.coerceIn(0.45f, 1f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+        shadowElevation = 8.dp
     ) {
         if (selectedTab == 0) {
             DashboardDeckContent(
@@ -484,195 +540,81 @@ private fun DashboardDeckContent(
     val frametimeText = if (fps > 0 && state.frametimeMs > 0f) {
         String.format(Locale.US, "%.1f ms", state.frametimeMs)
     } else {
-        "FPS"
+        "waiting for frame"
     }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 12.dp, vertical = 9.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.Top
         ) {
-            Row(
-                modifier = Modifier.weight(1f),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                CircularLoadGauge(
-                    size = 54.dp,
-                    percent = state.cpuPercent.coerceIn(0, 100),
-                    label = "CPU",
-                    accentColor = scheme.primary
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "LUMINA DECK",
+                    style = MaterialTheme.typography.labelSmallEmphasized,
+                    color = scheme.primary,
+                    maxLines = 1
                 )
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
+                Row(verticalAlignment = Alignment.Bottom) {
                     Text(
                         text = if (fps > 0) fps.toString() else "--",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.displaySmallEmphasized,
                         color = fpsColor,
-                        maxLines = 1,
-                        softWrap = false
+                        maxLines = 1
                     )
                     Text(
-                        text = frametimeText,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        text = " fps",
+                        style = MaterialTheme.typography.labelLarge,
                         color = scheme.onSurfaceVariant,
-                        maxLines = 1,
-                        softWrap = false
+                        modifier = Modifier.padding(bottom = 6.dp)
                     )
                 }
-                CircularLoadGauge(
-                    size = 54.dp,
-                    percent = state.gpuPercent.coerceIn(0, 100),
-                    label = "GPU",
-                    accentColor = scheme.tertiary
+                Text(
+                    text = frametimeText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 1
                 )
             }
-            Surface(
-                onClick = onCollapse,
-                modifier = Modifier.size(24.dp),
-                shape = CircleShape,
-                color = scheme.surfaceContainerHighest
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Close,
-                        contentDescription = "Tutup",
-                        tint = scheme.onSurfaceVariant,
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
+                AutoProfileToggle(
+                    checked = state.autoProfile,
+                    onToggle = onToggleAutoProfile
+                )
+                CollapseButton(onCollapse = onCollapse)
             }
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Surface(
-                onClick = onToggleAutoProfile,
-                shape = CircleShape,
-                color = if (state.autoProfile) scheme.tertiaryContainer else scheme.surfaceContainerHighest
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        imageVector = if (state.autoProfile) Icons.Rounded.AutoAwesome else Icons.Rounded.Tune,
-                        contentDescription = null,
-                        tint = if (state.autoProfile) scheme.onTertiaryContainer else scheme.onSurfaceVariant,
-                        modifier = Modifier.size(12.dp)
-                    )
-                    Text(
-                        text = if (state.autoProfile) "Auto" else "Manual",
-                        fontSize = 9.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (state.autoProfile) scheme.onTertiaryContainer else scheme.onSurfaceVariant,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                }
-            }
+        QuickStatusRow(state = state)
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Rounded.Thermostat,
-                        contentDescription = null,
-                        tint = scheme.primary,
-                        modifier = Modifier.size(12.dp)
-                    )
-                    Spacer(modifier = Modifier.width(2.dp))
-                    Text(
-                        text = state.tempLabel,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = scheme.onSurface,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Rounded.BatteryFull,
-                        contentDescription = null,
-                        tint = scheme.primary,
-                        modifier = Modifier.size(12.dp)
-                    )
-                    Spacer(modifier = Modifier.width(2.dp))
-                    Text(
-                        text = "${state.batteryPercent}%",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = scheme.onSurface,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                }
-            }
+        Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            LoadRow(
+                label = "CPU",
+                percent = state.cpuPercent,
+                accent = scheme.primary
+            )
+            LoadRow(
+                label = "GPU",
+                percent = state.gpuPercent,
+                accent = scheme.tertiary
+            )
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            deckProfiles.chunked(2).forEach { rowItems ->
-                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    rowItems.forEach { item ->
-                        val selected = deckProfileMatches(state.profile, item.value)
-                        Surface(
-                            onClick = { onProfileSelected(item.value) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(31.dp),
-                            shape = RoundedCornerShape(11.dp),
-                            color = if (selected) scheme.primary else scheme.surfaceContainerHighest
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(horizontal = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                Icon(
-                                    imageVector = item.icon,
-                                    contentDescription = null,
-                                    tint = if (selected) scheme.onPrimary else scheme.onSurfaceVariant,
-                                    modifier = Modifier.size(13.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = item.label,
-                                    fontSize = 11.sp,
-                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (selected) scheme.onPrimary else scheme.onSurface,
-                                    maxLines = 1,
-                                    softWrap = false
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        ProfileToggleRow(
+            current = state.profile,
+            onProfileSelected = onProfileSelected
+        )
 
-        DynamicRefreshRateStrip(
+        RefreshRateSection(
             modes = state.rrModes,
             selectedHz = state.selectedRrHz,
             liveHz = state.targetHz,
@@ -682,73 +624,198 @@ private fun DashboardDeckContent(
 }
 
 @Composable
-private fun CircularLoadGauge(
-    size: Dp,
-    percent: Int,
-    label: String,
-    accentColor: Color
+private fun AutoProfileToggle(
+    checked: Boolean,
+    onToggle: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
-    val trackColor = scheme.onSurface.copy(alpha = 0.12f)
-    val animatedProgress by animateFloatAsState(
-        targetValue = (percent.coerceIn(0, 100) / 100f),
-        animationSpec = tween(250),
-        label = "gaugeAnim"
-    )
-
-    Box(
-        modifier = Modifier.size(size),
-        contentAlignment = Alignment.Center
+    Surface(
+        onClick = onToggle,
+        shape = CircleShape,
+        color = if (checked) scheme.tertiaryContainer else scheme.surfaceContainerHighest,
+        border = BorderStroke(
+            1.dp,
+            if (checked) scheme.tertiary.copy(alpha = 0.5f) else scheme.outlineVariant.copy(alpha = 0.4f)
+        )
     ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val strokeWidth = 4.5.dp.toPx()
-            val arcSize = Size(
-                width = this.size.width - strokeWidth,
-                height = this.size.height - strokeWidth
-            )
-            val topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f)
-            drawArc(
-                color = trackColor,
-                startAngle = -90f,
-                sweepAngle = 360f,
-                useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-            )
-            drawArc(
-                color = accentColor,
-                startAngle = -90f,
-                sweepAngle = 360f * animatedProgress,
-                useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-            )
-        }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = "$percent%",
-                fontSize = 11.5.sp,
-                fontWeight = FontWeight.Bold,
-                color = scheme.onSurface,
-                maxLines = 1,
-                softWrap = false
+        Row(
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Icon(
+                imageVector = if (checked) Icons.Rounded.AutoAwesome else Icons.Rounded.Tune,
+                contentDescription = null,
+                tint = if (checked) scheme.onTertiaryContainer else scheme.onSurfaceVariant,
+                modifier = Modifier.size(12.dp)
             )
             Text(
-                text = label,
-                fontSize = 7.5.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = accentColor,
-                maxLines = 1,
-                softWrap = false
+                text = if (checked) "Auto" else "Manual",
+                style = MaterialTheme.typography.labelSmallEmphasized,
+                color = if (checked) scheme.onTertiaryContainer else scheme.onSurfaceVariant,
+                maxLines = 1
             )
         }
     }
 }
 
 @Composable
-private fun DynamicRefreshRateStrip(
+private fun CollapseButton(onCollapse: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        onClick = onCollapse,
+        modifier = Modifier.size(26.dp),
+        shape = CircleShape,
+        color = scheme.surfaceContainerHighest
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Close,
+                contentDescription = "Tutup",
+                tint = scheme.onSurfaceVariant,
+                modifier = Modifier.size(14.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun QuickStatusRow(state: GameDeckUiState) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        StatusChip(
+            icon = Icons.Rounded.Thermostat,
+            text = state.tempLabel,
+            modifier = Modifier.weight(1f)
+        )
+        StatusChip(
+            icon = Icons.Rounded.BatteryFull,
+            text = "${state.batteryPercent}%",
+            modifier = Modifier.weight(1f)
+        )
+        StatusChip(
+            icon = Icons.Rounded.Speed,
+            text = "${state.targetHz}Hz",
+            modifier = Modifier.weight(1f),
+            accent = scheme.primary
+        )
+    }
+}
+
+@Composable
+private fun StatusChip(
+    icon: ImageVector,
+    text: String,
+    modifier: Modifier = Modifier,
+    accent: Color = MaterialTheme.colorScheme.onSurfaceVariant
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.65f)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(12.dp)
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun LoadRow(
+    label: String,
+    percent: Int,
+    accent: Color
+) {
+    val scheme = MaterialTheme.colorScheme
+    val progress = percent.coerceIn(0, 100) / 100f
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmallEmphasized,
+                color = scheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = "$percent%",
+                style = MaterialTheme.typography.labelSmall,
+                color = accent
+            )
+        }
+        LinearWavyProgressIndicator(
+            progress = { progress },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(10.dp),
+            color = accent,
+            trackColor = scheme.onSurface.copy(alpha = 0.10f)
+        )
+    }
+}
+
+@Composable
+private fun ProfileToggleRow(
+    current: String,
+    onProfileSelected: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)
+    ) {
+        deckProfiles.forEachIndexed { index, item ->
+            val selected = deckProfileMatches(current, item.value)
+            ToggleButton(
+                checked = selected,
+                onCheckedChange = { onProfileSelected(item.value) },
+                shapes = when (index) {
+                    0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                    deckProfiles.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                    else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(36.dp)
+                    .semantics { role = Role.RadioButton },
+                contentPadding = PaddingValues(horizontal = 2.dp)
+            ) {
+                Text(
+                    text = item.label,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RefreshRateSection(
     modes: List<Int>,
     selectedHz: Int?,
     liveHz: Int,
@@ -762,97 +829,80 @@ private fun DynamicRefreshRateStrip(
         }
     }
 
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = scheme.surfaceContainerHighest.copy(alpha = 0.55f)
-    ) {
-        Column(
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Refresh rate",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelSmallEmphasized,
+                color = scheme.onSurfaceVariant,
+                maxLines = 1
+            )
+            Text(
+                text = if (selectedHz == null) "Auto · $liveHz Hz" else "$liveHz Hz",
+                style = MaterialTheme.typography.labelSmall,
+                color = scheme.primary,
+                maxLines = 1
+            )
+        }
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 9.dp, vertical = 7.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp)
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Refresh rate",
-                    modifier = Modifier.weight(1f),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = scheme.onSurface,
-                    maxLines = 1,
-                    softWrap = false
+            options.forEach { hz ->
+                RefreshRatePill(
+                    label = hz?.let { "${it}Hz" } ?: "Auto",
+                    selected = selectedHz == hz,
+                    onClick = { onSelect(hz) }
                 )
-                Text(
-                    text = if (selectedHz == null) "Auto ($liveHz Hz)" else "$liveHz Hz",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = scheme.primary,
-                    maxLines = 1,
-                    softWrap = false
-                )
-            }
-
-            if (options.size <= 4) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    options.forEach { hz ->
-                        RrOptionPill(
-                            label = hz?.let { "${it}Hz" } ?: "Auto",
-                            selected = selectedHz == hz,
-                            modifier = Modifier.weight(1f),
-                            onClick = { onSelect(hz) }
-                        )
-                    }
-                }
-            } else {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    options.forEach { hz ->
-                        RrOptionPill(
-                            label = hz?.let { "${it}Hz" } ?: "Auto",
-                            selected = selectedHz == hz,
-                            modifier = Modifier.widthIn(min = 48.dp),
-                            onClick = { onSelect(hz) }
-                        )
-                    }
-                }
             }
         }
     }
 }
 
 @Composable
-private fun RrOptionPill(
+private fun RefreshRatePill(
     label: String,
     selected: Boolean,
-    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
+    val motion = MaterialTheme.motionScheme
+    val corner by animateDpAsState(
+        targetValue = if (selected) 16.dp else 10.dp,
+        animationSpec = motion.fastSpatialSpec(),
+        label = "rrCorner"
+    )
+    val bg by animateColorAsState(
+        targetValue = if (selected) scheme.primaryContainer else scheme.surfaceContainerHighest,
+        animationSpec = motion.defaultEffectsSpec(),
+        label = "rrBg"
+    )
     Surface(
         onClick = onClick,
-        modifier = modifier.height(24.dp),
-        shape = CircleShape,
-        color = if (selected) scheme.primary else scheme.surfaceContainerHigh
+        modifier = Modifier
+            .height(26.dp)
+            .widthIn(min = 46.dp),
+        shape = RoundedCornerShape(corner),
+        color = bg
     ) {
         Box(
-            modifier = Modifier.padding(horizontal = 8.dp),
+            modifier = Modifier.padding(horizontal = 9.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = label,
-                fontSize = 9.5.sp,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                color = if (selected) scheme.onPrimary else scheme.onSurfaceVariant,
+                style = if (selected) {
+                    MaterialTheme.typography.labelSmallEmphasized
+                } else {
+                    MaterialTheme.typography.labelSmall
+                },
+                color = if (selected) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
                 maxLines = 1,
                 softWrap = false
             )
@@ -872,51 +922,38 @@ private fun ToolsDeckContent(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "Tools",
-                modifier = Modifier.weight(1f),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = scheme.onSurface,
-                maxLines = 1
-            )
-            Surface(
-                onClick = onCollapse,
-                modifier = Modifier.size(24.dp),
-                shape = CircleShape,
-                color = scheme.surfaceContainerHighest
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Close,
-                        contentDescription = "Tutup",
-                        tint = scheme.onSurfaceVariant,
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "TOOLS",
+                    style = MaterialTheme.typography.labelSmallEmphasized,
+                    color = scheme.primary,
+                    maxLines = 1
+                )
+                Text(
+                    text = "Quick toggles",
+                    style = MaterialTheme.typography.titleMediumEmphasized,
+                    color = scheme.onSurface,
+                    maxLines = 1
+                )
             }
+            CollapseButton(onCollapse = onCollapse)
         }
 
         Surface(
-            onClick = onToggleDnd,
-            shape = RoundedCornerShape(16.dp),
-            color = if (state.dndEnabled) scheme.primaryContainer else scheme.surfaceContainerHighest.copy(alpha = 0.65f),
-            border = if (state.dndEnabled) BorderStroke(1.dp, scheme.primary) else null
+            shape = RoundedCornerShape(20.dp),
+            color = scheme.surfaceContainerHighest.copy(alpha = 0.6f)
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 11.dp),
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
@@ -929,19 +966,14 @@ private fun ToolsDeckContent(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Jangan Ganggu",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (state.dndEnabled) scheme.onPrimaryContainer else scheme.onSurface,
+                        style = MaterialTheme.typography.titleSmallEmphasized,
+                        color = scheme.onSurface,
                         maxLines = 1
                     )
                     Text(
                         text = if (state.dndEnabled) "Notifikasi dibisukan" else "Nonaktif",
-                        fontSize = 10.sp,
-                        color = if (state.dndEnabled) {
-                            scheme.onPrimaryContainer.copy(alpha = 0.8f)
-                        } else {
-                            scheme.onSurfaceVariant
-                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
                         maxLines = 1
                     )
                 }
@@ -953,32 +985,55 @@ private fun ToolsDeckContent(
         }
 
         Surface(
-            onClick = onOpenManager,
-            shape = RoundedCornerShape(16.dp),
-            color = scheme.surfaceContainerHighest.copy(alpha = 0.65f)
+            shape = RoundedCornerShape(20.dp),
+            color = scheme.surfaceContainerHighest.copy(alpha = 0.6f)
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 11.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.Apps,
-                    contentDescription = null,
-                    tint = scheme.primary,
-                    modifier = Modifier.size(19.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
                 Text(
-                    text = "Buka Lumina Manager",
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = scheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    text = "Session",
+                    style = MaterialTheme.typography.labelSmallEmphasized,
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 1
                 )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    StatusChip(
+                        icon = Icons.Rounded.Speed,
+                        text = "${state.fps} fps",
+                        modifier = Modifier.weight(1f),
+                        accent = scheme.primary
+                    )
+                    StatusChip(
+                        icon = Icons.Rounded.Thermostat,
+                        text = state.tempLabel,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
+        }
+
+        Button(
+            onClick = onOpenManager,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shapes = ButtonDefaults.shapes()
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Apps,
+                contentDescription = null,
+                modifier = Modifier.size(ButtonDefaults.iconSizeFor(56.dp))
+            )
+            Spacer(modifier = Modifier.width(ButtonDefaults.iconSpacingFor(56.dp)))
+            Text(
+                text = "Buka Lumina Manager",
+                style = ButtonDefaults.textStyleFor(56.dp),
+                maxLines = 1
+            )
         }
     }
 }
