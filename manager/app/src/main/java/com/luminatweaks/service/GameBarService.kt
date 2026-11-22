@@ -585,11 +585,11 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
             params.width = panelWidth
             params.height = WindowManager.LayoutParams.WRAP_CONTENT
         } else {
-            params.gravity = Gravity.TOP or (if (isLeft) Gravity.LEFT else Gravity.RIGHT)
+            params.gravity = Gravity.CENTER_VERTICAL or (if (isLeft) Gravity.LEFT else Gravity.RIGHT)
             params.x = 0
             params.y = 0
-            params.width = edgeWidth
-            params.height = WindowManager.LayoutParams.MATCH_PARENT
+            params.width = (22f * density).roundToInt()
+            params.height = (56f * density).roundToInt()
         }
         view.requestLayout()
     }
