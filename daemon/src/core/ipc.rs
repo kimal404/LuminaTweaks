@@ -206,6 +206,22 @@ fn handle_client(stream: UnixStream, shared_state: Arc<SharedState>) {
                     let writer = reader.get_mut();
                     let _ = writer.write_all(b"OK\n");
                     let _ = writer.flush();
+                } else if trimmed == "CAPABILITY_REPORT" {
+                    let report = crate::core::capability::report_json();
+                    let writer = reader.get_mut();
+                    let _ = writer.write_all(report.as_bytes());
+                    let _ = writer.write_all(b"\n");
+                    let _ = writer.flush();
+                } else if trimmed == "CAPABILITY_REPROBE" {
+                    crate::core::capability::probe_all();
+                    let writer = reader.get_mut();
+                    let _ = writer.write_all(b"OK\n");
+                    let _ = writer.flush();
+                } else if let Some(rest) = trimmed.strip_prefix("CAPABILITY_MODE") {
+                    let ok = crate::core::capability::set_mode(rest.trim());
+                    let writer = reader.get_mut();
+                    let _ = writer.write_all(if ok { b"OK\n" } else { b"ERR\n" });
+                    let _ = writer.flush();
                 }
             }
             Err(e)

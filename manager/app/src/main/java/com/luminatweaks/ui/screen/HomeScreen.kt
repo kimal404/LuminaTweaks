@@ -446,6 +446,8 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
     ) { subscreen ->
         if (subscreen == "personalisasi") {
             PersonalisasiScreen(onBackClick = { currentSubscreen = null })
+        } else if (subscreen == "compatibility") {
+            CompatibilityScreen(onBackClick = { currentSubscreen = null })
         } else if (subscreen == "telemetry_overlay") {
             BackHandler { currentSubscreen = null }
             TelemetryOverlayScreen(
@@ -510,6 +512,7 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                         )
                         3 -> SettingsScreen(
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" },
+                            onNavigateToCompatibility = { currentSubscreen = "compatibility" },
                             onOpenSetupWizard = onOpenSetupWizard
                         )
                     }
@@ -583,6 +586,7 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                         )
                         3 -> SettingsScreen(
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" },
+                            onNavigateToCompatibility = { currentSubscreen = "compatibility" },
                             onOpenSetupWizard = onOpenSetupWizard
                         )
                     }

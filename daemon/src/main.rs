@@ -27,7 +27,7 @@ use core::detector::{
     is_low_power_active, is_master_enabled,
 };
 use core::ipc::{IpcServer, SharedState};
-use core::{detector, perf, watcher};
+use core::{capability, detector, perf, watcher};
 use std::collections::hash_map::DefaultHasher;
 use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
@@ -499,6 +499,7 @@ fn main() {
     IpcServer::start(Arc::clone(&shared_state));
 
     log!("[DAEMON] Subsystems online, entering main event loop");
+    capability::probe_all();
     let mut runtime = EngineRuntime::new(Arc::clone(&shared_state));
     let mut binder_client = binder_client::BinderClient::new();
     let _ = binder_client.poll(Duration::from_millis(200));
@@ -527,12 +528,14 @@ fn main() {
             engine::restore_balance();
             fps_monitor.stop();
             core::ipc::cleanup_socket();
+            capability::flush(true);
             cleanup_runtime_files();
             break;
         }
 
         if last_heartbeat.elapsed() >= HEARTBEAT_INTERVAL {
             publish_heartbeat();
+            capability::flush_if_due();
             last_heartbeat = Instant::now();
         }
 

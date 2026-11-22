@@ -59,7 +59,11 @@ pub fn set_dnd_mode(mode: &str) {
 }
 
 pub fn write_sysfs(path: &str, val: &str, lock: bool) -> bool {
-    if crate::tweaks::state::is_forbidden_node(path) || !Path::new(path).exists() {
+    if crate::tweaks::state::is_forbidden_node(path) {
+        return false;
+    }
+    if !Path::new(path).exists() {
+        crate::core::capability::record_write(path, val, false);
         return false;
     }
     let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o644));
@@ -72,17 +76,23 @@ pub fn write_sysfs(path: &str, val: &str, lock: bool) -> bool {
     };
     let mode = if lock { 0o444 } else { 0o644 };
     let _ = fs::set_permissions(path, fs::Permissions::from_mode(mode));
+    crate::core::capability::record_write(path, val, res);
     res
 }
 
 pub fn write_sysfs_quiet(path: &str, val: &str, lock: bool) -> bool {
-    if crate::tweaks::state::is_forbidden_node(path) || !Path::new(path).exists() {
+    if crate::tweaks::state::is_forbidden_node(path) {
+        return false;
+    }
+    if !Path::new(path).exists() {
+        crate::core::capability::record_write(path, val, false);
         return false;
     }
     let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o644));
     let res = fs::write(path, val.as_bytes()).is_ok();
     let mode = if lock { 0o444 } else { 0o644 };
     let _ = fs::set_permissions(path, fs::Permissions::from_mode(mode));
+    crate::core::capability::record_write(path, val, res);
     res
 }
 

@@ -166,7 +166,15 @@ pub fn write_tracked(path: &str, value: &str, lock: bool) -> bool {
         return false;
     }
     capture(path);
-    crate::tweaks::engine::write_sysfs(path, value, lock)
+    let ok = crate::tweaks::engine::write_sysfs(path, value, lock);
+    if crate::core::capability::strict_mode() {
+        if let Some(status) = crate::core::capability::last_status(path) {
+            if status.needs_rollback() {
+                restore_path(path);
+            }
+        }
+    }
+    ok
 }
 
 pub fn write_tracked_quiet(path: &str, value: &str, lock: bool) -> bool {
@@ -174,7 +182,15 @@ pub fn write_tracked_quiet(path: &str, value: &str, lock: bool) -> bool {
         return false;
     }
     capture(path);
-    crate::tweaks::engine::write_sysfs_quiet(path, value, lock)
+    let ok = crate::tweaks::engine::write_sysfs_quiet(path, value, lock);
+    if crate::core::capability::strict_mode() {
+        if let Some(status) = crate::core::capability::last_status(path) {
+            if status.needs_rollback() {
+                restore_path(path);
+            }
+        }
+    }
+    ok
 }
 
 pub fn restore_path(path: &str) -> bool {
@@ -189,6 +205,9 @@ pub fn restore_path(path: &str) -> bool {
     let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o644));
     let ok = fs::write(path, entry.value.as_bytes()).is_ok();
     let _ = fs::set_permissions(path, fs::Permissions::from_mode(entry.mode));
+    if ok {
+        crate::core::capability::record_rollback(path);
+    }
     ok
 }
 
@@ -224,6 +243,7 @@ pub fn restore_all() {
         let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o644));
         if fs::write(path, entry.value.as_bytes()).is_ok() {
             restored += 1;
+            crate::core::capability::record_rollback(path);
         }
         let _ = fs::set_permissions(path, fs::Permissions::from_mode(entry.mode));
     }

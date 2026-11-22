@@ -58,6 +58,7 @@ import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -121,6 +122,7 @@ private data class SettingsSheetOption<T>(
 fun SettingsScreen(
     onNavigateToAbout: (() -> Unit)? = null,
     onNavigateToPersonalisasi: (() -> Unit)? = null,
+    onNavigateToCompatibility: (() -> Unit)? = null,
     onOpenSetupWizard: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -137,6 +139,7 @@ fun SettingsScreen(
     var isGeneratingLog by remember { mutableStateOf(false) }
     var showAboutScreen by remember { mutableStateOf(false) }
     var showPersonalisasiScreen by remember { mutableStateOf(false) }
+    var showCompatibilityScreen by remember { mutableStateOf(false) }
     var showUninstallDialog by remember { mutableStateOf(false) }
     var isUninstalling by remember { mutableStateOf(false) }
     var uninstallOriginPoint by remember { mutableStateOf(Offset(0.5f, 0.5f)) }
@@ -145,6 +148,7 @@ fun SettingsScreen(
     val activeSettingsSubscreen = when {
         showAboutScreen && onNavigateToAbout == null -> "about"
         showPersonalisasiScreen && onNavigateToPersonalisasi == null -> "personalisasi"
+        showCompatibilityScreen && onNavigateToCompatibility == null -> "compatibility"
         else -> "main"
     }
 
@@ -155,6 +159,7 @@ fun SettingsScreen(
         when (route) {
             "about" -> AboutScreen(onBackClick = { showAboutScreen = false })
             "personalisasi" -> PersonalisasiScreen(onBackClick = { showPersonalisasiScreen = false })
+            "compatibility" -> CompatibilityScreen(onBackClick = { showCompatibilityScreen = false })
             else -> {
                 val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                 val bottomPadding = if (isFloating) 112.dp + navInset else 28.dp + navInset
@@ -258,6 +263,26 @@ fun SettingsScreen(
                                     title = stringResource(R.string.settings_setup_wizard),
                                     subtitle = stringResource(R.string.settings_setup_wizard_desc),
                                     onClick = onOpenSetupWizard
+                                )
+                            }
+                        }
+
+                        item(key = "compatibility") {
+                            SettingsSectionHeader(title = stringResource(R.string.section_compatibility))
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                SettingsActionRow(
+                                    index = 0,
+                                    count = 1,
+                                    icon = Icons.Rounded.Security,
+                                    title = stringResource(R.string.settings_compatibility),
+                                    subtitle = stringResource(R.string.settings_compatibility_desc),
+                                    onClick = {
+                                        if (onNavigateToCompatibility != null) {
+                                            onNavigateToCompatibility()
+                                        } else {
+                                            showCompatibilityScreen = true
+                                        }
+                                    }
                                 )
                             }
                         }

@@ -162,6 +162,12 @@ object ConfigRepository {
         notifyDaemonReload()
     }
 
+    suspend fun getCapabilityReport(): CapabilityReport? = withContext(Dispatchers.IO) {
+        CapabilityReport.parse(
+            runSuCmd("cat $CONFIG_DIR/capabilities.json 2>/dev/null", 4)
+        )
+    }
+
     suspend fun getTweaksState(forceRefresh: Boolean = false): TweaksUiState = withContext(Dispatchers.IO) {
         if (!forceRefresh && cachedTweaksState != null && cachedTweaksState!!.isLoaded) {
             return@withContext cachedTweaksState!!

@@ -261,6 +261,22 @@ object DaemonManager {
         runSuCmd(ipcCommand("FPS_PREVIEW_STOP"), 4).contains("OK")
     }
 
+    suspend fun reprobeCapabilities(): Boolean = withContext(Dispatchers.IO) {
+        runSuCmd(ipcCommand("CAPABILITY_REPROBE"), 4).contains("OK")
+    }
+
+    suspend fun setCapabilityMode(mode: String): Boolean = withContext(Dispatchers.IO) {
+        val safe = if (mode.equals("strict", ignoreCase = true)) "strict" else "observe"
+        runSuCmd(ipcCommand("CAPABILITY_MODE $safe"), 4).contains("OK")
+    }
+
+    suspend fun getCapabilityMode(): String = withContext(Dispatchers.IO) {
+        val mode = runSuCmd("cat $CONFIG_DIR/capability_mode 2>/dev/null", 3)
+            .trim()
+            .lowercase()
+        if (mode == "strict") "strict" else "observe"
+    }
+
     suspend fun getDaemonPid(): String? = withContext(Dispatchers.IO) {
         readPidFromFile() ?: probeDaemon()
     }
