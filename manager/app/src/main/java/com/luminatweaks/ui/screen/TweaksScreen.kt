@@ -574,8 +574,8 @@ fun TweaksScreen(
                 val telemetrySubtitle = if (fpsConfig.enabled) {
                     val count = fpsConfig.activeModuleCount.coerceAtLeast(1)
                     localizedLabel(
-                        "Aktif · ${fpsStyleLabel(fpsConfig.style)} · $count metrik",
-                        "Active · ${fpsStyleLabel(fpsConfig.style)} · $count metrics"
+                        "Aktif · $count metrik",
+                        "Active · $count metrics"
                     )
                 } else {
                     localizedLabel(

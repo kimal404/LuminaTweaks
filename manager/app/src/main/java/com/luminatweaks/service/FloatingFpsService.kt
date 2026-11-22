@@ -618,14 +618,14 @@ class FloatingFpsService : Service() {
             var dragStartX = 0
             var dragStartY = 0
             onDragStart = {
-                val lp = layoutParams
+                val lp = this@FloatingFpsService.layoutParams
                 if (lp != null) {
                     dragStartX = lp.x
                     dragStartY = lp.y
                 }
             }
             onDrag = drag@{ totalDx, totalDy ->
-                val lp = layoutParams ?: return@drag
+                val lp = this@FloatingFpsService.layoutParams ?: return@drag
                 val metrics = resources.displayMetrics
                 val maxX = (metrics.widthPixels - width.coerceAtLeast(80)).coerceAtLeast(0)
                 val maxY = (metrics.heightPixels - height.coerceAtLeast(36)).coerceAtLeast(0)
