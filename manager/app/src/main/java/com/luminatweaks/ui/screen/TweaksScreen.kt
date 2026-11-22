@@ -56,6 +56,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import com.luminatweaks.gamedeck.GameDeckSettingsScreen
+import com.luminatweaks.gamedeck.GameDeckPrefs
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.rounded.BatterySaver
@@ -245,6 +247,7 @@ fun TweaksScreen(
     var availableIoSchedulers by remember { mutableStateOf(emptyList<String>()) }
 
     var fpsConfig by remember { mutableStateOf(FloatingFpsPrefs.load(context)) }
+    var gameBarEnabled by remember { mutableStateOf(GameDeckPrefs.load(context).enabled) }
     val updateFpsConfig: (FloatingFpsConfig) -> Unit = { updated ->
         val wasEnabled = fpsConfig.enabled
         fpsConfig = updated
@@ -283,6 +286,12 @@ fun TweaksScreen(
     val ioSchedulerOrigin = rememberDialogOrigin()
     var inFloatingFpsSubpage by rememberSaveable { mutableStateOf(false) }
     var inSessionStatsSubpage by remember { mutableStateOf(false) }
+    var inGameBarSubpage by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(inGameBarSubpage) {
+        if (!inGameBarSubpage) {
+            gameBarEnabled = GameDeckPrefs.load(context).enabled
+        }
+    }
     var inMemoryZramSubpage by rememberSaveable { mutableStateOf(false) }
     var inHardwareDiagnosticSubpage by rememberSaveable { mutableStateOf(false) }
     var inUtilitySubpage by rememberSaveable { mutableStateOf(false) }
@@ -372,6 +381,12 @@ fun TweaksScreen(
         return
     }
 
+
+    if (inGameBarSubpage) {
+        BackHandler { inGameBarSubpage = false }
+        GameDeckSettingsScreen(onBack = { inGameBarSubpage = false })
+        return
+    }
 
     if (inFloatingFpsSubpage) {
         BackHandler { inFloatingFpsSubpage = false }
@@ -649,7 +664,7 @@ fun TweaksScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     ConnectedTweakActionRow(
                         index = 0,
-                        count = 4,
+                        count = 5,
                         icon = Icons.Rounded.Speed,
                         title = "Floating HUD",
                         subtitle = telemetrySubtitle,
@@ -666,7 +681,27 @@ fun TweaksScreen(
 
                     ConnectedTweakActionRow(
                         index = 1,
-                        count = 4,
+                        count = 5,
+                        icon = Icons.Rounded.SportsEsports,
+                        title = "Game Bar",
+                        subtitle = if (gameBarEnabled) {
+                            localizedLabel(
+                                "Aktif · DockRail, profil, FPS, CPU/GPU & freeform apps",
+                                "Active · DockRail, profile, FPS, CPU/GPU & freeform apps"
+                            )
+                        } else {
+                            localizedLabel(
+                                "DockRail & DeckCard untuk profil, FPS, CPU/GPU & freeform apps",
+                                "DockRail & DeckCard for profile, FPS, CPU/GPU & freeform apps"
+                            )
+                        },
+                        highlightSubtitle = gameBarEnabled,
+                        onClick = { inGameBarSubpage = true }
+                    )
+
+                    ConnectedTweakActionRow(
+                        index = 2,
+                        count = 5,
                         icon = Icons.Rounded.Insights,
                         title = localizedLabel("Statistik Sesi", "Session Stats"),
                         subtitle = localizedLabel(
@@ -683,8 +718,8 @@ fun TweaksScreen(
                     )
 
                     ConnectedTweakActionRow(
-                        index = 2,
-                        count = 4,
+                        index = 3,
+                        count = 5,
                         icon = Icons.Rounded.DeveloperBoard,
                         title = stringResource(R.string.hardware_diag_title),
                         subtitle = stringResource(R.string.hardware_diag_desc),
@@ -692,8 +727,8 @@ fun TweaksScreen(
                     )
 
                     ConnectedTweakActionRow(
-                        index = 3,
-                        count = 4,
+                        index = 4,
+                        count = 5,
                         icon = Icons.Rounded.Widgets,
                         title = stringResource(R.string.utility_screen_title),
                         subtitle = stringResource(R.string.utility_screen_desc),
