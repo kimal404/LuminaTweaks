@@ -207,7 +207,7 @@ fn gpu_max_performance() -> usize {
     usize::from(super::apply_node(LEGACY_GPUFREQ_PATH, &freq.to_string()))
 }
 
-fn maestro_profile() -> usize {
+fn performance_base_profile() -> usize {
     let mut applied = ppm_policies(true);
     if super::apply_node(FPSGO_PATH, "1") {
         applied += 1;
@@ -250,13 +250,12 @@ fn maestro_profile() -> usize {
     if super::apply_node(EARA_THERMAL_PATH, "1") {
         applied += 1;
     }
-    applied += super::mali_power_policy(SocProfile::Maestro);
     applied += ddr_performance(false);
     applied
 }
 
 fn performance_profile() -> usize {
-    let mut applied = maestro_profile();
+    let mut applied = performance_base_profile();
     applied += usize::from(super::apply_node(CCI_MODE_PATH, "1"));
     applied += usize::from(super::apply_node(POWER_MODE_PATH, "3"));
     applied += usize::from(super::apply_node(DRAMBOOST_PATH, "1"));
@@ -331,7 +330,6 @@ pub fn apply(profile: SocProfile) -> usize {
         SocProfile::Lite => super::mali_power_policy(SocProfile::Lite),
         SocProfile::Balance => balance_profile(),
         SocProfile::Eco => powersave_profile(),
-        SocProfile::Maestro => maestro_profile(),
         SocProfile::Performance => performance_profile(),
     }
 }

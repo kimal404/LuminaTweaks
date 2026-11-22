@@ -49,7 +49,6 @@ fn apply_gpu(profile: SocProfile) -> usize {
         SocProfile::Lite => (min, max),
         SocProfile::Balance => (min, max),
         SocProfile::Eco => (min, min),
-        SocProfile::Maestro => (min, max),
         SocProfile::Performance => (max, max),
     };
 
@@ -59,7 +58,6 @@ fn apply_gpu(profile: SocProfile) -> usize {
         SocProfile::Lite => SocProfile::Lite,
         SocProfile::Balance => SocProfile::Balance,
         SocProfile::Eco => SocProfile::Eco,
-        SocProfile::Maestro => SocProfile::Maestro,
         SocProfile::Performance => SocProfile::Performance,
     };
     applied += super::mali::apply_power_policy(policy);
@@ -72,7 +70,7 @@ fn mif(profile: SocProfile) -> usize {
     }
     if !matches!(
         profile,
-        SocProfile::Lite | SocProfile::Balance | SocProfile::Maestro | SocProfile::Performance
+        SocProfile::Lite | SocProfile::Balance | SocProfile::Performance
     ) {
         return 0;
     }
@@ -80,7 +78,7 @@ fn mif(profile: SocProfile) -> usize {
     for base in super::devfreq_matching(MIF_NEEDLES) {
         applied += match profile {
             SocProfile::Lite => super::devfreq_mid_perf(&base),
-            SocProfile::Maestro | SocProfile::Performance => super::devfreq_max_perf(&base),
+            SocProfile::Performance => super::devfreq_max_perf(&base),
             _ => super::devfreq_unlock(&base),
         };
     }
@@ -88,7 +86,7 @@ fn mif(profile: SocProfile) -> usize {
 }
 
 pub(crate) fn frame_boost() -> usize {
-    mif(SocProfile::Maestro)
+    mif(SocProfile::Performance)
 }
 
 pub(crate) fn frame_relax() -> usize {

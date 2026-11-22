@@ -101,7 +101,6 @@ pub enum SocProfile {
     Lite,
     Balance,
     Eco,
-    Maestro,
     Performance,
 }
 
@@ -332,7 +331,7 @@ fn profile_devfreq_mode(profile: SocProfile) -> Option<DevfreqMode> {
         SocProfile::Lite => Some(DevfreqMode::Mid),
         SocProfile::Balance => Some(DevfreqMode::Unlock),
         SocProfile::Eco => None,
-        SocProfile::Maestro | SocProfile::Performance => Some(DevfreqMode::Max),
+        SocProfile::Performance => Some(DevfreqMode::Max),
     }
 }
 
@@ -376,7 +375,7 @@ pub(crate) fn mali_power_policy(profile: SocProfile) -> usize {
                 "coarse_demand"
             }
         }
-        SocProfile::Lite | SocProfile::Maestro => {
+        SocProfile::Lite => {
             if available.contains("adaptive") {
                 "adaptive"
             } else {

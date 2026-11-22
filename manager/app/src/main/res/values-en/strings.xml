@@ -201,7 +201,7 @@
     <string name="tweaks_mtk_info_title">Profile Information</string>
     <string name="tweaks_mtk_info_desc">FPSGO is a MediaTek kernel module that dynamically regulates CPU/GPU clocks based on real-time frame rate. When FPS is stable, clocks are lowered to save power — but in heavy scenes, this limitation can cause frame drops.
 
-Features on this page are only active when the system is in the Maestro profile. In Balanced or Eco profiles, the subsystem reverts to the standard baseline.</string>
+Features on this page are only active when the system is in the Performance profile. In Balanced or Eco profiles, the subsystem reverts to the standard baseline.</string>
     <string name="tweaks_fpsgo_title">Bypass Frame Limiter (FPSGo)</string>
     <string name="tweaks_fpsgo_desc">Disable FPSGO regulation so CPU/GPU clocks can rise freely as needed for rendering, without being capped when FPS seems stable. Higher power consumption and temperature.</string>
     <string name="tweaks_ged_title">Mali GED GPU Boost</string>
@@ -219,7 +219,7 @@ Features on this page are only active when the system is in the Maestro profile.
     <string name="tweaks_renderer_system_default">System Default</string>
     <string name="section_additional_tweaks">Additional Tweaks</string>
     <string name="tweak_auto_dnd">Automatic DND Mode</string>
-    <string name="tweak_auto_dnd_desc">Automatically enable DND when Maestro profile is active</string>
+    <string name="tweak_auto_dnd_desc">Automatically enable DND when Performance profile is active</string>
     <string name="tweak_io_scheduler">I/O Scheduler</string>
     <string name="tweak_io_scheduler_desc">UFS/eMMC storage I/O queue scheduling algorithm</string>
     <string name="dialog_reboot_required_title">Reboot Required</string>

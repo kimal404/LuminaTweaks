@@ -270,7 +270,7 @@ fn change_cpu_governor(governor: &str) {
     }
 }
 
-fn maestro_governor(base: &str) -> String {
+fn preferred_governor(base: &str) -> String {
     let available =
         fs::read_to_string(format!("{}/scaling_available_governors", base)).unwrap_or_default();
     for preferred in ["sugov_ext", "schedutil", "walt"] {
@@ -291,7 +291,7 @@ fn performance_governor(base: &str) -> String {
     {
         return "performance".to_string();
     }
-    maestro_governor(base)
+    preferred_governor(base)
 }
 
 fn apply_performance_governor() {
@@ -303,7 +303,7 @@ fn apply_performance_governor() {
     }
 }
 
-fn maestro_cap(hw_max: u64, lite: bool, freqs: &[u64]) -> u64 {
+fn performance_cap(hw_max: u64, lite: bool, freqs: &[u64]) -> u64 {
     if !lite {
         return hw_max;
     }
@@ -325,7 +325,7 @@ fn cpufreq_performance(lite: bool) {
         let Some((hw_min, hw_max, freqs)) = hardware_limits(&base) else {
             continue;
         };
-        let cap = maestro_cap(hw_max, lite, &freqs).max(hw_min);
+        let cap = performance_cap(hw_max, lite, &freqs).max(hw_min);
         let floor = performance_floor(hw_min, cap, &freqs);
         profile_write(&format!("{}/scaling_max_freq", base), &cap.to_string());
         profile_write(&format!("{}/scaling_min_freq", base), &floor.to_string());
@@ -337,7 +337,7 @@ fn cpufreq_ppm_performance(lite: bool) {
         let Some((hw_min, hw_max, freqs)) = hardware_limits(base) else {
             continue;
         };
-        let cap = maestro_cap(hw_max, lite, &freqs).max(hw_min);
+        let cap = performance_cap(hw_max, lite, &freqs).max(hw_min);
         let floor = performance_floor(hw_min, cap, &freqs);
         profile_write(PPM_MAX_PATH, &format!("{} {}", cluster, cap));
         profile_write(PPM_MIN_PATH, &format!("{} {}", cluster, floor));
@@ -772,13 +772,13 @@ pub fn sync_global_tweaks() {
 
 #[cfg(test)]
 mod tests {
-    use super::{maestro_cap, performance_floor};
+    use super::{performance_cap, performance_floor};
 
     #[test]
     fn performance_lite_reduces_cap_and_floor() {
         let hw_max = 2_000_000;
-        let lite_cap = maestro_cap(hw_max, true, &[]);
-        assert_eq!(maestro_cap(hw_max, false, &[]), hw_max);
+        let lite_cap = performance_cap(hw_max, true, &[]);
+        assert_eq!(performance_cap(hw_max, false, &[]), hw_max);
         assert_eq!(lite_cap, 1_560_000);
         assert_eq!(performance_floor(300_000, hw_max, &[]), 1_600_000);
         assert_eq!(performance_floor(300_000, lite_cap, &[]), 1_248_000);

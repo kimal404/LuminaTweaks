@@ -28,7 +28,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 const PPM_MAX_PATH: &str = "/proc/ppm/policy/hard_userlimit_max_cpu_freq";
-const MEMORY_PATH: &str = "/data/adb/.config/lumina/maestro_memory.json";
+const MEMORY_PATH: &str = "/data/adb/.config/lumina/fas_memory.json";
 const STEP_FLOOR_PERCENT: u64 = 65;
 const LITE_CAP_PERCENT: u64 = 78;
 const BUDGET_TOLERANCE_PERCENT: f32 = 105.0;
@@ -711,13 +711,13 @@ impl FasController {
 
     pub fn tick(
         &mut self,
-        maestro: bool,
+        profile_active: bool,
         enabled: bool,
         active_hz: Option<i32>,
         lite: bool,
         thermal: ThermalPressure,
     ) {
-        if !maestro {
+        if !profile_active {
             self.remember_baseline();
             self.baseline_period = None;
             self.sustainable_period = None;

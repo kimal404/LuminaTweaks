@@ -73,7 +73,6 @@ pub fn apply(profile: SocProfile) -> usize {
         SocProfile::Lite => (min, max),
         SocProfile::Balance => (min, max),
         SocProfile::Eco => (min, min),
-        SocProfile::Maestro => (min, max),
         SocProfile::Performance => (max, max),
     };
 

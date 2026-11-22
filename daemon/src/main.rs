@@ -840,7 +840,6 @@ mod profile_tests {
         );
         assert_eq!(Profile::from_name("Eco"), Some(Profile::Eco));
         assert_eq!(Profile::from_name("Balanced"), Some(Profile::Balance));
-        assert_eq!(Profile::from_name("Maestro"), None);
         assert_eq!(Profile::Performance.as_str(), "Performance");
         assert_eq!(Profile::Performance.display_name(true), "Performance Lite");
     }
