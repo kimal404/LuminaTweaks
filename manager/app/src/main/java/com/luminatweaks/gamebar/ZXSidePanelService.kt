@@ -2648,17 +2648,17 @@ private class ZXRealTelemetryCollector {
     )
 
     fun readLuminaConfig(rootGranted: Boolean): JSONObject? {
-        val raw = readFileTextDirectOrSu(LUMINA_CONFIG_PATH, rootGranted)
+        val raw = readFileTextDirectOrSu(ZXSidePanelService.LUMINA_CONFIG_PATH, rootGranted)
             ?.takeIf { it.isNotBlank() } ?: return null
         return runCatching { JSONObject(raw) }.getOrNull()
     }
 
     fun readLuminaFpsStatus(rootGranted: Boolean): LuminaFpsStatus? {
-        val raw = readFileTextDirectOrSu(LUMINA_FPS_PATH, rootGranted)?.trim()
+        val raw = readFileTextDirectOrSu(ZXSidePanelService.LUMINA_FPS_PATH, rootGranted)?.trim()
             ?.takeIf { it.isNotEmpty() }
-            ?: readFileTextDirectOrSu(LUMINA_PUBLIC_FPS_PATH, false)?.trim()
+            ?: readFileTextDirectOrSu(ZXSidePanelService.LUMINA_PUBLIC_FPS_PATH, false)?.trim()
                 ?.takeIf { it.isNotEmpty() }
-            ?: readFileTextDirectOrSu(LUMINA_APP_FPS_PATH, false)?.trim()
+            ?: readFileTextDirectOrSu(ZXSidePanelService.LUMINA_APP_FPS_PATH, false)?.trim()
                 ?.takeIf { it.isNotEmpty() }
             ?: return null
         val parts = raw.split(Regex("\\s+"))
