@@ -595,6 +595,12 @@ pub fn set_auto_profile(enabled: bool) -> bool {
         let _ = fs::remove_file(&temp);
         return false;
     }
+    let _ = Command::new("setprop")
+        .args([
+            "persist.lumina.autoprofile",
+            if enabled { "1" } else { "0" },
+        ])
+        .status();
     invalidate_config_cache();
     true
 }

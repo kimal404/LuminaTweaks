@@ -348,7 +348,7 @@ impl EngineRuntime {
             } else if self.low_power {
                 Profile::Eco
             } else {
-                self.manual_profile.unwrap_or(Profile::Balance)
+                Profile::Balance
             };
             let target_lite = match target_cfg.as_ref() {
                 Some(cfg) => match cfg.lite_mode.as_str() {
@@ -457,6 +457,24 @@ impl EngineRuntime {
             log!("[RENDERER] Graphics backend applied: {}", desired_renderer);
             self.current_applied_renderer = desired_renderer;
         }
+    }
+
+    fn apply_manual_profile(&mut self, trigger: &str) {
+        let profile = self.manual_profile.unwrap_or(Profile::Balance);
+        let lite = is_lite_mode_active();
+        if self.current_profile == Some(profile) && self.current_lite == lite {
+            return;
+        }
+        apply_profile(profile, lite);
+        self.current_profile = Some(profile);
+        self.current_lite = lite;
+        set_system_profile_prop(profile.display_name(lite));
+        self.update_shared_state(profile, lite, self.active_target_pkg.as_deref());
+        log!(
+            "[PROFILE] Manual mode -> {} [{}]",
+            profile.display_name(lite),
+            trigger
+        );
     }
 
     fn reset_to_balance(&mut self, binder: &mut binder_client::BinderClient) {
@@ -680,19 +698,8 @@ fn main() {
                 log!("[SYSTEM] Config reload applied");
                 detector::invalidate_config_cache();
                 engine::sync_global_tweaks();
-                if !auto_profile {
-                    if let Some(profile) = runtime.manual_profile {
-                        let lite = is_lite_mode_active();
-                        apply_profile(profile, lite);
-                        runtime.current_profile = Some(profile);
-                        runtime.current_lite = lite;
-                        set_system_profile_prop(profile.display_name(lite));
-                        runtime.update_shared_state(
-                            profile,
-                            lite,
-                            runtime.active_target_pkg.as_deref(),
-                        );
-                    }
+                if !detector::is_auto_profile_enabled() {
+                    runtime.apply_manual_profile("Config reload");
                 }
             }
             reload_force = false;
@@ -706,19 +713,8 @@ fn main() {
                 log!("[SYSTEM] Config reload applied");
                 detector::invalidate_config_cache();
                 engine::sync_global_tweaks();
-                if !auto_profile {
-                    if let Some(profile) = runtime.manual_profile {
-                        let lite = is_lite_mode_active();
-                        apply_profile(profile, lite);
-                        runtime.current_profile = Some(profile);
-                        runtime.current_lite = lite;
-                        set_system_profile_prop(profile.display_name(lite));
-                        runtime.update_shared_state(
-                            profile,
-                            lite,
-                            runtime.active_target_pkg.as_deref(),
-                        );
-                    }
+                if !detector::is_auto_profile_enabled() {
+                    runtime.apply_manual_profile("Config reload");
                 }
             }
         }

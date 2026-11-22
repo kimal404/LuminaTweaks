@@ -665,7 +665,10 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         manualAutoGraceUntilMs = System.currentTimeMillis() + 5_000L
         uiState.value = uiState.value.copy(autoProfile = nextAuto)
         serviceScope.launch(Dispatchers.IO) {
-            runCatching { ConfigRepository.setAutoProfile(nextAuto) }
+            val synced = runCatching { DaemonManager.setAutoProfile(nextAuto) }.getOrDefault(false)
+            if (!synced) {
+                runCatching { ConfigRepository.setAutoProfile(nextAuto) }
+            }
         }
     }
 
@@ -678,7 +681,10 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
 
         profileJob = serviceScope.launch {
             val ok = withContext(Dispatchers.IO) {
-                runCatching { ConfigRepository.setAutoProfile(false) }
+                val synced = runCatching { DaemonManager.setAutoProfile(false) }.getOrDefault(false)
+                if (!synced) {
+                    runCatching { ConfigRepository.setAutoProfile(false) }
+                }
                 DaemonManager.setProfile(name)
             }
             if (!ok) {
