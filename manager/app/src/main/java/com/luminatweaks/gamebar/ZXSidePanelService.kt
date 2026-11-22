@@ -163,7 +163,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import kotlin.math.min
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -518,6 +517,9 @@ class ZXSidePanelService : Service(), LifecycleOwner, ViewModelStoreOwner, Saved
         panelState.onToggleRecord = { onMonitorTap() }
         panelState.onSelectProfileRequest = { profileCode ->
             applyDaemonProfile(profileCode)
+        }
+        panelState.onSelectRefreshRate = { hz ->
+            applyRefreshRate(hz)
         }
 
         syncInitialAudioAndBrightness()
@@ -1772,22 +1774,30 @@ class ZXSidePanelService : Service(), LifecycleOwner, ViewModelStoreOwner, Saved
                             // Last floating window just closed: hold the panel until the game
                             // behind it is resumed, or it vanishes with the floating app.
                         } else {
-                            withContext(Dispatchers.Main) {
-                                if (isHandleVisible || isViewAttached) {
-                                    stopFpsChoreographer()
-                                    isHandleVisible = false
-                                    isPanelExpanded = false
-                                    isWindowFullScreen = false
-                                    detachOverlay()
-                                }
-                                // The overlay may stay detached while the game is in the
-                                // background, but only gameinfo can end the service. Keep the
-                                // launch grace intact until it expires so stopServiceIfIdle()
-                                // cannot tear down a service that is still within that window.
-                                if (!stopServiceIfIdle(rootGranted)) {
-                                    if (nowMs >= pendingLaunchGraceUntilMs) {
-                                        pendingLaunchPkg = null
-                                        pendingLaunchGraceUntilMs = 0L
+                            val activeStillRunning =
+                                activeGamePackage?.let { isPackageRunning(it, rootGranted) } == true
+                            val transientFocus = isTransientFocusPackage(focusedPkg)
+                            if (isHandleVisible && transientFocus && activeStillRunning) {
+                                // System dialogs, IME, Play Services and the shade take focus
+                                // away from the game for a moment; do not tear the panel down.
+                            } else {
+                                withContext(Dispatchers.Main) {
+                                    if (isHandleVisible || isViewAttached) {
+                                        stopFpsChoreographer()
+                                        isHandleVisible = false
+                                        isPanelExpanded = false
+                                        isWindowFullScreen = false
+                                        detachOverlay()
+                                    }
+                                    // The overlay may stay detached while the game is in the
+                                    // background, but only gameinfo can end the service. Keep the
+                                    // launch grace intact until it expires so stopServiceIfIdle()
+                                    // cannot tear down a service that is still within that window.
+                                    if (!stopServiceIfIdle(rootGranted)) {
+                                        if (nowMs >= pendingLaunchGraceUntilMs) {
+                                            pendingLaunchPkg = null
+                                            pendingLaunchGraceUntilMs = 0L
+                                        }
                                     }
                                 }
                             }
@@ -1808,6 +1818,18 @@ class ZXSidePanelService : Service(), LifecycleOwner, ViewModelStoreOwner, Saved
                 delay(550L)
             }
         }
+    }
+
+    private fun isTransientFocusPackage(pkg: String): Boolean {
+        if (pkg.isBlank()) return false
+        if (pkg == "android" || pkg == "com.android.systemui") return true
+        if (pkg.contains("permissioncontroller", ignoreCase = true)) return true
+        if (pkg.startsWith("com.google.android.gms")) return true
+        if (pkg.startsWith("com.android.vending")) return true
+        return runCatching {
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+            imm?.enabledInputMethodList?.any { it.packageName == pkg } == true
+        }.getOrDefault(false)
     }
 
     private fun isLauncherPackage(pkg: String): Boolean {
@@ -1937,9 +1959,18 @@ class ZXSidePanelService : Service(), LifecycleOwner, ViewModelStoreOwner, Saved
         runCatching {
             @Suppress("DEPRECATION")
             val display = windowManager?.defaultDisplay ?: return
-            val currentRate = display.refreshRate.roundToInt().coerceAtLeast(60)
+            val currentRate = display.mode.refreshRate.roundToInt().coerceAtLeast(60)
             val maxRate = display.supportedModes.maxOfOrNull { it.refreshRate.roundToInt() } ?: currentRate
             panelState.fpsCap = maxRate.coerceAtLeast(currentRate)
+            val modes = display.supportedModes
+                .map { it.refreshRate.roundToInt() }
+                .filter { it in 60..240 }
+                .distinct()
+                .sorted()
+            if (modes.isNotEmpty()) {
+                panelState.refreshRateOptions = modes
+                panelState.activeRefreshRate = modes.minByOrNull { kotlin.math.abs(it - currentRate) } ?: currentRate
+            }
             // Without a real reading there is no frame rate to show, so fall back to the
             // panel rate instead of leaving a stale number on screen.
             if (!fpsHasReading || panelState.currentFps <= 0 || panelState.currentFps > panelState.fpsCap) {
@@ -1947,6 +1978,24 @@ class ZXSidePanelService : Service(), LifecycleOwner, ViewModelStoreOwner, Saved
             }
         }
     }
+
+    private fun applyRefreshRate(hz: Int) {
+        serviceScope.launch(Dispatchers.IO) {
+            runCatching {
+                @Suppress("DEPRECATION")
+                val display = windowManager?.defaultDisplay ?: return@launch
+                val mode = display.supportedModes
+                    .filter { abs(it.refreshRate.roundToInt() - hz) <= 2 }
+                    .minByOrNull { abs(it.refreshRate.roundToInt() - hz) }
+                    ?: return@launch
+                ConfigRepository.setRefreshRate(mode.modeId)
+                withContext(Dispatchers.Main) {
+                    panelState.activeRefreshRate = hz
+                }
+            }
+        }
+    }
+
 
     private var volumeReceiver: BroadcastReceiver? = null
     private var brightnessObserver: ContentObserver? = null
@@ -2069,6 +2118,7 @@ class ZXSidePanelService : Service(), LifecycleOwner, ViewModelStoreOwner, Saved
                 "1" -> "Performance"
                 "2" -> "Balanced"
                 "3" -> "Eco"
+                "4" -> "Maestro"
                 else -> "Balanced"
             }
             DaemonManager.setProfile(name)
@@ -2156,10 +2206,12 @@ class ZXSidePanelService : Service(), LifecycleOwner, ViewModelStoreOwner, Saved
                         "performance", "performa", "performance lite" -> "1"
                         "balanced" -> "2"
                         "eco", "powersave", "hemat daya" -> "3"
+                        "maestro" -> "4"
                         else -> if (profileRaw.isBlank()) panelState.currentProfileCode else "2"
                     }
 
                     val mappedActiveProfile = when (normalizedCode) {
+                        "4" -> "maestro"
                         "3" -> "saving"
                         "2" -> "balanced"
                         "1" -> "performance"

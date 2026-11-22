@@ -133,20 +133,21 @@ data class ResetConfirmSpec(
 class ZXSidePanelStateHolder {
     companion object {
         val DEFAULT_ACTIVE_WIDGETS = listOf(
-            "networkClock",
+            "profileSwitch",
             "fpsHeader",
             "speedometers",
-            "profileSwitch",
+            "displayRefreshRate",
             "brightnessSlider",
             "volumeSlider",
             "quickTools",
             "antiInterference",
             "liveMonitor",
-            "crosshair",
-            "displayTouch"
+            "displayTouch",
+            "crosshair"
         )
 
         val DEFAULT_LIBRARY_WIDGETS = listOf(
+            "networkClock",
             "networkPing",
             "thermalBattery",
             "customImage"
@@ -190,6 +191,9 @@ class ZXSidePanelStateHolder {
     var profileDurationText by mutableStateOf("00:00:00")
 
     var fpsCap by mutableIntStateOf(120)
+    var activeRefreshRate by mutableIntStateOf(60)
+    var refreshRateOptions by mutableStateOf(listOf(60, 90, 120))
+    var onSelectRefreshRate: ((Int) -> Unit)? = null
     var currentFps by mutableIntStateOf(60)
     var cpuLoad by mutableIntStateOf(24)
     var gpuLoad by mutableIntStateOf(18)
@@ -222,10 +226,12 @@ class ZXSidePanelStateHolder {
             "0" -> "Initializing"
             "1" -> if (isLiteMode) "Perf Lite" else "Performance"
             "2" -> "Balanced"
-            "3" -> "ECO Mode"
+            "3" -> "Eco"
+            "4" -> "Maestro"
             else -> when (activeProfile) {
-                "saving" -> "ECO Mode"
+                "saving" -> "Eco"
                 "balanced" -> "Balanced"
+                "maestro" -> "Maestro"
                 else -> if (isLiteMode) "Perf Lite" else "Performance"
             }
         }
@@ -354,10 +360,18 @@ class ZXSidePanelStateHolder {
         "profileSwitch" to SidePanelWidgetMeta(
             id = "profileSwitch",
             title = "Performance mode",
-            subtitle = "Power saving, Balanced, Performance",
+            subtitle = "Eco, Balanced, Maestro, Performance",
             icon = "bolt",
             category = "overview",
             mergeGroup = "telemetry"
+        ),
+        "displayRefreshRate" to SidePanelWidgetMeta(
+            id = "displayRefreshRate",
+            title = "Refresh rate",
+            subtitle = "Switch the active display mode",
+            icon = "screen_refresh",
+            category = "overview",
+            mergeGroup = null
         ),
         "brightnessSlider" to SidePanelWidgetMeta(
             id = "brightnessSlider",
@@ -498,6 +512,14 @@ class ZXSidePanelStateHolder {
 
     fun loadWidgetLayoutPreferences() {
         val prefs = boundPrefs ?: return
+        if (prefs.getInt("gs_layout_version", 0) < 2) {
+            prefs.edit()
+                .putString("gs_global_active_widgets", DEFAULT_ACTIVE_WIDGETS.joinToString(","))
+                .putString("gs_global_library_widgets", DEFAULT_LIBRARY_WIDGETS.joinToString(","))
+                .remove("gs_global_widget_spans")
+                .putInt("gs_layout_version", 2)
+                .apply()
+        }
         hudOffsetX = prefs.getFloat("gs_global_hud_offset_x", 0f)
         hudOffsetY = prefs.getFloat("gs_global_hud_offset_y", 0f)
 
@@ -957,6 +979,7 @@ class ZXSidePanelStateHolder {
         val code = when (profileId) {
             "saving" -> "3"
             "balanced" -> "2"
+            "maestro" -> "4"
             else -> "1"
         }
         if (isAutoMode && isRootAvailable) {
@@ -969,8 +992,9 @@ class ZXSidePanelStateHolder {
         profileDurationText = "00:00:00"
         onSelectProfileRequest?.invoke(code)
         val label = when (profileId) {
-            "saving" -> "ECO Mode"
+            "saving" -> "Eco"
             "balanced" -> "Balanced"
+            "maestro" -> "Maestro"
             else -> if (isLiteMode) "Performance Lite" else "Performance"
         }
         showToast("Applying $label profile", "bolt")

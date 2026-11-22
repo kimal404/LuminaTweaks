@@ -139,6 +139,7 @@ fun SidePanelWidgetContent(
         "fpsHeader" -> FpsMeterWidget(state, isMerged, span, overrideTier)
         "speedometers" -> SpeedometersWidget(state, isMerged, span, overrideTier)
         "profileSwitch" -> ProfileSegmentedWidget(state, isMerged, span, overrideTier)
+        "displayRefreshRate" -> RefreshRateWidget(state, isMerged, span, overrideTier)
         "brightnessSlider" -> BrightnessSliderWidget(state, isMerged, span, overrideTier)
         "volumeSlider" -> VolumeSliderWidget(state, isMerged, span, overrideTier)
         "quickTools" -> QuickToolsWidget(state, span, overrideTier)
@@ -1263,13 +1264,15 @@ private fun ProfileSegmentedWidget(
     val scheme = MaterialTheme.colorScheme
     if (span == 1) {
         val currentTitle = when (state.activeProfile) {
-            "saving" -> "Saving"
-            "balanced" -> "Balanced"
+            "saving" -> "Eco"
+            "balanced" -> "Balance"
+            "maestro" -> "Maestro"
             else -> "Perf"
         }
         val currentIcon = when (state.activeProfile) {
             "saving" -> "eco"
             "balanced" -> "balance"
+            "maestro" -> "auto_awesome"
             else -> "bolt"
         }
         M3WidgetCard(
@@ -1282,6 +1285,7 @@ private fun ProfileSegmentedWidget(
                         val next = when (state.activeProfile) {
                             "saving" -> "balanced"
                             "balanced" -> "performance"
+                            "performance" -> "maestro"
                             else -> "saving"
                         }
                         state.selectPerformanceProfile(next)
@@ -1313,8 +1317,9 @@ private fun ProfileSegmentedWidget(
 
     val perfLabel = if (state.isLiteMode) "Perf Lite" else "Performance"
     val profiles = listOf(
-        "saving" to "Power saving",
+        "saving" to "Eco",
         "balanced" to "Balanced",
+        "maestro" to "Maestro",
         "performance" to perfLabel
     )
 
@@ -1429,7 +1434,7 @@ private fun ProfileSegmentedWidget(
                     ) {
                         Text(
                             text = label,
-                            style = MaterialTheme.typography.labelMedium,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                             color = contentColor,
                             textAlign = TextAlign.Center,
                             maxLines = 1,
@@ -1448,6 +1453,97 @@ private fun ProfileSegmentedWidget(
         M3WidgetCard(
             contentPadding = PaddingValues(10.dp)
         ) {
+            inner()
+        }
+    }
+}
+
+@Composable
+private fun RefreshRateWidget(
+    state: ZXSidePanelStateHolder,
+    isMerged: Boolean,
+    span: Int = 3,
+    overrideTier: Int? = null
+) {
+    val scheme = MaterialTheme.colorScheme
+    val options = state.refreshRateOptions.ifEmpty { listOf(60) }
+    val inner: @Composable () -> Unit = {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = ZXSidePanelIcons.get("display_settings"),
+                        contentDescription = null,
+                        tint = scheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "Refresh rate",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = scheme.onSurface
+                    )
+                }
+                Text(
+                    text = "${state.activeRefreshRate} Hz",
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                    color = scheme.primary
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                options.forEach { hz ->
+                    val selected = hz == state.activeRefreshRate
+                    val containerColor by animateColorAsState(
+                        targetValue = if (selected) scheme.primaryContainer else scheme.surfaceContainerHigh,
+                        animationSpec = tween(durationMillis = 220),
+                        label = "RefreshRateChip"
+                    )
+                    val contentColor by animateColorAsState(
+                        targetValue = if (selected) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
+                        animationSpec = tween(durationMillis = 220),
+                        label = "RefreshRateChipText"
+                    )
+                    val shape = RoundedCornerShape(14.dp)
+                    Surface(
+                        shape = shape,
+                        color = containerColor,
+                        contentColor = contentColor,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(shape)
+                            .clickable { state.onSelectRefreshRate?.invoke(hz) }
+                    ) {
+                        Text(
+                            text = "${hz}Hz",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = contentColor,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            modifier = Modifier.padding(vertical = 9.dp, horizontal = 4.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (isMerged) {
+        inner()
+    } else {
+        M3WidgetCard(contentPadding = PaddingValues(10.dp)) {
             inner()
         }
     }
