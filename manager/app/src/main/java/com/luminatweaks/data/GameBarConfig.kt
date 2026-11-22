@@ -35,6 +35,18 @@ private fun snapPanelWidth(raw: Int): Int = when {
 object GameBarPrefs {
     private const val PREF_NAME = "game_bar_prefs"
 
+    fun setRefreshRateHint(context: Context, hz: Int?) {
+        val meta = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit()
+        if (hz == null) meta.remove("refresh_rate_hint") else meta.putInt("refresh_rate_hint", hz)
+        meta.apply()
+    }
+
+    fun refreshRateHint(context: Context): Int? {
+        val meta = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        val value = meta.getInt("refresh_rate_hint", -1)
+        return value.takeIf { it > 0 }
+    }
+
     fun load(context: Context): GameBarConfig {
         val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
         return GameBarConfig(

@@ -29,5 +29,8 @@ data class GameBarUiState(
     val manual: Boolean = false,
     val fpsOverlay: Boolean = false,
     val dndEnabled: Boolean = false,
+    val liteMode: Boolean = false,
+    val rrModes: List<Int> = emptyList(),
+    val currentRrId: Int? = null,
     val quickApps: List<GameBarQuickApp> = emptyList()
 )

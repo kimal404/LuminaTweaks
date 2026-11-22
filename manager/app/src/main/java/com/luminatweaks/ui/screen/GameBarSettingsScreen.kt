@@ -1,6 +1,7 @@
 package com.luminatweaks.ui.screen
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -24,14 +25,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
-import androidx.compose.material.icons.rounded.Autorenew
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.rounded.KeyboardArrowRight
-import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SportsEsports
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
@@ -57,10 +57,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import android.graphics.drawable.Drawable
+import androidx.core.graphics.drawable.toBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luminatweaks.data.ConfigRepository
@@ -80,6 +86,8 @@ private data class GameBarSizePreset(
     val label: String,
     val panelWidthDp: Int
 )
+
+private val appIconCache = mutableMapOf<String, Drawable?>()
 
 private val gameBarSizePresets = listOf(
     GameBarSizePreset("Ringkas", 256),
@@ -499,10 +507,10 @@ private fun GameBarPreview(config: GameBarConfig) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(216.dp)
+            .height(232.dp)
             .clip(RoundedCornerShape(28.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
-            .padding(14.dp)
+            .padding(12.dp)
     ) {
         Box(
             modifier = Modifier
@@ -514,7 +522,7 @@ private fun GameBarPreview(config: GameBarConfig) {
             modifier = Modifier
                 .align(if (isLeft) Alignment.CenterStart else Alignment.CenterEnd)
                 .width(4.dp)
-                .height(48.dp)
+                .height(44.dp)
                 .clip(CircleShape)
                 .background(
                     MaterialTheme.colorScheme.primary.copy(
@@ -522,157 +530,224 @@ private fun GameBarPreview(config: GameBarConfig) {
                     )
                 )
         )
-        val cardModifier = if (isLeft) {
-            Modifier
-                .align(Alignment.CenterStart)
-                .padding(start = 8.dp)
-        } else {
-            Modifier
-                .align(Alignment.CenterEnd)
-                .padding(end = 8.dp)
-        }
-        Surface(
-            modifier = cardModifier.width(178.dp),
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(
-                alpha = config.opacity.coerceIn(0.40f, 1f)
-            ),
-            shadowElevation = 6.dp
+        Row(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(
-                modifier = Modifier.padding(10.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+            if (isLeft) {
+                PreviewRail(config)
+            }
+            Surface(
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(
+                    alpha = config.opacity.coerceIn(0.40f, 1f)
+                ),
+                shadowElevation = 6.dp
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "20:45",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.width(5.dp))
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primaryContainer
-                    ) {
-                        Text(
-                            text = "AUTO",
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                            fontSize = 7.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            maxLines = 1
-                        )
-                    }
-                    Spacer(modifier = Modifier.weight(1f))
-                    Box(
-                        modifier = Modifier
-                            .size(14.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary)
-                    )
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Box(
-                        modifier = Modifier
-                            .size(14.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                    )
-                }
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.45f)
+                Column(
+                    modifier = Modifier.padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 6.dp, vertical = 3.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    Text(
+                        text = "Lumina Game",
+                        modifier = Modifier.fillMaxWidth(),
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.4.sp,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)
                     ) {
-                        Text(
-                            text = "120 FPS · 120Hz",
-                            fontSize = 8.sp,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                        Text(
-                            text = "36.8°C",
-                            fontSize = 8.sp,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                        Text(
-                            text = "24%",
-                            fontSize = 8.sp,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    listOf("Powersave", "Balanced", "Maestro").forEachIndexed { index, label ->
-                        Box(
+                        Row(
                             modifier = Modifier
-                                .weight(1f)
-                                .height(20.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (index == 1) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.surfaceContainerHighest
-                                    }
-                                ),
-                            contentAlignment = Alignment.Center
+                                .fillMaxWidth()
+                                .padding(horizontal = 6.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = label,
-                                fontSize = 6.5.sp,
-                                fontWeight = if (index == 1) FontWeight.Bold else FontWeight.Medium,
-                                color = if (index == 1) {
-                                    MaterialTheme.colorScheme.onPrimary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface
-                                },
+                                text = "42%",
+                                fontSize = 7.sp,
+                                maxLines = 1,
+                                softWrap = false,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "120",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
                                 maxLines = 1,
                                 softWrap = false
                             )
+                            Text(
+                                text = "37.0°C",
+                                fontSize = 7.sp,
+                                maxLines = 1,
+                                softWrap = false,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        listOf(
+                            listOf("Eco", "Balanced"),
+                            listOf("Maestro", "Performance")
+                        ).forEach { row ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                row.forEach { label ->
+                                    val selected = label == "Balanced"
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(15.dp)
+                                            .clip(RoundedCornerShape(5.dp))
+                                            .background(
+                                                if (selected) {
+                                                    MaterialTheme.colorScheme.primary
+                                                } else {
+                                                    MaterialTheme.colorScheme.surfaceContainerHighest
+                                                }
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = label,
+                                            fontSize = 6.sp,
+                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (selected) {
+                                                MaterialTheme.colorScheme.onPrimary
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurface
+                                            },
+                                            maxLines = 1,
+                                            softWrap = false
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 6.dp, vertical = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Refresh rate",
+                                    modifier = Modifier.weight(1f),
+                                    fontSize = 7.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                                Text(
+                                    text = "120 Hz",
+                                    fontSize = 7.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                listOf("Auto", "60", "120").forEachIndexed { index, label ->
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(12.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                if (index == 2) {
+                                                    MaterialTheme.colorScheme.primary
+                                                } else {
+                                                    MaterialTheme.colorScheme.surfaceContainerHigh
+                                                }
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = label,
+                                            fontSize = 5.5.sp,
+                                            fontWeight = if (index == 2) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (index == 2) {
+                                                MaterialTheme.colorScheme.onPrimary
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
+                                            maxLines = 1,
+                                            softWrap = false
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(6.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f))
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(6.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f))
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    PreviewAction(Icons.Rounded.Speed, active = false)
-                    PreviewAction(Icons.Rounded.NotificationsOff, active = false)
-                    PreviewAction(Icons.Rounded.Autorenew, active = true)
-                    PreviewAction(Icons.Rounded.Apps, active = false)
-                }
+            }
+            if (!isLeft) {
+                PreviewRail(config)
             }
         }
     }
 }
 
 @Composable
-private fun PreviewAction(icon: ImageVector, active: Boolean) {
+private fun PreviewRail(config: GameBarConfig) {
+    Surface(
+        modifier = Modifier.width(20.dp),
+        shape = RoundedCornerShape(9.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(
+            alpha = config.opacity.coerceIn(0.40f, 1f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = 5.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            PreviewAction(Icons.Rounded.Speed, active = true, size = 13.dp, iconSize = 8.dp)
+            PreviewAction(Icons.Rounded.Apps, active = false, size = 13.dp, iconSize = 8.dp)
+            PreviewAction(Icons.Rounded.Tune, active = false, size = 13.dp, iconSize = 8.dp)
+            Box(
+                modifier = Modifier
+                    .width(11.dp)
+                    .height(1.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+            )
+            PreviewAction(Icons.Rounded.Speed, active = false, size = 12.dp, iconSize = 7.dp)
+            PreviewAction(Icons.Rounded.Apps, active = false, size = 12.dp, iconSize = 7.dp)
+        }
+    }
+}
+
+@Composable
+private fun PreviewAction(
+    icon: ImageVector,
+    active: Boolean,
+    size: Dp = 26.dp,
+    iconSize: Dp = 13.dp
+) {
     Box(
         modifier = Modifier
-            .size(26.dp)
+            .size(size)
             .clip(CircleShape)
             .background(
                 if (active) {
@@ -691,7 +766,7 @@ private fun PreviewAction(icon: ImageVector, active: Boolean) {
             } else {
                 MaterialTheme.colorScheme.onSurfaceVariant
             },
-            modifier = Modifier.size(13.dp)
+            modifier = Modifier.size(iconSize)
         )
     }
 }
@@ -869,6 +944,7 @@ private fun QuickAppsPickerDialog(
     val context = LocalContext.current
     var apps by remember { mutableStateOf<List<AppItem>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
+    var icons by remember { mutableStateOf<Map<String, ImageBitmap>>(emptyMap()) }
 
     LaunchedEffect(Unit) {
         apps = withContext(Dispatchers.IO) {
@@ -876,6 +952,23 @@ private fun QuickAppsPickerDialog(
                 .sortedWith(compareByDescending<AppItem> { it.isGame }.thenBy { it.name.lowercase() })
         }
         loading = false
+    }
+
+    LaunchedEffect(apps) {
+        if (apps.isEmpty()) return@LaunchedEffect
+        icons = withContext(Dispatchers.IO) {
+            val packageManager = context.packageManager
+            val result = mutableMapOf<String, ImageBitmap>()
+            apps.forEach { app ->
+                val drawable = appIconCache.getOrPut(app.packageName) {
+                    runCatching { packageManager.getApplicationIcon(app.packageName) }.getOrNull()
+                } ?: return@forEach
+                runCatching {
+                    result[app.packageName] = drawable.toBitmap(72, 72).asImageBitmap()
+                }
+            }
+            result
+        }
     }
 
     AlertDialog(
@@ -894,7 +987,7 @@ private fun QuickAppsPickerDialog(
         text = {
             Column {
                 Text(
-                    text = "Pilih maksimal 12 aplikasi untuk Game Bar.",
+                    text = "Pilih aplikasi untuk Game Bar. Maksimal 3 ikon tampil di rail.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -906,6 +999,7 @@ private fun QuickAppsPickerDialog(
                         items(apps, key = { it.packageName }) { app ->
                             QuickAppPickerRow(
                                 app = app,
+                                icon = icons[app.packageName],
                                 checked = app.packageName in selected,
                                 enabled = app.packageName in selected || selected.size < 12,
                                 onToggle = { onToggle(app.packageName) }
@@ -926,6 +1020,7 @@ private fun QuickAppsPickerDialog(
 @Composable
 private fun QuickAppPickerRow(
     app: AppItem,
+    icon: ImageBitmap?,
     checked: Boolean,
     enabled: Boolean,
     onToggle: () -> Unit
@@ -944,12 +1039,20 @@ private fun QuickAppPickerRow(
                 .background(MaterialTheme.colorScheme.secondaryContainer),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = app.name.take(1).uppercase(),
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
-            )
+            if (icon != null) {
+                Image(
+                    bitmap = icon,
+                    contentDescription = app.name,
+                    modifier = Modifier.size(30.dp)
+                )
+            } else {
+                Text(
+                    text = app.name.take(1).uppercase(),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            }
         }
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {

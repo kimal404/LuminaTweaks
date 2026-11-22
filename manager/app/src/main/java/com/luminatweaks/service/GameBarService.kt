@@ -1,6 +1,7 @@
 package com.luminatweaks.service
 
 import android.app.ActivityManager
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -20,6 +21,7 @@ import android.os.IBinder
 import android.provider.Settings
 import android.view.Gravity
 import android.view.WindowManager
+import android.view.Display
 import android.widget.Toast
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
@@ -260,7 +262,7 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
                         gameActive ||
                         (lastGameSeenMs > 0L && now - lastGameSeenMs <= GAME_STALE_GRACE_MS)
                     )
-                val visible = manualOverride ?: autoVisible
+                val visible = (manualOverride ?: autoVisible) && !isKeyguardLocked()
 
                 if (!visible) {
                     if (isAttached) {
@@ -313,6 +315,9 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
             val fps = metrics.fps
             uiState.value = uiState.value.copy(
                 expanded = isExpanded,
+                liteMode = metrics.liteMode,
+                rrModes = metrics.rrModes,
+                currentRrId = metrics.currentRrId,
                 fps = fps,
                 frametimeMs = metrics.frametimeMs,
                 targetHz = metrics.targetHz,
@@ -355,6 +360,9 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
         val brightnessPercent: Int,
         val fpsOverlay: Boolean,
         val dndEnabled: Boolean,
+        val liteMode: Boolean,
+        val rrModes: List<Int>,
+        val currentRrId: Int?,
         val quickApps: List<GameBarQuickApp>
     )
 
@@ -419,8 +427,16 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
             dndEnabled = (getSystemService(NotificationManager::class.java)
                 ?.currentInterruptionFilter ?: NotificationManager.INTERRUPTION_FILTER_ALL) !=
                 NotificationManager.INTERRUPTION_FILTER_ALL,
+            liteMode = ConfigRepository.cachedTweaksState?.isGlobalLiteMode ?: false,
+            rrModes = supportedRefreshRates(),
+            currentRrId = GameBarPrefs.refreshRateHint(this),
             quickApps = quickApps
         )
+    }
+
+    private fun isKeyguardLocked(): Boolean {
+        val keyguard = getSystemService(KeyguardManager::class.java) ?: return false
+        return runCatching { keyguard.isKeyguardLocked }.getOrDefault(false)
     }
 
     private fun updateGameLabel(packageName: String?) {
@@ -464,8 +480,9 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
                         onQuickAppClick = ::openApp,
                         onToggleFpsOverlay = ::toggleFpsOverlay,
                         onToggleDnd = ::toggleDnd,
-                        onToggleAutoProfile = ::toggleAutoProfile,
-                        onOpenManager = ::openManager
+                        onToggleLiteMode = ::toggleLiteMode,
+                        onOpenManager = ::openManager,
+                        onRefreshRateSelected = ::selectRefreshRate
                     )
                 }
             }
@@ -543,8 +560,15 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
         val density = metrics.density
         val isLeft = activeConfig.side == GameBarSide.LEFT
         val margin = (14f * density).roundToInt()
+        val railWidthDp = 48
+        val railGapDp = 8
+        val basePanelDp = if (isExpanded) {
+            activeConfig.panelWidthDp + railWidthDp + railGapDp
+        } else {
+            activeConfig.panelWidthDp
+        }
         val panelWidth = min(
-            (activeConfig.panelWidthDp * density).roundToInt(),
+            (basePanelDp * density).roundToInt(),
             (metrics.widthPixels * 0.92f).roundToInt()
         ).coerceAtLeast((240f * density).roundToInt())
         val handleWidth = (activeConfig.handleThicknessDp * density).roundToInt().coerceAtLeast(1)
@@ -744,25 +768,89 @@ class GameBarService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStat
         }
     }
 
-    private fun toggleAutoProfile() {
-        val target = !uiState.value.autoProfile
+    private fun toggleLiteMode() {
+        val target = !uiState.value.liteMode
         serviceScope.launch {
             val ok = withContext(Dispatchers.IO) {
-                runCatching { ConfigRepository.setAutoProfile(target) }.isSuccess
+                runCatching { ConfigRepository.setGlobalLiteMode(target) }.isSuccess
             }
             if (ok) {
-                uiState.value = uiState.value.copy(autoProfile = target)
+                uiState.value = uiState.value.copy(liteMode = target)
                 Toast.makeText(
                     this@GameBarService,
                     if (target) {
-                        localizedText("Mode otomatis aktif", "Automatic mode enabled")
+                        localizedText("Mode Lite aktif", "Lite mode enabled")
                     } else {
-                        localizedText("Mode otomatis nonaktif", "Automatic mode disabled")
+                        localizedText("Mode Lite nonaktif", "Lite mode disabled")
                     },
                     Toast.LENGTH_SHORT
                 ).show()
             }
         }
+    }
+
+    private fun supportedRefreshRates(): List<Int> {
+        val display = currentDisplay() ?: return emptyList()
+        val modes = runCatching {
+            display.supportedModes.map { (it.refreshRate + 0.5f).toInt() }
+        }.getOrDefault(emptyList())
+        return modes.filter { it > 0 }.distinct().sortedDescending()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun currentDisplay(): Display? {
+        val viaApi = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            runCatching {
+                createDisplayContext(display)
+                    .getSystemService(WindowManager::class.java)
+                    ?.defaultDisplay
+            }.getOrNull()
+        } else {
+            null
+        }
+        return viaApi ?: runCatching { windowManager.defaultDisplay }.getOrNull()
+    }
+
+    private fun selectRefreshRate(hz: Int?) {
+        serviceScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching { applyRefreshRate(hz) }.getOrDefault(false)
+            }
+            if (ok) {
+                GameBarPrefs.setRefreshRateHint(this@GameBarService, hz)
+                uiState.value = uiState.value.copy(
+                    currentRrId = hz,
+                    targetHz = hz ?: uiState.value.targetHz
+                )
+            } else {
+                Toast.makeText(
+                    this@GameBarService,
+                    localizedText("Gagal mengubah refresh rate", "Failed to change refresh rate"),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    private fun applyRefreshRate(hz: Int?): Boolean {
+        if (hz == null) {
+            ConfigRepository.setRefreshRate(null)
+            return true
+        }
+        var id = ConfigRepository.cachedTweaksState
+            ?.rrModes
+            ?.firstOrNull { it.hz == hz }
+            ?.id
+        if (id == null) {
+            id = runCatching {
+                currentDisplay()?.supportedModes
+                    ?.filter { (it.refreshRate + 0.5f).toInt() == hz }
+                    ?.minByOrNull { it.modeId }
+                    ?.modeId
+            }.getOrNull()
+        }
+        ConfigRepository.setRefreshRate(id)
+        return true
     }
 
     private fun openApp(packageName: String) {
