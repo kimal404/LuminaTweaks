@@ -88,7 +88,11 @@ impl ThermalMonitor {
                 break;
             };
             let value = (next_trip - temp).max(0.0);
-            headroom = Some(headroom.map(|current: f32| current.min(value)).unwrap_or(value));
+            headroom = Some(
+                headroom
+                    .map(|current: f32| current.min(value))
+                    .unwrap_or(value),
+            );
         }
 
         let mut pressure = headroom
@@ -177,10 +181,7 @@ fn discover_zones() -> Vec<Zone> {
                 trips.push(celsius);
             }
         }
-        trips.sort_by(|left, right| {
-            left.partial_cmp(right)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        trips.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
         trips.dedup();
         zones.push(Zone { temp_path, trips });
     }

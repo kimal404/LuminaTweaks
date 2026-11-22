@@ -12,7 +12,6 @@ path = "src/lib.rs"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1"
-obfstr = "0.4"
 libc = "0.2"
 kala-ebpf = "0.2.0"
 

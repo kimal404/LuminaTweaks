@@ -61,11 +61,7 @@ fn set_split_lock(enabled: bool) {
     write_node(SPLIT_LOCK_PATH, if enabled { "1" } else { "0" });
 }
 
-fn tune_top_app(
-    boost: &str,
-    prefer_idle: &str,
-    uclamp: Option<(&str, &str, &str)>,
-) {
+fn tune_top_app(boost: &str, prefer_idle: &str, uclamp: Option<(&str, &str, &str)>) {
     write_first_available(
         STUNE_DIRS,
         &[
@@ -98,10 +94,7 @@ fn tune_touchpanel(performance: bool) {
         ("oplus_tp_direction", performance),
         ("oppo_tp_direction", performance),
     ] {
-        write_node(
-            &format!("{}/{}", TOUCHPANEL_DIR, name),
-            value(enabled),
-        );
+        write_node(&format!("{}/{}", TOUCHPANEL_DIR, name), value(enabled));
     }
 }
 

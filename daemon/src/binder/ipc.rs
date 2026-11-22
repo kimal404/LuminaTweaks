@@ -505,7 +505,10 @@ fn state_line(shared: &Shared) -> String {
         None => "-",
     };
     match focus {
-        Some(focus) => format!("STATE {} {} {} {}\n", focus.package, focus.pid, screen, power),
+        Some(focus) => format!(
+            "STATE {} {} {} {}\n",
+            focus.package, focus.pid, screen, power
+        ),
         None => format!("STATE - 0 {} {}\n", screen, power),
     }
 }

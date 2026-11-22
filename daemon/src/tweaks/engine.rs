@@ -173,10 +173,7 @@ fn cpu_governor_paths() -> Vec<String> {
             if !name.starts_with("cpu") || !name[3..].chars().all(|c| c.is_ascii_digit()) {
                 continue;
             }
-            let path = format!(
-                "/sys/devices/system/cpu/{}/cpufreq/scaling_governor",
-                name
-            );
+            let path = format!("/sys/devices/system/cpu/{}/cpufreq/scaling_governor", name);
             if Path::new(&path).exists() && !paths.contains(&path) {
                 paths.push(path);
             }
@@ -189,9 +186,15 @@ fn cpu_governor_paths() -> Vec<String> {
 
 fn fallback_governor() -> String {
     for base in cpu_policy_dirs() {
-        let available = fs::read_to_string(format!("{}/scaling_available_governors", base))
-            .unwrap_or_default();
-        for preferred in ["schedutil", "walt", "interactive", "ondemand", "conservative"] {
+        let available =
+            fs::read_to_string(format!("{}/scaling_available_governors", base)).unwrap_or_default();
+        for preferred in [
+            "schedutil",
+            "walt",
+            "interactive",
+            "ondemand",
+            "conservative",
+        ] {
             if available.split_whitespace().any(|item| item == preferred) {
                 return preferred.to_string();
             }
@@ -268,8 +271,8 @@ fn change_cpu_governor(governor: &str) {
 }
 
 fn maestro_governor(base: &str) -> String {
-    let available = fs::read_to_string(format!("{}/scaling_available_governors", base))
-        .unwrap_or_default();
+    let available =
+        fs::read_to_string(format!("{}/scaling_available_governors", base)).unwrap_or_default();
     for preferred in ["sugov_ext", "schedutil", "walt"] {
         if available.split_whitespace().any(|item| item == preferred) {
             return preferred.to_string();
@@ -279,10 +282,12 @@ fn maestro_governor(base: &str) -> String {
 }
 
 fn performance_governor(base: &str) -> String {
-    let available = fs::read_to_string(format!("{}/scaling_available_governors", base))
-        .unwrap_or_default();
+    let available =
+        fs::read_to_string(format!("{}/scaling_available_governors", base)).unwrap_or_default();
     if !crate::tweaks::mitigation::has("NO_PERFORMANCE_CPUGOV")
-        && available.split_whitespace().any(|item| item == "performance")
+        && available
+            .split_whitespace()
+            .any(|item| item == "performance")
     {
         return "performance".to_string();
     }
@@ -387,14 +392,8 @@ fn cpufreq_unlock() {
         let Some((hw_min, hw_max, _)) = hardware_limits(&base) else {
             continue;
         };
-        profile_write(
-            &format!("{}/scaling_max_freq", base),
-            &hw_max.to_string(),
-        );
-        profile_write(
-            &format!("{}/scaling_min_freq", base),
-            &hw_min.to_string(),
-        );
+        profile_write(&format!("{}/scaling_max_freq", base), &hw_max.to_string());
+        profile_write(&format!("{}/scaling_min_freq", base), &hw_min.to_string());
     }
 }
 
@@ -419,7 +418,11 @@ fn apply_battery_saver(enabled: bool) {
     };
     let numeric = content.chars().any(|value| value.is_ascii_digit());
     let value = if numeric {
-        if enabled { "1" } else { "0" }
+        if enabled {
+            "1"
+        } else {
+            "0"
+        }
     } else if enabled {
         "Y"
     } else {
@@ -448,10 +451,7 @@ fn apply_io_latency(low_latency: bool) {
             continue;
         }
         let base = format!("/sys/block/{}", name);
-        profile_apply(
-            &format!("{}/queue/read_ahead_kb", base),
-            read_ahead,
-        );
+        profile_apply(&format!("{}/queue/read_ahead_kb", base), read_ahead);
         let nr_path = format!("{}/queue/nr_requests", base);
         let nr_primary = if low_latency { "32" } else { "64" };
         if !crate::tweaks::state::write_tracked_quiet(&nr_path, nr_primary, true)

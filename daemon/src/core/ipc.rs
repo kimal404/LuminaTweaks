@@ -15,7 +15,7 @@
  */
 
 use std::fs;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -25,6 +25,7 @@ use std::time::Duration;
 
 pub const IPC_SOCKET_PRIMARY: &str = "/data/adb/.config/lumina/lumina.sock";
 pub const IPC_SOCKET_FALLBACK: &str = "/data/local/tmp/lumina_ipc.sock";
+const MAX_IPC_LINE_BYTES: u64 = 1024;
 
 fn ensure_parent_dir(path: &str) {
     if let Some(parent) = std::path::Path::new(path).parent() {
@@ -152,9 +153,20 @@ fn handle_client(stream: UnixStream, shared_state: Arc<SharedState>) {
 
     loop {
         line.clear();
-        match reader.read_line(&mut line) {
+        let read = reader
+            .by_ref()
+            .take(MAX_IPC_LINE_BYTES)
+            .read_line(&mut line);
+        match read {
             Ok(0) => break,
-            Ok(_) => {
+            Ok(bytes) => {
+                if bytes as u64 >= MAX_IPC_LINE_BYTES && !line.ends_with('\n') {
+                    crate::log!(
+                        "[WARN] IPC request exceeded {} bytes; closing client",
+                        MAX_IPC_LINE_BYTES
+                    );
+                    break;
+                }
                 let trimmed = line.trim();
                 if trimmed.is_empty() {
                     continue;

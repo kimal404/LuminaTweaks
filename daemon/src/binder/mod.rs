@@ -29,12 +29,12 @@
 //! cgroup polling path in `detector.rs` remains the fallback when binder is
 //! unavailable.
 
-mod ffi;
-pub mod producer;
-mod resolver;
 pub mod client;
+mod ffi;
 pub mod ipc;
+pub mod producer;
 pub mod protocol;
+mod resolver;
 
 use std::ffi::CString;
 use std::os::raw::c_void;
@@ -858,13 +858,8 @@ fn transact_write_int_on(
             unsafe { (api.parcel_delete)(input) };
             return Err("writeString unavailable".to_string());
         };
-        if unsafe {
-            write_string(
-                input,
-                package.as_ptr(),
-                package.as_bytes().len() as i32,
-            )
-        } != ffi::STATUS_OK
+        if unsafe { write_string(input, package.as_ptr(), package.as_bytes().len() as i32) }
+            != ffi::STATUS_OK
         {
             unsafe { (api.parcel_delete)(input) };
             return Err("writeString failed".to_string());

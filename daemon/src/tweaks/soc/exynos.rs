@@ -22,10 +22,7 @@ const FREQ_TABLES: &[&str] = &["gpu_available_frequencies", "gpu_freq_table"];
 const MIF_NEEDLES: &[&str] = &["devfreq_mif"];
 
 fn gpu_dir() -> Option<&'static str> {
-    GPU_DIRS
-        .iter()
-        .copied()
-        .find(|dir| Path::new(dir).is_dir())
+    GPU_DIRS.iter().copied().find(|dir| Path::new(dir).is_dir())
 }
 
 fn freq_table(dir: &str) -> Option<String> {

@@ -13,6 +13,10 @@ daemon/target/
 **/*.rs.bk
 Cargo.lock
 
+# Build artifacts (built by CI, never committed)
+/libluminagfx.so
+manager/app/src/main/assets/bin/
+
 # Gradle & Android Build Outputs
 .gradle/
 manager/.gradle/

@@ -40,9 +40,16 @@ patch_sepolicy_rule() {
     fi
 }
 
+# Only the /proc entries the daemon actually reads are granted:
+#   /proc/cpuinfo       -> proc_cpuinfo      (SoC detection)
+#   /proc/stat          -> proc_stat         (uptime/btime)
+#   /proc/<pid>/cmdline -> proc_pid_cmdline  (process/game detection)
 for ctx in magisk su init kernel; do
-    patch_sepolicy_rule "allow $ctx proc_type file { read open getattr }"
-    patch_sepolicy_rule "allow $ctx proc_type dir { read open search getattr }"
+    patch_sepolicy_rule "allow $ctx proc dir { search getattr }"
+    patch_sepolicy_rule "allow $ctx proc_pid dir { search getattr }"
+    patch_sepolicy_rule "allow $ctx proc_cpuinfo file { read open getattr }"
+    patch_sepolicy_rule "allow $ctx proc_stat file { read open getattr }"
+    patch_sepolicy_rule "allow $ctx proc_pid_cmdline file { read open getattr }"
 done
 
 exit 0

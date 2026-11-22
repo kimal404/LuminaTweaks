@@ -31,7 +31,7 @@ if [ -f "$MODPATH/bin/soc.sh" ]; then
     SOC=$(detect_lumina_soc 2>/dev/null)
 fi
 case "$SOC" in
-    mediatek|snapdragon|unisoc|generic) ;;
+    mediatek|snapdragon|unisoc|exynos|tensor|kirin|tegra|generic) ;;
     *) SOC="generic" ;;
 esac
 printf '%s\n' "$SOC" > /data/adb/.config/lumina/soc.conf
@@ -41,6 +41,10 @@ case "$SOC" in
     mediatek) SOC_LABEL="MediaTek" ;;
     snapdragon) SOC_LABEL="Snapdragon" ;;
     unisoc) SOC_LABEL="Unisoc" ;;
+    exynos) SOC_LABEL="Exynos" ;;
+    tensor) SOC_LABEL="Tensor" ;;
+    kirin) SOC_LABEL="Kirin" ;;
+    tegra) SOC_LABEL="Tegra" ;;
     *) SOC_LABEL="Generic" ;;
 esac
 ui_print "- SoC terdeteksi: $SOC_LABEL"

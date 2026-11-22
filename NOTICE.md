@@ -14,9 +14,10 @@ This project contains inspirations, logic architectures, and structural concepts
 * **Encore Tweaks**
   Copyright (C) 2024-2026 Rem01Gaming
   Source: https://github.com/Rem01Gaming/encore
-  Contribution: The `IProcessObserver` / ActivityManager binder monitoring
-  approach used by `daemon/src/binder/`. Licensed under the Apache License,
-  Version 2.0.
+  Contribution: Referenced and adapted for the `IProcessObserver` /
+  ActivityManager binder monitoring in `daemon/src/binder/`; original
+  copyright headers are preserved in those files. Licensed under the
+  Apache License, Version 2.0.
 
 * **Binder Resolver**
   Copyright (C) 2026 Rem01Gaming

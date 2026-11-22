@@ -26,8 +26,7 @@ const CCI_MODE_PATH: &str = "/proc/cpufreq/cpufreq_cci_mode";
 const POWER_MODE_PATH: &str = "/proc/cpufreq/cpufreq_power_mode";
 const DRAMBOOST_PATH: &str = "/sys/devices/platform/boot_dramboost/dramboost/dramboost";
 const EAS_PATH: &str = "/sys/devices/system/cpu/eas/enable";
-const GED_KPI_PATH: &str =
-    "/sys/module/sspm_v3/holders/ged/parameters/is_GED_KPI_enabled";
+const GED_KPI_PATH: &str = "/sys/module/sspm_v3/holders/ged/parameters/is_GED_KPI_enabled";
 const LEGACY_GPUFREQ_PATH: &str = "/proc/gpufreq/gpufreq_opp_freq";
 const FIX_OPP_PATH: &str = "/proc/gpufreqv2/fix_target_opp_index";
 const GPUFREQ_V2_TABLE: &str = "/proc/gpufreqv2/gpu_working_opp_table";
@@ -199,7 +198,10 @@ fn gpu_max_performance() -> usize {
             return usize::from(super::apply_node(FIX_OPP_PATH, &index.to_string()));
         }
     }
-    let Some(freq) = parse_opp_table(GPUFREQ_V1_TABLE).first().map(|(_, freq)| *freq) else {
+    let Some(freq) = parse_opp_table(GPUFREQ_V1_TABLE)
+        .first()
+        .map(|(_, freq)| *freq)
+    else {
         return 0;
     };
     usize::from(super::apply_node(LEGACY_GPUFREQ_PATH, &freq.to_string()))

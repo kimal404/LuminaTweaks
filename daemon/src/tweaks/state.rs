@@ -26,7 +26,12 @@ const STATE_PATH: &str = "/data/adb/.config/lumina/engine_state.json";
 const BOOT_ID_PATH: &str = "/proc/sys/kernel/random/boot_id";
 const FORBIDDEN_NODES: &[&str] = &["/sys/kernel/ged/hal/ged_kpi_hint_frame_info"];
 const GED_HAL_PREFIX: &str = "/sys/kernel/ged/hal/";
-const GED_HAL_SAFE_NODES: &[&str] = &["gx_game_mode", "gx_force_cpu_boost", "gx_dfps", "disp_dejitter"];
+const GED_HAL_SAFE_NODES: &[&str] = &[
+    "gx_game_mode",
+    "gx_force_cpu_boost",
+    "gx_dfps",
+    "disp_dejitter",
+];
 
 pub fn is_forbidden_node(path: &str) -> bool {
     let path = path.trim_end_matches('/');
@@ -149,13 +154,9 @@ fn capture(path: &str) -> bool {
         return true;
     }
 
-    snapshot.entries.insert(
-        path.to_string(),
-        Entry {
-            value,
-            mode,
-        },
-    );
+    snapshot
+        .entries
+        .insert(path.to_string(), Entry { value, mode });
     persist(snapshot);
     true
 }
@@ -240,7 +241,9 @@ mod tests {
         assert!(is_forbidden_node(
             "/sys/kernel/ged/hal/ged_kpi_hint_frame_info"
         ));
-        assert!(is_forbidden_node("/sys/kernel/ged/hal/custom_boost_gpu_freq"));
+        assert!(is_forbidden_node(
+            "/sys/kernel/ged/hal/custom_boost_gpu_freq"
+        ));
         assert!(!is_forbidden_node("/sys/kernel/ged/hal/gx_dfps"));
         assert!(!is_forbidden_node("/sys/kernel/ged/hal/gx_game_mode"));
         assert!(!is_forbidden_node("/sys/devices/system/cpu"));

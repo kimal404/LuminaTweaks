@@ -19,6 +19,10 @@ detect_lumina_soc() {
         value=$(getprop "$prop" 2>/dev/null | tr '[:upper:]' '[:lower:]')
         [ -n "$value" ] || continue
         case "$value" in
+            *allwinner*|*sunxi*|sun[0-9]*i*)
+                echo "generic"
+                return 0
+                ;;
             *mediatek*|*mtk*|*mt[0-9]*)
                 echo "mediatek"
                 return 0
@@ -86,6 +90,9 @@ detect_lumina_soc() {
 
     value=$(grep -iE '^(Hardware|Processor|model name)' /proc/cpuinfo 2>/dev/null | head -n 1 | tr '[:upper:]' '[:lower:]')
     case "$value" in
+        *allwinner*|*sunxi*|sun[0-9]*i*)
+            echo "generic"
+            ;;
         *mediatek*|*mtk*|*mt[0-9]*)
             echo "mediatek"
             ;;

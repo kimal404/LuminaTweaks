@@ -303,11 +303,13 @@ pub(crate) fn cpudcvs_unlock(base: &str) -> usize {
     ) else {
         return 0;
     };
-    usize::from(write_node(&format!("{}/hw_max_freq", base), &max.to_string()))
-        + usize::from(write_node(
-            &format!("{}/hw_min_freq", base),
-            &min.to_string(),
-        ))
+    usize::from(write_node(
+        &format!("{}/hw_max_freq", base),
+        &max.to_string(),
+    )) + usize::from(write_node(
+        &format!("{}/hw_min_freq", base),
+        &min.to_string(),
+    ))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -473,7 +475,10 @@ fn live_vendor() -> Vendor {
             return Vendor::Tensor;
         }
     }
-    if has_any_path(&["/sys/class/devfreq/gpufreq", "/sys/devices/platform/gpufreq"]) {
+    if has_any_path(&[
+        "/sys/class/devfreq/gpufreq",
+        "/sys/devices/platform/gpufreq",
+    ]) {
         return Vendor::Kirin;
     }
 
@@ -515,6 +520,15 @@ fn classify(value: &str) -> Option<Vendor> {
     let value = value.trim().to_ascii_lowercase();
     if value.is_empty() {
         return None;
+    }
+
+    // Allwinner platforms are named sun50i*/sun8i*; do not let the Snapdragon
+    // "sun" codename match them.
+    if value.contains("allwinner")
+        || value.contains("sunxi")
+        || (value.starts_with("sun") && value.contains('i'))
+    {
+        return Some(Vendor::Generic);
     }
 
     if value.contains("mediatek") || value.contains("mtk") || value.starts_with("mt") {
@@ -594,6 +608,13 @@ mod tests {
     fn detects_snapdragon_platform_codename() {
         assert_eq!(classify("kalama"), Some(Vendor::Snapdragon));
         assert_eq!(classify("lahaina"), Some(Vendor::Snapdragon));
+    }
+
+    #[test]
+    fn allwinner_platform_is_generic() {
+        assert_eq!(classify("sun50iw9"), Some(Vendor::Generic));
+        assert_eq!(classify("sun8iw"), Some(Vendor::Generic));
+        assert_eq!(classify("sun"), Some(Vendor::Snapdragon));
     }
 
     #[test]

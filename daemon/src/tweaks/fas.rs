@@ -259,10 +259,7 @@ fn percentile(frames: &[f32], percent: u64) -> Option<f32> {
     if values.len() < MIN_WINDOW_FRAMES {
         return None;
     }
-    values.sort_by(|left, right| {
-        left.partial_cmp(right)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    values.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
     let index = ((values.len() as f32 * percent as f32 / 100.0).ceil() as usize)
         .saturating_sub(1)
         .min(values.len() - 1);
@@ -579,34 +576,32 @@ impl FasController {
                 self.baseline_raised_at = None;
                 self.baseline_lowered_at = None;
             }
-            Some(current) if candidate <= current * BASELINE_DECREASE_PERCENT / 100.0 => {
-                match self.baseline_lowered_at {
-                    Some(at)
-                        if now.saturating_duration_since(at).as_millis()
-                            >= BASELINE_LOWER_HOLD_MS =>
-                    {
-                        self.baseline_period = Some(candidate);
-                        self.baseline_raised_at = None;
-                        self.baseline_lowered_at = None;
-                    }
-                    Some(_) => {}
-                    None => self.baseline_lowered_at = Some(now),
+            Some(current) if candidate <= current * BASELINE_DECREASE_PERCENT / 100.0 => match self
+                .baseline_lowered_at
+            {
+                Some(at)
+                    if now.saturating_duration_since(at).as_millis() >= BASELINE_LOWER_HOLD_MS =>
+                {
+                    self.baseline_period = Some(candidate);
+                    self.baseline_raised_at = None;
+                    self.baseline_lowered_at = None;
                 }
-            }
-            Some(current) if candidate >= current * BASELINE_INCREASE_PERCENT / 100.0 => {
-                match self.baseline_raised_at {
-                    Some(at)
-                        if now.saturating_duration_since(at).as_millis()
-                            >= BASELINE_RAISE_HOLD_MS =>
-                    {
-                        self.baseline_period = Some(candidate);
-                        self.baseline_raised_at = None;
-                        self.baseline_lowered_at = None;
-                    }
-                    Some(_) => {}
-                    None => self.baseline_raised_at = Some(now),
+                Some(_) => {}
+                None => self.baseline_lowered_at = Some(now),
+            },
+            Some(current) if candidate >= current * BASELINE_INCREASE_PERCENT / 100.0 => match self
+                .baseline_raised_at
+            {
+                Some(at)
+                    if now.saturating_duration_since(at).as_millis() >= BASELINE_RAISE_HOLD_MS =>
+                {
+                    self.baseline_period = Some(candidate);
+                    self.baseline_raised_at = None;
+                    self.baseline_lowered_at = None;
                 }
-            }
+                Some(_) => {}
+                None => self.baseline_raised_at = Some(now),
+            },
             Some(_) => {
                 self.baseline_raised_at = None;
                 self.baseline_lowered_at = None;
@@ -639,8 +634,7 @@ impl FasController {
                 if self.safety {
                     match self.recover_since {
                         Some(at)
-                            if now.saturating_duration_since(at).as_millis()
-                                >= RECOVER_HOLD_MS =>
+                            if now.saturating_duration_since(at).as_millis() >= RECOVER_HOLD_MS =>
                         {
                             self.safety = false;
                             self.recover_since = None;
@@ -1063,10 +1057,7 @@ mod tests {
 
         let fast = [6.0f32; 60];
         let mut detector = BottleneckDetector::new();
-        assert_eq!(
-            detector.classify(&fast, target),
-            FasBottleneck::Balanced
-        );
+        assert_eq!(detector.classify(&fast, target), FasBottleneck::Balanced);
     }
 
     #[test]
@@ -1079,9 +1070,21 @@ mod tests {
             classify_state(true, true, true, true, true),
             FasState::Recover
         );
-        assert_eq!(classify_state(false, false, false, true, true), FasState::Arm);
-        assert_eq!(classify_state(false, false, true, true, false), FasState::Boost);
-        assert_eq!(classify_state(false, false, true, false, true), FasState::Trim);
-        assert_eq!(classify_state(false, false, true, false, false), FasState::Hold);
+        assert_eq!(
+            classify_state(false, false, false, true, true),
+            FasState::Arm
+        );
+        assert_eq!(
+            classify_state(false, false, true, true, false),
+            FasState::Boost
+        );
+        assert_eq!(
+            classify_state(false, false, true, false, true),
+            FasState::Trim
+        );
+        assert_eq!(
+            classify_state(false, false, true, false, false),
+            FasState::Hold
+        );
     }
 }

@@ -284,11 +284,7 @@ impl EngineRuntime {
         }
     }
 
-    fn apply_target(
-        &mut self,
-        target_pkg: Option<&str>,
-        binder: &mut binder_client::BinderClient,
-    ) {
+    fn apply_target(&mut self, target_pkg: Option<&str>, binder: &mut binder_client::BinderClient) {
         let is_global_lite = is_lite_mode_active();
         let target_cfg = target_pkg.and_then(get_app_config);
 
@@ -605,15 +601,15 @@ fn main() {
                     || (active_pid > 0 && active_pid == died.pid));
 
             let confirmed_dead = died.pid <= 0
-                || !detector::pid_matches_package(
-                    died.pid,
-                    died.package.as_deref().unwrap_or(""),
-                );
+                || !detector::pid_matches_package(died.pid, died.package.as_deref().unwrap_or(""));
 
             if matches_target && confirmed_dead {
                 log!(
                     "[RESET]  {} ({}) \u{2794} BALANCED [Trigger: Died 0ms | uid {}]",
-                    active_pkg.as_deref().or(died.package.as_deref()).unwrap_or("-"),
+                    active_pkg
+                        .as_deref()
+                        .or(died.package.as_deref())
+                        .unwrap_or("-"),
                     died.pid,
                     died.uid
                 );
@@ -830,8 +826,14 @@ mod profile_tests {
 
     #[test]
     fn resolves_dynamic_profiles() {
-        assert_eq!(Profile::from_name("Performance"), Some(Profile::Performance));
-        assert_eq!(Profile::from_name("performance"), Some(Profile::Performance));
+        assert_eq!(
+            Profile::from_name("Performance"),
+            Some(Profile::Performance)
+        );
+        assert_eq!(
+            Profile::from_name("performance"),
+            Some(Profile::Performance)
+        );
         assert_eq!(
             Profile::from_name("Performance Lite"),
             Some(Profile::Performance)

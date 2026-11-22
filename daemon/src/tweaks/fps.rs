@@ -194,7 +194,6 @@ fn write_status(
     package: Option<&str>,
     session_start_ms: Option<u64>,
 ) {
-
     let frame = format!(
         "{:.1} {} {:.1} {} {} {}",
         fps,
@@ -280,20 +279,34 @@ fn parse_timestats(text: &str, package: &str) -> Option<RawLayer> {
     let mut fps: f32 = 0.0;
     let mut waiting_name = false;
 
-    let flush = |name: &Option<String>, frames: u64, fps: f32, best: &mut Option<RawLayer>, best_score: &mut u8| {
+    let flush = |name: &Option<String>,
+                 frames: u64,
+                 fps: f32,
+                 best: &mut Option<RawLayer>,
+                 best_score: &mut u8| {
         let Some(layer) = name.as_deref() else {
             return;
         };
-        if !layer.to_ascii_lowercase().contains(&package) || frames == 0 || !fps.is_finite() || fps <= 0.0 {
+        if !layer.to_ascii_lowercase().contains(&package)
+            || frames == 0
+            || !fps.is_finite()
+            || fps <= 0.0
+        {
             return;
         }
 
         let lower = layer.to_ascii_lowercase();
-        if lower.contains("background for") || lower.contains("dim layer") || lower.contains("screenshot") {
+        if lower.contains("background for")
+            || lower.contains("dim layer")
+            || lower.contains("screenshot")
+        {
             return;
         }
         let score = score_layer(layer);
-        if best.is_none() || score > *best_score || (score == *best_score && frames > best.as_ref().map(|l| l.frames).unwrap_or(0)) {
+        if best.is_none()
+            || score > *best_score
+            || (score == *best_score && frames > best.as_ref().map(|l| l.frames).unwrap_or(0))
+        {
             *best_score = score;
             *best = Some(RawLayer {
                 name: layer.to_string(),
@@ -346,7 +359,6 @@ fn disable_timestats() {
 }
 
 fn query_timestats(package: &str) -> Option<RawLayer> {
-
     let text = timestats_command("-dump -clear")?;
     parse_timestats(&text, package)
 }
@@ -368,7 +380,11 @@ fn find_layer(package: &str) -> Option<String> {
             continue;
         }
         let score = score_layer(line);
-        if best.as_ref().map(|(current, _)| score >= *current).unwrap_or(true) {
+        if best
+            .as_ref()
+            .map(|(current, _)| score >= *current)
+            .unwrap_or(true)
+        {
             best = Some((score, line.to_string()));
         }
     }
@@ -609,7 +625,6 @@ fn maintain_ebpf(
         .map(|source| Some(source.pid) != want_pid)
         .unwrap_or(false)
     {
-
         *ebpf = None;
     }
 
@@ -830,11 +845,16 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>, tap: FrameTap)
                 disable_timestats();
                 timestats_ready = false;
             }
-            write_status(fps, frametime, game_active, package.as_deref(), session_start_ms);
+            write_status(
+                fps,
+                frametime,
+                game_active,
+                package.as_deref(),
+                session_start_ms,
+            );
             continue;
         }
         if ebpf_fresh || ebpf_warming {
-
             continue;
         }
 
@@ -904,7 +924,13 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>, tap: FrameTap)
                 missing = 0;
                 slow = fps < 1.0;
                 tap.push_window(fps, frametime);
-                write_status(fps, frametime, game_active, package.as_deref(), session_start_ms);
+                write_status(
+                    fps,
+                    frametime,
+                    game_active,
+                    package.as_deref(),
+                    session_start_ms,
+                );
             }
             None => {
                 missing += 1;

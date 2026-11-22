@@ -33,7 +33,10 @@ pub fn mid_frequency(values: &[u64]) -> Option<u64> {
 }
 
 pub fn nearest_frequency(values: &[u64], target: u64) -> Option<u64> {
-    values.iter().copied().min_by_key(|value| value.abs_diff(target))
+    values
+        .iter()
+        .copied()
+        .min_by_key(|value| value.abs_diff(target))
 }
 
 #[cfg(test)]
