@@ -142,13 +142,11 @@ class ZXSidePanelStateHolder {
             "quickTools",
             "antiInterference",
             "liveMonitor",
-            "displayTouch",
-            "crosshair"
+            "displayTouch"
         )
 
         val DEFAULT_LIBRARY_WIDGETS = listOf(
             "networkClock",
-            "networkPing",
             "thermalBattery",
             "customImage"
         )
@@ -192,8 +190,9 @@ class ZXSidePanelStateHolder {
 
     var fpsCap by mutableIntStateOf(120)
     var activeRefreshRate by mutableIntStateOf(60)
-    var refreshRateOptions by mutableStateOf(listOf(60, 90, 120))
-    var onSelectRefreshRate: ((Int) -> Unit)? = null
+    var selectedRefreshRate by mutableStateOf<Int?>(null)
+    var refreshRateOptions by mutableStateOf<List<Int>>(emptyList())
+    var onSelectRefreshRate: ((Int?) -> Unit)? = null
     var currentFps by mutableIntStateOf(60)
     var cpuLoad by mutableIntStateOf(24)
     var gpuLoad by mutableIntStateOf(18)
@@ -410,25 +409,11 @@ class ZXSidePanelStateHolder {
             icon = "monitoring",
             category = "addons"
         ),
-        "crosshair" to SidePanelWidgetMeta(
-            id = "crosshair",
-            title = "Crosshair",
-            subtitle = "Custom reticle style, size & color",
-            icon = "my_location",
-            category = "addons"
-        ),
         "displayTouch" to SidePanelWidgetMeta(
             id = "displayTouch",
             title = "Color Scheme",
             subtitle = "Color filters, RGB balance & tuning",
             icon = "display_settings",
-            category = "addons"
-        ),
-        "networkPing" to SidePanelWidgetMeta(
-            id = "networkPing",
-            title = "Network & ping stabilizer",
-            subtitle = "Dual Wi-Fi acceleration & live latency",
-            icon = "wifi_tethering",
             category = "addons"
         ),
         "thermalBattery" to SidePanelWidgetMeta(
@@ -512,12 +497,12 @@ class ZXSidePanelStateHolder {
 
     fun loadWidgetLayoutPreferences() {
         val prefs = boundPrefs ?: return
-        if (prefs.getInt("gs_layout_version", 0) < 2) {
+        if (prefs.getInt("gs_layout_version", 0) < 3) {
             prefs.edit()
                 .putString("gs_global_active_widgets", DEFAULT_ACTIVE_WIDGETS.joinToString(","))
                 .putString("gs_global_library_widgets", DEFAULT_LIBRARY_WIDGETS.joinToString(","))
                 .remove("gs_global_widget_spans")
-                .putInt("gs_layout_version", 2)
+                .putInt("gs_layout_version", 3)
                 .apply()
         }
         hudOffsetX = prefs.getFloat("gs_global_hud_offset_x", 0f)

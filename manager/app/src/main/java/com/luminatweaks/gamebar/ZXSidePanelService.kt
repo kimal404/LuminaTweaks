@@ -406,6 +406,12 @@ class ZXSidePanelService : Service(), LifecycleOwner, ViewModelStoreOwner, Saved
     @Volatile
     private var cachedApplistTimestampMs: Long = 0L
 
+    @Volatile
+    private var manualModeGraceUntilMs: Long = 0L
+
+    @Volatile
+    private var manualProfileGraceUntilMs: Long = 0L
+
     private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         when (key) {
             "gamespace_sidepanel_side" -> {
@@ -919,9 +925,7 @@ class ZXSidePanelService : Service(), LifecycleOwner, ViewModelStoreOwner, Saved
                                 hudView?.post { hudView?.requestLayout() }
                             }
                         },
-                        onCrosshairVisibilityChanged = { visible ->
-                            crosshairView?.visibility = if (visible) View.VISIBLE else View.GONE
-                        }
+                        onCrosshairVisibilityChanged = { }
                     )
                 }
             }
@@ -1331,15 +1335,13 @@ class ZXSidePanelService : Service(), LifecycleOwner, ViewModelStoreOwner, Saved
             hView.alpha = 0f
 
             wm.addView(mainContainer, handleParams)
-            wm.addView(chView, chParams)
             wm.addView(hView, hudParams)
             rootOverlayView = mainContainer
-            crosshairView = chView
+            crosshairView = null
             hudView = hView
             isViewAttached = true
 
             mainContainer.animate().alpha(1f).setDuration(fadeDuration).start()
-            chView.animate().alpha(1f).setDuration(fadeDuration).start()
             hView.animate().alpha(1f).setDuration(fadeDuration).start()
 
             // Dynamically update window layout when switching between sidepanel and full-screen edit mode
@@ -1964,7 +1966,7 @@ class ZXSidePanelService : Service(), LifecycleOwner, ViewModelStoreOwner, Saved
             panelState.fpsCap = maxRate.coerceAtLeast(currentRate)
             val modes = display.supportedModes
                 .map { it.refreshRate.roundToInt() }
-                .filter { it in 60..240 }
+                .filter { it >= 30 }
                 .distinct()
                 .sorted()
             if (modes.isNotEmpty()) {
@@ -1979,9 +1981,18 @@ class ZXSidePanelService : Service(), LifecycleOwner, ViewModelStoreOwner, Saved
         }
     }
 
-    private fun applyRefreshRate(hz: Int) {
+    private fun applyRefreshRate(hz: Int?) {
+        panelState.selectedRefreshRate = hz
         serviceScope.launch(Dispatchers.IO) {
             runCatching {
+                if (hz == null) {
+                    ConfigRepository.setRefreshRate(null)
+                    withContext(Dispatchers.Main) {
+                        updateDisplayRefreshRateCap()
+                        panelState.showToast("Refresh rate: Auto", "display_settings")
+                    }
+                    return@launch
+                }
                 @Suppress("DEPRECATION")
                 val display = windowManager?.defaultDisplay ?: return@launch
                 val mode = display.supportedModes
@@ -1991,6 +2002,7 @@ class ZXSidePanelService : Service(), LifecycleOwner, ViewModelStoreOwner, Saved
                 ConfigRepository.setRefreshRate(mode.modeId)
                 withContext(Dispatchers.Main) {
                     panelState.activeRefreshRate = hz
+                    panelState.showToast("Refresh rate: ${hz}Hz", "display_settings")
                 }
             }
         }
@@ -2107,12 +2119,16 @@ class ZXSidePanelService : Service(), LifecycleOwner, ViewModelStoreOwner, Saved
     }
 
     private fun applyAutoModeToggle(enableAuto: Boolean) {
+        manualModeGraceUntilMs = System.currentTimeMillis() + 5_000L
         serviceScope.launch(Dispatchers.IO) {
             ConfigRepository.setAutoProfile(enableAuto)
         }
     }
 
     private fun applyDaemonProfile(profileCode: String) {
+        val now = System.currentTimeMillis()
+        manualModeGraceUntilMs = now + 5_000L
+        manualProfileGraceUntilMs = now + 5_000L
         serviceScope.launch(Dispatchers.IO) {
             val name = when (profileCode) {
                 "1" -> "Performance"
@@ -2121,7 +2137,13 @@ class ZXSidePanelService : Service(), LifecycleOwner, ViewModelStoreOwner, Saved
                 "4" -> "Maestro"
                 else -> "Balanced"
             }
-            DaemonManager.setProfile(name)
+            runCatching { ConfigRepository.setAutoProfile(false) }
+            val ok = DaemonManager.setProfile(name)
+            if (!ok) {
+                withContext(Dispatchers.Main) {
+                    panelState.showToast("Daemon Lumina tidak aktif", "bolt")
+                }
+            }
         }
     }
 
@@ -2179,9 +2201,14 @@ class ZXSidePanelService : Service(), LifecycleOwner, ViewModelStoreOwner, Saved
                     // 3. Read Battery Level, Charging & Thermal Temperature
                     val batteryInfo = readBatteryAndThermal(rootGranted)
 
+                    val nowPollMs = System.currentTimeMillis()
                     val luminaConfig = telemetryCollector.readLuminaConfig(rootGranted)
-                    val resolvedAuto = luminaConfig?.optBoolean("auto_profile", panelState.isAutoMode)
-                        ?: panelState.isAutoMode
+                    val resolvedAuto = if (nowPollMs < manualModeGraceUntilMs) {
+                        panelState.isAutoMode
+                    } else {
+                        luminaConfig?.optBoolean("auto_profile", panelState.isAutoMode)
+                            ?: panelState.isAutoMode
+                    }
                     val liteEnabled = luminaConfig?.optBoolean("lite_mode_global", false) ?: false
                     val bypassActive = false
 
@@ -2202,12 +2229,18 @@ class ZXSidePanelService : Service(), LifecycleOwner, ViewModelStoreOwner, Saved
                     } ?: false
 
                     val profileRaw = PropertyUtils.get("sys.lumina.profile", "").trim()
-                    val normalizedCode = when (profileRaw.lowercase(Locale.US)) {
-                        "performance", "performa", "performance lite" -> "1"
-                        "balanced" -> "2"
-                        "eco", "powersave", "hemat daya" -> "3"
-                        "maestro" -> "4"
-                        else -> if (profileRaw.isBlank()) panelState.currentProfileCode else "2"
+                    val profileLower = profileRaw.lowercase(Locale.US)
+                    val normalizedCode = if (nowPollMs < manualProfileGraceUntilMs) {
+                        panelState.currentProfileCode
+                    } else {
+                        when {
+                            profileLower.isBlank() -> panelState.currentProfileCode
+                            profileLower.contains("maestro") -> "4"
+                            profileLower.contains("eco") || profileLower.contains("power") || profileLower.contains("hemat") -> "3"
+                            profileLower.contains("perform") -> "1"
+                            profileLower.contains("balanc") -> "2"
+                            else -> panelState.currentProfileCode
+                        }
                     }
 
                     val mappedActiveProfile = when (normalizedCode) {
@@ -3915,10 +3948,8 @@ private fun MainSidepanelContent(
                 val subscreenTitle = when (state.activeSubscreen) {
                     "quickTools" -> "Tools"
                     "antiInterference" -> "Do not disturb"
-                    "networkPing" -> "Network"
                     "thermalBattery" -> "Thermal & battery"
                     "liveMonitor" -> "Live Monitor"
-                    "crosshair" -> "Crosshair settings"
                     "display" -> "Color Scheme"
                     "panelCustomization" -> "Panel Customization"
                     "appsManager" -> if (state.editMode) "Edit Sidepanel Apps" else "More Apps"
@@ -4037,7 +4068,7 @@ private fun MainSidepanelContent(
                 label = "MainFeedSubscreenTransition"
             ) { currentSubscreen ->
                 when (currentSubscreen) {
-                    "quickTools", "antiInterference", "networkPing", "thermalBattery" -> {
+                    "quickTools", "antiInterference", "thermalBattery" -> {
                         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                             SidePanelWidgetContent(widgetId = currentSubscreen, state = state, span = 3)
                         }
@@ -4050,16 +4081,6 @@ private fun MainSidepanelContent(
                                 .verticalScroll(rememberScrollState())
                         ) {
                             LiveMonitorSubscreen(state = state)
-                        }
-                    }
-                    "crosshair" -> {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 4.dp)
-                                .verticalScroll(rememberScrollState())
-                        ) {
-                            CrosshairSubscreen(state = state)
                         }
                     }
                     "display" -> {

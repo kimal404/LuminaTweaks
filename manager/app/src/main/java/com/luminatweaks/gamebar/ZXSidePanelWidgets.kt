@@ -145,9 +145,7 @@ fun SidePanelWidgetContent(
         "quickTools" -> QuickToolsWidget(state, span, overrideTier)
         "antiInterference" -> AntiInterferenceWidget(state, span, overrideTier)
         "liveMonitor" -> LiveMonitorWidget(state, span, overrideTier)
-        "crosshair" -> CrosshairWidget(state, span, overrideTier)
         "displayTouch" -> DisplayTouchWidget(state, span, overrideTier)
-        "networkPing" -> NetworkPingWidget(state, span, overrideTier)
         "thermalBattery" -> ThermalBatteryWidget(state, span, overrideTier)
         "networkClock" -> NetworkClockWidget(state, span, overrideTier)
         "customImage" -> CustomImageWidget(state, span, overrideTier)
@@ -852,7 +850,7 @@ private fun FpsMeterWidget(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Sync Target: 120 Hz",
+                            text = "Sync Target: ${state.activeRefreshRate} Hz",
                             style = MaterialTheme.typography.labelSmall,
                             color = scheme.onSurfaceVariant
                         )
@@ -1402,45 +1400,52 @@ private fun ProfileSegmentedWidget(
                 }
             }
 
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                profiles.forEach { (id, label) ->
-                    val isSelected = state.activeProfile == id
-                    val containerColor by animateColorAsState(
-                        targetValue = if (isSelected) scheme.primaryContainer else scheme.surfaceContainerHigh,
-                        animationSpec = tween(durationMillis = 250),
-                        label = "ProfileContainerColor"
-                    )
-                    val contentColor by animateColorAsState(
-                        targetValue = if (isSelected) scheme.onPrimaryContainer else scheme.onSurface,
-                        animationSpec = tween(durationMillis = 250),
-                        label = "ProfileContentColor"
-                    )
-                    val shape = RoundedCornerShape(16.dp)
-
-                    Surface(
-                        shape = shape,
-                        color = containerColor,
-                        contentColor = contentColor,
-                        modifier = Modifier
-                            .weight(1f)
-                            .graphicsLayer {
-                                alpha = if (!isSelected && state.isAutoMode && state.isRootAvailable) 0.72f else 1f
-                            }
-                            .clip(shape)
-                            .clickable { state.selectPerformanceProfile(id) }
+                profiles.chunked(2).forEach { rowProfiles ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = contentColor,
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp)
-                        )
+                        rowProfiles.forEach { (id, label) ->
+                            val isSelected = state.activeProfile == id
+                            val containerColor by animateColorAsState(
+                                targetValue = if (isSelected) scheme.primaryContainer else scheme.surfaceContainerHigh,
+                                animationSpec = tween(durationMillis = 250),
+                                label = "ProfileContainerColor"
+                            )
+                            val contentColor by animateColorAsState(
+                                targetValue = if (isSelected) scheme.onPrimaryContainer else scheme.onSurface,
+                                animationSpec = tween(durationMillis = 250),
+                                label = "ProfileContentColor"
+                            )
+                            val shape = RoundedCornerShape(14.dp)
+
+                            Surface(
+                                shape = shape,
+                                color = containerColor,
+                                contentColor = contentColor,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .graphicsLayer {
+                                        alpha = if (!isSelected && state.isAutoMode && state.isRootAvailable) 0.72f else 1f
+                                    }
+                                    .clip(shape)
+                                    .clickable { state.selectPerformanceProfile(id) }
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = contentColor,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.padding(vertical = 9.dp, horizontal = 6.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -1466,7 +1471,61 @@ private fun RefreshRateWidget(
     overrideTier: Int? = null
 ) {
     val scheme = MaterialTheme.colorScheme
-    val options = state.refreshRateOptions.ifEmpty { listOf(60) }
+    val detectedModes = state.refreshRateOptions.distinct().sorted()
+    val chips: List<Int?> = buildList {
+        add(null)
+        addAll(detectedModes)
+    }
+
+    if (span == 1) {
+        M3WidgetCard(
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        if (chips.size > 1) {
+                            val idx = chips.indexOf(state.selectedRefreshRate)
+                            val next = chips[(idx + 1) % chips.size]
+                            state.onSelectRefreshRate?.invoke(next)
+                        }
+                    },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = ZXSidePanelIcons.get("display_settings"),
+                    contentDescription = null,
+                    tint = scheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = state.selectedRefreshRate?.let { "${it}Hz" } ?: "Auto",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = scheme.primary,
+                    maxLines = 1,
+                    softWrap = false
+                )
+                Text(
+                    text = "${state.activeRefreshRate} Hz",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
+        }
+        return
+    }
+
+    val statusText = if (state.selectedRefreshRate == null) {
+        "Auto (${state.activeRefreshRate} Hz)"
+    } else {
+        "${state.activeRefreshRate} Hz"
+    }
+
     val inner: @Composable () -> Unit = {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -1494,45 +1553,41 @@ private fun RefreshRateWidget(
                     )
                 }
                 Text(
-                    text = "${state.activeRefreshRate} Hz",
+                    text = statusText,
                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                    color = scheme.primary
+                    color = scheme.primary,
+                    maxLines = 1,
+                    softWrap = false
                 )
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                options.forEach { hz ->
-                    val selected = hz == state.activeRefreshRate
-                    val containerColor by animateColorAsState(
-                        targetValue = if (selected) scheme.primaryContainer else scheme.surfaceContainerHigh,
-                        animationSpec = tween(durationMillis = 220),
-                        label = "RefreshRateChip"
-                    )
-                    val contentColor by animateColorAsState(
-                        targetValue = if (selected) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
-                        animationSpec = tween(durationMillis = 220),
-                        label = "RefreshRateChipText"
-                    )
-                    val shape = RoundedCornerShape(14.dp)
-                    Surface(
-                        shape = shape,
-                        color = containerColor,
-                        contentColor = contentColor,
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(shape)
-                            .clickable { state.onSelectRefreshRate?.invoke(hz) }
-                    ) {
-                        Text(
-                            text = "${hz}Hz",
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = contentColor,
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            modifier = Modifier.padding(vertical = 9.dp, horizontal = 4.dp)
+            if (chips.size <= 4) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    chips.forEach { hz ->
+                        RefreshRateOptionChip(
+                            label = hz?.let { "${it}Hz" } ?: "Auto",
+                            selected = state.selectedRefreshRate == hz,
+                            onClick = { state.onSelectRefreshRate?.invoke(hz) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    chips.forEach { hz ->
+                        RefreshRateOptionChip(
+                            label = hz?.let { "${it}Hz" } ?: "Auto",
+                            selected = state.selectedRefreshRate == hz,
+                            onClick = { state.onSelectRefreshRate?.invoke(hz) },
+                            modifier = Modifier.widthIn(min = 56.dp)
                         )
                     }
                 }
@@ -1546,6 +1601,45 @@ private fun RefreshRateWidget(
         M3WidgetCard(contentPadding = PaddingValues(10.dp)) {
             inner()
         }
+    }
+}
+
+@Composable
+private fun RefreshRateOptionChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    val containerColor by animateColorAsState(
+        targetValue = if (selected) scheme.primaryContainer else scheme.surfaceContainerHigh,
+        animationSpec = tween(durationMillis = 220),
+        label = "RefreshRateChip"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
+        animationSpec = tween(durationMillis = 220),
+        label = "RefreshRateChipText"
+    )
+    val shape = RoundedCornerShape(14.dp)
+    Surface(
+        shape = shape,
+        color = containerColor,
+        contentColor = contentColor,
+        modifier = modifier
+            .clip(shape)
+            .clickable(onClick = onClick)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+            color = contentColor,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.padding(vertical = 9.dp, horizontal = 8.dp)
+        )
     }
 }
 
@@ -4041,24 +4135,7 @@ fun NetworkClockWidget(
                 }
             }
 
-            Surface(
-                shape = CircleShape,
-                color = scheme.surfaceContainerHigh,
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .clickable { state.openSubscreen("networkPing") }
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = "Network",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = scheme.primary
-                    )
-                }
-            }
+
         }
     }
 }
