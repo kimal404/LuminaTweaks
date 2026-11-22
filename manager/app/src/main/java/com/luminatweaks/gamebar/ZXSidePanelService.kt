@@ -523,6 +523,9 @@ class ZXSidePanelService : Service(), LifecycleOwner, ViewModelStoreOwner, Saved
         syncInitialAudioAndBrightness()
         registerHardwareSyncObservers()
         loadInstalledLauncherApps()
+        serviceScope.launch(Dispatchers.IO) {
+            runCatching { ConfigRepository.getAppConfigs() }
+        }
         startAppMonitorWatcher()
         startRealTelemetryMonitor()
     }
@@ -1423,6 +1426,11 @@ class ZXSidePanelService : Service(), LifecycleOwner, ViewModelStoreOwner, Saved
     /** @return true when the service was actually torn down. */
     private fun stopServiceIfIdle(rootGranted: Boolean = checkRootGranted()): Boolean {
         if (isForceSidepanelEnabled() || hasFloatingWindows()) return false
+        if (prefs.getBoolean(PREF_SIDEPANEL_ENABLED, false)) {
+            // Master toggle keeps the watcher alive so the panel can come back on the
+            // next game without another explicit start from the manager UI.
+            return false
+        }
         if (System.currentTimeMillis() < pendingLaunchGraceUntilMs) return false
 
         // Check if daemon/gameinfo has an active game whose process is alive
@@ -1839,9 +1847,17 @@ class ZXSidePanelService : Service(), LifecycleOwner, ViewModelStoreOwner, Saved
             return true
         }
 
-        return prefs.contains("gs_app_${pkg}_lm_enabled") ||
+        if (prefs.contains("gs_app_${pkg}_lm_enabled") ||
             prefs.contains("gs_app_${pkg}_ch_enabled") ||
             prefs.contains("gs_app_${pkg}_disp_filter")
+        ) {
+            return true
+        }
+
+        return runCatching {
+            val info = packageManager.getApplicationInfo(pkg, 0)
+            info.category == android.content.pm.ApplicationInfo.CATEGORY_GAME
+        }.getOrDefault(false)
     }
 
     private fun readLuminaGamePackages(rootGranted: Boolean): Set<String> {
