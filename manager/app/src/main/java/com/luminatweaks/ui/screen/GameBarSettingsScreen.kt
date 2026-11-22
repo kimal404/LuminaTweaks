@@ -529,9 +529,8 @@ private fun GameBarPreview(config: GameBarConfig) {
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    PreviewGauge(size = 30.dp, progress = 0.45f, text = "45%", main = false)
-                    PreviewGauge(size = 38.dp, progress = 0.85f, text = "120", main = true)
-                    PreviewGauge(size = 30.dp, progress = 0.62f, text = "62%", main = false)
+                    PreviewGauge(size = 34.dp, progress = 0.45f, text = "45%", label = "CPU")
+                    PreviewGauge(size = 34.dp, progress = 0.62f, text = "62%", label = "GPU")
                 }
                 Surface(
                     shape = CircleShape,
@@ -709,7 +708,7 @@ private fun PreviewGauge(
     size: Dp,
     progress: Float,
     text: String,
-    main: Boolean
+    label: String
 ) {
     val accent = MaterialTheme.colorScheme.primary
     val track = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
@@ -718,7 +717,7 @@ private fun PreviewGauge(
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val strokeWidth = (if (main) 4.dp else 3.dp).toPx()
+            val strokeWidth = 3.dp.toPx()
             val arcSize = Size(
                 width = this.size.width - strokeWidth,
                 height = this.size.height - strokeWidth
@@ -743,18 +742,24 @@ private fun PreviewGauge(
                 style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
             )
         }
-        Text(
-            text = text,
-            fontSize = if (main) 8.5.sp else 6.sp,
-            fontWeight = FontWeight.Bold,
-            color = if (main) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurface
-            },
-            maxLines = 1,
-            softWrap = false
-        )
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = text,
+                fontSize = 6.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                softWrap = false
+            )
+            Text(
+                text = label,
+                fontSize = 4.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                softWrap = false
+            )
+        }
     }
 }
 

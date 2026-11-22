@@ -199,7 +199,7 @@ private fun GameBarPanel(
     onRefreshRateSelected: (Int?) -> Unit
 ) {
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp
-    val cardHeight = minOf(312.dp, (screenHeight - 24.dp).coerceAtLeast(220.dp))
+    val cardHeight = minOf(306.dp, (screenHeight - 24.dp).coerceAtLeast(220.dp))
 
     Surface(
         modifier = Modifier
@@ -298,16 +298,8 @@ private fun GameBarHeader(onCollapse: () -> Unit) {
 
 @Composable
 private fun MetricGaugeRow(state: GameBarUiState) {
-    val fps = state.fps.coerceAtLeast(0)
-    val targetHz = state.targetHz.coerceAtLeast(1)
     val cpuLoad = (state.cpuPercent ?: 0).coerceIn(0, 100)
     val gpuLoad = (state.gpuPercent ?: 0).coerceIn(0, 100)
-    val fpsProgress = (fps.toFloat() / targetHz.toFloat()).coerceIn(0f, 1f)
-    val frametime = if (state.frametimeMs > 0f) {
-        String.format(Locale.US, "%.1f ms", state.frametimeMs)
-    } else {
-        null
-    }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -315,26 +307,16 @@ private fun MetricGaugeRow(state: GameBarUiState) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         CircularMetricGauge(
-            size = 68.dp,
+            size = 76.dp,
             progress = cpuLoad / 100f,
             primaryText = "$cpuLoad%",
-            label = "CPU",
-            highlighted = false
+            label = "CPU"
         )
         CircularMetricGauge(
-            size = 84.dp,
-            progress = fpsProgress,
-            primaryText = if (fps > 0) fps.toString() else "--",
-            label = "FPS",
-            sublabel = frametime,
-            highlighted = true
-        )
-        CircularMetricGauge(
-            size = 68.dp,
+            size = 76.dp,
             progress = gpuLoad / 100f,
             primaryText = "$gpuLoad%",
-            label = "GPU",
-            highlighted = false
+            label = "GPU"
         )
     }
 }
@@ -344,23 +326,17 @@ private fun CircularMetricGauge(
     size: Dp,
     progress: Float,
     primaryText: String,
-    label: String,
-    sublabel: String? = null,
-    highlighted: Boolean
+    label: String
 ) {
     val trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
-    val accentColor = if (highlighted) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
-    }
+    val accentColor = MaterialTheme.colorScheme.primary
 
     Box(
         modifier = Modifier.size(size),
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val strokeWidth = (if (highlighted) 7.dp else 5.dp).toPx()
+            val strokeWidth = 6.dp.toPx()
             val arcSize = Size(
                 width = this.size.width - strokeWidth,
                 height = this.size.height - strokeWidth
@@ -391,33 +367,20 @@ private fun CircularMetricGauge(
         ) {
             Text(
                 text = primaryText,
-                fontSize = if (highlighted) 24.sp else 15.sp,
+                fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
-                color = if (highlighted) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                },
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 softWrap = false
             )
             Text(
                 text = label,
-                fontSize = if (highlighted) 9.sp else 8.sp,
+                fontSize = 9.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
                 softWrap = false
             )
-            if (!sublabel.isNullOrBlank()) {
-                Text(
-                    text = sublabel,
-                    fontSize = 8.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                    maxLines = 1,
-                    softWrap = false
-                )
-            }
         }
     }
 }
