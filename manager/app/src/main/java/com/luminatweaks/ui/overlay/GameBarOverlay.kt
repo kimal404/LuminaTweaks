@@ -256,7 +256,6 @@ private fun GameBarPanel(
     val isLeft = state.side == GameBarSide.LEFT
     var selectedTab by remember { mutableStateOf(TAB_PERFORMANCE) }
     val railModifier = Modifier
-    val cardModifier = Modifier.weight(1f)
 
     Box(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -289,7 +288,7 @@ private fun GameBarPanel(
                 onToggleLiteMode = onToggleLiteMode,
                 onOpenManager = onOpenManager,
                 onRefreshRateSelected = onRefreshRateSelected,
-                modifier = cardModifier
+                modifier = Modifier.weight(1f)
             )
             if (!isLeft) {
                 GameBarRail(
