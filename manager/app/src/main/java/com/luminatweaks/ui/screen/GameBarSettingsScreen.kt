@@ -1,24 +1,9 @@
-/*
- * Copyright (C) 2026 kimal
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.luminatweaks.ui.screen
 
+import android.graphics.drawable.Drawable
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -43,10 +28,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Bolt
-import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SportsEsports
@@ -77,20 +62,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import android.graphics.drawable.Drawable
-import androidx.core.graphics.drawable.toBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.drawable.toBitmap
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.GameBarConfig
 import com.luminatweaks.data.GameBarPrefs
@@ -132,6 +116,9 @@ fun GameBarSettingsScreen(onBack: () -> Unit) {
     fun save(updated: GameBarConfig) {
         config = updated
         GameBarPrefs.save(context, updated)
+        if (updated.enabled) {
+            GameBarService.sync(context, updated)
+        }
     }
 
     fun setEnabled(enabled: Boolean) {
@@ -143,12 +130,12 @@ fun GameBarSettingsScreen(onBack: () -> Unit) {
                 if (granted) {
                     val updated = config.copy(enabled = true)
                     save(updated)
-                    GameBarService.sync(context, updated)
                 }
             }
         } else {
             val updated = config.copy(enabled = false)
-            save(updated)
+            config = updated
+            GameBarPrefs.save(context, updated)
             GameBarService.sync(context, updated)
         }
     }
@@ -542,9 +529,9 @@ private fun GameBarPreview(config: GameBarConfig) {
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    PreviewGauge(size = 30.dp, progress = 0.45f, text = "45", main = false)
-                    PreviewGauge(size = 38.dp, progress = 0.8f, text = "96", main = true)
-                    PreviewGauge(size = 30.dp, progress = 0.62f, text = "62", main = false)
+                    PreviewGauge(size = 30.dp, progress = 0.45f, text = "45%", main = false)
+                    PreviewGauge(size = 38.dp, progress = 0.85f, text = "120", main = true)
+                    PreviewGauge(size = 30.dp, progress = 0.62f, text = "62%", main = false)
                 }
                 Surface(
                     shape = CircleShape,
@@ -572,7 +559,7 @@ private fun GameBarPreview(config: GameBarConfig) {
                     ).forEach { row ->
                         Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                             row.forEach { label ->
-                                val selected = label == "Balanced"
+                                val selected = label == "Maestro"
                                 Box(
                                     modifier = Modifier
                                         .weight(1f)
@@ -636,7 +623,7 @@ private fun GameBarPreview(config: GameBarConfig) {
                             )
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                            listOf("Auto", "60", "120").forEachIndexed { index, label ->
+                            listOf("Auto", "60 Hz", "120 Hz").forEachIndexed { index, label ->
                                 Box(
                                     modifier = Modifier
                                         .weight(1f)
@@ -758,7 +745,7 @@ private fun PreviewGauge(
         }
         Text(
             text = text,
-            fontSize = if (main) 9.sp else 6.5.sp,
+            fontSize = if (main) 8.5.sp else 6.sp,
             fontWeight = FontWeight.Bold,
             color = if (main) {
                 MaterialTheme.colorScheme.primary
@@ -944,7 +931,7 @@ private fun QuickAppsPickerDialog(
     val context = LocalContext.current
     var apps by remember { mutableStateOf<List<AppItem>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
-    var icons by remember { mutableStateOf<Map<String, ImageBitmap>>(emptyMap()) }
+    var icons by remember { mutableStateOf>(emptyMap()) }
 
     LaunchedEffect(Unit) {
         apps = withContext(Dispatchers.IO) {
