@@ -67,6 +67,5 @@ fn main() {
         luminad_core::log!("[SYSTEM] Binder observer thread failed to start");
     }
 
-    luminad_core::binder::manager_bridge::start();
     binder_ipc::serve(shared);
 }

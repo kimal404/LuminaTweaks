@@ -267,19 +267,6 @@ object DaemonManager {
         runSuCmd(ipcCommand("SET_PROFILE $safe"), 4).contains("OK")
     }
 
-    suspend fun setAutoProfile(enabled: Boolean): Boolean = withContext(Dispatchers.IO) {
-        runSuCmd(ipcCommand("SET_AUTO_PROFILE ${if (enabled) 1 else 0}"), 4).contains("OK")
-    }
-
-    suspend fun getAutoProfileEnabled(): Boolean? = withContext(Dispatchers.IO) {
-        val output = runSuCmd(ipcCommand("GET_AUTO_PROFILE"), 4)
-        when {
-            output.contains("AUTO_PROFILE true", ignoreCase = true) -> true
-            output.contains("AUTO_PROFILE false", ignoreCase = true) -> false
-            else -> null
-        }
-    }
-
     suspend fun getDaemonPid(): String? = withContext(Dispatchers.IO) {
         readPidFromFile() ?: probeDaemon()
     }

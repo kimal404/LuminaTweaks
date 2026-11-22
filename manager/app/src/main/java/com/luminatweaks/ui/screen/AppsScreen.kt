@@ -176,8 +176,7 @@ private suspend fun awaitPagerSettled(pagerState: PagerState?) {
 @Composable
 fun AppsScreen(
     modifier: Modifier = Modifier,
-    pagerState: PagerState? = null,
-    onOpenSessionStats: (() -> Unit)? = null
+    pagerState: PagerState? = null
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current

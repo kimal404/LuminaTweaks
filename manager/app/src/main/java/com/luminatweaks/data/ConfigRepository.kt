@@ -16,83 +16,43 @@
 
 package com.luminatweaks.data
 
-import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Base64
 import com.luminatweaks.model.AppItem
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 
 data class DisplayRrMode(val id: Int, val hz: Int)
-
-data class AngleStatus(
-    val libraries: Boolean = false,
-    val declared: Boolean = false,
-    val packageInstalled: Boolean = false,
-    val settingsKeys: Boolean = false,
-    val usable: Boolean = false,
-    val detail: String = "",
-
-    val known: Boolean = false
-)
 
 data class DetectedGame(val packageName: String, val label: String)
 
 data class TweaksUiState(
     val isGlobalLiteMode: Boolean = false,
-    val isGlobalTextureEnabled: Boolean = false,
     val rrModes: List<DisplayRrMode> = emptyList(),
     val currentRrId: Int? = null,
     val currentRendererId: String = "default",
     val isAutoDnd: Boolean = false,
-    val isAutoProfile: Boolean = true,
     val currentIoScheduler: String = "mq-deadline",
-    val zramSizeGb: Int = 8,
-    val zramAlgorithm: String = "zstd",
-    val swappiness: Int = 100,
     val isLoaded: Boolean = false
 )
 
 object ConfigRepository {
-    private fun normalizeProfileName(raw: String): String {
-        val value = raw.trim()
-        return when (value.lowercase()) {
-            "performance", "performa", "performance lite", "performance_lite",
-            "performance-lite" -> "performance"
-            "" -> "default"
-            else -> value
-        }
-    }
-
-    private fun isPerformanceLiteProfile(raw: String): Boolean = when (raw.trim().lowercase()) {
-        "performance lite", "performance_lite", "performance-lite" -> true
-        else -> false
-    }
-
     private const val CONFIG_DIR = "/data/adb/.config/lumina"
     private const val GLOBAL_CONFIG_PATH = "$CONFIG_DIR/config.json"
     private const val APP_CONFIG_PATH = "$CONFIG_DIR/app_config.json"
     private const val IPC_SOCKET_PRIMARY = "$CONFIG_DIR/lumina.sock"
     private const val IPC_SOCKET_FALLBACK = "/data/local/tmp/lumina_ipc.sock"
     private const val BATCH_SEP = "___LUMINA_SEP___"
-    private const val RECORD_PREFS_NAME = "lumina_session_stats"
-    private const val RECORD_APPS_KEY = "record_packages_set"
-    private const val RECORD_APPS_MIRROR = "record_apps.json"
 
     private val GAMELIST_JSON_CANDIDATES = listOf(
         "/data/adb/.config/lumina/gamelist.json",
@@ -115,9 +75,6 @@ object ConfigRepository {
 
     private val fileMutex = Mutex()
 
-    private val zramPatches = Channel<JSONObject>(Channel.UNLIMITED)
-    private val zramWriterStarted = AtomicBoolean(false)
-
     @Volatile
     var cachedTweaksState: TweaksUiState? = null
 
@@ -135,26 +92,6 @@ object ConfigRepository {
 
     @Volatile
     var customGames: Set<String> = emptySet()
-
-    @Volatile
-    private var cachedRecordApps: Set<String>? = null
-
-    @Volatile
-    private var appContext: Context? = null
-
-    @Volatile
-    private var cachedAngleStatus: AngleStatus? = null
-
-    fun initialize(context: Context) {
-        val app = context.applicationContext
-        appContext = app
-        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-            fileMutex.withLock {
-                val snapshot = readRecordApps(app)
-                persistRecordAppsLocked(app, snapshot)
-            }
-        }
-    }
 
     private fun runSuCmd(cmd: String, timeoutSeconds: Long = 6): String {
         return try {
@@ -237,11 +174,7 @@ object ConfigRepository {
             "echo '$BATCH_SEP'",
             "cat $CONFIG_DIR/current_rr.txt 2>/dev/null",
             "echo '$BATCH_SEP'",
-            "ren=\$(cat $CONFIG_DIR/current_renderer.txt 2>/dev/null); [ -z \"\$ren\" ] && ren=\$(getprop persist.lumina.renderer); [ -z \"\$ren\" ] && ren=\$(getprop debug.hwui.renderer); [ -z \"\$ren\" ] && ren=\"default\"; echo \"\$ren\"",
-            "echo '$BATCH_SEP'",
-            "cat $APP_CONFIG_PATH 2>/dev/null",
-            "echo '$BATCH_SEP'",
-            "dumpsys activity activities 2>/dev/null | grep -m1 -E 'topResumedActivity|mResumedActivity' | sed -n 's/.*{[^ ]* [^ ]* \\([^ \\/}]*\\)[\\/}].*/\\1/p'"
+            "ren=\$(cat $CONFIG_DIR/current_renderer.txt 2>/dev/null); [ -z \"\$ren\" ] && ren=\$(getprop persist.lumina.renderer); [ -z \"\$ren\" ] && ren=\$(getprop debug.hwui.renderer); [ -z \"\$ren\" ] && ren=\"default\"; echo \"\$ren\""
         ).joinToString(" ; ")
 
         val output = runSuCmd(batchScript, 5)
@@ -257,11 +190,7 @@ object ConfigRepository {
 
         val isLite = globalJson?.optBoolean("lite_mode_global", false) ?: false
         val isAutoDnd = globalJson?.optBoolean("auto_dnd", false) ?: false
-        val isAutoProfile = globalJson?.optBoolean("auto_profile", true) ?: true
         val currentIoSched = globalJson?.optString("io_scheduler", "mq-deadline")?.takeIf { it.isNotBlank() } ?: "mq-deadline"
-        val zramSize = globalJson?.optInt("zram_size_gb", 8) ?: 8
-        val zramAlgo = globalJson?.optString("zram_algorithm", "zstd")?.takeIf { it.isNotBlank() } ?: "zstd"
-        val swappiness = globalJson?.optInt("swappiness", 100) ?: 100
 
         val rrModes = if (parts.size > 1 && parts[1].isNotBlank()) {
             try {
@@ -280,47 +209,13 @@ object ConfigRepository {
         val currentRr = if (parts.size > 2) parts[2].toIntOrNull() else null
         val currentRenderer = if (parts.size > 3 && parts[3].isNotBlank()) parts[3] else "default"
 
-        val anglePkgs = mutableSetOf<String>()
-        if (parts.size > 4 && parts[4].isNotBlank()) {
-            try {
-                val arr = JSONArray(parts[4])
-                for (i in 0 until arr.length()) {
-                    val obj = arr.optJSONObject(i) ?: continue
-                    val pkg = obj.optString("pkg").trim()
-                    if (pkg.isEmpty()) continue
-                    val driver = obj.optString("texture_driver", "").trim().lowercase()
-                    val legacyEnabled = obj.optBoolean("texture_enabled", false)
-                    val lod = if (obj.has("texture_lod")) {
-                        obj.optInt("texture_lod", obj.optInt("texture_detail", 0))
-                    } else {
-                        obj.optInt("texture_detail", 0)
-                    }
-                    if (driver == "angle" || legacyEnabled || lod > 0) {
-                        anglePkgs.add(pkg)
-                    }
-                }
-            } catch (_: Exception) {
-                anglePkgs.clear()
-            }
-        }
-
-        val foregroundPkg = if (parts.size > 5) parts[5].trim() else ""
-        val isTextureGlobal = foregroundPkg.isNotEmpty() && anglePkgs.any {
-            it.equals(foregroundPkg, ignoreCase = true)
-        }
-
         val newState = TweaksUiState(
             isGlobalLiteMode = isLite,
-            isGlobalTextureEnabled = isTextureGlobal,
             rrModes = rrModes,
             currentRrId = currentRr,
             currentRendererId = currentRenderer,
             isAutoDnd = isAutoDnd,
-            isAutoProfile = isAutoProfile,
             currentIoScheduler = currentIoSched,
-            zramSizeGb = zramSize,
-            zramAlgorithm = zramAlgo,
-            swappiness = swappiness,
             isLoaded = true
         )
         cachedTweaksState = newState
@@ -364,15 +259,6 @@ object ConfigRepository {
         }
     }
 
-    suspend fun setAutoProfile(enabled: Boolean) = withContext(Dispatchers.IO) {
-        cachedTweaksState = cachedTweaksState?.copy(isAutoProfile = enabled)
-        fileMutex.withLock {
-            updateGlobalConfigInternal { it.put("auto_profile", enabled) }
-            val propVal = if (enabled) "1" else "0"
-            runSuCmd("setprop persist.lumina.autoprofile $propVal", 4)
-        }
-    }
-
     suspend fun setAutoDnd(enabled: Boolean) = withContext(Dispatchers.IO) {
         cachedTweaksState = cachedTweaksState?.copy(isAutoDnd = enabled)
         fileMutex.withLock {
@@ -389,61 +275,6 @@ object ConfigRepository {
         }
     }
 
-    private fun mergeJsonInto(target: JSONObject, source: JSONObject) {
-        val keys = source.keys()
-        while (keys.hasNext()) {
-            val key = keys.next()
-            target.put(key, source.get(key))
-        }
-    }
-
-    private fun enqueueZramPatch(patch: JSONObject) {
-        if (patch.length() == 0) return
-        if (zramWriterStarted.compareAndSet(false, true)) {
-            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-                var merged = JSONObject()
-                for (first in zramPatches) {
-                    mergeJsonInto(merged, first)
-                    while (true) {
-                        val next = withTimeoutOrNull(350L) { zramPatches.receive() } ?: break
-                        mergeJsonInto(merged, next)
-                    }
-                    val snapshot = merged
-                    merged = JSONObject()
-                    fileMutex.withLock {
-                        updateGlobalConfigInternal { json -> mergeJsonInto(json, snapshot) }
-                    }
-                }
-            }
-        }
-        zramPatches.trySend(patch)
-    }
-
-    suspend fun setZramConfig(
-        sizeGb: Int? = null,
-        algorithm: String? = null,
-        swappiness: Int? = null
-    ) = withContext(Dispatchers.IO) {
-        if (sizeGb == null && algorithm == null && swappiness == null) {
-            return@withContext
-        }
-
-        val cached = cachedTweaksState
-        if (cached != null) {
-            cachedTweaksState = cached.copy(
-                zramSizeGb = sizeGb ?: cached.zramSizeGb,
-                zramAlgorithm = algorithm ?: cached.zramAlgorithm,
-                swappiness = swappiness ?: cached.swappiness
-            )
-        }
-
-        val patch = JSONObject()
-        sizeGb?.let { patch.put("zram_size_gb", it) }
-        algorithm?.let { patch.put("zram_algorithm", it) }
-        swappiness?.let { patch.put("swappiness", it) }
-        enqueueZramPatch(patch)
-    }
-
     private fun loadAppConfigsInternal(): Map<String, AppProfileConfig> {
         val content = runSuCmd("cat $APP_CONFIG_PATH 2>/dev/null", 4)
         if (content.isBlank()) return emptyMap()
@@ -455,25 +286,6 @@ object ConfigRepository {
                 val obj = arr.getJSONObject(i)
                 val pkg = obj.optString("pkg")
                 if (pkg.isNotEmpty()) {
-                    val rawDetail = obj.optInt("texture_detail", 0).coerceIn(0, 4)
-                    val resolvedLod = (if (obj.has("texture_lod")) obj.optInt("texture_lod", rawDetail) else rawDetail).coerceIn(0, 4)
-
-                    val rawDriver = obj.optString("texture_driver", "").trim().lowercase()
-                    val legacyEnabled = obj.optBoolean("texture_enabled", false)
-                    val resolvedDriver = when {
-                        rawDriver == "angle" || rawDriver == "native" -> rawDriver
-                        legacyEnabled || resolvedLod > 0 -> "angle"
-                        else -> "native"
-                    }
-                    val resolvedTextureEnabled = resolvedDriver == "angle" || legacyEnabled
-                    val rawProfile = obj.optString("profile", "default")
-                    val rawLite = obj.optString("lite_mode", "default")
-                    val resolvedLite = if (isPerformanceLiteProfile(rawProfile) && rawLite == "default") {
-                        "on"
-                    } else {
-                        rawLite
-                    }
-
                     result[pkg] = AppProfileConfig(
                         pkg = pkg,
                         saklarUtama = obj.optBoolean("saklar_utama", false),
@@ -483,18 +295,10 @@ object ConfigRepository {
                         } else {
                             obj.optBoolean("saklar_utama", false)
                         },
-                        profile = normalizeProfileName(rawProfile),
-                        liteMode = resolvedLite,
+                        liteMode = obj.optString("lite_mode", "default"),
                         refreshRate = obj.optString("refresh_rate", "default"),
                         renderer = obj.optString("renderer", "default"),
-                        dnd = obj.optString("dnd", "default"),
-                        textureDriver = resolvedDriver,
-                        textureLod = resolvedLod,
-                        textureEnabled = resolvedTextureEnabled,
-                        textureDetail = resolvedLod,
-                        pixelSharp = obj.optBoolean("pixel_sharp", false),
-                        hardDistance = obj.optBoolean("hard_distance", false),
-                        recordSession = obj.optBoolean("record_session", false)
+                        dnd = obj.optString("dnd", "default")
                     )
                 }
             }
@@ -509,15 +313,6 @@ object ConfigRepository {
             }
             val loaded = loadAppConfigsInternal()
             cachedAppConfigs = loaded
-            if (appContext != null) {
-
-                val fromProfiles = loaded.values.filter { it.recordSession }.map { it.pkg }.toSet()
-                if (fromProfiles.isNotEmpty()) {
-                    val merged = readRecordApps(appContext!!) + fromProfiles
-                    cachedRecordApps = merged
-                    persistRecordAppsLocked(appContext!!, merged)
-                }
-            }
             refreshGameSets(loaded)
             loaded
         }
@@ -526,32 +321,15 @@ object ConfigRepository {
     private fun persistAppConfigsInternal(configs: Map<String, AppProfileConfig>) {
         val arr = JSONArray()
         for (item in configs.values) {
-            val normalizedLod = (if (item.textureLod > 0) item.textureLod else item.textureDetail).coerceIn(0, 4)
-            val normalizedDriver = when {
-                item.textureDriver.equals("angle", ignoreCase = true) -> "angle"
-                item.textureDriver.equals("native", ignoreCase = true) -> "native"
-                item.textureEnabled || normalizedLod > 0 -> "angle"
-                else -> "native"
-            }
-            val normalizedEnabled = normalizedDriver == "angle" || item.textureEnabled
-
             val obj = JSONObject().apply {
                 put("pkg", item.pkg)
                 put("saklar_utama", item.saklarUtama)
                 put("disabled", item.disabled)
                 put("custom", item.custom)
-                put("profile", normalizeProfileName(item.profile))
                 put("lite_mode", item.liteMode)
                 put("refresh_rate", item.refreshRate)
                 put("renderer", item.renderer)
                 put("dnd", item.dnd)
-                put("texture_driver", normalizedDriver)
-                put("texture_lod", normalizedLod)
-                put("texture_enabled", normalizedEnabled)
-                put("texture_detail", normalizedLod)
-                put("pixel_sharp", item.pixelSharp)
-                put("hard_distance", item.hardDistance)
-                put("record_session", item.recordSession)
             }
             arr.put(obj)
         }
@@ -571,29 +349,8 @@ object ConfigRepository {
 
     suspend fun saveAppConfig(profile: AppProfileConfig) = withContext(Dispatchers.IO) {
         fileMutex.withLock {
-            val normalizedLod = (if (profile.textureLod > 0) profile.textureLod else profile.textureDetail).coerceIn(0, 4)
-            val normalizedDriver = when {
-                profile.textureDriver.equals("angle", ignoreCase = true) -> "angle"
-                profile.textureDriver.equals("native", ignoreCase = true) -> "native"
-                profile.textureEnabled || normalizedLod > 0 -> "angle"
-                else -> "native"
-            }
-            val resolvedLite = if (isPerformanceLiteProfile(profile.profile) && profile.liteMode == "default") {
-                "on"
-            } else {
-                profile.liteMode
-            }
-            val normalizedProfile = profile.copy(
-                profile = normalizeProfileName(profile.profile),
-                liteMode = resolvedLite,
-                textureDriver = normalizedDriver,
-                textureLod = normalizedLod,
-                textureEnabled = normalizedDriver == "angle" || profile.textureEnabled,
-                textureDetail = normalizedLod
-            )
-
             val currentConfigs = (cachedAppConfigs ?: loadAppConfigsInternal()).toMutableMap()
-            currentConfigs[normalizedProfile.pkg] = normalizedProfile
+            currentConfigs[profile.pkg] = profile
             cachedAppConfigs = currentConfigs
             refreshGameSets(currentConfigs)
             persistAppConfigsInternal(currentConfigs)
@@ -817,136 +574,5 @@ object ConfigRepository {
         }
         runSuCmd(cmds.joinToString(" && "), 5)
         notifyDaemonReload()
-    }
-
-    private fun recordAppsPrefs(context: Context) =
-        context.getSharedPreferences(RECORD_PREFS_NAME, Context.MODE_PRIVATE)
-
-    suspend fun getAngleStatus(context: Context): AngleStatus = withContext(Dispatchers.IO) {
-        cachedAngleStatus?.let { return@withContext it }
-
-        val raw = runCatching { LuminaBridge.readAngleStatus(context) }.getOrNull()
-        if (raw.isNullOrBlank()) {
-            return@withContext AngleStatus(known = false)
-        }
-
-        val parsed = runCatching {
-            val obj = JSONObject(raw)
-            AngleStatus(
-                libraries = obj.optBoolean("libraries", false),
-                declared = obj.optBoolean("declared", false),
-                packageInstalled = obj.optBoolean("package", false),
-                settingsKeys = obj.optBoolean("settingsKeys", false),
-                usable = obj.optBoolean("usable", false),
-                detail = obj.optString("detail", ""),
-                known = true
-            )
-        }.getOrNull() ?: return@withContext AngleStatus(known = false)
-
-        cachedAngleStatus = parsed
-        parsed
-    }
-
-    suspend fun recordEnabled(context: Context, packageName: String): Boolean =
-        withContext(Dispatchers.IO) {
-            val pkg = packageName.substringBefore(':').trim()
-            if (pkg.isEmpty()) return@withContext false
-            if (readRecordApps(context).contains(pkg)) return@withContext true
-
-            val fromProfile = (cachedAppConfigs ?: getAppConfigs())[pkg]?.recordSession
-            if (fromProfile == true) {
-                cachedRecordApps = (cachedRecordApps.orEmpty() + pkg)
-                true
-            } else {
-                false
-            }
-        }
-
-    suspend fun setRecordEnabled(
-        context: Context,
-        packageName: String,
-        enabled: Boolean
-    ): Set<String> = withContext(Dispatchers.IO) {
-        val pkg = packageName.substringBefore(':').trim()
-        if (pkg.isEmpty()) return@withContext readRecordApps(context)
-
-        fileMutex.withLock {
-
-            val configs = (cachedAppConfigs ?: loadAppConfigsInternal()).toMutableMap()
-            val existing = configs[pkg]
-            val updatedProfile = (existing ?: AppProfileConfig(pkg = pkg))
-                .copy(recordSession = enabled)
-            if (existing != updatedProfile) {
-                configs[pkg] = updatedProfile
-                cachedAppConfigs = configs
-                runCatching { persistAppConfigsInternal(configs) }
-            }
-
-            val current = readRecordApps(context).toMutableSet()
-            if (enabled) current.add(pkg) else current.remove(pkg)
-            val snapshot = current.toSet()
-            cachedRecordApps = snapshot
-
-            recordAppsPrefs(context)
-                .edit()
-                .putStringSet(RECORD_APPS_KEY, snapshot)
-                .commit()
-
-            persistRecordAppsLocked(context, snapshot)
-            snapshot
-        }
-    }
-
-    private suspend fun persistRecordAppsLocked(context: Context, snapshot: Set<String>) {
-        val json = JSONArray(snapshot.sorted()).toString()
-
-        cachedAppConfigs?.let { cached ->
-            val next = cached.mapValues { (pkg, profile) ->
-                val wanted = snapshot.contains(pkg)
-                if (profile.recordSession == wanted) profile else profile.copy(recordSession = wanted)
-            }
-            cachedAppConfigs = next
-        }
-
-        runCatching {
-            File(context.filesDir, RECORD_APPS_MIRROR).writeText("$json\n")
-        }
-        runCatching { LuminaBridge.writeRecordApps(context, json) }
-    }
-
-    suspend fun getRecordedPackages(context: Context): Set<String> = withContext(Dispatchers.IO) {
-        readRecordApps(context)
-    }
-
-    private suspend fun readRecordApps(context: Context): Set<String> {
-        cachedRecordApps?.let { return it }
-
-        val bridged = runCatching { LuminaBridge.readRecordApps(context) }
-            .getOrNull()
-            ?.takeIf { it.isNotBlank() }
-        parseRecordApps(bridged)?.let { return it }
-
-        val mirror = runCatching {
-            File(context.filesDir, RECORD_APPS_MIRROR).takeIf { it.canRead() }?.readText()
-        }.getOrNull()
-        parseRecordApps(mirror)?.let { return it }
-
-        return recordAppsPrefs(context)
-            .getStringSet(RECORD_APPS_KEY, emptySet())
-            .orEmpty()
-            .toSet()
-    }
-
-    private fun parseRecordApps(raw: String?): Set<String>? {
-        if (raw.isNullOrBlank()) return null
-        return runCatching {
-            val arr = JSONArray(raw.trim())
-            buildSet {
-                for (index in 0 until arr.length()) {
-                    val pkg = arr.optString(index).substringBefore(':').trim()
-                    if (pkg.isNotEmpty()) add(pkg)
-                }
-            }
-        }.getOrNull()
     }
 }

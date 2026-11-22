@@ -25,5 +25,3 @@ pub mod sched;
 pub mod soc;
 pub mod state;
 pub mod thermal;
-pub mod texture;
-pub mod utility;

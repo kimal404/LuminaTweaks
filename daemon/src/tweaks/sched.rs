@@ -201,14 +201,6 @@ fn apply_cpuset_isolation() {
     write_node(&format!("{}/top-app/cpus", CPUSET_DIR), &active_list);
 }
 
-pub fn apply_maestro() {
-    set_split_lock(false);
-    set_sched_features(&["NEXT_BUDDY", "NO_TTWU_QUEUE"]);
-    tune_top_app("1", "1", Some(("75", "max", "1")));
-    tune_touchpanel(true);
-    apply_cpuset_isolation();
-}
-
 pub fn apply_balance() {
     set_split_lock(true);
     set_sched_features(&["NEXT_BUDDY", "TTWU_QUEUE"]);

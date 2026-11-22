@@ -178,43 +178,6 @@ object DeviceUtil {
         }
     }
 
-    fun getTotalRamGb(context: Context): Int {
-        return try {
-            val actManager = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-            val memInfo = android.app.ActivityManager.MemoryInfo()
-            actManager.getMemoryInfo(memInfo)
-            val totalGb = memInfo.totalMem.toDouble() / (1024.0 * 1024.0 * 1024.0)
-            kotlin.math.ceil(totalGb).toInt().coerceAtLeast(2)
-        } catch (_: Exception) {
-            8
-        }
-    }
-
-    fun getCurrentZramDisksizeGb(): Int {
-        val raw = readNodeOrSu("/sys/block/zram0/disksize")
-        val bytes = raw.toLongOrNull() ?: return 8
-        val gb = (bytes.toDouble() / (1024.0 * 1024.0 * 1024.0)).let { kotlin.math.round(it).toInt() }
-        return gb.coerceAtLeast(1)
-    }
-
-    fun getSwappiness(): Int {
-        val raw = readNodeOrSu("/proc/sys/vm/swappiness")
-        return raw.toIntOrNull()?.coerceIn(0, 200) ?: 100
-    }
-
-    fun getActiveZramAlgorithm(): String {
-        val raw = readNodeOrSu("/sys/block/zram0/comp_algorithm")
-        val active = raw.substringAfter('[', "").substringBefore(']', "")
-        return if (active.isNotBlank()) active else "zstd"
-    }
-
-    fun getAvailableZramAlgorithms(): List<String> {
-        val raw = readNodeOrSu("/sys/block/zram0/comp_algorithm")
-        val cleaned = raw.replace("[", "").replace("]", "").trim()
-        val list = cleaned.split(" ", "\t", "\n").filter { it.isNotBlank() }
-        return if (list.isNotEmpty()) list else listOf("zstd", "lz4", "lzo-rle", "lzo")
-    }
-
     fun getAvailableIoSchedulers(): List<String> {
         val schedulers = linkedSetOf<String>()
 

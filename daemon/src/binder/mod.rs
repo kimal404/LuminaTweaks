@@ -34,7 +34,6 @@ pub mod producer;
 mod resolver;
 pub mod client;
 pub mod ipc;
-pub mod manager_bridge;
 pub mod protocol;
 
 use std::ffi::CString;

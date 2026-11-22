@@ -18,7 +18,6 @@ use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Mutex;
@@ -66,8 +65,6 @@ pub struct AppConfig {
     pub dnd: String,
     pub refresh_rate: String,
     pub renderer: String,
-    pub texture_enabled: bool,
-    pub texture_detail: i32,
     pub pixel_sharp: bool,
     pub hard_distance: bool,
     #[serde(default)]
@@ -187,9 +184,6 @@ pub fn invalidate_config_cache() {
         *guard = None;
     }
     if let Ok(mut guard) = CACHED_LITE.lock() {
-        *guard = None;
-    }
-    if let Ok(mut guard) = CACHED_AUTO.lock() {
         *guard = None;
     }
 }
@@ -371,7 +365,6 @@ fn read_master_enabled() -> bool {
 static CACHED_LOW_POWER: Mutex<Option<(Instant, bool)>> = Mutex::new(None);
 static CACHED_MASTER: Mutex<Option<(Instant, bool)>> = Mutex::new(None);
 static CACHED_LITE: Mutex<Option<(Instant, bool)>> = Mutex::new(None);
-static CACHED_AUTO: Mutex<Option<(Instant, bool)>> = Mutex::new(None);
 
 pub fn is_low_power_active() -> bool {
     if let Ok(guard) = CACHED_LOW_POWER.lock() {
@@ -542,117 +535,8 @@ pub fn is_auto_dnd_enabled() -> bool {
     val == "1" || val.eq_ignore_ascii_case("true")
 }
 
-pub fn is_auto_profile_enabled() -> bool {
-    if let Ok(guard) = CACHED_AUTO.lock() {
-        if let Some((at, value)) = *guard {
-            if at.elapsed() < CONFIG_CACHE_TTL {
-                return value;
-            }
-        }
-    }
-
-    let value = read_auto_profile();
-    if let Ok(mut guard) = CACHED_AUTO.lock() {
-        *guard = Some((Instant::now(), value));
-    }
-    value
-}
-
-fn read_auto_profile() -> bool {
-    if let Some(json) = read_global_json() {
-        if let Some(value) = json.get("auto_profile") {
-            return is_truthy(value);
-        }
-    }
-
-    let val = get_system_prop("persist.lumina.autoprofile");
-    if val == "0" || val.eq_ignore_ascii_case("false") {
-        return false;
-    }
-    true
-}
-
-pub fn set_auto_profile(enabled: bool) -> bool {
-    let path = format!("{}/config.json", CONFIG_DIR);
-    let mut object = match fs::read_to_string(&path)
-        .ok()
-        .and_then(|content| serde_json::from_str::<Value>(&content).ok())
-    {
-        Some(Value::Object(map)) => map,
-        _ => serde_json::Map::new(),
-    };
-    object.insert("auto_profile".to_string(), Value::Bool(enabled));
-
-    let _ = fs::create_dir_all(CONFIG_DIR);
-    let content = Value::Object(object).to_string();
-    let temp = format!("{}.tmp", path);
-    if fs::write(&temp, content).is_err() {
-        let _ = fs::remove_file(&temp);
-        return false;
-    }
-    let _ = fs::set_permissions(&temp, fs::Permissions::from_mode(0o644));
-    if fs::rename(&temp, &path).is_err() {
-        let _ = fs::remove_file(&temp);
-        return false;
-    }
-    let _ = Command::new("setprop")
-        .args([
-            "persist.lumina.autoprofile",
-            if enabled { "1" } else { "0" },
-        ])
-        .status();
-    invalidate_config_cache();
-    true
-}
-
 pub fn process_exists(pid: i32) -> bool {
     pid > 0 && Path::new(&format!("/proc/{}", pid)).exists()
-}
-
-pub fn get_global_zram_config() -> (Option<u32>, Option<String>, Option<u32>) {
-    let json = match read_global_json() {
-        Some(j) => j,
-        None => return (None, None, None),
-    };
-
-    let size_gb = json
-        .get("zram_size_gb")
-        .or_else(|| json.get("zram_size"))
-        .or_else(|| json.get("zramSize"))
-        .and_then(|v| {
-            if let Some(n) = v.as_u64() {
-                Some(n as u32)
-            } else if let Some(s) = v.as_str() {
-                s.replace("GB", "")
-                    .replace("gb", "")
-                    .trim()
-                    .parse::<u32>()
-                    .ok()
-            } else {
-                None
-            }
-        });
-
-    let algo = json
-        .get("zram_algorithm")
-        .or_else(|| json.get("zramAlgorithm"))
-        .or_else(|| json.get("zram_algo"))
-        .and_then(|v| v.as_str().map(|s| s.trim().to_string()));
-
-    let swappiness = json
-        .get("swappiness")
-        .or_else(|| json.get("vm_swappiness"))
-        .and_then(|v| {
-            if let Some(n) = v.as_u64() {
-                Some(n as u32)
-            } else if let Some(s) = v.as_str() {
-                s.trim().parse::<u32>().ok()
-            } else {
-                None
-            }
-        });
-
-    (size_gb, algo, swappiness)
 }
 
 pub fn get_global_io_scheduler() -> Option<String> {
@@ -894,21 +778,6 @@ fn extract_app_config(item: &Value) -> AppConfig {
         _ => "default".to_string(),
     };
 
-    let texture_enabled = item
-        .get("texture_enabled")
-        .or_else(|| item.get("textureEnabled"))
-        .map(is_truthy)
-        .unwrap_or(false);
-
-    let texture_detail = match item
-        .get("texture_detail")
-        .or_else(|| item.get("textureDetail"))
-    {
-        Some(Value::Number(n)) => n.as_i64().unwrap_or(0) as i32,
-        Some(Value::String(s)) => s.parse::<i32>().unwrap_or(0),
-        _ => 0,
-    };
-
     let pixel_sharp = item
         .get("pixel_sharp")
         .or_else(|| item.get("pixelSharp"))
@@ -928,8 +797,6 @@ fn extract_app_config(item: &Value) -> AppConfig {
         dnd,
         refresh_rate,
         renderer,
-        texture_enabled,
-        texture_detail,
         pixel_sharp,
         hard_distance,
         disabled_games,
@@ -972,8 +839,6 @@ pub fn get_app_config(pkg: &str) -> Option<AppConfig> {
             dnd: meta.dnd,
             refresh_rate: "default".to_string(),
             renderer: "default".to_string(),
-            texture_enabled: false,
-            texture_detail: 0,
             pixel_sharp: false,
             hard_distance: false,
             disabled_games: global_disabled.clone(),
@@ -988,8 +853,6 @@ pub fn get_app_config(pkg: &str) -> Option<AppConfig> {
             dnd: "default".to_string(),
             refresh_rate: "default".to_string(),
             renderer: "default".to_string(),
-            texture_enabled: false,
-            texture_detail: 0,
             pixel_sharp: false,
             hard_distance: false,
             disabled_games: global_disabled,
