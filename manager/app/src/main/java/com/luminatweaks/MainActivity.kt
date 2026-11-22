@@ -55,9 +55,6 @@ class MainActivity : ComponentActivity() {
         // connection and never shell out to `su`.
         LuminaBridge.start(applicationContext)
         com.luminatweaks.data.ConfigRepository.initialize(applicationContext)
-        if (com.luminatweaks.gamebar.ZXSidePanelService.isSidepanelEnabled(this)) {
-            com.luminatweaks.gamebar.ZXSidePanelService.show(this)
-        }
 
         lifecycleScope.launch(Dispatchers.IO) {
             val pkg = packageName

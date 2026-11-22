@@ -54,30 +54,8 @@
                 android:value="Real-time game FPS and frametime overlay monitor" />
         </service>
 
-        <service
-            android:name=".gamebar.ZXSidePanelService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="In-game game bar side panel, controls, and telemetry" />
-        </service>
 
-        <service
-            android:name=".gamebar.ZXFloatingAppRootService"
-            android:exported="false"
-            tools:ignore="Instantiatable" />
-
-        <receiver
-            android:name=".gamebar.GameBarBootReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-            </intent-filter>
-        </receiver>
-
-        <provider
+<provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.provider"
             android:exported="false"

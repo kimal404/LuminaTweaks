@@ -818,14 +818,18 @@ private class FpsOverlayView(context: Context) : View(context) {
     )
 
     private val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val heroPillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val fpsPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
-    private val extraPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val extraPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    }
     private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
@@ -851,6 +855,7 @@ private class FpsOverlayView(context: Context) : View(context) {
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
 
     private var dragging = false
+    private var lastLayoutSignature = ""
 
     var onDragStart: (() -> Unit)? = null
     var onDrag: ((Float, Float) -> Unit)? = null
@@ -862,24 +867,21 @@ private class FpsOverlayView(context: Context) : View(context) {
         invalidate()
     }
 
-    private val heroPillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private var lastLayoutSignature = ""
-
     fun applyState(config: FloatingFpsConfig, telemetry: LiveFpsTelemetry) {
         val relayout = this.config != config
         this.config = config
         this.telemetry = telemetry
         val scale = config.scale.coerceIn(0.8f, 1.3f)
         val isMinimal = config.style == FpsOverlayStyle.MINIMAL
-        fpsPaint.textSize = (if (isMinimal) 17f else 20f) * scale * scaledDensity
-        extraPaint.textSize = (if (isMinimal) 11.5f else 12.5f) * scale * scaledDensity
-        extraPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        linePaint.strokeWidth = 2.2f * scale * density
-        val lines = stackedLines()
-        val sig = "${config.style}|$scale|${config.showFps}|${fpsLabel()}|${lines.joinToString("|")}"
+        fpsPaint.textSize = (if (isMinimal) 13f else 14.5f) * scale * scaledDensity
+        labelPaint.textSize = 9f * scale * scaledDensity
+        extraPaint.textSize = (if (isMinimal) 11f else 11.5f) * scale * scaledDensity
+        linePaint.strokeWidth = 1.8f * scale * density
+        val items = metricItems()
+        val sig = "${config.style}|$scale|${config.showFps}|${fpsLabel()}|${items.joinToString("|")}"
         contentDescription = buildList {
             if (config.showFps) add("FPS ${fpsLabel()}")
-            addAll(lines)
+            addAll(items)
         }.joinToString(", ")
         if (relayout || sig != lastLayoutSignature) {
             lastLayoutSignature = sig
@@ -890,25 +892,25 @@ private class FpsOverlayView(context: Context) : View(context) {
 
     private fun scale(): Float = config.scale.coerceIn(0.8f, 1.3f)
 
-    private fun stackedLines(): List<String> {
-        val lines = ArrayList<String>(5)
+    private fun metricItems(): List<String> {
+        val items = ArrayList<String>(5)
         if (config.showFrametime) {
             val msText = if (telemetry.fps > 0) String.format(Locale.US, "%.1f ms", telemetry.frametimeMs) else "-- ms"
-            lines.add(msText)
+            items.add(msText)
         }
         if (config.showProfile) {
-            lines.add(telemetry.profileLabel)
+            items.add(telemetry.profileLabel)
         }
         if (config.showCpuCluster) {
-            lines.add(telemetry.cpuClusterLabel)
+            items.add(telemetry.cpuClusterLabel)
         }
         if (config.showTemp) {
-            lines.add(telemetry.tempLabel)
+            items.add(telemetry.tempLabel)
         }
         if (config.showRam) {
-            lines.add(telemetry.ramLabel)
+            items.add(telemetry.ramLabel)
         }
-        return lines
+        return items
     }
 
     private fun textHeight(paint: Paint): Float {
@@ -920,49 +922,49 @@ private class FpsOverlayView(context: Context) : View(context) {
         val s = scale()
         val dp = density * s
         val isMinimal = config.style == FpsOverlayStyle.MINIMAL
-        val padX = (if (isMinimal) 11f else 14f) * dp
-        val padY = (if (isMinimal) 9f else 12f) * dp
-        val rowGap = (if (isMinimal) 4f else 6f) * dp
-        val lines = stackedLines()
+        val padX = (if (isMinimal) 9f else 10f) * dp
+        val padY = (if (isMinimal) 5f else 6f) * dp
+        val itemGap = (if (isMinimal) 6f else 8f) * dp
+        val divW = 1f * dp
+        val items = metricItems()
 
-        var maxInnerWidth = if (isMinimal) 56f * dp else 66f * dp
-        if (config.style == FpsOverlayStyle.GRAPH) {
-            maxInnerWidth = max(maxInnerWidth, 84f * dp)
-        }
-        if (config.showFps) {
-            val dot = (if (isMinimal) 7f else 9f) * dp
-            val pillPadH = if (isMinimal) 0f else 20f * dp
-            val heroW = pillPadH + dot + 7f * dp + fpsPaint.measureText("120")
-            maxInnerWidth = max(maxInnerWidth, heroW)
-        }
-        for (line in lines) {
-            maxInnerWidth = max(maxInnerWidth, extraPaint.measureText(line))
-        }
-
-        val width = maxInnerWidth + padX * 2f
-        var height = padY * 2f
+        var width = padX * 2f
+        var contentH = 0f
         var blockCount = 0
 
         if (config.showFps) {
-            val pillPadV = if (isMinimal) 0f else 8f * dp
-            height += max(textHeight(fpsPaint), 9f * dp) + pillPadV
+            val dot = (if (isMinimal) 6f else 7f) * dp
+            val pillPadH = if (isMinimal) 0f else 8f * dp
+            val pillPadV = if (isMinimal) 0f else 3f * dp
+            val numW = max(fpsPaint.measureText("120"), fpsPaint.measureText(fpsLabel()))
+            val unitW = labelPaint.measureText("FPS")
+            val heroW = pillPadH * 2f + dot + 5f * dp + numW + 3f * dp + unitW
+            val heroH = max(textHeight(fpsPaint), dot) + pillPadV * 2f
+            width += heroW
+            contentH = max(contentH, heroH)
             blockCount++
         }
 
         if (config.style == FpsOverlayStyle.GRAPH) {
-            if (blockCount > 0) height += rowGap
-            height += 22f * dp
+            if (blockCount > 0) width += itemGap
+            width += 52f * dp
+            contentH = max(contentH, 18f * dp)
             blockCount++
         }
 
-        if (lines.isNotEmpty()) {
-            val lineH = textHeight(extraPaint)
-            if (blockCount > 0) height += rowGap
-            height += lines.size * lineH + (lines.size - 1) * rowGap
-        } else if (blockCount == 0) {
-            height += textHeight(fpsPaint)
+        items.forEach { itemText ->
+            if (blockCount > 0) width += itemGap + divW + itemGap
+            width += extraPaint.measureText(itemText)
+            contentH = max(contentH, textHeight(extraPaint))
+            blockCount++
         }
 
+        if (blockCount == 0) {
+            width += 48f * dp
+            contentH = textHeight(fpsPaint)
+        }
+
+        val height = contentH + padY * 2f
         setMeasuredDimension(
             resolveSize(width.roundToInt().coerceAtLeast(1), widthMeasureSpec),
             resolveSize(height.roundToInt().coerceAtLeast(1), heightMeasureSpec)
@@ -983,59 +985,76 @@ private class FpsOverlayView(context: Context) : View(context) {
 
         backgroundPaint.color = palette.background
         backgroundPaint.alpha = (alpha * 255f).roundToInt().coerceIn(0, 255)
-        val radius = (if (isMinimal) 16f else 22f) * dp
+        val radius = if (isMinimal) 14f * dp else h / 2f
         rect.set(0f, 0f, w, h)
         canvas.drawRoundRect(rect, radius, radius, backgroundPaint)
 
-        val padX = (if (isMinimal) 11f else 14f) * dp
-        val padY = (if (isMinimal) 9f else 12f) * dp
-        val rowGap = (if (isMinimal) 4f else 6f) * dp
-        var cursorY = padY
+        val padX = (if (isMinimal) 9f else 10f) * dp
+        val itemGap = (if (isMinimal) 6f else 8f) * dp
+        val divW = 1f * dp
+        val cy = h / 2f
+        var cursorX = padX
         var hasDrawnBlock = false
 
         if (config.showFps) {
-            val dot = (if (isMinimal) 7f else 9f) * dp
-            val pillPadV = if (isMinimal) 0f else 4f * dp
-            val pillPadH = if (isMinimal) 0f else 10f * dp
+            val dot = (if (isMinimal) 6f else 7f) * dp
+            val pillPadH = if (isMinimal) 0f else 8f * dp
+            val pillPadV = if (isMinimal) 0f else 3f * dp
+            val numW = max(fpsPaint.measureText("120"), fpsPaint.measureText(fpsLabel()))
+            val unitW = labelPaint.measureText("FPS")
+            val heroW = pillPadH * 2f + dot + 5f * dp + numW + 3f * dp + unitW
             val heroH = max(textHeight(fpsPaint), dot) + pillPadV * 2f
 
             if (!isMinimal) {
                 heroPillPaint.color = status
-                heroPillPaint.alpha = 38
-                rect.set(padX, cursorY, w - padX, cursorY + heroH)
-                canvas.drawRoundRect(rect, 13f * dp, 13f * dp, heroPillPaint)
+                heroPillPaint.alpha = 40
+                rect.set(cursorX, cy - heroH / 2f, cursorX + heroW, cy + heroH / 2f)
+                canvas.drawRoundRect(rect, heroH / 2f, heroH / 2f, heroPillPaint)
             }
 
-            val cy = cursorY + heroH / 2f
-            val contentStart = padX + pillPadH
+            var x = cursorX + pillPadH
             dotPaint.color = status
-            canvas.drawCircle(contentStart + dot / 2f, cy, dot / 2f, dotPaint)
+            canvas.drawCircle(x + dot / 2f, cy, dot / 2f, dotPaint)
+            x += dot + 5f * dp
 
             fpsPaint.color = status
-            drawCentered(canvas, fpsLabel(), fpsPaint, contentStart + dot + 7f * dp, cy)
-            cursorY += heroH
+            drawCentered(canvas, fpsLabel(), fpsPaint, x, cy)
+            x += numW + 3f * dp
+
+            labelPaint.color = status
+            labelPaint.alpha = 215
+            drawCentered(canvas, "FPS", labelPaint, x, cy)
+
+            cursorX += heroW
             hasDrawnBlock = true
         }
 
         if (config.style == FpsOverlayStyle.GRAPH) {
-            if (hasDrawnBlock) cursorY += rowGap
-            val graphH = 22f * dp
+            if (hasDrawnBlock) cursorX += itemGap
+            val graphW = 52f * dp
+            val graphH = 18f * dp
             if (telemetry.fps > 0) {
-                drawSparkline(canvas, padX, cursorY, w - padX, cursorY + graphH, status, dp)
+                drawSparkline(canvas, cursorX, cy - graphH / 2f, cursorX + graphW, cy + graphH / 2f, status)
             }
-            cursorY += graphH
+            cursorX += graphW
             hasDrawnBlock = true
         }
 
-        val lines = stackedLines()
-        if (lines.isNotEmpty()) {
-            val lineH = textHeight(extraPaint)
+        val items = metricItems()
+        if (items.isNotEmpty()) {
             extraPaint.color = palette.onSurface
-            lines.forEachIndexed { index, itemText ->
-                if (hasDrawnBlock || index > 0) cursorY += rowGap
-                val cy = cursorY + lineH / 2f
-                drawCentered(canvas, itemText, extraPaint, padX, cy)
-                cursorY += lineH
+            dividerPaint.color = palette.onSurface
+            dividerPaint.alpha = 56
+            val divH = 10f * dp
+            items.forEach { itemText ->
+                if (hasDrawnBlock) {
+                    cursorX += itemGap
+                    canvas.drawRect(cursorX, cy - divH / 2f, cursorX + divW, cy + divH / 2f, dividerPaint)
+                    cursorX += divW + itemGap
+                }
+                drawCentered(canvas, itemText, extraPaint, cursorX, cy)
+                cursorX += extraPaint.measureText(itemText)
+                hasDrawnBlock = true
             }
         }
     }
@@ -1054,8 +1073,7 @@ private class FpsOverlayView(context: Context) : View(context) {
         top: Float,
         right: Float,
         bottom: Float,
-        color: Int,
-        dp: Float
+        color: Int
     ) {
         val samples = telemetry.history
         if (samples.size < 2 || right <= left || bottom <= top) return

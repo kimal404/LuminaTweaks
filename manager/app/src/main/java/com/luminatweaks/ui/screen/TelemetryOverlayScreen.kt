@@ -335,7 +335,7 @@ private fun FpsOverlayPreviewBadge(
     )
     val textColor = MaterialTheme.colorScheme.onSurface
 
-    val lines = remember(config, telemetry) {
+    val items = remember(config, telemetry) {
         buildList {
             if (config.showFrametime) add(String.format(Locale.US, "%.1f ms", telemetry.frametimeMs))
             if (config.showProfile) add(telemetry.profileLabel)
@@ -345,35 +345,47 @@ private fun FpsOverlayPreviewBadge(
         }
     }
 
-    val cardShape = RoundedCornerShape(if (isMinimal) 16.dp else 22.dp)
+    val cardShape = if (isMinimal) RoundedCornerShape(14.dp) else CircleShape
 
     Surface(
         shape = cardShape,
         color = containerColor,
         shadowElevation = 3.dp
     ) {
-        Column(
+        Row(
             modifier = Modifier.padding(
-                horizontal = if (isMinimal) 11.dp else 14.dp,
-                vertical = if (isMinimal) 9.dp else 12.dp
+                horizontal = if (isMinimal) 9.dp else 10.dp,
+                vertical = if (isMinimal) 5.dp else 6.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(if (isMinimal) 4.dp else 6.dp)
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(if (isMinimal) 6.dp else 8.dp)
         ) {
             if (config.showFps) {
                 val heroContent: @Composable () -> Unit = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .size(if (isMinimal) 7.dp else 9.dp)
+                                .size(if (isMinimal) 6.dp else 7.dp)
                                 .clip(CircleShape)
                                 .background(statusColor)
                         )
-                        Spacer(modifier = Modifier.width(7.dp))
+                        Spacer(modifier = Modifier.width(5.dp))
                         Text(
                             text = "${telemetry.fps}",
-                            style = if (isMinimal) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLargeEmphasized,
+                            fontSize = if (isMinimal) 13.sp else 14.sp,
+                            fontWeight = FontWeight.Bold,
                             color = statusColor,
-                            maxLines = 1
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = "FPS",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = statusColor.copy(alpha = 0.85f),
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
                 }
@@ -383,9 +395,9 @@ private fun FpsOverlayPreviewBadge(
                 } else {
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(13.dp))
-                            .background(statusColor.copy(alpha = 0.15f))
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                            .clip(CircleShape)
+                            .background(statusColor.copy(alpha = 0.16f))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         heroContent()
                     }
@@ -397,18 +409,27 @@ private fun FpsOverlayPreviewBadge(
                     samples = telemetry.history,
                     lineColor = statusColor,
                     modifier = Modifier
-                        .width(84.dp)
-                        .height(22.dp)
+                        .width(52.dp)
+                        .height(18.dp)
                 )
             }
 
-            lines.forEach { itemText ->
+            items.forEachIndexed { index, itemText ->
+                if (index > 0 || config.showFps || config.style == FpsOverlayStyle.GRAPH) {
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .height(10.dp)
+                            .background(textColor.copy(alpha = 0.22f))
+                    )
+                }
                 Text(
                     text = itemText,
-                    fontSize = 12.sp,
+                    fontSize = if (isMinimal) 11.sp else 11.5.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = textColor,
-                    maxLines = 1
+                    maxLines = 1,
+                    softWrap = false
                 )
             }
         }
