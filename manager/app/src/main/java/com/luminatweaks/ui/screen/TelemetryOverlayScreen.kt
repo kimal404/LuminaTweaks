@@ -23,6 +23,8 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,13 +44,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.rounded.DeveloperBoard
-import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Speed
@@ -60,7 +62,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -69,15 +70,14 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -85,17 +85,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -104,24 +97,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luminatweaks.R
 import com.luminatweaks.ui.component.LuminaBackButton
-import com.luminatweaks.ui.component.appBarFade
 import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.component.rememberSliderHaptics
 import java.util.Locale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-
-enum class FpsOverlayStyle(val key: String) {
-    PILL("pill"),
-    GRAPH("graph"),
-    MINIMAL("minimal");
-
-    companion object {
-        fun fromKey(raw: String?): FpsOverlayStyle =
-            entries.firstOrNull { it.key.equals(raw, ignoreCase = true) } ?: PILL
-    }
-}
 
 enum class FpsOverlayCorner(val key: String, val alignment: Alignment) {
     TOP_LEFT("top_left", Alignment.TopStart),
@@ -137,10 +118,8 @@ enum class FpsOverlayCorner(val key: String, val alignment: Alignment) {
 
 data class FloatingFpsConfig(
     val enabled: Boolean = false,
-    val style: FpsOverlayStyle = FpsOverlayStyle.PILL,
     val corner: FpsOverlayCorner = FpsOverlayCorner.TOP_RIGHT,
     val autoGame: Boolean = true,
-    val touchLock: Boolean = false,
     val showFps: Boolean = true,
     val showFrametime: Boolean = true,
     val showCpuCluster: Boolean = false,
@@ -169,10 +148,8 @@ object FloatingFpsPrefs {
         val sp = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
         return FloatingFpsConfig(
             enabled = sp.getBoolean("enabled", false),
-            style = FpsOverlayStyle.fromKey(sp.getString("style", FpsOverlayStyle.PILL.key)),
             corner = FpsOverlayCorner.fromKey(sp.getString("corner", FpsOverlayCorner.TOP_RIGHT.key)),
             autoGame = sp.getBoolean("auto_game", true),
-            touchLock = sp.getBoolean("touch_lock", false),
             showFps = sp.getBoolean("show_fps", true),
             showFrametime = sp.getBoolean("show_frametime", true),
             showCpuCluster = sp.getBoolean("show_cpu_cluster", false),
@@ -188,10 +165,8 @@ object FloatingFpsPrefs {
     fun save(context: Context, config: FloatingFpsConfig) {
         context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit()
             .putBoolean("enabled", config.enabled)
-            .putString("style", config.style.key)
             .putString("corner", config.corner.key)
             .putBoolean("auto_game", config.autoGame)
-            .putBoolean("touch_lock", config.touchLock)
             .putBoolean("show_fps", config.showFps)
             .putBoolean("show_frametime", config.showFrametime)
             .putBoolean("show_cpu_cluster", config.showCpuCluster)
@@ -212,8 +187,7 @@ private data class SimulatedFpsTelemetry(
     val cpuClusterLabel: String = "3.2 GHz",
     val tempLabel: String = "38.1°C",
     val ramLabel: String = "54%",
-    val profileLabel: String = "Balanced",
-    val history: List<Float> = listOf(8.3f, 8.4f, 8.2f, 8.3f, 8.5f, 8.3f, 8.2f, 8.3f, 8.4f, 8.3f, 8.2f, 8.3f)
+    val profileLabel: String = "Balanced"
 )
 
 @Composable
@@ -223,69 +197,54 @@ private fun rememberSimulatedFpsTelemetry(
     active: Boolean = true
 ): SimulatedFpsTelemetry {
     val safeTarget = targetHz.coerceAtLeast(60)
-    val baseFrameMs = 1000f / safeTarget.toFloat()
     var tick by remember { mutableIntStateOf(0) }
-    var history by remember(safeTarget) {
-        mutableStateOf(List(16) { baseFrameMs })
-    }
 
     LaunchedEffect(active, intervalMs, safeTarget) {
         if (!active) return@LaunchedEffect
-        val pattern = intArrayOf(0, 0, -1, 0, 0, -2, 0, 0, -1, 0, 0, 0)
         while (isActive) {
             delay(intervalMs.toLong())
-            val delta = pattern[tick % pattern.size]
-            val currentFps = (safeTarget + delta).coerceAtLeast(1)
-            val currentMs = (1000f / currentFps.toFloat())
-            history = (history.drop(1) + currentMs)
             tick += 1
         }
     }
 
-    val latestMs = history.lastOrNull() ?: baseFrameMs
-    val latestFps = (1000f / latestMs).roundToInt().coerceIn(1, safeTarget)
+    val pattern = intArrayOf(0, 0, -1, 0, 0, -2, 0, 0, -1, 0, 0, 0)
+    val delta = pattern[tick % pattern.size]
+    val currentFps = (safeTarget + delta).coerceIn(1, safeTarget)
+    val currentMs = 1000f / currentFps.toFloat()
+
     return SimulatedFpsTelemetry(
-        fps = latestFps,
+        fps = currentFps,
         targetHz = safeTarget,
-        frametimeMs = latestMs,
-        history = history
+        frametimeMs = currentMs
     )
 }
 
 @Composable
-internal fun fpsStyleLabel(style: FpsOverlayStyle): String = when (style) {
-    FpsOverlayStyle.PILL -> localizedLabel("Kapsul", "Pill")
-    FpsOverlayStyle.GRAPH -> localizedLabel("Grafik", "Graph")
-    FpsOverlayStyle.MINIMAL -> localizedLabel("Minimalis", "Minimal")
-}
-
-@Composable
-internal fun fpsCornerLabel(corner: FpsOverlayCorner): String = when (corner) {
-    FpsOverlayCorner.TOP_LEFT -> localizedLabel("Kiri Atas", "Top Left")
-    FpsOverlayCorner.TOP_RIGHT -> localizedLabel("Kanan Atas", "Top Right")
-    FpsOverlayCorner.BOTTOM_LEFT -> localizedLabel("Kiri Bawah", "Bottom Left")
-    FpsOverlayCorner.BOTTOM_RIGHT -> localizedLabel("Kanan Bawah", "Bottom Right")
+internal fun fpsCornerShortLabel(corner: FpsOverlayCorner): String = when (corner) {
+    FpsOverlayCorner.TOP_LEFT -> localizedLabel("Kiri Atas", "Top L")
+    FpsOverlayCorner.TOP_RIGHT -> localizedLabel("Kanan Atas", "Top R")
+    FpsOverlayCorner.BOTTOM_LEFT -> localizedLabel("Kiri Bawah", "Bot L")
+    FpsOverlayCorner.BOTTOM_RIGHT -> localizedLabel("Kanan Bawah", "Bot R")
 }
 
 @Composable
 private fun FpsViewportStage(
     config: FloatingFpsConfig,
-    telemetry: SimulatedFpsTelemetry,
-    heightDp: Int
+    telemetry: SimulatedFpsTelemetry
 ) {
     val gridColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(heightDp.dp)
-            .clip(RoundedCornerShape(18.dp))
+            .height(104.dp)
+            .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clipToBounds()
-            .padding(12.dp)
+            .padding(10.dp)
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val step = 20.dp.toPx()
+            val step = 18.dp.toPx()
             var x = step
             while (x < size.width) {
                 drawLine(gridColor, Offset(x, 0f), Offset(x, size.height), strokeWidth = 1f)
@@ -301,6 +260,7 @@ private fun FpsViewportStage(
         Box(
             modifier = Modifier
                 .align(config.corner.alignment)
+                .horizontalScroll(rememberScrollState())
                 .graphicsLayer {
                     scaleX = config.scale
                     scaleY = config.scale
@@ -329,10 +289,7 @@ private fun FpsOverlayPreviewBadge(
         targetValue = targetStatusColor,
         label = "fpsStatusColor"
     )
-    val isMinimal = config.style == FpsOverlayStyle.MINIMAL
-    val containerColor = MaterialTheme.colorScheme.surface.copy(
-        alpha = if (isMinimal) (config.bgAlpha * 0.80f).coerceIn(0.25f, 0.92f) else config.bgAlpha
-    )
+    val containerColor = MaterialTheme.colorScheme.surface.copy(alpha = config.bgAlpha)
     val textColor = MaterialTheme.colorScheme.onSurface
 
     val items = remember(config, telemetry) {
@@ -345,34 +302,34 @@ private fun FpsOverlayPreviewBadge(
         }
     }
 
-    val cardShape = if (isMinimal) RoundedCornerShape(14.dp) else CircleShape
-
     Surface(
-        shape = cardShape,
+        shape = CircleShape,
         color = containerColor,
         shadowElevation = 3.dp
     ) {
         Row(
-            modifier = Modifier.padding(
-                horizontal = if (isMinimal) 9.dp else 10.dp,
-                vertical = if (isMinimal) 5.dp else 6.dp
-            ),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(if (isMinimal) 6.dp else 8.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (config.showFps) {
-                val heroContent: @Composable () -> Unit = {
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(statusColor.copy(alpha = 0.16f))
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .size(if (isMinimal) 6.dp else 7.dp)
+                                .size(7.dp)
                                 .clip(CircleShape)
                                 .background(statusColor)
                         )
                         Spacer(modifier = Modifier.width(5.dp))
                         Text(
                             text = "${telemetry.fps}",
-                            fontSize = if (isMinimal) 13.sp else 14.sp,
+                            fontSize = 13.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = statusColor,
                             maxLines = 1,
@@ -389,33 +346,10 @@ private fun FpsOverlayPreviewBadge(
                         )
                     }
                 }
-
-                if (isMinimal) {
-                    heroContent()
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(statusColor.copy(alpha = 0.16f))
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
-                        heroContent()
-                    }
-                }
-            }
-
-            if (config.style == FpsOverlayStyle.GRAPH) {
-                FrametimeSparkline(
-                    samples = telemetry.history,
-                    lineColor = statusColor,
-                    modifier = Modifier
-                        .width(52.dp)
-                        .height(18.dp)
-                )
             }
 
             items.forEachIndexed { index, itemText ->
-                if (index > 0 || config.showFps || config.style == FpsOverlayStyle.GRAPH) {
+                if (index > 0 || config.showFps) {
                     Box(
                         modifier = Modifier
                             .width(1.dp)
@@ -425,7 +359,7 @@ private fun FpsOverlayPreviewBadge(
                 }
                 Text(
                     text = itemText,
-                    fontSize = if (isMinimal) 11.sp else 11.5.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = textColor,
                     maxLines = 1,
@@ -433,55 +367,6 @@ private fun FpsOverlayPreviewBadge(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun FrametimeSparkline(
-    samples: List<Float>,
-    lineColor: Color,
-    modifier: Modifier = Modifier
-) {
-    Canvas(modifier = modifier) {
-        if (samples.size < 2 || size.width <= 0f || size.height <= 0f) return@Canvas
-        val minVal = (samples.minOrNull() ?: 8f) - 1.5f
-        val maxVal = (samples.maxOrNull() ?: 16f) + 1.5f
-        val span = (maxVal - minVal).coerceAtLeast(1f)
-        val stepX = size.width / (samples.size - 1).toFloat()
-
-        val linePath = Path()
-        val fillPath = Path()
-        samples.forEachIndexed { index, value ->
-            val x = index * stepX
-            val normalized = ((value - minVal) / span).coerceIn(0f, 1f)
-            val y = size.height * (1f - normalized * 0.82f - 0.09f)
-            if (index == 0) {
-                linePath.moveTo(x, y)
-                fillPath.moveTo(x, size.height)
-                fillPath.lineTo(x, y)
-            } else {
-                linePath.lineTo(x, y)
-                fillPath.lineTo(x, y)
-            }
-        }
-        fillPath.lineTo(size.width, size.height)
-        fillPath.close()
-
-        drawPath(
-            path = fillPath,
-            brush = Brush.verticalGradient(
-                colors = listOf(lineColor.copy(alpha = 0.28f), Color.Transparent)
-            )
-        )
-        drawPath(
-            path = linePath,
-            color = lineColor,
-            style = Stroke(
-                width = 2.dp.toPx(),
-                cap = StrokeCap.Round,
-                join = StrokeJoin.Round
-            )
-        )
     }
 }
 
@@ -502,22 +387,19 @@ internal fun TelemetryOverlayScreen(
     var scaleDraft by remember(config.scale) { mutableFloatStateOf(config.scale) }
     var alphaDraft by remember(config.bgAlpha) { mutableFloatStateOf(config.bgAlpha) }
 
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val fadeSurface = MaterialTheme.colorScheme.background
 
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         contentWindowInsets = WindowInsets(0.dp),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .appBarFade(fadeSurface, scrollBehavior.state.overlappedFraction)
+                    .background(MaterialTheme.colorScheme.background)
                     .statusBarsPadding()
             ) {
-                LargeFlexibleTopAppBar(
+                TopAppBar(
                     navigationIcon = {
                         LuminaBackButton(
                             onBack = onBack,
@@ -533,10 +415,8 @@ internal fun TelemetryOverlayScreen(
                         )
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent,
-                        scrolledContainerColor = Color.Transparent
+                        containerColor = MaterialTheme.colorScheme.background
                     ),
-                    scrollBehavior = scrollBehavior,
                     windowInsets = WindowInsets(0, 0, 0, 0)
                 )
             }
@@ -545,60 +425,26 @@ internal fun TelemetryOverlayScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding(),
+                top = innerPadding.calculateTopPadding() + 4.dp,
                 bottom = 28.dp + navInset,
                 start = 16.dp,
                 end = 16.dp
-            )
+            ),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item(key = "header_preview") {
-                HudSectionHeader(title = localizedLabel("Pratinjau & Gaya", "Preview & Style"))
-            }
-
-            item(key = "group_preview") {
+            item(key = "group_main") {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Column(
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(connectedContainerShape(index = 0, count = 2))
                             .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
-                            .padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                            .padding(12.dp)
                     ) {
                         FpsViewportStage(
                             config = config,
-                            telemetry = telemetry,
-                            heightDp = 152
+                            telemetry = telemetry
                         )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            FpsOverlayStyle.entries.forEachIndexed { index, style ->
-                                val shapes = when (index) {
-                                    0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
-                                    FpsOverlayStyle.entries.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
-                                    else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
-                                }
-                                ToggleButton(
-                                    checked = config.style == style,
-                                    onCheckedChange = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        onConfigChange(config.copy(style = style))
-                                    },
-                                    shapes = shapes,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text(
-                                        text = fpsStyleLabel(style),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1
-                                    )
-                                }
-                            }
-                        }
                     }
 
                     HudSwitchRow(
@@ -607,7 +453,7 @@ internal fun TelemetryOverlayScreen(
                         icon = Icons.Rounded.Speed,
                         title = localizedLabel("Aktifkan Floating HUD", "Enable Floating HUD"),
                         subtitle = if (config.enabled) {
-                            localizedLabel("Tampilkan overlay di atas aplikasi", "Display overlay above apps")
+                            localizedLabel("Overlay aktif di atas layar", "Overlay active on screen")
                         } else {
                             localizedLabel("Nonaktif", "Disabled")
                         },
@@ -620,20 +466,16 @@ internal fun TelemetryOverlayScreen(
                 }
             }
 
-            item(key = "header_automation") {
-                HudSectionHeader(title = localizedLabel("Otomatisasi & Posisi", "Automation & Position"))
-            }
-
-            item(key = "group_automation") {
+            item(key = "group_behavior") {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     HudSwitchRow(
                         index = 0,
-                        count = 3,
+                        count = 2,
                         icon = Icons.Rounded.SportsEsports,
                         title = localizedLabel("Deteksi Game Otomatis", "Automatic Game Detection"),
                         subtitle = localizedLabel(
-                            "Aktif otomatis saat menjalankan aplikasi dalam daftar game",
-                            "Activate automatically when running apps in the game list"
+                            "Muncul otomatis saat membuka game",
+                            "Show automatically when launching a game"
                         ),
                         checked = config.autoGame,
                         onCheckedChange = { autoGame ->
@@ -642,89 +484,78 @@ internal fun TelemetryOverlayScreen(
                         }
                     )
 
-                    HudSwitchRow(
-                        index = 1,
-                        count = 3,
-                        icon = Icons.Rounded.Lock,
-                        title = localizedLabel("Kunci Sentuhan", "Touch Pass-Through"),
-                        subtitle = localizedLabel(
-                            "Teruskan sentuhan ke layar di bawah overlay",
-                            "Pass touch input through to the screen beneath"
-                        ),
-                        checked = config.touchLock,
-                        onCheckedChange = { touchLock ->
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            onConfigChange(config.copy(touchLock = touchLock))
-                        }
-                    )
-
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(connectedContainerShape(index = 2, count = 3))
+                            .clip(connectedContainerShape(index = 1, count = 2))
                             .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             HudSquircleIcon(icon = Icons.Rounded.Tune)
-                            Spacer(modifier = Modifier.width(16.dp))
+                            Spacer(modifier = Modifier.width(14.dp))
                             Text(
-                                text = localizedLabel("Posisi Awal", "Initial Anchor"),
+                                text = localizedLabel("Posisi Awal", "Initial Position"),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         }
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            FpsOverlayCorner.entries.forEach { corner ->
-                                FilterChip(
-                                    selected = config.corner == corner,
-                                    onClick = {
+                            FpsOverlayCorner.entries.forEachIndexed { index, corner ->
+                                val shapes = when (index) {
+                                    0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                                    FpsOverlayCorner.entries.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                                    else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
+                                }
+                                ToggleButton(
+                                    checked = config.corner == corner,
+                                    onCheckedChange = {
                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                         onConfigChange(config.copy(corner = corner))
                                     },
-                                    label = {
-                                        Text(
-                                            text = fpsCornerLabel(corner),
-                                            style = MaterialTheme.typography.labelMedium
-                                        )
-                                    }
-                                )
+                                    shapes = shapes,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = fpsCornerShortLabel(corner),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
 
-            item(key = "header_appearance") {
-                HudSectionHeader(title = localizedLabel("Tampilan & Metrik", "Appearance & Metrics"))
-            }
-
-            item(key = "group_appearance") {
+            item(key = "group_metrics") {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(connectedContainerShape(index = 0, count = 4))
                             .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             HudSquircleIcon(icon = Icons.Rounded.Palette)
-                            Spacer(modifier = Modifier.width(16.dp))
+                            Spacer(modifier = Modifier.width(14.dp))
                             Text(
-                                text = localizedLabel("Metrik Aktif", "Active Metrics"),
+                                text = localizedLabel("Metrik Tampil", "Visible Metrics"),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             FilterChip(
                                 selected = config.showFps,
@@ -744,7 +575,7 @@ internal fun TelemetryOverlayScreen(
                                         onConfigChange(config.copy(showFrametime = !config.showFrametime))
                                     }
                                 },
-                                label = { Text("Frametime (ms)") }
+                                label = { Text("Frametime") }
                             )
                             FilterChip(
                                 selected = config.showCpuCluster,
@@ -841,8 +672,8 @@ internal fun TelemetryOverlayScreen(
                             .fillMaxWidth()
                             .clip(connectedContainerShape(index = 3, count = 4))
                             .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -856,11 +687,11 @@ internal fun TelemetryOverlayScreen(
                             )
                             Surface(
                                 color = MaterialTheme.colorScheme.primaryContainer,
-                                shape = RoundedCornerShape(12.dp)
+                                shape = RoundedCornerShape(10.dp)
                             ) {
                                 Text(
                                     text = "${config.intervalMs} ms",
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -906,23 +737,6 @@ internal fun TelemetryOverlayScreen(
 }
 
 @Composable
-private fun HudSectionHeader(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.padding(
-            start = 12.dp,
-            end = 12.dp,
-            top = 16.dp,
-            bottom = 8.dp
-        )
-    )
-}
-
-@Composable
 private fun HudSquircleIcon(icon: ImageVector) {
     Box(
         modifier = Modifier
@@ -935,7 +749,7 @@ private fun HudSquircleIcon(icon: ImageVector) {
             imageVector = icon,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(22.dp)
+            modifier = Modifier.size(20.dp)
         )
     }
 }
@@ -968,7 +782,7 @@ private fun HudSwitchRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
-            modifier = Modifier.padding(end = 16.dp),
+            modifier = Modifier.padding(end = 14.dp),
             contentAlignment = Alignment.Center
         ) {
             HudSquircleIcon(icon = icon)
@@ -976,7 +790,7 @@ private fun HudSwitchRow(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(vertical = 8.dp)
+                .padding(vertical = 6.dp)
         ) {
             Text(
                 text = title,
@@ -991,7 +805,7 @@ private fun HudSwitchRow(
             )
         }
         Box(
-            modifier = Modifier.padding(start = 16.dp),
+            modifier = Modifier.padding(start = 12.dp),
             contentAlignment = Alignment.Center
         ) {
             Switch(
@@ -1039,8 +853,8 @@ private fun HudSliderRow(
             .fillMaxWidth()
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1054,11 +868,11 @@ private fun HudSliderRow(
             )
             Surface(
                 color = MaterialTheme.colorScheme.primaryContainer,
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(10.dp)
             ) {
                 Text(
                     text = valueText,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimaryContainer

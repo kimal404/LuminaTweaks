@@ -80,7 +80,7 @@ import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.HourglassEmpty
-import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.PowerSettingsNew
@@ -922,9 +922,9 @@ fun HomeDashboardContent(
                         modifier = Modifier.weight(1f)
                     )
                     HomeHardwareTile(
-                        label = stringResource(R.string.home_profile_auto),
+                        label = stringResource(R.string.home_profile_auto).substringBefore(" ("),
                         value = profileDisplayValue,
-                        icon = Icons.Rounded.Lock,
+                        icon = Icons.Rounded.Speed,
                         highlight = true,
                         modifier = Modifier.weight(1f)
                     )
