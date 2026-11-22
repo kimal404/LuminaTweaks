@@ -55,6 +55,9 @@ class MainActivity : ComponentActivity() {
         // connection and never shell out to `su`.
         LuminaBridge.start(applicationContext)
         com.luminatweaks.data.ConfigRepository.initialize(applicationContext)
+        if (com.luminatweaks.gamedeck.GameDeckPrefs.load(this).enabled) {
+            com.luminatweaks.gamedeck.GameDeckService.sync(this)
+        }
 
         lifecycleScope.launch(Dispatchers.IO) {
             val pkg = packageName
