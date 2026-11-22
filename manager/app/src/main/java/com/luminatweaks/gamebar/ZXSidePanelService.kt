@@ -223,13 +223,13 @@ class ZXSidePanelService : Service(), LifecycleOwner, ViewModelStoreOwner, Saved
 
         const val NOTIFICATION_ID = 1002
 
-        private const val LUMINA_CONFIG_DIR = "/data/adb/.config/lumina"
-        private const val LUMINA_CONFIG_PATH = "$LUMINA_CONFIG_DIR/config.json"
-        private const val LUMINA_PID_PATH = "$LUMINA_CONFIG_DIR/luminad.pid"
-        private const val LUMINA_LEGACY_PID_PATH = "/data/local/tmp/lumina.pid"
-        private const val LUMINA_FPS_PATH = "$LUMINA_CONFIG_DIR/fps.txt"
-        private const val LUMINA_PUBLIC_FPS_PATH = "/data/local/tmp/lumina.fps"
-        private const val LUMINA_APP_FPS_PATH = "/data/data/com.luminatweaks/files/lumina.fps"
+        const val LUMINA_CONFIG_DIR = "/data/adb/.config/lumina"
+        const val LUMINA_CONFIG_PATH = "$LUMINA_CONFIG_DIR/config.json"
+        const val LUMINA_PID_PATH = "$LUMINA_CONFIG_DIR/luminad.pid"
+        const val LUMINA_LEGACY_PID_PATH = "/data/local/tmp/lumina.pid"
+        const val LUMINA_FPS_PATH = "$LUMINA_CONFIG_DIR/fps.txt"
+        const val LUMINA_PUBLIC_FPS_PATH = "/data/local/tmp/lumina.fps"
+        const val LUMINA_APP_FPS_PATH = "/data/data/com.luminatweaks/files/lumina.fps"
 
         private val LUMINA_GAMELIST_JSON = listOf(
             "$LUMINA_CONFIG_DIR/gamelist.json",
