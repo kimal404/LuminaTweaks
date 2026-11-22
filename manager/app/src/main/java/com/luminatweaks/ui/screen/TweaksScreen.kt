@@ -119,7 +119,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.luminatweaks.R
 import com.luminatweaks.data.ConfigRepository
-import com.luminatweaks.data.GameBarPrefs
+import com.luminatweaks.gamebar.ZXSidePanelService
 import com.luminatweaks.data.DisplayRrMode
 import com.luminatweaks.service.FloatingFpsService
 import com.luminatweaks.ui.component.TouchOriginDialog
@@ -246,7 +246,7 @@ fun TweaksScreen(
     var availableIoSchedulers by remember { mutableStateOf(emptyList<String>()) }
 
     var fpsConfig by remember { mutableStateOf(FloatingFpsPrefs.load(context)) }
-    var gameBarEnabled by remember { mutableStateOf(GameBarPrefs.load(context).enabled) }
+    var gameBarEnabled by remember { mutableStateOf(ZXSidePanelService.isSidepanelEnabled(context)) }
     val updateFpsConfig: (FloatingFpsConfig) -> Unit = { updated ->
         val wasEnabled = fpsConfig.enabled
         fpsConfig = updated
@@ -292,7 +292,7 @@ fun TweaksScreen(
 
     LaunchedEffect(inGameBarSubpage) {
         if (!inGameBarSubpage) {
-            gameBarEnabled = GameBarPrefs.load(context).enabled
+            gameBarEnabled = ZXSidePanelService.isSidepanelEnabled(context)
         }
     }
 

@@ -73,12 +73,19 @@ kotlin {
 dependencies {
     implementation("io.coil-kt:coil-compose:2.6.0")
 
+    implementation("com.github.topjohnwu.libsu:core:6.0.0")
+    implementation("com.github.topjohnwu.libsu:service:6.0.0")
+    implementation("com.github.topjohnwu.libsu:io:6.0.0")
+    implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1")
+    implementation("androidx.savedstate:savedstate-ktx:1.3.0")
+
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.material3)
     implementation(libs.androidx.graphics.shapes)
 
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
     implementation("androidx.activity:activity-compose:1.9.3")
 
     implementation("androidx.compose.ui:ui")
