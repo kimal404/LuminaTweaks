@@ -392,25 +392,4 @@ Features on this page are only active when the system is in the Maestro profile.
     <string name="profile_desc_performance">Peak performance for heavy games with high clocks and thermal protection</string>
     <string name="section_automation">Automation</string>
     <string name="home_profile_auto">Profile (Automatic)</string>
-    <string name="gamebar_title">Game Bar</string>
-    <string name="gamebar_subtitle">In-game side panel with profiles, FPS, and device telemetry from the Lumina daemon.</string>
-    <string name="gamebar_enable">Enable Game Bar</string>
-    <string name="gamebar_enable_desc">Show the side panel automatically while a game is detected running.</string>
-    <string name="gamebar_overlay_permission">Overlay Permission</string>
-    <string name="gamebar_permission_granted">Overlay permission is granted.</string>
-    <string name="gamebar_permission_required">Overlay permission is required for the panel to appear.</string>
-    <string name="gamebar_grant">Grant</string>
-    <string name="gamebar_side">Panel Position</string>
-    <string name="gamebar_side_left">Left</string>
-    <string name="gamebar_side_right">Right</string>
-    <string name="gamebar_style">Panel Style</string>
-    <string name="gamebar_style_solid">Solid</string>
-    <string name="gamebar_style_image">Image</string>
-    <string name="gamebar_sensitivity">Swipe Sensitivity</string>
-    <string name="gamebar_length">Panel Length</string>
-    <string name="gamebar_thickness">Handle Thickness</string>
-    <string name="gamebar_opacity">Panel Opacity</string>
-    <string name="gamebar_blur">Blur Intensity</string>
-    <string name="gamebar_status_title">Data Source</string>
-    <string name="gamebar_status_desc">Profiles, FPS, recording sessions, and game detection are read from luminad (sys.lumina.* and /data/adb/.config/lumina).</string>
 </resources>

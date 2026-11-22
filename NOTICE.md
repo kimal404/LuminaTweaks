@@ -42,11 +42,7 @@ This project contains inspirations, logic architectures, and structural concepts
   Source: https://github.com/Liliya2727/AZenith
   Contribution: Pure AZenith color engine transplanted into
   `manager/app/src/main/java/com/luminatweaks/ui/theme/` (ColorEngine,
-  accent intensity system, and Personalisasi Warna section), plus the
-  Game Bar port in `manager/app/src/main/java/com/luminatweaks/gamebar/`
-  (ZXSidePanelService, ZXSidePanelState, ZXSidePanelComponents,
-  ZXSidePanelWidgets, ZXSidePanelIcons, ZXFloatingAppManager, and
-  ZXFloatingAppRootService) adapted to the Lumina daemon. Licensed
+  accent intensity system, and Personalisasi Warna section). Licensed
   under the Apache License, Version 2.0.
 
 --------------------------------------------------------------------------------
