@@ -33,7 +33,6 @@ Flash the release zip via your root manager and reboot.
 - **Author:** [@kimal404](https://github.com/kimal404)
 - **[AZenith](https://github.com/Liliya2727/AZenith)** by [@Liliya2727](https://github.com/Liliya2727) — Transplantasi kode ColorEngine, sistem intensitas aksen, dan bagian Personalisasi Warna (Apache 2.0).
 - **[Encore Tweaks](https://github.com/Rem01Gaming/encore)** by [@Rem01Gaming](https://github.com/Rem01Gaming) — Referensi dan adaptasi kode pemantauan proses/binder (Apache 2.0).
-- **[Project Raco](https://github.com/LoggingNewMemory/Project-Raco)** by [@LoggingNewMemory](https://github.com/LoggingNewMemory) — Referensi source code tweaks.
 
 ---
 
