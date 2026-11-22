@@ -374,13 +374,26 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         )
     }
 
+    private fun runRootRead(cmd: String): String {
+        return runCatching {
+            val process = ProcessBuilder("su", "-c", cmd)
+                .redirectErrorStream(true)
+                .start()
+            if (!process.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+                return ""
+            }
+            process.inputStream.bufferedReader().use { it.readText() }.trim()
+        }.getOrDefault("")
+    }
+
     private fun readCpuLoad(): Int {
         val direct = sysfs.cpuPercent()?.roundToInt()?.coerceIn(0, 100)
         if (direct != null) {
             lastCpuPercent = direct
             return direct
         }
-        val line = RootUtil.runAsRoot("head -n 1 /proc/stat 2>/dev/null").trim()
+        val line = runRootRead("head -n 1 /proc/stat 2>/dev/null")
         if (!line.startsWith("cpu ")) return lastCpuPercent
         val parts = line.split(Regex("\\s+")).drop(1).mapNotNull { it.toLongOrNull() }
         if (parts.size < 5) return lastCpuPercent
@@ -412,7 +425,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             "/sys/kernel/gpu/gpu_busy; do " +
             "[ -r \"\$p\" ] && { cat \"\$p\"; break; }; done; " +
             "[ -r /sys/class/kgsl/kgsl-3d0/gpubusy ] && cat /sys/class/kgsl/kgsl-3d0/gpubusy"
-        val raw = RootUtil.runAsRoot(cmd).trim()
+        val raw = runRootRead(cmd)
         if (raw.isEmpty()) return lastGpuPercent
         val tokens = raw.split(Regex("\\s+"))
         val pct = if (tokens.size >= 2) {
