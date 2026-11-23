@@ -741,18 +741,12 @@ fn main() {
         };
 
         let preview_active = screen_awake && shared_state.fps_preview_active();
-        let fps_package = if screen_awake {
-            current_target.clone().or_else(|| {
-                if preview_active {
-                    focused.clone()
-                } else {
-                    None
-                }
-            })
+        let fps_package = if preview_active {
+            current_target.clone().or_else(|| focused.clone())
         } else {
             None
         };
-        let fps_game_active = screen_awake && current_target.is_some();
+        let fps_game_active = preview_active && current_target.is_some();
         let fps_pid = if fps_game_active {
             fps_package
                 .as_deref()

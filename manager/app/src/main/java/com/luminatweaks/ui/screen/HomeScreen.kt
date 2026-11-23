@@ -351,7 +351,7 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                     isModuleInstalled = installed
                     currentProfile = propProfile ?: status.profile
                 }
-                delay(2500L)
+                delay(5000L)
             }
         }
     }

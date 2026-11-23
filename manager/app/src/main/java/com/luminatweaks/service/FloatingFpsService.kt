@@ -94,8 +94,8 @@ class FloatingFpsService : Service() {
         private const val PUBLIC_FPS_PATH = "/data/local/tmp/lumina.fps"
         private const val FEED_MAX_AGE_MS = 3_000L
         private const val GAME_STALE_GRACE_MS = 6_000L
-        private const val ALWAYS_ON_PREVIEW_SECONDS = 3600
-        private const val PREVIEW_RENEW_MS = 30 * 60 * 1000L
+        private const val HUD_LEASE_SECONDS = 1800
+        private const val HUD_LEASE_RENEW_MS = 10 * 60 * 1000L
 
         const val ACTION_SYNC = "com.luminatweaks.action.FPS_OVERLAY_SYNC"
         const val ACTION_PREVIEW_BURST = "com.luminatweaks.action.FPS_OVERLAY_PREVIEW_BURST"
@@ -216,7 +216,6 @@ class FloatingFpsService : Service() {
                 activeConfig = FloatingFpsPrefs.load(this)
                 burstUntilMs = System.currentTimeMillis() + 5_500L
                 startForegroundCompat()
-                requestDaemonPreview(8)
                 startTelemetryLoop()
                 previewBurstJob?.cancel()
                 previewBurstJob = serviceScope.launch {
@@ -224,8 +223,6 @@ class FloatingFpsService : Service() {
                     burstUntilMs = 0L
                     if (!activeConfig.enabled) {
                         stopSelf()
-                    } else {
-                        applyPreviewLease(force = true)
                     }
                 }
                 return START_STICKY
@@ -247,7 +244,6 @@ class FloatingFpsService : Service() {
             applyLayoutParamsUpdate()
         }
         startTelemetryLoop()
-        applyPreviewLease()
         return START_STICKY
     }
 
@@ -306,7 +302,7 @@ class FloatingFpsService : Service() {
                     break
                 }
 
-                if (cfg.autoGame && now - trackedListStampMs >= 5_000L) {
+                if (cfg.autoGame && now - trackedListStampMs >= 60_000L) {
                     trackedListStampMs = now
                     refreshTrackedGamesFromRepository()
                 }
@@ -334,6 +330,8 @@ class FloatingFpsService : Service() {
                         (lastGameSeenMs > 0L && now - lastGameSeenMs <= GAME_STALE_GRACE_MS)
                     )))
 
+                setHudLease(show, now)
+
                 if (!show) {
                     if (isOverlayAttached) {
                         detachOverlay()
@@ -341,18 +339,8 @@ class FloatingFpsService : Service() {
                     if (lastNotifShownState != false) {
                         updateNotification(isShowing = false)
                     }
-                    delay(250L)
+                    delay(if (screenAwake) 1_000L else 3_000L)
                     continue
-                }
-
-                if (cfg.autoGame && detectedGame && (!fresh || (feed?.fps ?: 0f) <= 0f)) {
-                    if (now - lastLeaseRequestMs >= 3_000L) {
-                        lastLeaseRequestMs = now
-                        requestDaemonPreview(15)
-                    }
-                } else if (!cfg.autoGame && lastLeaseRequestMs > 0L && now - lastLeaseRequestMs >= PREVIEW_RENEW_MS) {
-                    lastLeaseRequestMs = now
-                    requestDaemonPreview(ALWAYS_ON_PREVIEW_SECONDS)
                 }
 
                 val daemonReading = fresh && feed != null && feed.fps > 0f
@@ -536,8 +524,11 @@ class FloatingFpsService : Service() {
     )
 
     private fun readFeed(): Feed? {
+        val now = System.currentTimeMillis()
+        parseFeed(readSystemProperty("sys.lumina.fps"))?.let { feed ->
+            if (now - feed.epochMs <= FEED_MAX_AGE_MS) return feed
+        }
         val candidates = ArrayList<Feed>(3)
-        parseFeed(readSystemProperty("sys.lumina.fps"))?.let { candidates.add(it) }
         val appFile = File(filesDir, "lumina.fps").absolutePath
         for (path in listOf(appFile, PUBLIC_FPS_PATH, "/data/adb/.config/lumina/fps.txt")) {
             try {
@@ -629,20 +620,20 @@ class FloatingFpsService : Service() {
         }
     }
 
-    private fun applyPreviewLease(force: Boolean = false) {
-        if (!force && System.currentTimeMillis() < burstUntilMs) return
-        val need = activeConfig.enabled && !activeConfig.autoGame
-        if (!force && need == previewLease) return
-        previewLease = need
-        if (need) lastLeaseRequestMs = System.currentTimeMillis()
-        serviceScope.launch(Dispatchers.IO) {
-            runCatching {
-                if (need) {
-                    DaemonManager.requestFpsPreview(ALWAYS_ON_PREVIEW_SECONDS)
-                } else {
-                    DaemonManager.stopFpsPreview()
-                }
+    private fun setHudLease(active: Boolean, now: Long) {
+        if (!active) {
+            if (!previewLease) return
+            previewLease = false
+            lastLeaseRequestMs = 0L
+            serviceScope.launch(Dispatchers.IO) {
+                runCatching { DaemonManager.stopFpsPreview() }
             }
+            return
+        }
+        if (!previewLease || now - lastLeaseRequestMs >= HUD_LEASE_RENEW_MS) {
+            previewLease = true
+            lastLeaseRequestMs = now
+            requestDaemonPreview(HUD_LEASE_SECONDS)
         }
     }
 
