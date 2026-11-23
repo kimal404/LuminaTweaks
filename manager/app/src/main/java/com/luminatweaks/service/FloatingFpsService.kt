@@ -60,6 +60,7 @@ import com.luminatweaks.util.DeviceUtil
 import com.luminatweaks.util.RootUtil
 import java.io.File
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -493,8 +494,23 @@ class FloatingFpsService : Service() {
         }.getOrDefault(false)
     }
 
-    private suspend fun probeForegroundPackageRoot(): String? {
-        val raw = RootUtil.runAsRoot(
+    private fun runSuOutput(cmd: String, timeoutSeconds: Long = 3): String {
+        return try {
+            val process = ProcessBuilder("su", "-c", cmd)
+                .redirectErrorStream(true)
+                .start()
+            if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+                return ""
+            }
+            process.inputStream.bufferedReader().use { it.readText() }.trim()
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    private fun probeForegroundPackageRoot(): String? {
+        val raw = runSuOutput(
             "dumpsys window displays 2>/dev/null | grep -m1 'mCurrentFocus' || " +
                 "dumpsys activity activities 2>/dev/null | grep -m1 'ResumedActivity'"
         )
