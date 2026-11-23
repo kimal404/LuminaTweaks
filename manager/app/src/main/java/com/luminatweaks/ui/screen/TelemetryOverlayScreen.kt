@@ -56,7 +56,6 @@ import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.Thermostat
-import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -104,21 +103,8 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
-enum class FpsOverlayCorner(val key: String, val alignment: Alignment) {
-    TOP_LEFT("top_left", Alignment.TopStart),
-    TOP_RIGHT("top_right", Alignment.TopEnd),
-    BOTTOM_LEFT("bottom_left", Alignment.BottomStart),
-    BOTTOM_RIGHT("bottom_right", Alignment.BottomEnd);
-
-    companion object {
-        fun fromKey(raw: String?): FpsOverlayCorner =
-            entries.firstOrNull { it.key.equals(raw, ignoreCase = true) } ?: TOP_RIGHT
-    }
-}
-
 data class FloatingFpsConfig(
     val enabled: Boolean = false,
-    val corner: FpsOverlayCorner = FpsOverlayCorner.TOP_RIGHT,
     val autoGame: Boolean = true,
     val showFps: Boolean = true,
     val showFrametime: Boolean = true,
@@ -148,7 +134,6 @@ object FloatingFpsPrefs {
         val sp = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
         return FloatingFpsConfig(
             enabled = sp.getBoolean("enabled", false),
-            corner = FpsOverlayCorner.fromKey(sp.getString("corner", FpsOverlayCorner.TOP_RIGHT.key)),
             autoGame = sp.getBoolean("auto_game", true),
             showFps = sp.getBoolean("show_fps", true),
             showFrametime = sp.getBoolean("show_frametime", true),
@@ -165,7 +150,6 @@ object FloatingFpsPrefs {
     fun save(context: Context, config: FloatingFpsConfig) {
         context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit()
             .putBoolean("enabled", config.enabled)
-            .putString("corner", config.corner.key)
             .putBoolean("auto_game", config.autoGame)
             .putBoolean("show_fps", config.showFps)
             .putBoolean("show_frametime", config.showFrametime)
@@ -176,6 +160,19 @@ object FloatingFpsPrefs {
             .putFloat("scale", config.scale)
             .putFloat("bg_alpha", config.bgAlpha)
             .putInt("interval_ms", config.intervalMs)
+            .apply()
+    }
+
+    fun loadPosition(context: Context): Pair<Int, Int>? {
+        val sp = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        if (!sp.contains("pos_x") || !sp.contains("pos_y")) return null
+        return sp.getInt("pos_x", 0) to sp.getInt("pos_y", 0)
+    }
+
+    fun savePosition(context: Context, x: Int, y: Int) {
+        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit()
+            .putInt("pos_x", x)
+            .putInt("pos_y", y)
             .apply()
     }
 }
@@ -220,14 +217,6 @@ private fun rememberSimulatedFpsTelemetry(
 }
 
 @Composable
-internal fun fpsCornerShortLabel(corner: FpsOverlayCorner): String = when (corner) {
-    FpsOverlayCorner.TOP_LEFT -> localizedLabel("Kiri Atas", "Top L")
-    FpsOverlayCorner.TOP_RIGHT -> localizedLabel("Kanan Atas", "Top R")
-    FpsOverlayCorner.BOTTOM_LEFT -> localizedLabel("Kiri Bawah", "Bot L")
-    FpsOverlayCorner.BOTTOM_RIGHT -> localizedLabel("Kanan Bawah", "Bot R")
-}
-
-@Composable
 private fun FpsViewportStage(
     config: FloatingFpsConfig,
     telemetry: SimulatedFpsTelemetry
@@ -237,7 +226,7 @@ private fun FpsViewportStage(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(104.dp)
+            .height(96.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clipToBounds()
@@ -259,7 +248,7 @@ private fun FpsViewportStage(
 
         Box(
             modifier = Modifier
-                .align(config.corner.alignment)
+                .align(Alignment.Center)
                 .horizontalScroll(rememberScrollState())
                 .graphicsLayer {
                     scaleX = config.scale
@@ -467,71 +456,21 @@ internal fun TelemetryOverlayScreen(
             }
 
             item(key = "group_behavior") {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    HudSwitchRow(
-                        index = 0,
-                        count = 2,
-                        icon = Icons.Rounded.SportsEsports,
-                        title = localizedLabel("Deteksi Game Otomatis", "Automatic Game Detection"),
-                        subtitle = localizedLabel(
-                            "Muncul otomatis saat membuka game",
-                            "Show automatically when launching a game"
-                        ),
-                        checked = config.autoGame,
-                        onCheckedChange = { autoGame ->
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            onConfigChange(config.copy(autoGame = autoGame))
-                        }
-                    )
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(connectedContainerShape(index = 1, count = 2))
-                            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            HudSquircleIcon(icon = Icons.Rounded.Tune)
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Text(
-                                text = localizedLabel("Posisi Awal", "Initial Position"),
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            FpsOverlayCorner.entries.forEachIndexed { index, corner ->
-                                val shapes = when (index) {
-                                    0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
-                                    FpsOverlayCorner.entries.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
-                                    else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
-                                }
-                                ToggleButton(
-                                    checked = config.corner == corner,
-                                    onCheckedChange = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        onConfigChange(config.copy(corner = corner))
-                                    },
-                                    shapes = shapes,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text(
-                                        text = fpsCornerShortLabel(corner),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1,
-                                        softWrap = false
-                                    )
-                                }
-                            }
-                        }
+                HudSwitchRow(
+                    index = 0,
+                    count = 1,
+                    icon = Icons.Rounded.SportsEsports,
+                    title = localizedLabel("Deteksi Game Otomatis", "Automatic Game Detection"),
+                    subtitle = localizedLabel(
+                        "Muncul otomatis saat membuka game di daftar Lumina",
+                        "Show automatically when launching games in Lumina list"
+                    ),
+                    checked = config.autoGame,
+                    onCheckedChange = { autoGame ->
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onConfigChange(config.copy(autoGame = autoGame))
                     }
-                }
+                )
             }
 
             item(key = "group_metrics") {

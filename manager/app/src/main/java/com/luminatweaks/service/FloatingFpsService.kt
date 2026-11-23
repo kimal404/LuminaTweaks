@@ -53,7 +53,6 @@ import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DaemonManager
 import com.luminatweaks.ui.screen.FloatingFpsConfig
 import com.luminatweaks.ui.screen.FloatingFpsPrefs
-import com.luminatweaks.ui.screen.FpsOverlayCorner
 import com.luminatweaks.ui.theme.OverlayPalette
 import com.luminatweaks.ui.theme.ThemeController
 import com.luminatweaks.ui.theme.overlayPalette
@@ -74,7 +73,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
 
 data class LiveFpsTelemetry(
     val fps: Int = 0,
@@ -93,8 +91,8 @@ class FloatingFpsService : Service() {
         private const val CHANNEL_ID = "lumina_floating_fps_channel"
         private const val NOTIFICATION_ID = 4041
         private const val PUBLIC_FPS_PATH = "/data/local/tmp/lumina.fps"
-        private const val FEED_MAX_AGE_MS = 2_000L
-        private const val GAME_STALE_GRACE_MS = 10_000L
+        private const val FEED_MAX_AGE_MS = 3_000L
+        private const val GAME_STALE_GRACE_MS = 6_000L
         private const val ALWAYS_ON_PREVIEW_SECONDS = 3600
         private const val PREVIEW_RENEW_MS = 30 * 60 * 1000L
 
@@ -103,10 +101,14 @@ class FloatingFpsService : Service() {
         const val ACTION_STOP = "com.luminatweaks.action.FPS_OVERLAY_STOP"
 
         suspend fun ensureOverlayPermission(context: Context): Boolean {
+            val pkg = context.packageName
+            RootUtil.runAsRoot(
+                "appops set $pkg GET_USAGE_STATS allow 2>/dev/null || " +
+                    "cmd appops set $pkg GET_USAGE_STATS allow 2>/dev/null"
+            )
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(context)) {
                 return true
             }
-            val pkg = context.packageName
             RootUtil.runAsRoot(
                 "appops set $pkg SYSTEM_ALERT_WINDOW allow 2>/dev/null || " +
                     "cmd appops set $pkg SYSTEM_ALERT_WINDOW allow 2>/dev/null"
@@ -171,15 +173,17 @@ class FloatingFpsService : Service() {
     private var previewBurstJob: Job? = null
     private var burstUntilMs = 0L
     private var isOverlayAttached = false
-    private var lastAppliedCorner: FpsOverlayCorner? = null
-    private var hasCustomDragPosition = false
     private var previewLease = false
     private var lastLeaseRequestMs = 0L
 
     private var lastForegroundPkg: String? = null
     private var lastForegroundTs = 0L
-    private var cachedGameList: Set<String> = emptySet()
-    private var cachedGameListStampMs = 0L
+    private var lastFgRootFallbackMs = 0L
+    private var usageAccessGranted = false
+    private var trackedGamePackages: Set<String> = emptySet()
+    private var disabledGamePackages: Set<String> = emptySet()
+    private var trackedListStampMs = 0L
+    private var lastNotifShownState: Boolean? = null
 
     private var cachedHz = 60
     private var cachedCpuCluster = "-- GHz"
@@ -228,10 +232,6 @@ class FloatingFpsService : Service() {
         }
 
         val loaded = FloatingFpsPrefs.load(this)
-        val cornerChanged = lastAppliedCorner != null && lastAppliedCorner != loaded.corner
-        if (cornerChanged) {
-            hasCustomDragPosition = false
-        }
         activeConfig = loaded
 
         if (!loaded.enabled && System.currentTimeMillis() >= burstUntilMs) {
@@ -243,7 +243,7 @@ class FloatingFpsService : Service() {
         startForegroundCompat()
         if (isOverlayAttached) {
             overlayView?.applyState(loaded, liveTelemetry)
-            applyLayoutParamsUpdate(resetCorner = cornerChanged)
+            applyLayoutParamsUpdate()
         }
         startTelemetryLoop()
         applyPreviewLease()
@@ -259,7 +259,7 @@ class FloatingFpsService : Service() {
             lp.x = lp.x.coerceIn(0, (metrics.widthPixels - 60).coerceAtLeast(0))
             lp.y = lp.y.coerceIn(0, (metrics.heightPixels - 44).coerceAtLeast(0))
         }
-        overlayView?.post { applyLayoutParamsUpdate(resetCorner = !hasCustomDragPosition) }
+        overlayView?.post { applyLayoutParamsUpdate() }
     }
 
     override fun onDestroy() {
@@ -278,6 +278,7 @@ class FloatingFpsService : Service() {
 
     private fun startForegroundCompat() {
         val notification = buildNotification(isShowing = isOverlayAttached)
+        lastNotifShownState = isOverlayAttached
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(
                 NOTIFICATION_ID,
@@ -304,17 +305,24 @@ class FloatingFpsService : Service() {
                     break
                 }
 
+                if (cfg.autoGame && now - trackedListStampMs >= 5_000L) {
+                    trackedListStampMs = now
+                    refreshTrackedGamesFromRepository()
+                }
+
                 val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
                 val screenAwake = pm?.isInteractive ?: true
 
                 val (feed, fgGame) = withContext(Dispatchers.IO) {
                     val f = readFeed()
-                    val g = if (cfg.autoGame && screenAwake) isForegroundGameActive(now) else false
+                    val g = if (cfg.autoGame && screenAwake) isForegroundGameActive(now, f) else false
                     f to g
                 }
 
                 val fresh = feed != null && now - feed.epochMs <= FEED_MAX_AGE_MS
-                val detectedGame = fgGame || (fresh && feed?.gameActive == true)
+                val daemonGameActive = fresh && feed?.gameActive == true &&
+                    (feed.packageName == null || !disabledGamePackages.contains(feed.packageName))
+                val detectedGame = fgGame || daemonGameActive
                 if (detectedGame) {
                     lastGameSeenMs = now
                 }
@@ -328,10 +336,22 @@ class FloatingFpsService : Service() {
                 if (!show) {
                     if (isOverlayAttached) {
                         detachOverlay()
+                    }
+                    if (lastNotifShownState != false) {
                         updateNotification(isShowing = false)
                     }
-                    delay(350L)
+                    delay(250L)
                     continue
+                }
+
+                if (cfg.autoGame && detectedGame && (!fresh || (feed?.fps ?: 0f) <= 0f)) {
+                    if (now - lastLeaseRequestMs >= 3_000L) {
+                        lastLeaseRequestMs = now
+                        requestDaemonPreview(15)
+                    }
+                } else if (!cfg.autoGame && lastLeaseRequestMs > 0L && now - lastLeaseRequestMs >= PREVIEW_RENEW_MS) {
+                    lastLeaseRequestMs = now
+                    requestDaemonPreview(ALWAYS_ON_PREVIEW_SECONDS)
                 }
 
                 val daemonReading = fresh && feed != null && feed.fps > 0f
@@ -344,11 +364,6 @@ class FloatingFpsService : Service() {
                 } else {
                     fps = 0f
                     frametime = 0f
-                }
-
-                if (!cfg.autoGame && lastLeaseRequestMs > 0L && now - lastLeaseRequestMs >= PREVIEW_RENEW_MS) {
-                    lastLeaseRequestMs = now
-                    requestDaemonPreview(ALWAYS_ON_PREVIEW_SECONDS)
                 }
 
                 if (now - sensorStampMs >= 1_000L) {
@@ -382,6 +397,8 @@ class FloatingFpsService : Service() {
 
                 if (!isOverlayAttached) {
                     attachOverlay()
+                }
+                if (lastNotifShownState != isOverlayAttached) {
                     updateNotification(isShowing = isOverlayAttached)
                 }
                 overlayView?.applyState(cfg, liveTelemetry)
@@ -391,41 +408,78 @@ class FloatingFpsService : Service() {
         }
     }
 
-    private fun isForegroundGameActive(nowMs: Long): Boolean {
-        val usm = getSystemService(UsageStatsManager::class.java) ?: return false
-        val lookback = if (lastForegroundPkg == null) 300_000L else 12_000L
-        val events = runCatching { usm.queryEvents(nowMs - lookback, nowMs) }.getOrNull()
-        if (events != null) {
-            val ev = UsageEvents.Event()
-            while (events.hasNextEvent()) {
-                events.getNextEvent(ev)
-                if (ev.eventType == UsageEvents.Event.ACTIVITY_RESUMED && ev.timeStamp >= lastForegroundTs) {
-                    val pkg = ev.packageName
-                    if (!pkg.isNullOrBlank() &&
-                        pkg != "android" &&
-                        pkg != "com.android.systemui" &&
-                        !pkg.contains("permissioncontroller", ignoreCase = true)
-                    ) {
-                        lastForegroundTs = ev.timeStamp
-                        lastForegroundPkg = pkg
+    private suspend fun refreshTrackedGamesFromRepository() {
+        runCatching {
+            val configs = ConfigRepository.getAppConfigs(forceRefresh = true)
+            val whitelist = ConfigRepository.detectInstalledGames(packageManager)
+                .map { it.packageName }
+                .toSet()
+
+            val disabled = configs.values
+                .filter { it.disabled }
+                .map { it.pkg }
+                .toSet()
+
+            val enabledFromConfigs = configs.values
+                .filter { !it.disabled && (it.saklarUtama || it.custom) }
+                .map { it.pkg }
+                .toSet()
+
+            val enabledFromWhitelist = whitelist - disabled
+            disabledGamePackages = disabled
+            trackedGamePackages = enabledFromConfigs + enabledFromWhitelist
+        }
+    }
+
+    private suspend fun isForegroundGameActive(nowMs: Long, feed: Feed?): Boolean {
+        if (!usageAccessGranted) {
+            usageAccessGranted = true
+            val pkg = packageName
+            RootUtil.runAsRoot(
+                "appops set $pkg GET_USAGE_STATS allow 2>/dev/null || " +
+                    "cmd appops set $pkg GET_USAGE_STATS allow 2>/dev/null"
+            )
+        }
+
+        val usm = getSystemService(UsageStatsManager::class.java)
+        if (usm != null) {
+            val lookback = if (lastForegroundPkg == null) 300_000L else 15_000L
+            val events = runCatching { usm.queryEvents(nowMs - lookback, nowMs) }.getOrNull()
+            if (events != null) {
+                val ev = UsageEvents.Event()
+                while (events.hasNextEvent()) {
+                    events.getNextEvent(ev)
+                    if (ev.eventType == UsageEvents.Event.ACTIVITY_RESUMED && ev.timeStamp >= lastForegroundTs) {
+                        val pkg = ev.packageName
+                        if (!pkg.isNullOrBlank() &&
+                            pkg != "android" &&
+                            pkg != "com.android.systemui" &&
+                            !pkg.contains("permissioncontroller", ignoreCase = true)
+                        ) {
+                            lastForegroundTs = ev.timeStamp
+                            lastForegroundPkg = pkg
+                        }
                     }
                 }
             }
         }
 
-        val fg = lastForegroundPkg ?: return false
+        if (lastForegroundPkg == null && nowMs - lastFgRootFallbackMs >= 1_500L) {
+            lastFgRootFallbackMs = nowMs
+            val detected = probeForegroundPackageRoot()
+            if (!detected.isNullOrBlank()) {
+                lastForegroundPkg = detected
+            }
+        }
+
+        val feedPkg = feed?.takeIf { nowMs - it.epochMs <= FEED_MAX_AGE_MS && it.gameActive }?.packageName
+        val fg = lastForegroundPkg ?: feedPkg ?: return false
         if (fg == packageName || isLauncherPackage(fg)) return false
+        if (disabledGamePackages.contains(fg)) return false
+        if (trackedGamePackages.contains(fg)) return true
 
-        val configured = ConfigRepository.cachedAppConfigs?.get(fg)
-        if (configured != null && !configured.disabled && (configured.saklarUtama || configured.custom)) {
-            return true
-        }
-
-        if (nowMs - cachedGameListStampMs >= 4_000L) {
-            cachedGameListStampMs = nowMs
-            cachedGameList = readLuminaGameList()
-        }
-        if (cachedGameList.contains(fg)) {
+        val cached = ConfigRepository.cachedAppConfigs?.get(fg)
+        if (cached != null && !cached.disabled && (cached.saklarUtama || cached.custom)) {
             return true
         }
 
@@ -439,6 +493,16 @@ class FloatingFpsService : Service() {
         }.getOrDefault(false)
     }
 
+    private suspend fun probeForegroundPackageRoot(): String? {
+        val raw = RootUtil.runAsRoot(
+            "dumpsys window displays 2>/dev/null | grep -m1 'mCurrentFocus' || " +
+                "dumpsys activity activities 2>/dev/null | grep -m1 'ResumedActivity'"
+        )
+        if (raw.isBlank()) return null
+        val match = Regex("([a-zA-Z0-9_]+(?:\\.[a-zA-Z0-9_]+)+)/").find(raw)
+        return match?.groupValues?.getOrNull(1)
+    }
+
     private fun isLauncherPackage(pkg: String): Boolean {
         return runCatching {
             val homeIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
@@ -447,51 +511,12 @@ class FloatingFpsService : Service() {
         }.getOrDefault(false)
     }
 
-    private fun readLuminaGameList(): Set<String> {
-        val jsonPaths = listOf(
-            "/data/adb/.config/lumina/gamelist.json",
-            "/data/adb/modules/luminatweaks/config/gamelist.json",
-            "/data/adb/modules/luminatweaks/gamelist.json"
-        )
-        for (path in jsonPaths) {
-            val raw = runCatching { File(path).takeIf { it.canRead() }?.readText() }.getOrNull()
-                ?.takeIf { it.isNotBlank() } ?: continue
-            val parsed = runCatching {
-                val json = JSONObject(raw)
-                buildSet {
-                    val keys = json.keys()
-                    while (keys.hasNext()) {
-                        val name = keys.next().substringBefore(':').trim()
-                        if (name.isNotEmpty()) add(name)
-                    }
-                }
-            }.getOrNull()
-            if (!parsed.isNullOrEmpty()) return parsed
-        }
-
-        val txtPaths = listOf(
-            "/data/adb/.config/lumina/gamelist.txt",
-            "/data/adb/.config/lumina/games.txt",
-            "/data/adb/modules/luminatweaks/config/gamelist.txt",
-            "/data/adb/modules/luminatweaks/gamelist.txt"
-        )
-        for (path in txtPaths) {
-            val raw = runCatching { File(path).takeIf { it.canRead() }?.readText() }.getOrNull()
-                ?.takeIf { it.isNotBlank() } ?: continue
-            val parsed = raw.lineSequence()
-                .map { it.substringBefore('#').trim().substringBefore(' ').substringBefore(':').trim() }
-                .filter { it.isNotEmpty() }
-                .toSet()
-            if (parsed.isNotEmpty()) return parsed
-        }
-        return emptySet()
-    }
-
     private data class Feed(
         val fps: Float,
         val frametimeMs: Float,
         val epochMs: Long,
-        val gameActive: Boolean
+        val gameActive: Boolean,
+        val packageName: String?
     )
 
     private fun readFeed(): Feed? {
@@ -556,7 +581,8 @@ class FloatingFpsService : Service() {
             ?: if (fps > 0f) 1000f / fps else 0f
         val gameActive = parts.getOrNull(3)?.let { it == "1" || it.equals("true", true) }
             ?: (fps > 0f)
-        return Feed(fps, frametime, epochMs, gameActive)
+        val pkg = parts.getOrNull(4)?.takeIf { it.isNotBlank() && it != "-" }
+        return Feed(fps, frametime, epochMs, gameActive, pkg)
     }
 
     @Suppress("DEPRECATION")
@@ -631,10 +657,10 @@ class FloatingFpsService : Service() {
                 val maxY = (metrics.heightPixels - height.coerceAtLeast(36)).coerceAtLeast(0)
                 val targetX = (dragStartX + totalDx.roundToInt()).coerceIn(0, maxX)
                 val targetY = (dragStartY + totalDy.roundToInt()).coerceIn(0, maxY)
-                hasCustomDragPosition = true
                 if (targetX != lp.x || targetY != lp.y) {
                     lp.x = targetX
                     lp.y = targetY
+                    FloatingFpsPrefs.savePosition(this@FloatingFpsService, targetX, targetY)
                     runCatching { wm.updateViewLayout(this, lp) }
                 }
             }
@@ -644,9 +670,8 @@ class FloatingFpsService : Service() {
             wm.addView(view, params)
             overlayView = view
             layoutParams = params
-            lastAppliedCorner = cfg.corner
             isOverlayAttached = true
-            view.post { applyLayoutParamsUpdate(resetCorner = !hasCustomDragPosition) }
+            view.post { applyLayoutParamsUpdate() }
         }
     }
 
@@ -674,7 +699,7 @@ class FloatingFpsService : Service() {
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
 
-        val (initX, initY) = computeCornerCoordinates(config.corner, 0, 0)
+        val (initX, initY) = computeInitialCoordinates(config)
         return WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -692,44 +717,32 @@ class FloatingFpsService : Service() {
         }
     }
 
-    private fun applyLayoutParamsUpdate(resetCorner: Boolean) {
+    private fun applyLayoutParamsUpdate() {
         val wm = windowManager ?: return
         val view = overlayView ?: return
         val lp = layoutParams ?: return
-
-        if (resetCorner || !hasCustomDragPosition) {
-            val (cx, cy) = computeCornerCoordinates(
-                activeConfig.corner,
-                view.measuredWidth,
-                view.measuredHeight
-            )
-            lp.x = cx
-            lp.y = cy
-            lastAppliedCorner = activeConfig.corner
-        }
+        val metrics = resources.displayMetrics
+        val maxX = (metrics.widthPixels - view.measuredWidth.coerceAtLeast(80)).coerceAtLeast(0)
+        val maxY = (metrics.heightPixels - view.measuredHeight.coerceAtLeast(36)).coerceAtLeast(0)
+        lp.x = lp.x.coerceIn(0, maxX)
+        lp.y = lp.y.coerceIn(0, maxY)
         runCatching { wm.updateViewLayout(view, lp) }
     }
 
-    private fun computeCornerCoordinates(corner: FpsOverlayCorner, width: Int, height: Int): Pair<Int, Int> {
+    private fun computeInitialCoordinates(config: FloatingFpsConfig): Pair<Int, Int> {
         val metrics = resources.displayMetrics
+        val saved = FloatingFpsPrefs.loadPosition(this)
+        if (saved != null) {
+            val maxX = (metrics.widthPixels - 80).coerceAtLeast(0)
+            val maxY = (metrics.heightPixels - 36).coerceAtLeast(0)
+            return saved.first.coerceIn(0, maxX) to saved.second.coerceIn(0, maxY)
+        }
         val density = metrics.density
         val marginX = (14f * density).roundToInt()
         val topMargin = (38f * density).roundToInt()
-        val bottomMargin = (72f * density).roundToInt()
-        val scale = activeConfig.scale.coerceIn(0.8f, 1.3f)
-        val viewWidth = width.takeIf { it > 0 } ?: (168f * density * scale).roundToInt()
-        val viewHeight = height.takeIf { it > 0 } ?: (34f * density * scale).roundToInt()
-
-        return when (corner) {
-            FpsOverlayCorner.TOP_LEFT -> marginX to topMargin
-            FpsOverlayCorner.TOP_RIGHT ->
-                (metrics.widthPixels - viewWidth - marginX).coerceAtLeast(marginX) to topMargin
-            FpsOverlayCorner.BOTTOM_LEFT ->
-                marginX to (metrics.heightPixels - viewHeight - bottomMargin).coerceAtLeast(topMargin)
-            FpsOverlayCorner.BOTTOM_RIGHT ->
-                (metrics.widthPixels - viewWidth - marginX).coerceAtLeast(marginX) to
-                    (metrics.heightPixels - viewHeight - bottomMargin).coerceAtLeast(topMargin)
-        }
+        val scale = config.scale.coerceIn(0.8f, 1.3f)
+        val estWidth = (168f * density * scale).roundToInt()
+        return (metrics.widthPixels - estWidth - marginX).coerceAtLeast(marginX) to topMargin
     }
 
     private fun createNotificationChannel() {
@@ -751,6 +764,7 @@ class FloatingFpsService : Service() {
     }
 
     private fun updateNotification(isShowing: Boolean) {
+        lastNotifShownState = isShowing
         val manager = getSystemService(NotificationManager::class.java) ?: return
         manager.notify(NOTIFICATION_ID, buildNotification(isShowing))
     }
@@ -772,19 +786,10 @@ class FloatingFpsService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val statusLine = when {
-            isShowing && liveTelemetry.fps <= 0 -> localizedText(
-                "Menunggu frame game",
-                "Waiting for game frames"
-            )
-            isShowing -> localizedText(
-                "Floating HUD aktif",
-                "Floating HUD active"
-            )
-            else -> localizedText(
-                "Menunggu sesi game",
-                "Waiting for game session"
-            )
+        val statusLine = if (isShowing) {
+            localizedText("Floating HUD aktif", "Floating HUD active")
+        } else {
+            localizedText("Menunggu sesi game", "Waiting for game session")
         }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)

@@ -793,15 +793,18 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>, tap: FrameTap)
                 game_active = next_game;
                 pid = next_pid;
                 session_start_ms = next_start;
-                if changed && package.is_none() {
-                    if timestats_ready {
-                        disable_timestats();
-                        timestats_ready = false;
+                if changed {
+                    if package.is_none() {
+                        if timestats_ready {
+                            disable_timestats();
+                            timestats_ready = false;
+                        }
+                        drop(ebpf.take());
+                        ebpf_failed_at = None;
+                        write_idle(false, None, None);
+                        continue;
                     }
-                    drop(ebpf.take());
-                    ebpf_failed_at = None;
-                    write_idle(false, None, None);
-                    continue;
+                    write_idle(game_active, package.as_deref(), session_start_ms);
                 }
             }
             Ok(Request::Stop) | Err(mpsc::RecvTimeoutError::Disconnected) => {
@@ -832,7 +835,7 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>, tap: FrameTap)
             .as_ref()
             .map(EbpfSource::has_recent_frames)
             .unwrap_or(false);
-        let ebpf_warming = ebpf.as_ref().map(EbpfSource::warming_up).unwrap_or(false);
+        let ebpf_warming = false;
 
         if let Some((fps, frametime)) = ebpf_reading {
             missing = 0;
