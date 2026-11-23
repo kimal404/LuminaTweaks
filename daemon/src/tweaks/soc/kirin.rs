@@ -23,6 +23,7 @@ const GPU_DIRS: &[&str] = &[
     "/sys/kernel/gpu",
 ];
 const GPU_NEEDLES: &[&str] = &["gpu", "mali"];
+const BUS_NEEDLES: &[&str] = &["ddr", "emc", "memlat", "mif"];
 
 fn gpu_devfreq() -> Option<String> {
     for dir in GPU_DIRS {
@@ -33,36 +34,38 @@ fn gpu_devfreq() -> Option<String> {
     super::devfreq_matching(GPU_NEEDLES).into_iter().next()
 }
 
-pub(crate) fn frame_boost() -> usize {
+fn gpu(profile: SocProfile) -> usize {
     gpu_devfreq()
-        .map(|base| super::devfreq_max_perf(&base))
+        .map(|base| super::devfreq_profile(&base, profile))
         .unwrap_or(0)
+}
+
+fn bus(profile: SocProfile) -> usize {
+    if profile == SocProfile::Eco || crate::tweaks::mitigation::has("DISABLE_DDR_TWEAK") {
+        return 0;
+    }
+    super::devfreq_group_profile(BUS_NEEDLES, profile)
+}
+
+pub(crate) fn frame_boost() -> usize {
+    gpu(SocProfile::Performance) + bus(SocProfile::Performance)
 }
 
 pub(crate) fn frame_relax() -> usize {
-    gpu_devfreq()
-        .map(|base| super::devfreq_unlock(&base))
-        .unwrap_or(0)
+    gpu(SocProfile::Balance) + bus(SocProfile::Balance)
 }
 
 pub fn apply(profile: SocProfile) -> usize {
-    let Some(base) = gpu_devfreq() else {
-        return 0;
-    };
-    match profile {
-        SocProfile::Lite => super::devfreq_mid_perf(&base),
-        SocProfile::Balance => super::devfreq_unlock(&base),
-        SocProfile::Eco => super::devfreq_min_perf(&base),
-        SocProfile::Performance => super::devfreq_max_perf(&base),
-    }
+    gpu(profile) + bus(profile) + super::mali::apply_power_policy(profile)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::GPU_NEEDLES;
+    use super::{BUS_NEEDLES, GPU_NEEDLES};
 
     #[test]
     fn covers_kirin_gpu_nodes() {
         assert!(GPU_NEEDLES.contains(&"gpu"));
+        assert!(BUS_NEEDLES.contains(&"ddr"));
     }
 }

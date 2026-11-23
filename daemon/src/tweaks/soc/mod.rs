@@ -267,6 +267,22 @@ pub(crate) fn devfreq_min_perf(base: &str) -> usize {
         + usize::from(apply_node(&format!("{}/max_freq", base), &value))
 }
 
+pub(crate) fn devfreq_profile(base: &str, profile: SocProfile) -> usize {
+    match profile {
+        SocProfile::Lite => devfreq_mid_perf(base),
+        SocProfile::Balance => devfreq_unlock(base),
+        SocProfile::Eco => devfreq_min_perf(base),
+        SocProfile::Performance => devfreq_max_perf(base),
+    }
+}
+
+pub(crate) fn devfreq_group_profile(needles: &[&str], profile: SocProfile) -> usize {
+    devfreq_matching(needles)
+        .into_iter()
+        .map(|base| devfreq_profile(&base, profile))
+        .sum()
+}
+
 pub(crate) fn cpudcvs_max_perf(base: &str) -> usize {
     let values = read_frequencies(&format!("{}/available_frequencies", base));
     let Some(max) = devfreq::max_frequency(&values) else {

@@ -55,6 +55,8 @@ const POWER_LIMIT_KEYS: &[&str] = &[
     "ignore_pbm_limited",
 ];
 const PPM_LIMIT_POLICIES: &[&str] = &["PWR_THRO", "THERMAL"];
+const GPU_DEVFREQ_NEEDLES: &[&str] = &["mali", "gpufreq"];
+const BUS_NEEDLES: &[&str] = &["ddr", "emi", "emc", "memlat"];
 
 fn parse_opp_table(path: &str) -> Vec<(usize, u64)> {
     let Ok(content) = fs::read_to_string(path) else {
@@ -173,6 +175,14 @@ fn ddr_performance(lite: bool) -> usize {
             super::devfreq_max_perf(&base)
         };
     }
+    applied += super::devfreq_group_profile(
+        BUS_NEEDLES,
+        if lite {
+            SocProfile::Lite
+        } else {
+            SocProfile::Performance
+        },
+    );
     applied
 }
 
@@ -189,7 +199,14 @@ fn ddr_balance() -> usize {
     if let Some(base) = super::find_devfreq(&["mtk-dvfsrc-devfreq"]) {
         applied += super::devfreq_unlock(&base);
     }
+    applied += super::devfreq_group_profile(BUS_NEEDLES, SocProfile::Balance);
     applied
+}
+
+fn gpu_devfreq_profile(profile: SocProfile) -> usize {
+    super::find_devfreq(GPU_DEVFREQ_NEEDLES)
+        .map(|base| super::devfreq_profile(&base, profile))
+        .unwrap_or(0)
 }
 
 fn gpu_max_performance() -> usize {
@@ -205,6 +222,50 @@ fn gpu_max_performance() -> usize {
         return 0;
     };
     usize::from(super::apply_node(LEGACY_GPUFREQ_PATH, &freq.to_string()))
+}
+
+fn gpu_performance_or_devfreq() -> usize {
+    let applied = gpu_max_performance();
+    if applied > 0 {
+        applied
+    } else {
+        gpu_devfreq_profile(SocProfile::Performance)
+    }
+}
+
+fn gpu_balance_or_devfreq() -> usize {
+    let mut applied = 0;
+    if super::write_node(LEGACY_GPUFREQ_PATH, "0") {
+        applied += 1;
+    }
+    if super::write_node(FIX_OPP_PATH, "-1") {
+        applied += 1;
+    }
+    if applied > 0 {
+        applied
+    } else {
+        gpu_devfreq_profile(SocProfile::Balance)
+    }
+}
+
+fn gpu_eco_or_devfreq() -> usize {
+    let mut applied = 0;
+    if Path::new("/proc/gpufreqv2").is_dir() {
+        if let Some(index) = min_opp_index(GPUFREQ_V2_TABLE) {
+            if super::apply_node(FIX_OPP_PATH, &index.to_string()) {
+                applied += 1;
+            }
+        }
+    } else if let Some(freq) = last_opp_freq(GPUFREQ_V1_TABLE) {
+        if super::apply_node(LEGACY_GPUFREQ_PATH, &freq.to_string()) {
+            applied += 1;
+        }
+    }
+    if applied > 0 {
+        applied
+    } else {
+        gpu_devfreq_profile(SocProfile::Eco)
+    }
 }
 
 fn performance_base_profile() -> usize {
@@ -259,7 +320,7 @@ fn performance_profile() -> usize {
     applied += usize::from(super::apply_node(CCI_MODE_PATH, "1"));
     applied += usize::from(super::apply_node(POWER_MODE_PATH, "3"));
     applied += usize::from(super::apply_node(DRAMBOOST_PATH, "1"));
-    applied += gpu_max_performance();
+    applied += gpu_performance_or_devfreq();
     applied += super::mali_power_policy(SocProfile::Performance);
     applied
 }
@@ -281,12 +342,7 @@ fn balance_profile() -> usize {
         }
     }
 
-    if super::write_node(LEGACY_GPUFREQ_PATH, "0") {
-        applied += 1;
-    }
-    if super::write_node(FIX_OPP_PATH, "-1") {
-        applied += 1;
-    }
+    applied += gpu_balance_or_devfreq();
 
     applied += power_limited("0");
     applied += super::mali_power_policy(SocProfile::Balance);
@@ -302,32 +358,24 @@ fn balance_profile() -> usize {
 
 fn powersave_profile() -> usize {
     let mut applied = usize::from(super::apply_node(POWER_MODE_PATH, "1"));
-    if Path::new("/proc/gpufreqv2").is_dir() {
-        if let Some(index) = min_opp_index(GPUFREQ_V2_TABLE) {
-            if super::apply_node(FIX_OPP_PATH, &index.to_string()) {
-                applied += 1;
-            }
-        }
-    } else if let Some(freq) = last_opp_freq(GPUFREQ_V1_TABLE) {
-        if super::apply_node(LEGACY_GPUFREQ_PATH, &freq.to_string()) {
-            applied += 1;
-        }
-    }
+    applied += gpu_eco_or_devfreq();
     applied += super::mali_power_policy(SocProfile::Eco);
     applied
 }
 
 pub(crate) fn frame_boost() -> usize {
-    ddr_performance(false)
+    ddr_performance(false) + gpu_performance_or_devfreq()
 }
 
 pub(crate) fn frame_relax() -> usize {
-    ddr_balance()
+    ddr_balance() + gpu_balance_or_devfreq()
 }
 
 pub fn apply(profile: SocProfile) -> usize {
     match profile {
-        SocProfile::Lite => super::mali_power_policy(SocProfile::Lite),
+        SocProfile::Lite => {
+            super::mali_power_policy(SocProfile::Lite) + gpu_devfreq_profile(SocProfile::Lite)
+        }
         SocProfile::Balance => balance_profile(),
         SocProfile::Eco => powersave_profile(),
         SocProfile::Performance => performance_profile(),
@@ -336,7 +384,10 @@ pub fn apply(profile: SocProfile) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{first_opp_freq, last_opp_freq, min_opp_index, parse_opp_table};
+    use super::{
+        first_opp_freq, last_opp_freq, min_opp_index, parse_opp_table, BUS_NEEDLES,
+        GPU_DEVFREQ_NEEDLES,
+    };
 
     fn sample_table(name: &str) -> String {
         let dir = std::env::temp_dir().join(name);
@@ -363,5 +414,12 @@ mod tests {
         assert_eq!(first_opp_freq(&path), Some(1300000));
         assert_eq!(last_opp_freq(&path), Some(1248000));
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn covers_mediatek_devfreq_nodes() {
+        assert!(GPU_DEVFREQ_NEEDLES.contains(&"mali"));
+        assert!(BUS_NEEDLES.contains(&"ddr"));
+        assert!(BUS_NEEDLES.contains(&"emc"));
     }
 }

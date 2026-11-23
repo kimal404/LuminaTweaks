@@ -19,7 +19,12 @@ use std::path::Path;
 
 const GPU_DIRS: &[&str] = &["/sys/kernel/gpu", "/sys/devices/platform/gpu"];
 const FREQ_TABLES: &[&str] = &["gpu_available_frequencies", "gpu_freq_table"];
-const MIF_NEEDLES: &[&str] = &["devfreq_mif"];
+const BUS_NEEDLES: &[&str] = &[
+    "devfreq_mif",
+    "devfreq_int",
+    "devfreq_disp",
+    "devfreq_memlat",
+];
 
 fn gpu_dir() -> Option<&'static str> {
     GPU_DIRS.iter().copied().find(|dir| Path::new(dir).is_dir())
@@ -77,15 +82,7 @@ fn mif(profile: SocProfile) -> usize {
     ) {
         return 0;
     }
-    let mut applied = 0;
-    for base in super::devfreq_matching(MIF_NEEDLES) {
-        applied += match profile {
-            SocProfile::Lite => super::devfreq_mid_perf(&base),
-            SocProfile::Performance => super::devfreq_max_perf(&base),
-            _ => super::devfreq_unlock(&base),
-        };
-    }
-    applied
+    super::devfreq_group_profile(BUS_NEEDLES, profile)
 }
 
 pub(crate) fn frame_boost() -> usize {
@@ -98,25 +95,21 @@ pub(crate) fn frame_relax() -> usize {
 
 pub fn apply(profile: SocProfile) -> usize {
     let mut applied = apply_gpu(profile);
-    let policy = match profile {
-        SocProfile::Lite => SocProfile::Lite,
-        SocProfile::Balance => SocProfile::Balance,
-        SocProfile::Eco => SocProfile::Eco,
-        SocProfile::Performance => SocProfile::Performance,
-    };
-    applied += super::mali::apply_power_policy(policy);
+    applied += super::mali::apply_power_policy(profile);
     applied += mif(profile);
     applied
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{FREQ_TABLES, GPU_DIRS};
+    use super::{BUS_NEEDLES, FREQ_TABLES, GPU_DIRS};
 
     #[test]
     fn has_exynos_gpu_nodes() {
         assert!(GPU_DIRS.contains(&"/sys/kernel/gpu"));
         assert!(FREQ_TABLES.contains(&"gpu_available_frequencies"));
         assert!(FREQ_TABLES.contains(&"gpu_freq_table"));
+        assert!(BUS_NEEDLES.contains(&"devfreq_mif"));
+        assert!(BUS_NEEDLES.contains(&"devfreq_int"));
     }
 }

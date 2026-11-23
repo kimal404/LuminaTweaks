@@ -17,7 +17,7 @@
 use super::SocProfile;
 use std::path::Path;
 
-const MIF_NEEDLES: &[&str] = &["devfreq_mif"];
+const BUS_NEEDLES: &[&str] = &["devfreq_mif", "devfreq_int", "devfreq_disp"];
 
 fn gpu_dir() -> Option<String> {
     let candidates = super::platform_matching("mali");
@@ -54,13 +54,7 @@ fn apply_gpu(profile: SocProfile) -> usize {
 
     let mut applied = set_freq(&base, "scaling_max_freq", cap);
     applied += set_freq(&base, "scaling_min_freq", floor);
-    let policy = match profile {
-        SocProfile::Lite => SocProfile::Lite,
-        SocProfile::Balance => SocProfile::Balance,
-        SocProfile::Eco => SocProfile::Eco,
-        SocProfile::Performance => SocProfile::Performance,
-    };
-    applied += super::mali::apply_power_policy(policy);
+    applied += super::mali::apply_power_policy(profile);
     applied
 }
 
@@ -74,15 +68,7 @@ fn mif(profile: SocProfile) -> usize {
     ) {
         return 0;
     }
-    let mut applied = 0;
-    for base in super::devfreq_matching(MIF_NEEDLES) {
-        applied += match profile {
-            SocProfile::Lite => super::devfreq_mid_perf(&base),
-            SocProfile::Performance => super::devfreq_max_perf(&base),
-            _ => super::devfreq_unlock(&base),
-        };
-    }
-    applied
+    super::devfreq_group_profile(BUS_NEEDLES, profile)
 }
 
 pub(crate) fn frame_boost() -> usize {
@@ -99,10 +85,11 @@ pub fn apply(profile: SocProfile) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::MIF_NEEDLES;
+    use super::BUS_NEEDLES;
 
     #[test]
-    fn covers_tensor_mif_nodes() {
-        assert!(MIF_NEEDLES.contains(&"devfreq_mif"));
+    fn covers_tensor_bus_nodes() {
+        assert!(BUS_NEEDLES.contains(&"devfreq_mif"));
+        assert!(BUS_NEEDLES.contains(&"devfreq_int"));
     }
 }

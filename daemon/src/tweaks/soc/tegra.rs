@@ -18,6 +18,7 @@ use super::SocProfile;
 use std::path::Path;
 
 const GPU_DIRS: &[&str] = &["/sys/kernel/tegra_gpu", "/sys/devices/platform/tegra_gpu"];
+const BUS_NEEDLES: &[&str] = &["emc", "ddr", "memlat"];
 
 fn gpu_dir() -> Option<&'static str> {
     GPU_DIRS
@@ -33,32 +34,7 @@ fn set_rate(dir: &str, node: &str, value: u64) -> usize {
     ))
 }
 
-pub(crate) fn frame_boost() -> usize {
-    let Some(dir) = gpu_dir() else {
-        return 0;
-    };
-    let values = super::read_frequencies(&format!("{}/available_frequencies", dir));
-    let Some(max) = crate::tweaks::devfreq::max_frequency(&values) else {
-        return 0;
-    };
-    set_rate(dir, "gpu_cap_rate", max)
-}
-
-pub(crate) fn frame_relax() -> usize {
-    let Some(dir) = gpu_dir() else {
-        return 0;
-    };
-    let values = super::read_frequencies(&format!("{}/available_frequencies", dir));
-    let (Some(min), Some(max)) = (
-        crate::tweaks::devfreq::min_frequency(&values),
-        crate::tweaks::devfreq::max_frequency(&values),
-    ) else {
-        return 0;
-    };
-    set_rate(dir, "gpu_cap_rate", max) + set_rate(dir, "gpu_floor_rate", min)
-}
-
-pub fn apply(profile: SocProfile) -> usize {
+fn gpu(profile: SocProfile) -> usize {
     let Some(dir) = gpu_dir() else {
         return 0;
     };
@@ -81,12 +57,32 @@ pub fn apply(profile: SocProfile) -> usize {
     applied
 }
 
+fn bus(profile: SocProfile) -> usize {
+    if profile == SocProfile::Eco || crate::tweaks::mitigation::has("DISABLE_DDR_TWEAK") {
+        return 0;
+    }
+    super::devfreq_group_profile(BUS_NEEDLES, profile)
+}
+
+pub(crate) fn frame_boost() -> usize {
+    gpu(SocProfile::Performance) + bus(SocProfile::Performance)
+}
+
+pub(crate) fn frame_relax() -> usize {
+    gpu(SocProfile::Balance) + bus(SocProfile::Balance)
+}
+
+pub fn apply(profile: SocProfile) -> usize {
+    gpu(profile) + bus(profile)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::GPU_DIRS;
+    use super::{BUS_NEEDLES, GPU_DIRS};
 
     #[test]
     fn has_tegra_gpu_node() {
         assert!(GPU_DIRS.contains(&"/sys/kernel/tegra_gpu"));
+        assert!(BUS_NEEDLES.contains(&"emc"));
     }
 }

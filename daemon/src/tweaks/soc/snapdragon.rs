@@ -38,6 +38,15 @@ fn kgsl_devfreq() -> Option<String> {
         .map(|base| format!("{}/devfreq", base))
 }
 
+fn gpu_devfreq_profile(profile: SocProfile) -> usize {
+    if kgsl_devfreq().is_some() {
+        return 0;
+    }
+    super::find_devfreq(&["gpu", "kgsl"])
+        .map(|base| super::devfreq_profile(&base, profile))
+        .unwrap_or(0)
+}
+
 fn kgsl_node(name: &str) -> Option<String> {
     let base = kgsl_base()?;
     let path = format!("{}/{}", base, name);
@@ -121,7 +130,7 @@ fn ddr_balance() -> usize {
 }
 
 fn lite_profile() -> usize {
-    let mut applied = ddr_profile(true);
+    let mut applied = ddr_profile(true) + gpu_devfreq_profile(SocProfile::Lite);
     if let Some(base) = kgsl_devfreq() {
         applied += super::devfreq_unlock(&base);
     }
@@ -131,7 +140,7 @@ fn lite_profile() -> usize {
 }
 
 fn performance_profile() -> usize {
-    let mut applied = ddr_profile(false);
+    let mut applied = ddr_profile(false) + gpu_devfreq_profile(SocProfile::Performance);
     if let Some(base) = kgsl_devfreq() {
         applied += super::devfreq_max_perf(&base);
     }
@@ -141,7 +150,7 @@ fn performance_profile() -> usize {
 }
 
 fn balance_profile() -> usize {
-    let mut applied = ddr_balance();
+    let mut applied = ddr_balance() + gpu_devfreq_profile(SocProfile::Balance);
     if let Some(base) = kgsl_devfreq() {
         applied += super::devfreq_unlock(&base);
     }
@@ -155,13 +164,13 @@ fn powersave_profile() -> usize {
         return 0;
     }
     let Some(base) = kgsl_devfreq() else {
-        return 0;
+        return gpu_devfreq_profile(SocProfile::Eco);
     };
     super::devfreq_min_perf(&base)
 }
 
 pub(crate) fn frame_boost() -> usize {
-    let mut applied = ddr_profile(false);
+    let mut applied = ddr_profile(false) + gpu_devfreq_profile(SocProfile::Performance);
     if let Some(base) = kgsl_devfreq() {
         applied += super::devfreq_max_perf(&base);
     }
@@ -169,7 +178,7 @@ pub(crate) fn frame_boost() -> usize {
 }
 
 pub(crate) fn frame_relax() -> usize {
-    let mut applied = ddr_balance();
+    let mut applied = ddr_balance() + gpu_devfreq_profile(SocProfile::Balance);
     if let Some(base) = kgsl_devfreq() {
         applied += super::devfreq_unlock(&base);
     }
