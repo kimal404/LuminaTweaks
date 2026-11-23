@@ -125,6 +125,7 @@ fn apply_profile(profile: Profile, lite: bool) {
         Profile::Balance => engine::balance_profile(),
         Profile::Performance => engine::performance_profile(lite),
     }
+    capability::log_summary("profile");
 }
 
 fn config_hash() -> u64 {
@@ -421,6 +422,7 @@ impl EngineRuntime {
                 self.active_target_pid,
                 trigger
             );
+            capability::log_summary("reset");
         }
 
         self.current_profile = Some(Profile::Balance);
@@ -453,10 +455,12 @@ fn main() {
     if std::env::args_os().any(|arg| arg == "--restore-all") {
         tweaks::state::restore_all();
         engine::restore_boot_profile();
+        capability::log_summary("restore_boot");
         return;
     }
     if std::env::args_os().any(|arg| arg == "--restore-boot") {
         engine::restore_boot_profile();
+        capability::log_summary("restore_boot");
         return;
     }
 
@@ -490,6 +494,7 @@ fn main() {
     engine::init_baseline_governor();
     engine::sync_global_tweaks();
     engine::apply_boot_profile();
+    capability::log_summary("boot");
     soc::vendor();
     if !crate::tweaks::mitigation::active_items().is_empty() {
         log!("[MITIGATION] {}", crate::tweaks::mitigation::summary());

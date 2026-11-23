@@ -58,6 +58,7 @@ rm -f /data/adb/.config/lumina/luminad.lock
 rm -f /data/local/tmp/lumina.log*
 rm -f /data/local/tmp/luminad.log*
 rm -f /data/local/tmp/lumina-binder.log*
+rm -f /data/local/tmp/lumina_capability.log*
 
 setprop sys.lumina.profile Balanced 2>/dev/null || true
 

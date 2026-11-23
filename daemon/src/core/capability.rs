@@ -16,7 +16,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::sync::Mutex;
@@ -25,8 +26,11 @@ const CONFIG_DIR: &str = "/data/adb/.config/lumina";
 const REPORT_PATH: &str = "/data/adb/.config/lumina/capabilities.json";
 const REPORT_TMP: &str = "/data/adb/.config/lumina/capabilities.json.tmp";
 const MODE_PATH: &str = "/data/adb/.config/lumina/capability_mode";
+const CAP_LOG_PATH: &str = "/data/local/tmp/lumina_capability.log";
+const CAP_LOG_OLD: &str = "/data/local/tmp/lumina_capability.log.old";
 const MAX_ENTRIES: usize = 256;
 const PERSIST_INTERVAL_MS: u64 = 2_000;
+const CAP_LOG_MAX_BYTES: u64 = 128 * 1024;
 
 const PROBES: &[&str] = &[
     "/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor",
@@ -100,6 +104,26 @@ struct State {
 }
 
 static STATE: Mutex<Option<State>> = Mutex::new(None);
+static CAP_LOG_LOCK: Mutex<()> = Mutex::new(());
+
+#[derive(Serialize)]
+struct LogEvent<'a> {
+    ts: u64,
+    boot_id: &'a str,
+    path: &'a str,
+    category: &'a str,
+    status: Status,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    requested: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    actual: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    detail: Option<&'a str>,
+}
+
+fn should_log(previous: Option<Status>, status: Status) -> bool {
+    previous != Some(status) || status == Status::RolledBack
+}
 
 fn now_ms() -> u64 {
     std::time::SystemTime::now()
@@ -172,6 +196,45 @@ fn read_actual(path: &str) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+fn append_event(entry: &Entry) {
+    let boot = boot_id();
+    let event = LogEvent {
+        ts: now_ms(),
+        boot_id: &boot,
+        path: &entry.path,
+        category: &entry.category,
+        status: entry.status,
+        requested: entry.requested.as_deref(),
+        actual: entry.actual.as_deref(),
+        detail: entry.detail.as_deref(),
+    };
+    let Ok(mut line) = serde_json::to_string(&event) else {
+        return;
+    };
+    line.push('\n');
+
+    let _guard = CAP_LOG_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if fs::metadata(CAP_LOG_PATH)
+        .map(|meta| meta.len() >= CAP_LOG_MAX_BYTES)
+        .unwrap_or(false)
+    {
+        if Path::new(CAP_LOG_OLD).exists() {
+            let _ = fs::remove_file(CAP_LOG_OLD);
+        }
+        let _ = fs::rename(CAP_LOG_PATH, CAP_LOG_OLD);
+    }
+    if let Ok(mut file) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(CAP_LOG_PATH)
+    {
+        let _ = file.write_all(line.as_bytes());
+        let _ = fs::set_permissions(CAP_LOG_PATH, fs::Permissions::from_mode(0o644));
+    }
+}
+
 fn detail_for(status: Status) -> Option<String> {
     match status {
         Status::Unsupported => Some("path_missing".to_string()),
@@ -185,24 +248,28 @@ fn detail_for(status: Status) -> Option<String> {
 
 fn store(path: &str, status: Status, requested: Option<String>, actual: Option<String>) {
     let updated_at_ms = now_ms();
-    with_state(|state| {
+    let logged = with_state(|state| {
         if state.entries.len() >= MAX_ENTRIES && !state.entries.contains_key(path) {
-            return;
+            return None;
         }
-        state.entries.insert(
-            path.to_string(),
-            Entry {
-                path: path.to_string(),
-                category: category_for(path).to_string(),
-                status,
-                requested,
-                actual,
-                detail: detail_for(status),
-                updated_at_ms,
-            },
-        );
+        let previous = state.entries.get(path).map(|entry| entry.status);
+        let entry = Entry {
+            path: path.to_string(),
+            category: category_for(path).to_string(),
+            status,
+            requested,
+            actual,
+            detail: detail_for(status),
+            updated_at_ms,
+        };
+        let logged = should_log(previous, status).then(|| entry.clone());
+        state.entries.insert(path.to_string(), entry);
         state.dirty = true;
+        logged
     });
+    if let Some(entry) = logged {
+        append_event(&entry);
+    }
 }
 
 pub fn record_write(path: &str, requested: &str, write_ok: bool) -> Status {
@@ -323,6 +390,50 @@ pub fn report_json() -> String {
     serde_json::to_string(&build_report()).unwrap_or_else(|_| "{}".to_string())
 }
 
+pub fn log_summary(tag: &str) {
+    let (supported, coerced, blocked, degraded, unsupported, unknown, rolled_back) =
+        with_state(|state| {
+            let mut supported = 0;
+            let mut coerced = 0;
+            let mut blocked = 0;
+            let mut degraded = 0;
+            let mut unsupported = 0;
+            let mut unknown = 0;
+            let mut rolled_back = 0;
+            for entry in state.entries.values() {
+                match entry.status {
+                    Status::Supported => supported += 1,
+                    Status::Coerced => coerced += 1,
+                    Status::Blocked => blocked += 1,
+                    Status::Degraded => degraded += 1,
+                    Status::Unsupported => unsupported += 1,
+                    Status::Unknown => unknown += 1,
+                    Status::RolledBack => rolled_back += 1,
+                }
+            }
+            (
+                supported,
+                coerced,
+                blocked,
+                degraded,
+                unsupported,
+                unknown,
+                rolled_back,
+            )
+        });
+    crate::log!(
+        "[CAP] {}: supported={} coerced={} blocked={} degraded={} unsupported={} unknown={} rolled_back={}",
+        tag,
+        supported,
+        coerced,
+        blocked,
+        degraded,
+        unsupported,
+        unknown,
+        rolled_back
+    );
+}
+
 pub fn flush(force: bool) {
     let now = now_ms();
     let report = with_state(|state| {
@@ -364,7 +475,7 @@ pub fn flush_if_due() {
 
 #[cfg(test)]
 mod tests {
-    use super::{category_for, Status};
+    use super::{category_for, should_log, Status};
 
     #[test]
     fn maps_capability_categories() {
@@ -399,5 +510,14 @@ mod tests {
             "\"rolled_back\""
         );
         assert_eq!(Status::Supported.as_str(), "supported");
+    }
+
+    #[test]
+    fn logs_only_changes_and_rollbacks() {
+        assert!(should_log(None, Status::Supported));
+        assert!(!should_log(Some(Status::Supported), Status::Supported));
+        assert!(should_log(Some(Status::Supported), Status::Coerced));
+        assert!(should_log(Some(Status::Blocked), Status::RolledBack));
+        assert!(should_log(Some(Status::RolledBack), Status::RolledBack));
     }
 }

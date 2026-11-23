@@ -24,7 +24,7 @@ static INIT_LOGGER_ONCE: Once = Once::new();
 
 const LOG_FILE: &str = "/data/local/tmp/luminad.log";
 const LOG_FILE_OLD: &str = "/data/local/tmp/luminad.log.old";
-const MAX_BYTES: u64 = 1024 * 1024;
+const MAX_BYTES: u64 = 512 * 1024;
 
 #[repr(C)]
 struct Tm {
@@ -61,6 +61,15 @@ fn get_timestamp() -> String {
 pub fn init_logger() {
     INIT_LOGGER_ONCE.call_once(|| {
         let _guard = LOG_LOCK.lock().unwrap_or_else(|error| error.into_inner());
+        if fs::metadata(LOG_FILE)
+            .map(|meta| meta.len() > 0)
+            .unwrap_or(false)
+        {
+            if Path::new(LOG_FILE_OLD).exists() {
+                let _ = fs::remove_file(LOG_FILE_OLD);
+            }
+            let _ = fs::rename(LOG_FILE, LOG_FILE_OLD);
+        }
         if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(LOG_FILE) {
             let _ = writeln!(file, "{} [SYSTEM] Session started", get_timestamp());
         }
