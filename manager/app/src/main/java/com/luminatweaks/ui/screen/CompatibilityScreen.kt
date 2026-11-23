@@ -37,8 +37,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.HelpOutline
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.RemoveCircleOutline
 import androidx.compose.material.icons.rounded.Restore
@@ -55,6 +57,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -92,6 +95,7 @@ fun CompatibilityScreen(onBackClick: () -> Unit = {}) {
     var strictMode by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
     var refreshing by remember { mutableStateOf(false) }
+    var showAll by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         loading = report == null
@@ -102,13 +106,23 @@ fun CompatibilityScreen(onBackClick: () -> Unit = {}) {
 
     val entries = report?.entries.orEmpty()
     val supported = entries.count {
-        it.status == CapabilityStatus.Supported || it.status == CapabilityStatus.Coerced
+        it.status == CapabilityStatus.Supported || it.status == CapabilityStatus.WriteOnly
     }
     val coerced = entries.count { it.status == CapabilityStatus.Coerced }
     val issues = entries.count {
         it.status == CapabilityStatus.Blocked || it.status == CapabilityStatus.Degraded
     }
     val unsupported = entries.count { it.status == CapabilityStatus.Unsupported }
+    val hiddenCount = entries.count {
+        it.status == CapabilityStatus.Unsupported || it.status == CapabilityStatus.ReadOnly
+    }
+    val visibleEntries = if (showAll) {
+        entries
+    } else {
+        entries.filter {
+            it.status != CapabilityStatus.Unsupported && it.status != CapabilityStatus.ReadOnly
+        }
+    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -267,6 +281,23 @@ fun CompatibilityScreen(onBackClick: () -> Unit = {}) {
                 }
             }
 
+            if (hiddenCount > 0) {
+                item(key = "filter") {
+                    TextButton(
+                        onClick = { showAll = !showAll },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = if (showAll) {
+                                stringResource(R.string.compatibility_hide_unsupported)
+                            } else {
+                                stringResource(R.string.compatibility_show_all, hiddenCount)
+                            }
+                        )
+                    }
+                }
+            }
+
             if (entries.isEmpty()) {
                 item(key = "empty") {
                     Card(
@@ -303,7 +334,7 @@ fun CompatibilityScreen(onBackClick: () -> Unit = {}) {
                     }
                 }
             } else {
-                entries.groupBy { it.category }
+                visibleEntries.groupBy { it.category }
                     .toSortedMap()
                     .forEach { (category, items) ->
                         item(key = "header_$category") {
@@ -444,6 +475,8 @@ private fun statusVisual(status: CapabilityStatus): Pair<ImageVector, Color> = w
     CapabilityStatus.Unsupported -> Icons.Rounded.RemoveCircleOutline to MaterialTheme.colorScheme.onSurfaceVariant
     CapabilityStatus.RolledBack -> Icons.Rounded.Restore to MaterialTheme.colorScheme.tertiary
     CapabilityStatus.Unknown -> Icons.Rounded.HelpOutline to MaterialTheme.colorScheme.onSurfaceVariant
+    CapabilityStatus.ReadOnly -> Icons.Rounded.Lock to MaterialTheme.colorScheme.onSurfaceVariant
+    CapabilityStatus.WriteOnly -> Icons.Rounded.Edit to MaterialTheme.colorScheme.tertiary
 }
 
 @Composable
@@ -456,6 +489,8 @@ private fun statusLabel(status: CapabilityStatus): String = stringResource(
         CapabilityStatus.Unsupported -> R.string.compatibility_status_unsupported
         CapabilityStatus.RolledBack -> R.string.compatibility_status_rolled_back
         CapabilityStatus.Unknown -> R.string.compatibility_status_unknown
+        CapabilityStatus.ReadOnly -> R.string.compatibility_status_read_only
+        CapabilityStatus.WriteOnly -> R.string.compatibility_status_write_only
     }
 )
 

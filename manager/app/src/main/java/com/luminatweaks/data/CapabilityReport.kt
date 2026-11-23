@@ -25,7 +25,9 @@ enum class CapabilityStatus {
     Degraded,
     Unsupported,
     Unknown,
-    RolledBack;
+    RolledBack,
+    ReadOnly,
+    WriteOnly;
 
     companion object {
         fun from(raw: String?): CapabilityStatus = when (raw?.trim()?.lowercase()) {
@@ -35,6 +37,8 @@ enum class CapabilityStatus {
             "degraded" -> Degraded
             "unsupported" -> Unsupported
             "rolled_back" -> RolledBack
+            "read_only" -> ReadOnly
+            "write_only" -> WriteOnly
             else -> Unknown
         }
     }

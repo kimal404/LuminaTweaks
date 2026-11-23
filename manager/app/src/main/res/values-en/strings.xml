@@ -346,6 +346,8 @@ Features on this page are only active when the system is in the Performance prof
     <string name="compatibility_mode_observe_desc">Reports status only; tweak behavior stays unchanged.</string>
     <string name="compatibility_empty_title">No data yet</string>
     <string name="compatibility_empty_desc">Apply a profile or rescan to see tweak support.</string>
+    <string name="compatibility_show_all">Show all (%1$d hidden)</string>
+    <string name="compatibility_hide_unsupported">Hide unsupported</string>
     <string name="compatibility_requested">Requested: %1$s</string>
     <string name="compatibility_actual">Actual: %1$s</string>
     <string name="compatibility_category_cpu">CPU</string>
@@ -362,4 +364,6 @@ Features on this page are only active when the system is in the Performance prof
     <string name="compatibility_status_unsupported">Unsupported</string>
     <string name="compatibility_status_rolled_back">Rolled back</string>
     <string name="compatibility_status_unknown">Unknown</string>
+    <string name="compatibility_status_read_only">Read-only</string>
+    <string name="compatibility_status_write_only">Write-only</string>
 </resources>

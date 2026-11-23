@@ -347,6 +347,8 @@ Fitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. P
     <string name="compatibility_mode_observe_desc">Hanya melaporkan status; perilaku tweak tidak berubah.</string>
     <string name="compatibility_empty_title">Belum ada data</string>
     <string name="compatibility_empty_desc">Jalankan profil atau pindai ulang untuk melihat dukungan tweak.</string>
+    <string name="compatibility_show_all">Tampilkan semua (%1$d disembunyikan)</string>
+    <string name="compatibility_hide_unsupported">Sembunyikan yang tidak didukung</string>
     <string name="compatibility_requested">Diminta: %1$s</string>
     <string name="compatibility_actual">Aktual: %1$s</string>
     <string name="compatibility_category_cpu">CPU</string>
@@ -363,4 +365,6 @@ Fitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. P
     <string name="compatibility_status_unsupported">Tidak didukung</string>
     <string name="compatibility_status_rolled_back">Dikembalikan</string>
     <string name="compatibility_status_unknown">Tidak diketahui</string>
+    <string name="compatibility_status_read_only">Hanya baca</string>
+    <string name="compatibility_status_write_only">Hanya tulis</string>
 </resources>

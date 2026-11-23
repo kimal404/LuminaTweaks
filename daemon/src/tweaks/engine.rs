@@ -547,7 +547,14 @@ fn block_paths() -> Vec<String> {
     };
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
-        if name.starts_with("loop") || name.starts_with("ram") {
+        if name.starts_with("loop")
+            || name.starts_with("ram")
+            || name.starts_with("dm-")
+            || name.starts_with("mtdblock")
+            || name.starts_with("zram")
+            || name.starts_with("sr")
+            || name.starts_with("fd")
+        {
             continue;
         }
         let base = format!("/sys/block/{}", name);

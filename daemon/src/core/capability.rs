@@ -34,11 +34,7 @@ const CAP_LOG_MAX_BYTES: u64 = 128 * 1024;
 
 const PROBES: &[&str] = &[
     "/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor",
-    "/sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq",
-    "/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq",
-    "/sys/class/thermal/thermal_zone0/temp",
     "/proc/sys/net/ipv4/tcp_congestion_control",
-    "/proc/sys/vm/swappiness",
     "/proc/sys/vm/vfs_cache_pressure",
     "/sys/block/sda/queue/scheduler",
     "/sys/class/kgsl/kgsl-3d0/devfreq/min_freq",
@@ -55,6 +51,8 @@ pub enum Status {
     Unsupported,
     Unknown,
     RolledBack,
+    ReadOnly,
+    WriteOnly,
 }
 
 impl Status {
@@ -71,6 +69,8 @@ impl Status {
             Status::Unsupported => "unsupported",
             Status::Unknown => "unknown",
             Status::RolledBack => "rolled_back",
+            Status::ReadOnly => "read_only",
+            Status::WriteOnly => "write_only",
         }
     }
 }
@@ -196,6 +196,24 @@ fn read_actual(path: &str) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+fn writable(path: &str) -> bool {
+    fs::metadata(path)
+        .map(|meta| meta.permissions().mode() & 0o222 != 0)
+        .unwrap_or(false)
+}
+
+fn looks_like_value(requested: &str, actual: &str) -> bool {
+    let actual = actual.trim();
+    if actual.is_empty() || actual.starts_with('[') {
+        return false;
+    }
+    let requested = requested.trim();
+    if requested.chars().all(|ch| ch.is_ascii_digit() || ch == '-') {
+        return actual.chars().all(|ch| ch.is_ascii_digit() || ch == '-');
+    }
+    true
+}
+
 fn append_event(entry: &Entry) {
     let boot = boot_id();
     let event = LogEvent {
@@ -242,6 +260,8 @@ fn detail_for(status: Status) -> Option<String> {
         Status::Degraded => Some("no_readback".to_string()),
         Status::Coerced => Some("value_coerced".to_string()),
         Status::RolledBack => Some("restored".to_string()),
+        Status::ReadOnly => Some("read_only".to_string()),
+        Status::WriteOnly => Some("write_only".to_string()),
         _ => None,
     }
 }
@@ -283,7 +303,8 @@ pub fn record_write(path: &str, requested: &str, write_ok: bool) -> Status {
         Status::Blocked
     } else {
         match actual.as_deref() {
-            None => Status::Degraded,
+            None => Status::WriteOnly,
+            Some(value) if !looks_like_value(requested, value) => Status::WriteOnly,
             Some(value) if value == requested.trim() => Status::Supported,
             Some(_) => Status::Coerced,
         }
@@ -323,9 +344,13 @@ pub fn probe_all() {
             {
                 Status::Unknown
             } else if fs::read_to_string(path).is_ok() {
-                Status::Unknown
+                if writable(path) {
+                    Status::Unknown
+                } else {
+                    Status::ReadOnly
+                }
             } else {
-                Status::Blocked
+                Status::WriteOnly
             };
             state.entries.insert(
                 path.to_string(),
@@ -391,38 +416,53 @@ pub fn report_json() -> String {
 }
 
 pub fn log_summary(tag: &str) {
-    let (supported, coerced, blocked, degraded, unsupported, unknown, rolled_back) =
-        with_state(|state| {
-            let mut supported = 0;
-            let mut coerced = 0;
-            let mut blocked = 0;
-            let mut degraded = 0;
-            let mut unsupported = 0;
-            let mut unknown = 0;
-            let mut rolled_back = 0;
-            for entry in state.entries.values() {
-                match entry.status {
-                    Status::Supported => supported += 1,
-                    Status::Coerced => coerced += 1,
-                    Status::Blocked => blocked += 1,
-                    Status::Degraded => degraded += 1,
-                    Status::Unsupported => unsupported += 1,
-                    Status::Unknown => unknown += 1,
-                    Status::RolledBack => rolled_back += 1,
-                }
+    let (
+        supported,
+        coerced,
+        blocked,
+        degraded,
+        unsupported,
+        unknown,
+        rolled_back,
+        read_only,
+        write_only,
+    ) = with_state(|state| {
+        let mut supported = 0;
+        let mut coerced = 0;
+        let mut blocked = 0;
+        let mut degraded = 0;
+        let mut unsupported = 0;
+        let mut unknown = 0;
+        let mut rolled_back = 0;
+        let mut read_only = 0;
+        let mut write_only = 0;
+        for entry in state.entries.values() {
+            match entry.status {
+                Status::Supported => supported += 1,
+                Status::Coerced => coerced += 1,
+                Status::Blocked => blocked += 1,
+                Status::Degraded => degraded += 1,
+                Status::Unsupported => unsupported += 1,
+                Status::Unknown => unknown += 1,
+                Status::RolledBack => rolled_back += 1,
+                Status::ReadOnly => read_only += 1,
+                Status::WriteOnly => write_only += 1,
             }
-            (
-                supported,
-                coerced,
-                blocked,
-                degraded,
-                unsupported,
-                unknown,
-                rolled_back,
-            )
-        });
+        }
+        (
+            supported,
+            coerced,
+            blocked,
+            degraded,
+            unsupported,
+            unknown,
+            rolled_back,
+            read_only,
+            write_only,
+        )
+    });
     crate::log!(
-        "[CAP] {}: supported={} coerced={} blocked={} degraded={} unsupported={} unknown={} rolled_back={}",
+        "[CAP] {}: supported={} coerced={} blocked={} degraded={} unsupported={} unknown={} rolled_back={} read_only={} write_only={}",
         tag,
         supported,
         coerced,
@@ -430,7 +470,9 @@ pub fn log_summary(tag: &str) {
         degraded,
         unsupported,
         unknown,
-        rolled_back
+        rolled_back,
+        read_only,
+        write_only
     );
 }
 
@@ -475,7 +517,7 @@ pub fn flush_if_due() {
 
 #[cfg(test)]
 mod tests {
-    use super::{category_for, should_log, Status};
+    use super::{category_for, looks_like_value, should_log, Status};
 
     #[test]
     fn maps_capability_categories() {
@@ -501,6 +543,8 @@ mod tests {
         assert!(!Status::Supported.needs_rollback());
         assert!(!Status::Coerced.needs_rollback());
         assert!(!Status::Unknown.needs_rollback());
+        assert!(!Status::ReadOnly.needs_rollback());
+        assert!(!Status::WriteOnly.needs_rollback());
     }
 
     #[test]
@@ -510,6 +554,21 @@ mod tests {
             "\"rolled_back\""
         );
         assert_eq!(Status::Supported.as_str(), "supported");
+        assert_eq!(
+            serde_json::to_string(&Status::WriteOnly).unwrap(),
+            "\"write_only\""
+        );
+    }
+
+    #[test]
+    fn detects_debug_readback() {
+        assert!(!looks_like_value(
+            "-1",
+            "[GPUFREQ-DEBUG] fix GPU/STACK OPP index is disabled"
+        ));
+        assert!(looks_like_value("3", "3"));
+        assert!(looks_like_value("sugov_ext", "sugov_ext"));
+        assert!(looks_like_value("1 1800000", "1 1800000"));
     }
 
     #[test]
