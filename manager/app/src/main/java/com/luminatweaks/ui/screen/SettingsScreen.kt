@@ -59,6 +59,7 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Security
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -123,6 +124,7 @@ fun SettingsScreen(
     onNavigateToAbout: (() -> Unit)? = null,
     onNavigateToPersonalisasi: (() -> Unit)? = null,
     onNavigateToCompatibility: (() -> Unit)? = null,
+    onNavigateToTweaks: (() -> Unit)? = null,
     onOpenSetupWizard: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -140,6 +142,7 @@ fun SettingsScreen(
     var showAboutScreen by remember { mutableStateOf(false) }
     var showPersonalisasiScreen by remember { mutableStateOf(false) }
     var showCompatibilityScreen by remember { mutableStateOf(false) }
+    var showTweaksScreen by remember { mutableStateOf(false) }
     var showUninstallDialog by remember { mutableStateOf(false) }
     var isUninstalling by remember { mutableStateOf(false) }
     var uninstallOriginPoint by remember { mutableStateOf(Offset(0.5f, 0.5f)) }
@@ -149,6 +152,7 @@ fun SettingsScreen(
         showAboutScreen && onNavigateToAbout == null -> "about"
         showPersonalisasiScreen && onNavigateToPersonalisasi == null -> "personalisasi"
         showCompatibilityScreen && onNavigateToCompatibility == null -> "compatibility"
+        showTweaksScreen && onNavigateToTweaks == null -> "tweaks"
         else -> "main"
     }
 
@@ -160,6 +164,7 @@ fun SettingsScreen(
             "about" -> AboutScreen(onBackClick = { showAboutScreen = false })
             "personalisasi" -> PersonalisasiScreen(onBackClick = { showPersonalisasiScreen = false })
             "compatibility" -> CompatibilityScreen(onBackClick = { showCompatibilityScreen = false })
+            "tweaks" -> TweaksScreen(onBackClick = { showTweaksScreen = false })
             else -> {
                 val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                 val bottomPadding = if (isFloating) 112.dp + navInset else 28.dp + navInset
@@ -230,7 +235,7 @@ fun SettingsScreen(
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 SettingsActionRow(
                                     index = 0,
-                                    count = 3,
+                                    count = 2,
                                     icon = Icons.Rounded.Description,
                                     title = stringResource(R.string.settings_save_log),
                                     subtitle = if (isGeneratingLog) {
@@ -244,7 +249,7 @@ fun SettingsScreen(
 
                                 SettingsActionRow(
                                     index = 1,
-                                    count = 3,
+                                    count = 2,
                                     icon = Icons.Rounded.Language,
                                     title = stringResource(R.string.settings_language),
                                     subtitle = if (currentLanguage == "en") {
@@ -255,24 +260,30 @@ fun SettingsScreen(
                                     highlightSubtitle = true,
                                     onClick = { showLanguageSheet = true }
                                 )
-
-                                SettingsActionRow(
-                                    index = 2,
-                                    count = 3,
-                                    icon = Icons.Rounded.AutoFixHigh,
-                                    title = stringResource(R.string.settings_setup_wizard),
-                                    subtitle = stringResource(R.string.settings_setup_wizard_desc),
-                                    onClick = onOpenSetupWizard
-                                )
                             }
                         }
 
-                        item(key = "compatibility") {
-                            SettingsSectionHeader(title = stringResource(R.string.section_compatibility))
+                        item(key = "advanced") {
+                            SettingsSectionHeader(title = stringResource(R.string.section_advanced))
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 SettingsActionRow(
                                     index = 0,
-                                    count = 1,
+                                    count = 3,
+                                    icon = Icons.Rounded.Tune,
+                                    title = stringResource(R.string.settings_advanced_tweaks),
+                                    subtitle = stringResource(R.string.settings_advanced_tweaks_desc),
+                                    onClick = {
+                                        if (onNavigateToTweaks != null) {
+                                            onNavigateToTweaks()
+                                        } else {
+                                            showTweaksScreen = true
+                                        }
+                                    }
+                                )
+
+                                SettingsActionRow(
+                                    index = 1,
+                                    count = 3,
                                     icon = Icons.Rounded.Security,
                                     title = stringResource(R.string.settings_compatibility),
                                     subtitle = stringResource(R.string.settings_compatibility_desc),
@@ -283,6 +294,15 @@ fun SettingsScreen(
                                             showCompatibilityScreen = true
                                         }
                                     }
+                                )
+
+                                SettingsActionRow(
+                                    index = 2,
+                                    count = 3,
+                                    icon = Icons.Rounded.AutoFixHigh,
+                                    title = stringResource(R.string.settings_setup_wizard),
+                                    subtitle = stringResource(R.string.settings_setup_wizard_desc),
+                                    onClick = onOpenSetupWizard
                                 )
                             }
                         }

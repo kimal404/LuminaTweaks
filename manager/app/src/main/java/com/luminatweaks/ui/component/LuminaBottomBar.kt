@@ -37,7 +37,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -73,8 +72,7 @@ private data class NavTab(
 
 private val navTabs = listOf(
     NavTab(Icons.Rounded.Home, R.string.nav_home),
-    NavTab(Icons.Rounded.Apps, R.string.nav_apps),
-    NavTab(Icons.Rounded.Tune, R.string.nav_tweaks),
+    NavTab(Icons.Rounded.Apps, R.string.nav_games),
     NavTab(Icons.Rounded.Settings, R.string.nav_settings)
 )
 

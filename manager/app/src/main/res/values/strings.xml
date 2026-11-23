@@ -40,6 +40,7 @@
     <string name="opt_on">Hidup</string>
     <string name="opt_active">Aktif</string>
     <string name="apps_title">Aplikasi</string>
+    <string name="apps_title_games">Game</string>
     <string name="action_more">Lainnya</string>
     <string name="apps_show_system">Tampilkan aplikasi sistem</string>
     <string name="apps_hide_system">Sembunyikan aplikasi sistem</string>
@@ -80,12 +81,15 @@
     <string name="title_settings">Pengaturan</string>
     <string name="section_personalization">Personalisasi</string>
     <string name="section_others">Lainnya</string>
+    <string name="section_advanced">Lanjutan</string>
     <string name="section_about">Tentang</string>
     <string name="settings_personalization_desc">Tema, warna, dan kustomisasi antarmuka</string>
     <string name="settings_save_log">Simpan Log</string>
     <string name="settings_save_log_bundling">Sedang membundel berkas log...</string>
     <string name="settings_save_log_desc">Ekspor atau bagikan log diagnosis daemon Lumina</string>
     <string name="settings_language">Bahasa</string>
+    <string name="settings_advanced_tweaks">Tweaks Suite</string>
+    <string name="settings_advanced_tweaks_desc">Kontrol manual refresh rate, renderer, IO, dan HUD</string>
     <string name="settings_about">Tentang LuminaTweaks</string>
     <string name="settings_version_format">Versi %1$s</string>
     <string name="dialog_select_language">Pilih Bahasa</string>
@@ -141,6 +145,7 @@
     <string name="action_reset">Reset</string>
     <string name="nav_home">Beranda</string>
     <string name="nav_apps">Aplikasi</string>
+    <string name="nav_games">Game</string>
     <string name="nav_tweaks">Tweaks</string>
     <string name="nav_settings">Pengaturan</string>
     <string name="setup_root_privilege">Hak Akses Root</string>

@@ -117,6 +117,7 @@ import com.luminatweaks.R
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DisplayRrMode
 import com.luminatweaks.service.FloatingFpsService
+import com.luminatweaks.ui.component.LuminaBackButton
 import com.luminatweaks.ui.component.TouchOriginDialog
 import com.luminatweaks.ui.component.appBarFade
 import com.luminatweaks.ui.component.pressScale
@@ -222,8 +223,10 @@ private suspend fun awaitPagerSettled(pagerState: PagerState?) {
 @Composable
 fun TweaksScreen(
     pagerState: PagerState? = null,
-    onOpenFloatingHud: (() -> Unit)? = null
+    onOpenFloatingHud: (() -> Unit)? = null,
+    onBackClick: (() -> Unit)? = null
 ) {
+    BackHandler(enabled = onBackClick != null) { onBackClick?.invoke() }
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
@@ -442,7 +445,8 @@ fun TweaksScreen(
         topBar = {
             TweaksFlexibleTopBar(
                 title = stringResource(R.string.tweaks_title),
-                scrollBehavior = scrollBehavior
+                scrollBehavior = scrollBehavior,
+                onBackClick = onBackClick
             )
         },
         snackbarHost = {
@@ -609,7 +613,8 @@ fun TweaksScreen(
 @Composable
 private fun TweaksFlexibleTopBar(
     title: String,
-    scrollBehavior: TopAppBarScrollBehavior
+    scrollBehavior: TopAppBarScrollBehavior,
+    onBackClick: (() -> Unit)? = null
 ) {
     val fadeSurface = MaterialTheme.colorScheme.background
     Box(
@@ -626,6 +631,11 @@ private fun TweaksFlexibleTopBar(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+            },
+            navigationIcon = {
+                if (onBackClick != null) {
+                    LuminaBackButton(onBack = onBackClick)
+                }
             },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = Color.Transparent,

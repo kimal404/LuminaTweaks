@@ -189,7 +189,7 @@ fun AppsScreen(
     var isRefreshing by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var hideSystemApps by remember { mutableStateOf(true) }
-    var selectedFilter by remember { mutableStateOf(AppListFilter.ALL) }
+    var selectedFilter by remember { mutableStateOf(AppListFilter.GAMES) }
     var showMoreMenu by remember { mutableStateOf(false) }
 
     val appConfigs = remember { mutableStateMapOf<String, AppProfileConfig>() }
@@ -238,6 +238,11 @@ fun AppsScreen(
     }
 
     val activeApp = rawApps.find { it.packageName == selectedPackageName }
+    val screenTitle = if (selectedFilter == AppListFilter.GAMES) {
+        R.string.apps_title_games
+    } else {
+        R.string.apps_title
+    }
 
     val visibleBaseApps = remember(rawApps, hideSystemApps) {
         rawApps.filter { app -> if (hideSystemApps) !app.isSystemApp else true }
@@ -328,7 +333,7 @@ fun AppsScreen(
                         LargeFlexibleTopAppBar(
                             title = {
                                 Text(
-                                    text = stringResource(R.string.apps_title),
+                                    text = stringResource(screenTitle),
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
