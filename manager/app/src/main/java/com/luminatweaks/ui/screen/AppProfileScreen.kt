@@ -58,7 +58,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.BatterySaver
-import androidx.compose.material.icons.rounded.Brush
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Lock
@@ -136,8 +135,6 @@ fun OptionItem.getLabel(): String = when (this) {
     OptionItem.ON -> stringResource(R.string.opt_on)
 }
 
-data class RendererOption(val id: String, val label: String)
-
 private data class ProfileSheetOption<T>(
     val value: T,
     val label: String
@@ -161,7 +158,6 @@ fun AppProfileScreen(
 
             var showLiteModeSheet by remember { mutableStateOf(false) }
             var showRefreshRateSheet by remember { mutableStateOf(false) }
-            var showRendererSheet by remember { mutableStateOf(false) }
             var showDndSheet by remember { mutableStateOf(false) }
             LaunchedEffect(Unit) {
                 rrModes = ConfigRepository.getRefreshRateModes()
@@ -169,20 +165,6 @@ fun AppProfileScreen(
 
             val triStateOptions = remember {
                 listOf(OptionItem.OFF, OptionItem.DEFAULT, OptionItem.ON)
-            }
-
-            val defaultRendererLabel = stringResource(R.string.opt_default)
-            val rendererOptions = remember(defaultRendererLabel) {
-                listOf(
-                    RendererOption("default", defaultRendererLabel),
-                    RendererOption("skiavk", "Skia Vulkan"),
-                    RendererOption("skiavkthreaded", "Skia Vulkan (Threaded)"),
-                    RendererOption("skiagl", "Skia OpenGL"),
-                    RendererOption("skiaglthreaded", "Skia OpenGL (Threaded)"),
-                    RendererOption("opengl", "OpenGL ES"),
-                    RendererOption("openglthreaded", "OpenGL ES (Threaded)"),
-                    RendererOption("vulkan", "Vulkan")
-                )
             }
 
             val currentHzLabel = if (profile.refreshRate == "default" || profile.refreshRate.isBlank()) {
@@ -193,9 +175,6 @@ fun AppProfileScreen(
                 }
                 if (matched != null) "${matched.hz} Hz" else stringResource(R.string.profile_mode_format, profile.refreshRate)
             }
-
-            val currentRendererLabel =
-                rendererOptions.find { it.id == profile.renderer }?.label ?: defaultRendererLabel
 
             val packageInfo = remember(app.packageName) {
                 runCatching { packageManager.getPackageInfo(app.packageName, 0) }.getOrNull()
@@ -423,20 +402,12 @@ fun AppProfileScreen(
                                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     ProfileActionRow(
                                         index = 0,
-                                        count = 2,
+                                        count = 1,
                                         icon = Icons.Rounded.Speed,
                                         title = stringResource(R.string.profile_refresh_rate),
                                         subtitle = currentHzLabel,
                                         highlightSubtitle = true,
                                         onClick = { showRefreshRateSheet = true }
-                                    )
-                                    ProfileActionRow(
-                                        index = 1,
-                                        count = 2,
-                                        icon = Icons.Rounded.Brush,
-                                        title = stringResource(R.string.profile_renderer),
-                                        subtitle = currentRendererLabel,
-                                        onClick = { showRendererSheet = true }
                                     )
                                 }
 
@@ -486,17 +457,6 @@ fun AppProfileScreen(
                     onProfileChanged(profile.copy(refreshRate = value))
                 },
                 onDismiss = { showRefreshRateSheet = false }
-            )
-
-            ProfileOptionSheet(
-                show = showRendererSheet,
-                title = stringResource(R.string.dialog_select_renderer),
-                options = rendererOptions.map { ProfileSheetOption(it.id, it.label) },
-                isSelected = { it.equals(profile.renderer, ignoreCase = true) },
-                onSelect = { id ->
-                    onProfileChanged(profile.copy(renderer = id))
-                },
-                onDismiss = { showRendererSheet = false }
             )
 
             ProfileOptionSheet(

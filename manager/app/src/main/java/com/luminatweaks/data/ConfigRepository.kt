@@ -303,7 +303,6 @@ object ConfigRepository {
                         },
                         liteMode = obj.optString("lite_mode", "default"),
                         refreshRate = obj.optString("refresh_rate", "default"),
-                        renderer = obj.optString("renderer", "default"),
                         dnd = obj.optString("dnd", "default")
                     )
                 }
@@ -334,7 +333,6 @@ object ConfigRepository {
                 put("custom", item.custom)
                 put("lite_mode", item.liteMode)
                 put("refresh_rate", item.refreshRate)
-                put("renderer", item.renderer)
                 put("dnd", item.dnd)
             }
             arr.put(obj)
@@ -541,41 +539,32 @@ object ConfigRepository {
     }
 
     suspend fun setRenderer(id: String) = withContext(Dispatchers.IO) {
-        cachedTweaksState = cachedTweaksState?.copy(currentRendererId = id)
+        val normalized = when (id.trim().lowercase()) {
+            "skiavk", "skiavkthreaded", "vulkan", "vk" -> "skiavk"
+            "skiagl", "skiaglthreaded", "opengl", "openglthreaded", "gles" -> "skiagl"
+            else -> "default"
+        }
+        cachedTweaksState = cachedTweaksState?.copy(currentRendererId = normalized)
         ensureDir()
         val cmds = mutableListOf<String>()
-        cmds.add("echo '$id' > $CONFIG_DIR/current_renderer.txt")
-        cmds.add("setprop persist.lumina.renderer '$id'")
+        cmds.add("echo '$normalized' > $CONFIG_DIR/current_renderer.txt")
+        cmds.add("setprop persist.lumina.renderer '$normalized'")
+        cmds.add("setprop debug.hwui.render_thread ''")
+        cmds.add("setprop debug.skia.threaded_mode ''")
+        cmds.add("resetprop --delete ro.hwui.use_vulkan 2>/dev/null || resetprop ro.hwui.use_vulkan ''")
 
-        if (id == "default") {
-            cmds.add("setprop debug.hwui.renderer ''")
-            cmds.add("setprop debug.renderengine.backend ''")
-            cmds.add("setprop debug.hwui.render_thread ''")
-            cmds.add("setprop debug.skia.threaded_mode ''")
-            cmds.add("resetprop --delete ro.hwui.use_vulkan 2>/dev/null || resetprop ro.hwui.use_vulkan ''")
-        } else {
-            cmds.add("setprop debug.hwui.renderer '$id'")
-            if (id.contains("threaded")) {
-                cmds.add("setprop debug.hwui.render_thread true")
-                if (id.contains("skia")) {
-                    cmds.add("setprop debug.skia.threaded_mode true")
-                } else {
-                    cmds.add("setprop debug.skia.threaded_mode false")
-                }
-            } else {
-                cmds.add("setprop debug.hwui.render_thread false")
-                cmds.add("setprop debug.skia.threaded_mode false")
+        when (normalized) {
+            "skiavk" -> {
+                cmds.add("setprop debug.hwui.renderer 'skiavk'")
+                cmds.add("setprop debug.renderengine.backend 'vulkan'")
             }
-
-            when (id) {
-                "skiavk", "skiavkthreaded", "vulkan" -> {
-                    cmds.add("setprop debug.renderengine.backend vulkan")
-                    cmds.add("resetprop ro.hwui.use_vulkan true")
-                }
-                "skiagl", "skiaglthreaded", "opengl", "openglthreaded" -> {
-                    cmds.add("setprop debug.renderengine.backend gles")
-                    cmds.add("resetprop ro.hwui.use_vulkan false")
-                }
+            "skiagl" -> {
+                cmds.add("setprop debug.hwui.renderer 'skiagl'")
+                cmds.add("setprop debug.renderengine.backend 'gles'")
+            }
+            else -> {
+                cmds.add("setprop debug.hwui.renderer ''")
+                cmds.add("setprop debug.renderengine.backend ''")
             }
         }
         runSuCmd(cmds.joinToString(" && "), 5)

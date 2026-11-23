@@ -64,7 +64,6 @@ pub struct AppConfig {
     pub lite_mode: String,
     pub dnd: String,
     pub refresh_rate: String,
-    pub renderer: String,
     pub pixel_sharp: bool,
     pub hard_distance: bool,
     #[serde(default)]
@@ -773,11 +772,6 @@ fn extract_app_config(item: &Value) -> AppConfig {
         _ => "default".to_string(),
     };
 
-    let renderer = match item.get("renderer") {
-        Some(Value::String(s)) => s.clone(),
-        _ => "default".to_string(),
-    };
-
     let pixel_sharp = item
         .get("pixel_sharp")
         .or_else(|| item.get("pixelSharp"))
@@ -796,7 +790,6 @@ fn extract_app_config(item: &Value) -> AppConfig {
         lite_mode,
         dnd,
         refresh_rate,
-        renderer,
         pixel_sharp,
         hard_distance,
         disabled_games,
@@ -838,7 +831,6 @@ pub fn get_app_config(pkg: &str) -> Option<AppConfig> {
             lite_mode: meta.lite_mode,
             dnd: meta.dnd,
             refresh_rate: "default".to_string(),
-            renderer: "default".to_string(),
             pixel_sharp: false,
             hard_distance: false,
             disabled_games: global_disabled.clone(),
@@ -852,7 +844,6 @@ pub fn get_app_config(pkg: &str) -> Option<AppConfig> {
             lite_mode: "default".to_string(),
             dnd: "default".to_string(),
             refresh_rate: "default".to_string(),
-            renderer: "default".to_string(),
             pixel_sharp: false,
             hard_distance: false,
             disabled_games: global_disabled,

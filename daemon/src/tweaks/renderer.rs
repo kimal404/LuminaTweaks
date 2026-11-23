@@ -21,43 +21,30 @@ const CONFIG_DIR: &str = "/data/adb/.config/lumina";
 const LEGACY_MODULE_RENDERER: &str = "/data/adb/modules/luminatweaks/current_renderer.txt";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Backend {
-    Vulkan,
-    Gles,
-    None,
+enum GlobalBackend {
+    Default,
+    SkiaGl,
+    SkiaVk,
 }
 
-struct RendererSpec {
-    backend: Backend,
-    threaded: bool,
-    skia_threaded: bool,
-}
-
-impl RendererSpec {
-    fn parse(name: &str) -> Option<Self> {
+impl GlobalBackend {
+    fn from_raw(name: &str) -> Self {
         let lower = name.trim().to_ascii_lowercase();
-        if lower.is_empty() {
-            return None;
-        }
-
-        let backend = if lower.contains("vulkan") || lower.contains("skiavk") || lower == "vk" {
-            Backend::Vulkan
+        if lower.contains("vulkan") || lower.contains("skiavk") || lower == "vk" {
+            Self::SkiaVk
         } else if lower.contains("opengl") || lower.contains("gles") || lower.contains("skiagl") {
-            Backend::Gles
-        } else if lower == "software" {
-            Backend::None
+            Self::SkiaGl
         } else {
-            return None;
-        };
+            Self::Default
+        }
+    }
 
-        let threaded = lower.contains("threaded");
-        let skia_threaded = threaded && lower.contains("skia");
-
-        Some(Self {
-            backend,
-            threaded,
-            skia_threaded,
-        })
+    fn as_id(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::SkiaGl => "skiagl",
+            Self::SkiaVk => "skiavk",
+        }
     }
 }
 
@@ -69,56 +56,10 @@ fn set_prop(key: &str, value: &str) {
     let _ = crate::core::sysprop::set(key, value);
 }
 
-fn set_reset_prop(key: &str, value: Option<&str>) {
-    match value {
-        Some(v) => run("resetprop", &[key, v]),
-        None => run("resetprop", &["--delete", key]),
-    }
-}
-
-fn clear_props() {
-    for key in [
-        "debug.hwui.renderer",
-        "debug.renderengine.backend",
-        "debug.hwui.render_thread",
-        "debug.skia.threaded_mode",
-    ] {
-        set_prop(key, "");
-    }
-    set_reset_prop("ro.hwui.use_vulkan", None);
-}
-
-fn write_spec(spec: &RendererSpec) {
-    match spec.backend {
-        Backend::None => {
-            clear_props();
-            set_reset_prop("ro.hwui.use_vulkan", Some("false"));
-        }
-        Backend::Vulkan => {
-            set_prop("debug.renderengine.backend", "vulkan");
-            set_prop(
-                "debug.hwui.render_thread",
-                if spec.threaded { "true" } else { "false" },
-            );
-            set_prop(
-                "debug.skia.threaded_mode",
-                if spec.skia_threaded { "true" } else { "false" },
-            );
-            set_reset_prop("ro.hwui.use_vulkan", Some("true"));
-        }
-        Backend::Gles => {
-            set_prop("debug.renderengine.backend", "gles");
-            set_prop(
-                "debug.hwui.render_thread",
-                if spec.threaded { "true" } else { "false" },
-            );
-            set_prop(
-                "debug.skia.threaded_mode",
-                if spec.skia_threaded { "true" } else { "false" },
-            );
-            set_reset_prop("ro.hwui.use_vulkan", Some("false"));
-        }
-    }
+fn clear_legacy_props() {
+    set_prop("debug.hwui.render_thread", "");
+    set_prop("debug.skia.threaded_mode", "");
+    run("resetprop", &["--delete", "ro.hwui.use_vulkan"]);
 }
 
 fn config_path() -> String {
@@ -126,14 +67,19 @@ fn config_path() -> String {
 }
 
 pub fn setrender(renderer: &str) {
-    match RendererSpec::parse(renderer) {
-        Some(spec) => {
-            set_prop("debug.hwui.renderer", renderer);
-            write_spec(&spec);
+    clear_legacy_props();
+    match GlobalBackend::from_raw(renderer) {
+        GlobalBackend::SkiaVk => {
+            set_prop("debug.hwui.renderer", "skiavk");
+            set_prop("debug.renderengine.backend", "vulkan");
         }
-        None => {
-            clear_props();
-            set_reset_prop("ro.hwui.use_vulkan", None);
+        GlobalBackend::SkiaGl => {
+            set_prop("debug.hwui.renderer", "skiagl");
+            set_prop("debug.renderengine.backend", "gles");
+        }
+        GlobalBackend::Default => {
+            set_prop("debug.hwui.renderer", "");
+            set_prop("debug.renderengine.backend", "");
         }
     }
 }
@@ -150,46 +96,43 @@ pub fn get_saved_renderer() -> String {
         }
     }
 
-    let mut value = String::new();
+    let mut raw = String::new();
     for path in [config_path(), LEGACY_MODULE_RENDERER.to_string()] {
         if let Ok(text) = fs::read_to_string(path) {
             let trimmed = text.trim();
             if !trimmed.is_empty() {
-                value = trimmed.to_string();
+                raw = trimmed.to_string();
                 break;
             }
         }
     }
 
-    if value.is_empty() {
+    if raw.is_empty() {
         if let Ok(out) = Command::new("getprop")
             .arg("persist.lumina.renderer")
             .output()
         {
             let prop = String::from_utf8_lossy(&out.stdout).trim().to_string();
             if !prop.is_empty() {
-                value = prop;
+                raw = prop;
             }
         }
     }
 
-    if value.is_empty() {
-        value = "default".to_string();
-    }
-
+    let normalized = GlobalBackend::from_raw(&raw).as_id().to_string();
     if let Ok(mut guard) = RENDERER_CACHE.lock() {
-        *guard = Some((Instant::now(), value.clone()));
+        *guard = Some((Instant::now(), normalized.clone()));
     }
-    value
+    normalized
 }
 
 pub fn save_renderer(renderer: &str) {
+    let normalized = GlobalBackend::from_raw(renderer).as_id().to_string();
     if let Ok(mut guard) = RENDERER_CACHE.lock() {
-        *guard = Some((Instant::now(), renderer.to_string()));
+        *guard = Some((Instant::now(), normalized.clone()));
     }
-    let _ = fs::write(config_path(), renderer);
-    set_prop("persist.lumina.renderer", renderer);
-
+    let _ = fs::write(config_path(), &normalized);
+    set_prop("persist.lumina.renderer", &normalized);
     let _ = fs::remove_file(LEGACY_MODULE_RENDERER);
 }
 

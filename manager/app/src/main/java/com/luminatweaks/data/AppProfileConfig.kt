@@ -23,6 +23,5 @@ data class AppProfileConfig(
     val custom: Boolean = false,
     val liteMode: String = "default",
     val refreshRate: String = "default",
-    val renderer: String = "default",
     val dnd: String = "default"
 )

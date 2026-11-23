@@ -370,16 +370,7 @@ impl EngineRuntime {
             self.current_applied_rr = desired_rr;
         }
 
-        let global_renderer = renderer::get_saved_renderer();
-        let desired_renderer = if let Some(ref cfg) = target_cfg {
-            if cfg.renderer != "default" && !cfg.renderer.is_empty() {
-                cfg.renderer.clone()
-            } else {
-                global_renderer
-            }
-        } else {
-            global_renderer
-        };
+        let desired_renderer = renderer::get_saved_renderer();
 
         if desired_renderer != self.current_applied_renderer {
             renderer::setrender(&desired_renderer);

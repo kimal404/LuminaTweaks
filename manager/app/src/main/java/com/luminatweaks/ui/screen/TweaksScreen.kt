@@ -140,40 +140,31 @@ data class RendererItem(
 
 val RENDERER_OPTIONS = listOf(
     RendererItem("default", R.string.tweaks_renderer_system_default),
-    RendererItem("skiavk", R.string.opt_default),
-    RendererItem("skiavkthreaded", R.string.opt_default),
     RendererItem("skiagl", R.string.opt_default),
-    RendererItem("skiaglthreaded", R.string.opt_default),
-    RendererItem("opengl", R.string.opt_default),
-    RendererItem("openglthreaded", R.string.opt_default),
-    RendererItem("vulkan", R.string.opt_default)
+    RendererItem("skiavk", R.string.opt_default)
 )
 
-fun getRendererDisplayLabel(id: String, defaultLabel: String): String {
+fun normalizeRendererId(id: String): String {
     return when (id.trim().lowercase()) {
-        "default" -> defaultLabel
+        "skiavk", "skiavkthreaded", "vulkan", "vk" -> "skiavk"
+        "skiagl", "skiaglthreaded", "opengl", "openglthreaded", "gles" -> "skiagl"
+        else -> "default"
+    }
+}
+
+fun getRendererDisplayLabel(id: String, defaultLabel: String): String {
+    return when (normalizeRendererId(id)) {
         "skiavk" -> "Skia Vulkan"
-        "skiavkthreaded" -> "Skia Vulkan (Threaded)"
         "skiagl" -> "Skia OpenGL"
-        "skiaglthreaded" -> "Skia OpenGL (Threaded)"
-        "opengl" -> "OpenGL ES"
-        "openglthreaded" -> "OpenGL ES (Threaded)"
-        "vulkan" -> "Vulkan"
-        else -> id
+        else -> defaultLabel
     }
 }
 
 fun getRendererShortLabel(id: String, defaultLabel: String): String {
-    return when (id.trim().lowercase()) {
-        "default" -> defaultLabel
+    return when (normalizeRendererId(id)) {
         "skiavk" -> "Skia Vulkan"
-        "skiavkthreaded" -> "Vulkan MT"
-        "skiagl" -> "Skia GL"
-        "skiaglthreaded" -> "Skia GL MT"
-        "opengl" -> "OpenGL"
-        "openglthreaded" -> "OpenGL MT"
-        "vulkan" -> "Vulkan"
-        else -> id
+        "skiagl" -> "Skia OpenGL"
+        else -> defaultLabel
     }
 }
 
@@ -237,7 +228,7 @@ fun TweaksScreen(
     var rrModes by remember { mutableStateOf<List<DisplayRrMode>>(cached?.rrModes ?: emptyList()) }
     var currentRrId by remember { mutableStateOf<Int?>(cached?.currentRrId) }
     var liveRefreshRate by remember { mutableIntStateOf(60) }
-    var currentRendererId by remember { mutableStateOf(cached?.currentRendererId ?: "default") }
+    var currentRendererId by remember { mutableStateOf(normalizeRendererId(cached?.currentRendererId ?: "default")) }
     var currentIoScheduler by remember { mutableStateOf(cached?.currentIoScheduler ?: "mq-deadline") }
     var availableIoSchedulers by remember { mutableStateOf(emptyList<String>()) }
 
@@ -294,7 +285,7 @@ fun TweaksScreen(
         isGlobalLiteMode = state.isGlobalLiteMode
         rrModes = state.rrModes
         currentRrId = state.currentRrId
-        currentRendererId = state.currentRendererId
+        currentRendererId = normalizeRendererId(state.currentRendererId)
         currentIoScheduler = state.currentIoScheduler
         availableIoSchedulers = withContext(Dispatchers.IO) {
             DeviceUtil.getAvailableIoSchedulers()
@@ -391,8 +382,12 @@ fun TweaksScreen(
         origin = rendererOrigin.origin,
         icon = Icons.Rounded.DeveloperBoard,
         title = stringResource(R.string.tweaks_dialog_select_renderer),
+        subtitle = localizedLabel(
+            "Berlaku global saat aplikasi dibuka ulang",
+            "Applies globally on app cold start"
+        ),
         options = rendererOptions,
-        isSelected = { it.equals(currentRendererId, ignoreCase = true) },
+        isSelected = { it.equals(normalizeRendererId(currentRendererId), ignoreCase = true) },
         onSelect = { rawId ->
             val previous = currentRendererId
             currentRendererId = rawId
@@ -476,8 +471,8 @@ fun TweaksScreen(
                 Spacer(modifier = Modifier.height(12.dp))
                 TweaksInfoBanner(
                     text = localizedLabel(
-                        "Pengaturan di bawah berlaku secara global sebagai default, dan dapat disesuaikan terpisah untuk tiap aplikasi",
-                        "Settings below apply globally as defaults and can be configured individually per app"
+                        "Refresh rate dan Lite Mode dapat disesuaikan terpisah tiap aplikasi, sedangkan renderer berlaku global saat aplikasi dibuka ulang",
+                        "Refresh rate and Lite Mode can be customized per app, while renderer applies globally on app cold start"
                     )
                 )
             }
