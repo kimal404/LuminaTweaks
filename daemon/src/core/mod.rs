@@ -20,4 +20,5 @@ pub mod capability;
 pub mod detector;
 pub mod ipc;
 pub mod perf;
+pub mod sysprop;
 pub mod watcher;

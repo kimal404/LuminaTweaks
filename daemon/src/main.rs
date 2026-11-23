@@ -33,7 +33,6 @@ use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::io::AsRawFd;
-use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -57,7 +56,8 @@ const PID_FILE_PATH: &str = "/data/adb/.config/lumina/luminad.pid";
 const HEARTBEAT_FILE_PATH: &str = "/data/adb/.config/lumina/luminad.alive";
 const LEGACY_PID_FILE_PATH: &str = "/data/local/tmp/lumina.pid";
 const LEGACY_HEARTBEAT_FILE_PATH: &str = "/data/local/tmp/lumina.alive";
-const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(2);
+const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
+const CONFIG_FALLBACK_INTERVAL: Duration = Duration::from_secs(5);
 
 extern "C" fn handle_signal(_: i32) {
     SHUTDOWN.store(true, Ordering::Relaxed);
@@ -152,9 +152,7 @@ fn kernel_release() -> String {
 }
 
 fn set_system_profile_prop(name: &str) {
-    let _ = Command::new("setprop")
-        .args(["sys.lumina.profile", name])
-        .status();
+    let _ = core::sysprop::set("sys.lumina.profile", name);
 }
 
 fn set_dnd(binder: &mut binder_client::BinderClient, mode: &str) {
@@ -200,12 +198,7 @@ fn publish_heartbeat() {
         .to_string();
     let _ = write_runtime_file(HEARTBEAT_FILE_PATH, &timestamp);
     let _ = write_runtime_file(LEGACY_HEARTBEAT_FILE_PATH, &timestamp);
-    let _ = std::process::Command::new("setprop")
-        .args(["sys.lumina.alive", &timestamp])
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status();
+    let _ = core::sysprop::set("sys.lumina.alive", &timestamp);
 }
 
 fn cleanup_runtime_files() {
@@ -232,9 +225,7 @@ fn publish_selinux_status() {
         },
         Err(_) => "Disabled",
     };
-    let _ = Command::new("setprop")
-        .args(["sys.lumina.selinux", status])
-        .status();
+    let _ = core::sysprop::set("sys.lumina.selinux", status);
 }
 
 struct EngineRuntime {
@@ -548,6 +539,7 @@ fn main() {
         let screen_awake = binder_client.screen_state().unwrap_or(true);
         if last_screen_state != Some(screen_awake) {
             if screen_awake {
+                display::reapply_saved_mode();
                 match display::saved_mode_hz() {
                     Some(hz) => log!("[POWER]  Screen ON ({}Hz) \u{2794} Workers resumed", hz),
                     None => log!("[POWER]  Screen ON \u{2794} Workers resumed"),
@@ -585,7 +577,7 @@ fn main() {
             }
             reload_force = false;
         } else if reload_pending_at.is_none()
-            && runtime.last_config_poll.elapsed() >= Duration::from_secs(2)
+            && runtime.last_config_poll.elapsed() >= CONFIG_FALLBACK_INTERVAL
         {
             runtime.last_config_poll = Instant::now();
             let hash = config_hash();
@@ -780,8 +772,15 @@ fn main() {
 
         fps_monitor.observe(fps_package.as_deref(), fps_game_active, fps_pid, None);
 
-        let thermal_pressure = thermal_monitor.sample();
-        if runtime.current_profile == Some(Profile::Performance) {
+        let thermal_pressure =
+            if screen_awake && runtime.current_profile == Some(Profile::Performance) {
+                thermal_monitor.sample()
+            } else {
+                thermal::ThermalPressure::Normal
+            };
+        if runtime.current_profile != Some(Profile::Performance) {
+            performance_guard = false;
+        } else if screen_awake {
             match thermal_pressure {
                 thermal::ThermalPressure::Critical if !performance_guard => {
                     engine::performance_safety_relax();
@@ -795,8 +794,6 @@ fn main() {
                 }
                 _ => {}
             }
-        } else {
-            performance_guard = false;
         }
         fas_controller.tick(
             false,

@@ -66,7 +66,7 @@ fn run(tool: &str, args: &[&str]) {
 }
 
 fn set_prop(key: &str, value: &str) {
-    run("setprop", &[key, value]);
+    let _ = crate::core::sysprop::set(key, value);
 }
 
 fn set_reset_prop(key: &str, value: Option<&str>) {

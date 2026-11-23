@@ -218,12 +218,7 @@ fn write_idle(game_active: bool, package: Option<&str>, session_start_ms: Option
 }
 
 fn publish_property(frame: &str) {
-    let _ = Command::new("setprop")
-        .args(["sys.lumina.fps", frame])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
+    let _ = crate::core::sysprop::set("sys.lumina.fps", frame);
 }
 
 fn epoch_ms() -> u128 {
@@ -925,7 +920,7 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>, tap: FrameTap)
         match reading {
             Some((fps, frametime)) => {
                 missing = 0;
-                slow = fps < 1.0;
+                slow = fps < 1.0 || source != Source::Vendor;
                 tap.push_window(fps, frametime);
                 write_status(
                     fps,
@@ -945,7 +940,7 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>, tap: FrameTap)
                         timestats_ready = false;
                     }
                     source = next;
-                    slow = false;
+                    slow = next != Source::Vendor;
                     if source == Source::Unavailable {
                         unavailable_at = Some(Instant::now());
                     }

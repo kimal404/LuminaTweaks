@@ -14,10 +14,8 @@
 
 use serde_json::Value;
 use std::fs;
-use std::io::{BufRead, BufReader};
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::sync::Mutex;
-use std::thread;
 use std::time::{Duration, Instant};
 
 pub const CONFIG_DIR: &str = "/data/adb/.config/lumina";
@@ -130,35 +128,10 @@ pub fn resolve_mode_id(val: &str) -> Option<i32> {
     Some(num)
 }
 
-pub fn start_screen_toggle_listener() {
-    thread::spawn(|| loop {
-        let mut child = match Command::new("/system/bin/logcat")
-            .args(["-b", "events", "-s", "screen_toggled"])
-            .stdout(Stdio::piped())
-            .spawn()
-        {
-            Ok(c) => c,
-            Err(_) => {
-                thread::sleep(Duration::from_secs(5));
-                continue;
-            }
-        };
-
-        if let Some(stdout) = child.stdout.take() {
-            let reader = BufReader::new(stdout);
-            for line in reader.lines().flatten() {
-                if line.contains(": 1") {
-                    thread::sleep(Duration::from_millis(300));
-                    if let Some(saved_id) = get_saved_mode_id() {
-                        apply_refresh_rate_id(saved_id);
-                    }
-                }
-            }
-        }
-
-        let _ = child.wait();
-        thread::sleep(Duration::from_secs(2));
-    });
+pub fn reapply_saved_mode() {
+    if let Some(saved_id) = get_saved_mode_id() {
+        apply_refresh_rate_id(saved_id);
+    }
 }
 
 pub fn init_display_subsystem() {
@@ -185,6 +158,4 @@ pub fn init_display_subsystem() {
     if let Some(saved_id) = get_saved_mode_id() {
         apply_refresh_rate_id(saved_id);
     }
-
-    start_screen_toggle_listener();
 }
