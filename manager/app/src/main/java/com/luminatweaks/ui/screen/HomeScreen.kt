@@ -233,7 +233,14 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
     var daemonPid by remember { mutableStateOf<String?>(null) }
     var isModuleInstalled by remember { mutableStateOf(true) }
     var isRebootRequired by remember { mutableStateOf(false) }
-    var currentProfile by remember { mutableStateOf(unknownLabel) }
+    var currentProfile by remember {
+        val initial = DeviceUtil.readSystemProperty("sys.lumina.profile")
+        mutableStateOf(
+            initial?.takeIf { it.isNotBlank() }
+                ?.let { DaemonManager.normalizeProfileLabel(it) }
+                ?: unknownLabel
+        )
+    }
     var isRootGranted by remember { mutableStateOf(false) }
     var selinuxStatus by remember { mutableStateOf("Unknown") }
     var showRebootDialog by remember { mutableStateOf(false) }
@@ -309,7 +316,7 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                         currentProfile = resolved
                     }
                 }
-                delay(1000L)
+                delay(250L)
             }
         }
     }
