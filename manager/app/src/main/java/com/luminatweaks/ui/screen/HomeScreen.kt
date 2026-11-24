@@ -136,6 +136,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import com.luminatweaks.R
+import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DaemonManager
 import com.luminatweaks.service.FloatingFpsService
 import com.luminatweaks.ui.component.LuminaBottomBar
@@ -790,7 +791,7 @@ fun HomeDashboardContent(
         ) {
             PowerActionRow(
                 index = 0,
-                count = 3,
+                count = 4,
                 icon = Icons.Rounded.Refresh,
                 title = stringResource(R.string.power_action_reboot),
                 onClick = {
@@ -802,7 +803,7 @@ fun HomeDashboardContent(
             )
             PowerActionRow(
                 index = 1,
-                count = 3,
+                count = 4,
                 icon = Icons.Rounded.Memory,
                 title = stringResource(R.string.power_action_recovery),
                 onClick = {
@@ -814,13 +815,28 @@ fun HomeDashboardContent(
             )
             PowerActionRow(
                 index = 2,
-                count = 3,
+                count = 4,
                 icon = Icons.Rounded.PowerSettingsNew,
                 title = stringResource(R.string.power_action_restart_service),
                 onClick = {
                     showPowerDialog = false
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     launchRestart()
+                }
+            )
+            PowerActionRow(
+                index = 3,
+                count = 4,
+                icon = Icons.Rounded.Speed,
+                title = localizedLabel("Kembali ke mode otomatis", "Restore auto mode"),
+                onClick = {
+                    showPowerDialog = false
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    homeScope.launch {
+                        ConfigRepository.setAutoProfile(true)
+                        DaemonManager.setAutoProfile(true)
+                        currentProfile = readSystemProperty("sys.lumina.profile") ?: "Balanced"
+                    }
                 }
             )
         }

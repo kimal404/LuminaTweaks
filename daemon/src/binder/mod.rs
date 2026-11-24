@@ -1044,10 +1044,13 @@ fn handle_background(pid: i32) {
     let Some(shared) = SHARED.get() else {
         return;
     };
-    if pid <= 0 {
-        return;
-    }
-    if shared.clear_focus(pid).is_some() {
+    let cleared = if pid <= 0 {
+        shared.clear_focus_state();
+        true
+    } else {
+        shared.clear_focus(pid).is_some()
+    };
+    if cleared {
         shared.request_screen();
     }
 }

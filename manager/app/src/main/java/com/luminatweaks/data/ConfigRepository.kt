@@ -198,6 +198,9 @@ object ConfigRepository {
             JSONObject()
         }
         updater(json)
+        if (!json.has("auto_profile")) {
+            json.put("auto_profile", true)
+        }
         writeFileAtomically(GLOBAL_CONFIG_PATH, json.toString(), reloadDaemon = true)
     }
 
@@ -537,6 +540,9 @@ object ConfigRepository {
         val disabledSet = JSONArray()
         configs.values.filter { it.disabled }.forEach { disabledSet.put(it.pkg) }
         globalJson.put("disabled_games", disabledSet)
+        if (!globalJson.has("auto_profile")) {
+            globalJson.put("auto_profile", true)
+        }
         writeFileAtomically(GLOBAL_CONFIG_PATH, globalJson.toString(), reloadDaemon = true)
     }
 

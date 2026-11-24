@@ -164,6 +164,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+        savedAutoProfileBeforeDeck = readAutoProfileSetting()
         startForegroundCompat()
     }
 
@@ -367,8 +368,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         val gpu = if (collectHeavy) readGpuLoad() else lastGpuPercent
 
         val profileProp = DeviceUtil.readSystemProperty("sys.lumina.profile") ?: "Balanced"
-        val autoProp = DeviceUtil.readSystemProperty("persist.lumina.autoprofile")
-            .let { it == null || (!it.equals("0", true) && !it.equals("false", true)) }
+        val autoProp = readAutoProfileSetting()
 
         return DeckSnapshot(
             fps = fps,
@@ -663,10 +663,14 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         }
     }
 
+    private fun readAutoProfileSetting(): Boolean =
+        DeviceUtil.readSystemProperty("persist.lumina.autoprofile")
+            .let { it == null || (!it.equals("0", true) && !it.equals("false", true)) }
+
     private fun selectProfile(name: String) {
         profileJob?.cancel()
         if (savedAutoProfileBeforeDeck == null) {
-            savedAutoProfileBeforeDeck = uiState.value.autoProfile
+            savedAutoProfileBeforeDeck = readAutoProfileSetting()
         }
         deckManualProfile = name
         manualProfileGraceUntilMs = System.currentTimeMillis() + 5_000L
@@ -688,8 +692,9 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     }
 
     private fun restoreManagerProfileIfNeeded() {
-        if (deckManualProfile == null) return
         val restoreAuto = savedAutoProfileBeforeDeck ?: true
+        val currentAuto = readAutoProfileSetting()
+        if (deckManualProfile == null && currentAuto == restoreAuto) return
         deckManualProfile = null
         savedAutoProfileBeforeDeck = null
         CoroutineScope(Dispatchers.IO).launch {

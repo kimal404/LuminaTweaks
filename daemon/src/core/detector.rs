@@ -114,6 +114,22 @@ pub fn sanitize_pkg_name(raw: &str) -> &str {
         .trim()
 }
 
+pub fn is_launcher_package(pkg: &str) -> bool {
+    matches!(
+        pkg,
+        "com.google.android.apps.nexuslauncher"
+            | "com.miui.home"
+            | "com.mi.android.globallauncher"
+            | "com.android.launcher"
+            | "com.android.launcher3"
+            | "org.lineageos.trebuchet"
+            | "ch.deletescape.lawnchair"
+            | "ch.deletescape.lawnchair.ci"
+            | "com.teslacoilsw.launcher"
+            | "com.sec.android.app.launcher"
+    )
+}
+
 pub(crate) fn is_ignored_package(pkg: &str) -> bool {
     matches!(
         pkg,
@@ -128,17 +144,8 @@ pub(crate) fn is_ignored_package(pkg: &str) -> bool {
             | "com.lbe.security.miui"
             | "com.miui.guardprovider"
             | "com.google.android.googlequicksearchbox"
-            | "com.google.android.apps.nexuslauncher"
-            | "com.miui.home"
-            | "com.mi.android.globallauncher"
-            | "com.android.launcher"
-            | "com.android.launcher3"
-            | "org.lineageos.trebuchet"
-            | "ch.deletescape.lawnchair"
-            | "ch.deletescape.lawnchair.ci"
-            | "com.teslacoilsw.launcher"
-            | "com.sec.android.app.launcher"
-    ) || pkg.contains("inputmethod")
+    ) || is_launcher_package(pkg)
+        || pkg.contains("inputmethod")
         || pkg.contains("system_server")
         || pkg.contains("overlay")
 }

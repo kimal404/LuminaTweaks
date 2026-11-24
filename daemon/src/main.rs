@@ -517,6 +517,12 @@ fn main() {
     engine::init_baseline_governor();
     engine::sync_global_tweaks();
     engine::apply_boot_profile();
+
+    let _ = std::fs::remove_file(MANUAL_PROFILE_PATH);
+    detector::set_auto_profile(true);
+    engine::balance_profile();
+    set_system_profile_prop("Balanced");
+    log!("[PROFILE] Boot reset -> auto/Balanced (stale manual state cleared)");
     capability::log_summary("boot");
     soc::vendor();
     if !crate::tweaks::mitigation::active_items().is_empty() {
@@ -646,7 +652,13 @@ fn main() {
                 log!("[SYSTEM] Config reload applied");
                 detector::invalidate_config_cache();
                 engine::sync_global_tweaks();
-                if !detector::is_auto_profile_enabled() {
+                if detector::is_auto_profile_enabled() {
+                    let _ = std::fs::remove_file(MANUAL_PROFILE_PATH);
+                    runtime.manual_profile = None;
+                    if runtime.current_profile != Some(Profile::Balance) || runtime.current_lite {
+                        runtime.reset_to_balance_triggered("Auto restored", &mut binder_client);
+                    }
+                } else {
                     runtime.apply_manual_profile("Config reload");
                 }
             }
@@ -661,7 +673,13 @@ fn main() {
                 log!("[SYSTEM] Config reload applied");
                 detector::invalidate_config_cache();
                 engine::sync_global_tweaks();
-                if !detector::is_auto_profile_enabled() {
+                if detector::is_auto_profile_enabled() {
+                    let _ = std::fs::remove_file(MANUAL_PROFILE_PATH);
+                    runtime.manual_profile = None;
+                    if runtime.current_profile != Some(Profile::Balance) || runtime.current_lite {
+                        runtime.reset_to_balance_triggered("Auto restored", &mut binder_client);
+                    }
+                } else {
                     runtime.apply_manual_profile("Config reload");
                 }
             }
@@ -683,9 +701,12 @@ fn main() {
                     || (active_pid > 0 && active_pid == died.pid)
                     || (died.package.is_none() && main_proc_gone));
 
-            let confirmed_dead = died.pid <= 0
-                || !detector::pid_matches_package(died.pid, died.package.as_deref().unwrap_or(""))
-                || main_proc_gone;
+            let died_is_main_pid = died
+                .package
+                .as_deref()
+                .map(|pkg| detector::pid_matches_package(died.pid, pkg))
+                .unwrap_or(false);
+            let confirmed_dead = died.pid <= 0 || main_proc_gone || died_is_main_pid;
 
             if matches_target && confirmed_dead {
                 if auto_profile {
@@ -719,6 +740,13 @@ fn main() {
 
         let binder_push = binder_client.is_push();
         let binder_focus = binder_client.focused_package();
+        let launcher_focus = binder_push
+            && screen_awake
+            && binder_focus
+                .as_deref()
+                .map(detector::is_launcher_package)
+                .unwrap_or(false);
+        let focus_released = binder_push && screen_awake && binder_focus.is_none();
         let focused = if screen_awake {
             match binder_focus {
                 Some(package) if is_app_enabled(&package) => {
@@ -732,6 +760,7 @@ fn main() {
                     Some(package)
                 }
                 Some(_) if binder_push => None,
+                None if binder_push => None,
                 Some(_) | None if suppress_fallback => None,
                 Some(_) | None => get_focused_package(),
             }
@@ -741,6 +770,22 @@ fn main() {
         let focused = focused
             .map(|package| detector::sanitize_pkg_name(&package).to_string())
             .filter(|package| !package.is_empty());
+
+        if auto_profile && runtime.active_target_pkg.is_some() && (launcher_focus || focus_released)
+        {
+            runtime.reset_to_balance_triggered(
+                if launcher_focus {
+                    "Launcher focus"
+                } else {
+                    "Foreground released"
+                },
+                &mut binder_client,
+            );
+            fps_monitor.observe(None, false, 0);
+            TextureController::sync_config(None);
+            last_pkg_for_texture = None;
+            fallback_blocked_until = Instant::now() + Duration::from_millis(1500);
+        }
 
         let current_target = if is_master_enabled() {
             let newly_focused_target = focused.as_deref().filter(|pkg| is_app_enabled(pkg));
@@ -795,7 +840,9 @@ fn main() {
                         runtime.left_foreground_at = None;
                         None
                     }
-                } else if detector::process_exists(runtime.target_game_pid) && detector::pid_matches_package(runtime.target_game_pid, saved_pkg) {
+                } else if detector::process_exists(runtime.target_game_pid)
+                    && detector::pid_matches_package(runtime.target_game_pid, saved_pkg)
+                {
                     if runtime.left_foreground_at.is_none() {
                         log!("[SYSTEM] Focus lost -> {} grace 3s", saved_pkg);
                         runtime.left_foreground_at = Some(Instant::now());

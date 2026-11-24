@@ -56,7 +56,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -71,7 +70,6 @@ import com.luminatweaks.ui.component.AospSectionHeader
 import com.luminatweaks.ui.component.LuminaBackButton
 import com.luminatweaks.ui.component.AospTopBar
 import com.luminatweaks.ui.component.rememberHeaderScrolled
-import com.luminatweaks.ui.component.scrolledHeader
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
