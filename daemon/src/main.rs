@@ -175,6 +175,10 @@ fn set_dnd(binder: &mut binder_client::BinderClient, mode: &str) {
 }
 
 fn notify_profile_toast(binder: &mut binder_client::BinderClient, profile: Profile, lite: bool) {
+    let uid = unsafe { libc::geteuid() };
+    if uid != 1000 && uid != 2000 {
+        return;
+    }
     if detector::is_toast_enabled() {
         let _ = binder.show_toast(&format!("Profile {}", profile.display_name(lite)));
     }
@@ -611,13 +615,13 @@ fn main() {
             last_heartbeat = Instant::now();
         }
 
-        let auto_profile = detector::is_auto_profile_enabled();
         let requested_profile = pending_profile
             .take()
             .or_else(|| shared_state.take_requested_profile());
         if let Some(name) = requested_profile {
             if let Some(profile) = Profile::from_name(&name) {
                 let lite = is_lite_mode_active();
+                detector::set_auto_profile(false);
                 let had_profile = runtime.current_profile.is_some();
                 apply_profile(profile, lite);
                 runtime.manual_profile = Some(profile);
@@ -635,6 +639,7 @@ fn main() {
                 );
             }
         }
+        let auto_profile = detector::is_auto_profile_enabled();
 
         let loop_started = Instant::now();
         let screen_awake = binder_client

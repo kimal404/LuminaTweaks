@@ -321,8 +321,19 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                 if (System.currentTimeMillis() >= profileHoldUntil.get()) {
                     val propProfile = readSystemProperty("sys.lumina.profile")
                     if (!propProfile.isNullOrBlank()) {
-                        withContext(Dispatchers.Main) {
-                            currentProfile = DaemonManager.normalizeProfileLabel(propProfile)
+                        val normalized = DaemonManager.normalizeProfileLabel(propProfile)
+                        if (normalized != currentProfile) {
+                            val shouldToast = ConfigRepository.getToastNotifications()
+                            withContext(Dispatchers.Main) {
+                                currentProfile = normalized
+                                if (shouldToast) {
+                                    Toast.makeText(
+                                        context,
+                                        "Profile $normalized",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
                         }
                     }
                 }
