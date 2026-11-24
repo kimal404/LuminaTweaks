@@ -832,10 +832,9 @@ fun HomeDashboardContent(
                 onClick = {
                     showPowerDialog = false
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    homeScope.launch {
+                    restartScope.launch {
                         ConfigRepository.setAutoProfile(true)
                         DaemonManager.setAutoProfile(true)
-                        currentProfile = readSystemProperty("sys.lumina.profile") ?: "Balanced"
                     }
                 }
             )
