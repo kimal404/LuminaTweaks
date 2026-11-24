@@ -17,6 +17,7 @@
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
+use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -137,7 +138,8 @@ pub fn resolve(apk: &Path) -> Option<Codes> {
     }
 
     let classpath = format!("-Djava.class.path={}", apk.display());
-    let mut child = Command::new("/system/bin/app_process")
+    let mut command = Command::new("/system/bin/app_process");
+    command
         .arg(classpath)
         .arg("/")
         .arg("com.rem01gaming.binderresolver.MainKt")
@@ -147,11 +149,20 @@ pub fn resolve(apk: &Path) -> Option<Codes> {
         .env("ANDROID_ART_ROOT", "/apex/com.android.art")
         .env("ANDROID_I18N_ROOT", "/apex/com.android.i18n")
         .env("ANDROID_TZDATA_ROOT", "/apex/com.android.tzdata")
+        .env_remove("ANDROID_SOCKET_zygote")
+        .env_remove("ANDROID_SOCKET_usap_pool_primary")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .ok()?;
+        .stderr(Stdio::null());
+    unsafe {
+        command.pre_exec(|| {
+            for fd in 3..1024 {
+                libc::close(fd);
+            }
+            Ok(())
+        });
+    }
+    let mut child = command.spawn().ok()?;
 
     if let Some(mut stdin) = child.stdin.take() {
         for query in QUERIES {
