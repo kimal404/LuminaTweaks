@@ -323,16 +323,8 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                     if (!propProfile.isNullOrBlank()) {
                         val normalized = DaemonManager.normalizeProfileLabel(propProfile)
                         if (normalized != currentProfile) {
-                            val shouldToast = ConfigRepository.getToastNotifications()
                             withContext(Dispatchers.Main) {
                                 currentProfile = normalized
-                                if (shouldToast) {
-                                    Toast.makeText(
-                                        context,
-                                        "Profile $normalized",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
                             }
                         }
                     }

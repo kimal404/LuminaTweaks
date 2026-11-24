@@ -43,6 +43,15 @@ fn acquire_lock() -> bool {
 }
 
 fn main() {
+    let mut args = std::env::args().skip(1);
+    if let Some(arg) = args.next() {
+        if arg == "--toast" {
+            let text = args.next().unwrap_or_default();
+            let ok = luminad_core::binder::enqueue_text_toast(&text);
+            std::process::exit(if ok { 0 } else { 1 });
+        }
+    }
+
     if !acquire_lock() {
         eprintln!("lumina-binder is already running");
         std::process::exit(0);

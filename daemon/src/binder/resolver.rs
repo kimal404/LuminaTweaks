@@ -28,7 +28,7 @@ const CACHE_SCHEMA: u32 = 3;
 const CACHE_PATH: &str = "/data/adb/.config/lumina/binder_codes.json";
 const CONFIG_DIR: &str = "/data/adb/.config/lumina";
 
-const QUERIES: [&str; 11] = [
+const QUERIES: [&str; 10] = [
     "android.app.IActivityManager.Stub::TRANSACTION_registerProcessObserver",
     "android.app.IProcessObserver.Stub::TRANSACTION_onForegroundActivitiesChanged",
     "android.app.IProcessObserver.Stub::TRANSACTION_onProcessDied",
@@ -37,7 +37,6 @@ const QUERIES: [&str; 11] = [
     "android.os.IPowerManager.Stub::TRANSACTION_isInteractive",
     "android.os.IPowerManager.Stub::TRANSACTION_isPowerSaveMode",
     "android.app.INotificationManager.Stub::TRANSACTION_setInterruptionFilter",
-    "android.app.INotificationManager.Stub::TRANSACTION_getInterruptionFilter",
     "android.hardware.display.IDisplayManager.Stub::TRANSACTION_registerCallbackWithEventMask",
     "android.app.INotificationManager.Stub::TRANSACTION_enqueueTextToast",
 ];
@@ -204,9 +203,9 @@ pub fn resolve(apk: &Path) -> Option<Codes> {
         is_interactive: resolved.get(QUERIES[5]).copied().unwrap_or(0),
         is_power_save: resolved.get(QUERIES[6]).copied().unwrap_or(0),
         set_interruption_filter: resolved.get(QUERIES[7]).copied().unwrap_or(0),
-        get_interruption_filter: resolved.get(QUERIES[8]).copied().unwrap_or(0),
-        display_register_with_mask: resolved.get(QUERIES[9]).copied().unwrap_or(0),
-        enqueue_text_toast: resolved.get(QUERIES[10]).copied().unwrap_or(0),
+        get_interruption_filter: 0,
+        display_register_with_mask: resolved.get(QUERIES[8]).copied().unwrap_or(0),
+        enqueue_text_toast: resolved.get(QUERIES[9]).copied().unwrap_or(0),
     };
 
     if !codes.essential_ok() {

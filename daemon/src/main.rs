@@ -33,6 +33,8 @@ use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::io::AsRawFd;
+use std::os::unix::process::CommandExt;
+use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -174,13 +176,24 @@ fn set_dnd(binder: &mut binder_client::BinderClient, mode: &str) {
     }
 }
 
-fn notify_profile_toast(binder: &mut binder_client::BinderClient, profile: Profile, lite: bool) {
-    let uid = unsafe { libc::geteuid() };
-    if uid != 1000 && uid != 2000 {
+fn notify_profile_toast(profile: Profile, lite: bool) {
+    if !detector::is_toast_enabled() {
         return;
     }
-    if detector::is_toast_enabled() {
-        let _ = binder.show_toast(&format!("Profile {}", profile.display_name(lite)));
+    let helper = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(|dir| dir.join("lumina-binder")))
+        .filter(|path| path.is_file())
+        .unwrap_or_else(|| {
+            std::path::PathBuf::from("/data/adb/modules/luminatweaks/bin/lumina-binder")
+        });
+    let text = format!("Profile {}", profile.display_name(lite));
+    let mut command = Command::new(helper);
+    command.arg("--toast").arg(text).uid(2000).gid(2000);
+    if let Ok(mut child) = command.spawn() {
+        std::thread::spawn(move || {
+            let _ = child.wait();
+        });
     }
 }
 
@@ -380,7 +393,7 @@ impl EngineRuntime {
                 self.current_lite = target_lite;
                 self.update_shared_state(target_profile, target_lite, target_pkg);
                 if had_profile {
-                    notify_profile_toast(binder, target_profile, target_lite);
+                    notify_profile_toast(target_profile, target_lite);
                 }
             }
         }
@@ -416,7 +429,7 @@ impl EngineRuntime {
         }
     }
 
-    fn apply_manual_profile(&mut self, trigger: &str, binder: &mut binder_client::BinderClient) {
+    fn apply_manual_profile(&mut self, trigger: &str) {
         let profile = self.manual_profile.unwrap_or(Profile::Balance);
         let lite = is_lite_mode_active();
         if self.current_profile == Some(profile) && self.current_lite == lite {
@@ -429,7 +442,7 @@ impl EngineRuntime {
         set_system_profile_prop(profile.display_name(lite));
         self.update_shared_state(profile, lite, self.active_target_pkg.as_deref());
         if had_profile {
-            notify_profile_toast(binder, profile, lite);
+            notify_profile_toast(profile, lite);
         }
         log!(
             "[PROFILE] Manual mode -> {} [{}]",
@@ -459,7 +472,7 @@ impl EngineRuntime {
             engine::balance_profile();
             set_system_profile_prop("Balanced");
             if had_profile {
-                notify_profile_toast(binder, Profile::Balance, false);
+                notify_profile_toast(Profile::Balance, false);
             }
             log!(
                 "[RESET]  {} ({}) \u{2794} BALANCED [Trigger: {}]",
@@ -631,7 +644,7 @@ fn main() {
                 set_system_profile_prop(profile.display_name(lite));
                 runtime.update_shared_state(profile, lite, runtime.active_target_pkg.as_deref());
                 if had_profile {
-                    notify_profile_toast(&mut binder_client, profile, lite);
+                    notify_profile_toast(profile, lite);
                 }
                 log!(
                     "[PROFILE] Manual selection -> {}",
@@ -690,7 +703,7 @@ fn main() {
                         runtime.reset_to_balance_triggered("Auto restored", &mut binder_client);
                     }
                 } else {
-                    runtime.apply_manual_profile("Config reload", &mut binder_client);
+                    runtime.apply_manual_profile("Config reload");
                 }
             }
             reload_force = false;
@@ -711,7 +724,7 @@ fn main() {
                         runtime.reset_to_balance_triggered("Auto restored", &mut binder_client);
                     }
                 } else {
-                    runtime.apply_manual_profile("Config reload", &mut binder_client);
+                    runtime.apply_manual_profile("Config reload");
                 }
             }
         }

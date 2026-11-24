@@ -967,9 +967,10 @@ fn enqueue_text_toast_on(
     }
 
     if manual_token {
-        let (Some(write_token), Some(interface)) =
-            (api.write_interface_token, ffi::interface_token(NOTIFICATION_DESCRIPTOR))
-        else {
+        let (Some(write_token), Some(interface)) = (
+            api.write_interface_token,
+            ffi::interface_token(NOTIFICATION_DESCRIPTOR),
+        ) else {
             unsafe { (api.parcel_delete)(input) };
             return false;
         };
@@ -1031,7 +1032,12 @@ fn enqueue_text_toast_on(
 /// Enqueues a short system toast through `INotificationManager`.
 /// Runs inside the `lumina-binder` helper process; callers fall back silently.
 pub fn enqueue_text_toast(text: &str) -> bool {
-    let code = TX_TOAST.load(Ordering::Relaxed);
+    let mut code = TX_TOAST.load(Ordering::Relaxed);
+    if code == 0 {
+        if let Some(cached) = resolver::load_cached() {
+            code = cached.enqueue_text_toast;
+        }
+    }
     if code == 0 {
         return false;
     }
