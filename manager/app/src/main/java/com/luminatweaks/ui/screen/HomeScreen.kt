@@ -200,7 +200,7 @@ fun getConnectedContainerShape(
 @Composable
 fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
     val context = LocalContext.current
-    val pagerState = rememberPagerState(initialPage = 0, pageCount = { 3 })
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { 4 })
     val tabScope = rememberCoroutineScope()
     var targetTab by remember { mutableIntStateOf(0) }
     var isNavigating by remember { mutableStateOf(false) }
@@ -451,15 +451,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
         } else if (subscreen == "session_stats") {
             BackHandler { currentSubscreen = null }
             SessionStatsScreen(onBack = { currentSubscreen = null })
-        } else if (subscreen == "tweaks") {
-            TweaksScreen(
-                onOpenFloatingHud = {
-                    overlayConfig = FloatingFpsPrefs.load(context)
-                    currentSubscreen = "telemetry_overlay"
-                },
-                onOpenSessionStats = { currentSubscreen = "session_stats" },
-                onBackClick = { currentSubscreen = null }
-            )
         } else if (subscreen == "telemetry_overlay") {
             BackHandler { currentSubscreen = null }
             TelemetryOverlayScreen(
@@ -516,10 +507,18 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             pagerState = pagerState,
                             onOpenSessionStats = { currentSubscreen = "session_stats" }
                         )
-                        2 -> SettingsScreen(
+                        2 -> TweaksScreen(
+                            pagerState = pagerState,
+                            onOpenFloatingHud = {
+                                overlayConfig = FloatingFpsPrefs.load(context)
+                                currentSubscreen = "telemetry_overlay"
+                            },
+                            onOpenSessionStats = { currentSubscreen = "session_stats" }
+                        )
+                        3 -> SettingsScreen(
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" },
                             onNavigateToCompatibility = { currentSubscreen = "compatibility" },
-                            onNavigateToTweaks = { currentSubscreen = "tweaks" },
+                            onNavigateToTweaks = { onTabSelected(2) },
                             onOpenSetupWizard = onOpenSetupWizard
                         )
                     }
@@ -585,10 +584,18 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             pagerState = pagerState,
                             onOpenSessionStats = { currentSubscreen = "session_stats" }
                         )
-                        2 -> SettingsScreen(
+                        2 -> TweaksScreen(
+                            pagerState = pagerState,
+                            onOpenFloatingHud = {
+                                overlayConfig = FloatingFpsPrefs.load(context)
+                                currentSubscreen = "telemetry_overlay"
+                            },
+                            onOpenSessionStats = { currentSubscreen = "session_stats" }
+                        )
+                        3 -> SettingsScreen(
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" },
                             onNavigateToCompatibility = { currentSubscreen = "compatibility" },
-                            onNavigateToTweaks = { currentSubscreen = "tweaks" },
+                            onNavigateToTweaks = { onTabSelected(2) },
                             onOpenSetupWizard = onOpenSetupWizard
                         )
                     }
