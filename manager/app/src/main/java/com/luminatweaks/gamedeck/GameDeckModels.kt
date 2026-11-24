@@ -38,6 +38,7 @@ data class GameDeckUiState(
     val batteryPercent: Int = 0,
     val profile: String = "Balanced",
     val profileOverride: String = "Auto",
+    val profileAutoMode: Boolean = true,
     val rrModes: List<Int> = emptyList(),
     val selectedRrHz: Int? = null,
     val dndEnabled: Boolean = false,

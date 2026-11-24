@@ -73,6 +73,7 @@
     <string name="home_core_tap_start">Ketuk untuk memulai atau restart daemon</string>
     <string name="action_start">Mulai</string>
     <string name="home_thermal">Thermal</string>
+    <string name="home_profile">Profil</string>
     <string name="home_manager_version">Manager Version</string>
     <string name="home_kernel_version">Kernel Version</string>
     <string name="home_device_model">Device Model</string>

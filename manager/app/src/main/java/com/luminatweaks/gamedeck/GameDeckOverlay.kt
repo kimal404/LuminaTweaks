@@ -100,6 +100,7 @@ fun GameDeckRoot(
     onExpand: () -> Unit,
     onCollapse: () -> Unit,
     onProfileSelected: (String?) -> Unit,
+    onAutoModeToggle: () -> Unit,
     onRefreshRateSelected: (Int?) -> Unit,
     onToggleDnd: () -> Unit,
     onQuickAppClick: (String) -> Unit,
@@ -131,6 +132,7 @@ fun GameDeckRoot(
                 state = current,
                 onCollapse = onCollapse,
                 onProfileSelected = onProfileSelected,
+                onAutoModeToggle = onAutoModeToggle,
                 onRefreshRateSelected = onRefreshRateSelected,
                 onToggleDnd = onToggleDnd,
                 onQuickAppClick = onQuickAppClick,
@@ -238,6 +240,7 @@ private fun GameDeckWorkspace(
     state: GameDeckUiState,
     onCollapse: () -> Unit,
     onProfileSelected: (String?) -> Unit,
+    onAutoModeToggle: () -> Unit,
     onRefreshRateSelected: (Int?) -> Unit,
     onToggleDnd: () -> Unit,
     onQuickAppClick: (String) -> Unit,
@@ -293,6 +296,7 @@ private fun GameDeckWorkspace(
                 state = state,
                 selectedTab = selectedTab,
                 onProfileSelected = onProfileSelected,
+                onAutoModeToggle = onAutoModeToggle,
                 onRefreshRateSelected = onRefreshRateSelected,
                 onToggleDnd = onToggleDnd,
                 onOpenManager = onOpenManager
@@ -302,6 +306,7 @@ private fun GameDeckWorkspace(
                 state = state,
                 selectedTab = selectedTab,
                 onProfileSelected = onProfileSelected,
+                onAutoModeToggle = onAutoModeToggle,
                 onRefreshRateSelected = onRefreshRateSelected,
                 onToggleDnd = onToggleDnd,
                 onOpenManager = onOpenManager
@@ -496,6 +501,7 @@ private fun DeckCard(
     state: GameDeckUiState,
     selectedTab: Int,
     onProfileSelected: (String?) -> Unit,
+    onAutoModeToggle: () -> Unit,
     onRefreshRateSelected: (Int?) -> Unit,
     onToggleDnd: () -> Unit,
     onOpenManager: () -> Unit
@@ -514,6 +520,7 @@ private fun DeckCard(
             DashboardDeckContent(
                 state = state,
                 onProfileSelected = onProfileSelected,
+                onAutoModeToggle = onAutoModeToggle,
                 onRefreshRateSelected = onRefreshRateSelected
             )
         } else {
@@ -530,6 +537,7 @@ private fun DeckCard(
 private fun DashboardDeckContent(
     state: GameDeckUiState,
     onProfileSelected: (String?) -> Unit,
+    onAutoModeToggle: () -> Unit,
     onRefreshRateSelected: (Int?) -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -645,15 +653,22 @@ private fun DashboardDeckContent(
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     rowOptions.forEach { option ->
-                        val selected = deckOverrideSelected(
+                        val selected = !state.profileAutoMode && deckOverrideSelected(
                             state.profileOverride,
                             option.label
                         )
                         Surface(
-                            onClick = { onProfileSelected(option.command) },
+                            onClick = {
+                                if (!state.profileAutoMode) {
+                                    onProfileSelected(option.command)
+                                }
+                            },
                             modifier = Modifier
                                 .weight(1f)
-                                .height(30.dp),
+                                .height(30.dp)
+                                .graphicsLayer {
+                                    alpha = if (state.profileAutoMode) 0.45f else 1f
+                                },
                             shape = RoundedCornerShape(11.dp),
                             color = if (selected) scheme.primary else scheme.surfaceContainerHighest
                         ) {
@@ -675,9 +690,9 @@ private fun DashboardDeckContent(
                 }
             }
 
-            val autoSelected = deckOverrideSelected(state.profileOverride, "Auto")
+            val autoSelected = state.profileAutoMode
             Surface(
-                onClick = { onProfileSelected(null) },
+                onClick = onAutoModeToggle,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(28.dp),

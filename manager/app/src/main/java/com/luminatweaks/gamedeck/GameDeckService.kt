@@ -149,6 +149,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
 
     private var pendingOverrideLabel: String? = null
     private var pendingOverrideUntilMs = 0L
+    private var profileAutoMode = true
     private var prevRootCpuTotal = 0L
     private var prevRootCpuIdle = 0L
     private var lastCpuPercent = 0
@@ -162,6 +163,12 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+        val currentOverride = DeviceUtil.readSystemProperty("sys.lumina.profile_override") ?: "Auto"
+        profileAutoMode = currentOverride.equals("Auto", ignoreCase = true)
+        uiState.value = uiState.value.copy(
+            profileAutoMode = profileAutoMode,
+            profileOverride = currentOverride
+        )
         startForegroundCompat()
     }
 
@@ -296,6 +303,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         batteryPercent = snapshot.batteryPercent,
                         profile = snapshot.profile,
                         profileOverride = pendingOverrideLabel ?: snapshot.profileOverride,
+                        profileAutoMode = profileAutoMode,
                         rrModes = snapshot.rrModes,
                         selectedRrHz = snapshot.selectedRrHz,
                         dndEnabled = snapshot.dndEnabled,
@@ -520,6 +528,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         onExpand = { setExpanded(true) },
                         onCollapse = { setExpanded(false) },
                         onProfileSelected = ::selectProfileOverride,
+                        onAutoModeToggle = ::toggleProfileAutoMode,
                         onRefreshRateSelected = ::selectRefreshRate,
                         onToggleDnd = ::toggleDnd,
                         onQuickAppClick = ::launchFreeformApp,
@@ -652,8 +661,19 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     }
 
     private fun selectProfileOverride(name: String?) {
+        if (profileAutoMode || name == null) {
+            Toast.makeText(
+                this@GameDeckService,
+                localizedText(
+                    "Matikan Auto Mode dulu untuk memilih profil",
+                    "Turn off Auto Mode to choose a profile"
+                ),
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+
         val label = when (name) {
-            null -> "Auto"
             "eco" -> "Eco"
             "performance" -> "Performance"
             "performance_lite" -> "Performance Lite"
@@ -665,17 +685,49 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
 
         serviceScope.launch {
             val ok = withContext(Dispatchers.IO) {
-                if (name == null) {
-                    DaemonManager.clearProfileOverride()
-                } else {
-                    DaemonManager.setProfileOverride(name)
-                }
+                DaemonManager.setProfileOverride(name)
             }
             if (!ok) {
                 pendingOverrideLabel = null
                 Toast.makeText(
                     this@GameDeckService,
                     localizedText("Gagal menerapkan profil", "Failed to apply profile"),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    private fun toggleProfileAutoMode() {
+        val nextAuto = !profileAutoMode
+        profileAutoMode = nextAuto
+        if (!nextAuto) {
+            uiState.value = uiState.value.copy(
+                profileAutoMode = false,
+                profileOverride = "Auto"
+            )
+            Toast.makeText(
+                this@GameDeckService,
+                localizedText("Mode manual — pilih profil", "Manual mode — select a profile"),
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+
+        pendingOverrideLabel = "Auto"
+        pendingOverrideUntilMs = System.currentTimeMillis() + 4_000L
+        uiState.value = uiState.value.copy(
+            profileAutoMode = true,
+            profileOverride = "Auto"
+        )
+        serviceScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                DaemonManager.clearProfileOverride()
+            }
+            if (!ok) {
+                Toast.makeText(
+                    this@GameDeckService,
+                    localizedText("Gagal kembali ke Auto Mode", "Failed to restore Auto Mode"),
                     Toast.LENGTH_SHORT
                 ).show()
             }

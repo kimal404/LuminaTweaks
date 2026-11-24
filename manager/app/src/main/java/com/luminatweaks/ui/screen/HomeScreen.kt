@@ -81,6 +81,7 @@ import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.HourglassEmpty
 import androidx.compose.material.icons.rounded.MenuBook
+import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Refresh
@@ -232,6 +233,7 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
     var daemonPid by remember { mutableStateOf<String?>(null) }
     var isModuleInstalled by remember { mutableStateOf(true) }
     var isRebootRequired by remember { mutableStateOf(false) }
+    var currentProfile by remember { mutableStateOf(unknownLabel) }
     var isRootGranted by remember { mutableStateOf(false) }
     var selinuxStatus by remember { mutableStateOf("Unknown") }
     var showRebootDialog by remember { mutableStateOf(false) }
@@ -281,9 +283,33 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
             withContext(Dispatchers.Main) {
                 batteryTemp = initialTemp
                 daemonPid = initialStatus.pid
+                currentProfile = initialStatus.profile
                 isRootGranted = initialRoot
                 selinuxStatus = initialSelinux
                 isChecking = false
+            }
+        }
+    }
+
+    LaunchedEffect(isScreenResumed, currentSubscreen) {
+        if (!isScreenResumed || currentSubscreen != null) {
+            return@LaunchedEffect
+        }
+
+        withContext(Dispatchers.IO) {
+            while (isActive) {
+                val rawProfile = DeviceUtil.readSystemProperty("sys.lumina.profile")
+                val resolved = if (rawProfile.isNullOrBlank()) {
+                    unknownLabel
+                } else {
+                    DaemonManager.normalizeProfileLabel(rawProfile)
+                }
+                withContext(Dispatchers.Main) {
+                    if (resolved != currentProfile) {
+                        currentProfile = resolved
+                    }
+                }
+                delay(1000L)
             }
         }
     }
@@ -470,6 +496,7 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             isChecking = isChecking,
                             isModuleInstalled = isModuleInstalled,
                             isRebootRequired = isRebootRequired,
+                            currentProfile = currentProfile,
                             kernelVersion = kernelVersion,
                             deviceModel = deviceModel,
                             isRootGranted = isRootGranted,
@@ -544,6 +571,7 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             isChecking = isChecking,
                             isModuleInstalled = isModuleInstalled,
                             isRebootRequired = isRebootRequired,
+                            currentProfile = currentProfile,
                             kernelVersion = kernelVersion,
                             deviceModel = deviceModel,
                             isRootGranted = isRootGranted,
@@ -704,6 +732,7 @@ fun HomeDashboardContent(
     isChecking: Boolean = false,
     isModuleInstalled: Boolean = true,
     isRebootRequired: Boolean = false,
+    currentProfile: String,
     kernelVersion: String,
     deviceModel: String,
     isRootGranted: Boolean,
@@ -886,13 +915,25 @@ fun HomeDashboardContent(
 
             item(key = "metrics") {
                 Spacer(modifier = Modifier.height(16.dp))
-                HomeHardwareTile(
-                    label = stringResource(R.string.home_thermal),
-                    value = batteryTemp,
-                    icon = Icons.Rounded.Thermostat,
-                    highlight = false,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    HomeHardwareTile(
+                        label = stringResource(R.string.home_thermal),
+                        value = batteryTemp,
+                        icon = Icons.Rounded.Thermostat,
+                        highlight = false,
+                        modifier = Modifier.weight(1f)
+                    )
+                    HomeHardwareTile(
+                        label = stringResource(R.string.home_profile),
+                        value = currentProfile,
+                        icon = Icons.Rounded.Speed,
+                        highlight = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
 
             item(key = "device") {
