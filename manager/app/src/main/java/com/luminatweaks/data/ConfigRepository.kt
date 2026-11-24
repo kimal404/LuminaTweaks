@@ -549,11 +549,7 @@ object ConfigRepository {
                 profile.textureEnabled || normalizedLod > 0 -> "angle"
                 else -> "native"
             }
-            val resolvedLite = if (profile.liteMode == "default" && isPerformanceLiteProfile(obj.optString("profile", ""))) {
-                "on"
-            } else {
-                profile.liteMode
-            }
+            val resolvedLite = profile.liteMode
             val normalizedProfile = profile.copy(
                 liteMode = resolvedLite,
                 textureDriver = normalizedDriver,
