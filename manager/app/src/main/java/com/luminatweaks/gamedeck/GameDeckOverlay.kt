@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 package com.luminatweaks.gamedeck
 
 import androidx.compose.animation.animateColorAsState
@@ -5,9 +7,9 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -21,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -39,11 +42,18 @@ import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ButtonGroupDefaults
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearWavyProgressIndicator
+import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -55,14 +65,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -70,7 +78,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
@@ -148,23 +155,24 @@ private fun EdgeDeckHandle(
     onExpand: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
+    val motion = MaterialTheme.motionScheme
     val swipeThreshold = with(LocalDensity.current) { 10.dp.toPx() }
     var hinting by remember { mutableStateOf(true) }
     var dragging by remember { mutableStateOf(false) }
 
     val handleWidth by animateDpAsState(
         targetValue = if (hinting || dragging) 8.dp else 5.dp,
-        animationSpec = tween(220),
+        animationSpec = motion.defaultSpatialSpec(),
         label = "deckHandleWidth"
     )
     val handleHeight by animateDpAsState(
-        targetValue = if (hinting || dragging) 64.dp else 48.dp,
-        animationSpec = tween(220),
+        targetValue = if (hinting || dragging) 66.dp else 48.dp,
+        animationSpec = motion.defaultSpatialSpec(),
         label = "deckHandleHeight"
     )
     val handleAlpha by animateFloatAsState(
-        targetValue = if (hinting || dragging) 0.92f else 0.55f,
-        animationSpec = tween(300),
+        targetValue = if (hinting || dragging) 0.96f else 0.58f,
+        animationSpec = motion.defaultEffectsSpec(),
         label = "deckHandleAlpha"
     )
 
@@ -216,7 +224,8 @@ private fun EdgeDeckHandle(
                 .graphicsLayer { alpha = handleAlpha },
             shape = CircleShape,
             color = scheme.primary,
-            shadowElevation = 6.dp
+            contentColor = scheme.onPrimary,
+            shadowElevation = 8.dp
         ) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -225,9 +234,8 @@ private fun EdgeDeckHandle(
                 Icon(
                     imageVector = Icons.Rounded.ChevronRight,
                     contentDescription = null,
-                    tint = scheme.onPrimary,
                     modifier = Modifier
-                        .size(10.dp)
+                        .size(11.dp)
                         .graphicsLayer { scaleX = if (isLeft) 1f else -1f }
                 )
             }
@@ -248,7 +256,7 @@ private fun GameDeckWorkspace(
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val isLeft = state.side == GameDeckSide.LEFT
-    val deckHeight = 258.dp
+    val deckHeight = 286.dp
     val closeThreshold = with(LocalDensity.current) { 24.dp.toPx() }
 
     Row(
@@ -335,14 +343,24 @@ private fun DockRail(
     onOpenManager: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
-    Surface(
+    val deckOpacity = opacity.coerceIn(0.45f, 1f)
+    val shape = RoundedCornerShape(26.dp)
+
+    Box(
         modifier = Modifier
             .width(52.dp)
-            .fillMaxHeight(),
-        shape = RoundedCornerShape(22.dp),
-        color = scheme.surfaceContainerHigh.copy(alpha = opacity.coerceIn(0.45f, 1f)),
-        tonalElevation = 4.dp,
-        shadowElevation = 10.dp
+            .fillMaxHeight()
+            .shadow(10.dp, shape)
+            .clip(shape)
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        scheme.surfaceContainerHighest.copy(alpha = deckOpacity),
+                        scheme.surfaceContainerHigh.copy(alpha = deckOpacity)
+                    )
+                )
+            )
+            .border(1.dp, scheme.outlineVariant.copy(alpha = 0.38f * deckOpacity), shape)
     ) {
         Column(
             modifier = Modifier
@@ -350,7 +368,7 @@ private fun DockRail(
                 .verticalScroll(rememberScrollState())
                 .padding(vertical = 10.dp, horizontal = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(7.dp)
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             DockRailNavItem(
                 icon = Icons.Rounded.GridView,
@@ -369,17 +387,17 @@ private fun DockRail(
                 modifier = Modifier
                     .padding(vertical = 2.dp)
                     .width(22.dp)
-                    .height(1.5.dp)
+                    .height(2.dp)
                     .clip(CircleShape)
-                    .background(scheme.outlineVariant.copy(alpha = 0.5f))
+                    .background(scheme.outlineVariant.copy(alpha = 0.55f))
             )
 
             if (quickApps.isEmpty()) {
                 Surface(
                     onClick = onOpenManager,
-                    modifier = Modifier.size(34.dp),
-                    shape = RoundedCornerShape(11.dp),
-                    color = scheme.surfaceContainerHighest.copy(alpha = 0.75f)
+                    modifier = Modifier.size(40.dp),
+                    shape = MaterialShapes.Cookie4Sided.toShape(),
+                    color = scheme.tertiaryContainer
                 ) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
@@ -388,8 +406,8 @@ private fun DockRail(
                         Icon(
                             imageVector = Icons.Rounded.Add,
                             contentDescription = "Tambah aplikasi",
-                            tint = scheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp)
+                            tint = scheme.onTertiaryContainer,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
@@ -413,31 +431,52 @@ private fun DockRailNavItem(
     onClick: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
+    val motion = MaterialTheme.motionScheme
     val pillBg by animateColorAsState(
         targetValue = if (selected) scheme.primary else Color.Transparent,
-        animationSpec = tween(180),
+        animationSpec = motion.defaultEffectsSpec(),
         label = "railPillBg"
     )
     val iconTint by animateColorAsState(
         targetValue = if (selected) scheme.onPrimary else scheme.onSurfaceVariant,
-        animationSpec = tween(180),
+        animationSpec = motion.defaultEffectsSpec(),
         label = "railIconTint"
+    )
+    val labelTint by animateColorAsState(
+        targetValue = if (selected) scheme.onSurface else scheme.onSurfaceVariant,
+        animationSpec = motion.defaultEffectsSpec(),
+        label = "railLabelTint"
+    )
+    val corner by animateDpAsState(
+        targetValue = if (selected) 18.dp else 10.dp,
+        animationSpec = motion.defaultSpatialSpec(),
+        label = "railPillCorner"
+    )
+    val indicatorWidth by animateDpAsState(
+        targetValue = if (selected) 40.dp else 34.dp,
+        animationSpec = motion.defaultSpatialSpec(),
+        label = "railPillWidth"
+    )
+    val indicatorHeight by animateDpAsState(
+        targetValue = if (selected) 28.dp else 24.dp,
+        animationSpec = motion.defaultSpatialSpec(),
+        label = "railPillHeight"
     )
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
-            .padding(vertical = 2.dp),
+            .padding(vertical = 3.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         Box(
             modifier = Modifier
-                .width(36.dp)
-                .height(24.dp)
-                .clip(CircleShape)
+                .width(indicatorWidth)
+                .height(indicatorHeight)
+                .clip(RoundedCornerShape(corner))
                 .background(pillBg),
             contentAlignment = Alignment.Center
         ) {
@@ -445,14 +484,14 @@ private fun DockRailNavItem(
                 imageVector = icon,
                 contentDescription = label,
                 tint = iconTint,
-                modifier = Modifier.size(15.dp)
+                modifier = Modifier.size(if (selected) 17.dp else 15.dp)
             )
         }
         Text(
             text = label,
             fontSize = 8.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-            color = if (selected) scheme.onSurface else scheme.onSurfaceVariant,
+            color = labelTint,
             maxLines = 1,
             softWrap = false
         )
@@ -468,9 +507,9 @@ private fun DockRailAppIcon(
     val icon = rememberAppIcon(app.packageName)
     Surface(
         onClick = onClick,
-        modifier = Modifier.size(34.dp),
-        shape = RoundedCornerShape(11.dp),
-        color = scheme.surfaceContainerHighest.copy(alpha = 0.8f)
+        modifier = Modifier.size(40.dp),
+        shape = MaterialShapes.Cookie4Sided.toShape(),
+        color = scheme.surfaceContainerHighest.copy(alpha = 0.9f)
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -481,8 +520,8 @@ private fun DockRailAppIcon(
                     bitmap = icon,
                     contentDescription = app.label,
                     modifier = Modifier
-                        .size(23.dp)
-                        .clip(RoundedCornerShape(6.dp))
+                        .size(25.dp)
+                        .clip(CircleShape)
                 )
             } else {
                 Text(
@@ -507,14 +546,24 @@ private fun DeckCard(
     onOpenManager: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
-    Surface(
+    val deckOpacity = state.opacity.coerceIn(0.45f, 1f)
+    val shape = RoundedCornerShape(30.dp)
+
+    Box(
         modifier = Modifier
             .width(284.dp)
-            .fillMaxHeight(),
-        shape = RoundedCornerShape(26.dp),
-        color = scheme.surfaceContainerHigh.copy(alpha = state.opacity.coerceIn(0.45f, 1f)),
-        tonalElevation = 4.dp,
-        shadowElevation = 10.dp
+            .fillMaxHeight()
+            .shadow(12.dp, shape)
+            .clip(shape)
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        scheme.surfaceContainerHighest.copy(alpha = deckOpacity),
+                        scheme.surfaceContainerHigh.copy(alpha = deckOpacity)
+                    )
+                )
+            )
+            .border(1.dp, scheme.outlineVariant.copy(alpha = 0.38f * deckOpacity), shape)
     ) {
         if (selectedTab == 0) {
             DashboardDeckContent(
@@ -544,16 +593,21 @@ private fun DashboardDeckContent(
     val fps = state.fps.coerceAtLeast(0)
     val targetHz = state.targetHz.coerceAtLeast(1)
     val fpsRatio = fps.toFloat() / targetHz.toFloat()
-    val fpsColor = when {
+    val rawFpsColor = when {
         fps <= 0 -> scheme.onSurfaceVariant
         fpsRatio >= 0.90f -> scheme.primary
         fpsRatio >= 0.65f -> scheme.tertiary
         else -> scheme.error
     }
+    val fpsColor by animateColorAsState(
+        targetValue = rawFpsColor,
+        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+        label = "deckFpsColor"
+    )
     val frametimeText = if (fps > 0 && state.frametimeMs > 0f) {
         String.format(Locale.US, "%.1f ms", state.frametimeMs)
     } else {
-        "FPS"
+        "Menunggu frame"
     }
 
     Column(
@@ -563,167 +617,18 @@ private fun DashboardDeckContent(
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 2.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            CircularLoadGauge(
-                size = 58.dp,
-                percent = state.cpuPercent.coerceIn(0, 100),
-                label = "CPU",
-                accentColor = scheme.primary
-            )
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = if (fps > 0) fps.toString() else "--",
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = fpsColor,
-                    maxLines = 1,
-                    softWrap = false
-                )
-                Text(
-                    text = frametimeText,
-                    fontSize = 9.5.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = scheme.onSurfaceVariant,
-                    maxLines = 1,
-                    softWrap = false
-                )
-            }
-            CircularLoadGauge(
-                size = 58.dp,
-                percent = state.gpuPercent.coerceIn(0, 100),
-                label = "GPU",
-                accentColor = scheme.tertiary
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Rounded.Thermostat,
-                    contentDescription = null,
-                    tint = scheme.primary,
-                    modifier = Modifier.size(12.dp)
-                )
-                Spacer(modifier = Modifier.width(3.dp))
-                Text(
-                    text = state.tempLabel,
-                    fontSize = 10.5.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = scheme.onSurface,
-                    maxLines = 1,
-                    softWrap = false
-                )
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Rounded.BatteryFull,
-                    contentDescription = null,
-                    tint = scheme.primary,
-                    modifier = Modifier.size(12.dp)
-                )
-                Spacer(modifier = Modifier.width(3.dp))
-                Text(
-                    text = "${state.batteryPercent}%",
-                    fontSize = 10.5.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = scheme.onSurface,
-                    maxLines = 1,
-                    softWrap = false
-                )
-            }
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            deckProfileOptions.chunked(2).forEach { rowOptions ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    rowOptions.forEach { option ->
-                        val selected = !state.profileAutoMode && deckOverrideSelected(
-                            state.profileOverride,
-                            option.label
-                        )
-                        Surface(
-                            onClick = {
-                                if (!state.profileAutoMode) {
-                                    onProfileSelected(option.command)
-                                }
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(30.dp)
-                                .graphicsLayer {
-                                    alpha = if (state.profileAutoMode) 0.45f else 1f
-                                },
-                            shape = RoundedCornerShape(11.dp),
-                            color = if (selected) scheme.primary else scheme.surfaceContainerHighest
-                        ) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = option.label,
-                                    fontSize = 10.5.sp,
-                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (selected) scheme.onPrimary else scheme.onSurface,
-                                    maxLines = 1,
-                                    softWrap = false
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            val autoSelected = state.profileAutoMode
-            Surface(
-                onClick = onAutoModeToggle,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(28.dp),
-                shape = RoundedCornerShape(11.dp),
-                color = if (autoSelected) scheme.primary else scheme.surfaceContainerHighest
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Tune,
-                        contentDescription = null,
-                        tint = if (autoSelected) scheme.onPrimary else scheme.onSurfaceVariant,
-                        modifier = Modifier.size(12.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "Auto",
-                        fontSize = 10.5.sp,
-                        fontWeight = if (autoSelected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (autoSelected) scheme.onPrimary else scheme.onSurface,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                }
-            }
-        }
-
-        DynamicRefreshRateStrip(
+        DashboardTopRow(state)
+        PerformanceHero(
+            state = state,
+            fpsColor = fpsColor,
+            frametimeText = frametimeText
+        )
+        ProfileSection(
+            state = state,
+            onProfileSelected = onProfileSelected,
+            onAutoModeToggle = onAutoModeToggle
+        )
+        RefreshRateSection(
             modes = state.rrModes,
             selectedHz = state.selectedRrHz,
             liveHz = state.targetHz,
@@ -733,64 +638,72 @@ private fun DashboardDeckContent(
 }
 
 @Composable
-private fun CircularLoadGauge(
-    size: Dp,
-    percent: Int,
-    label: String,
-    accentColor: Color
-) {
+private fun DashboardTopRow(state: GameDeckUiState) {
     val scheme = MaterialTheme.colorScheme
-    val trackColor = scheme.onSurface.copy(alpha = 0.12f)
-    val animatedProgress by animateFloatAsState(
-        targetValue = (percent.coerceIn(0, 100) / 100f),
-        animationSpec = tween(250),
-        label = "gaugeAnim"
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        LiveBadge(active = state.fps > 0)
+        Spacer(modifier = Modifier.width(7.dp))
+        Text(
+            text = "GAME DECK",
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            color = scheme.onSurfaceVariant,
+            maxLines = 1,
+            softWrap = false
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        MetricChip(
+            icon = Icons.Rounded.Thermostat,
+            label = state.tempLabel
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        MetricChip(
+            icon = Icons.Rounded.BatteryFull,
+            label = "${state.batteryPercent}%"
+        )
+    }
+}
+
+@Composable
+private fun LiveBadge(active: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    val container by animateColorAsState(
+        targetValue = if (active) scheme.primaryContainer else scheme.surfaceContainerHigh,
+        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+        label = "liveBadgeContainer"
+    )
+    val content by animateColorAsState(
+        targetValue = if (active) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
+        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+        label = "liveBadgeContent"
     )
 
-    Box(
-        modifier = Modifier.size(size),
-        contentAlignment = Alignment.Center
+    Surface(
+        shape = CircleShape,
+        color = container,
+        contentColor = content
     ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val strokeWidth = 4.5.dp.toPx()
-            val arcSize = Size(
-                width = this.size.width - strokeWidth,
-                height = this.size.height - strokeWidth
-            )
-            val topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f)
-            drawArc(
-                color = trackColor,
-                startAngle = -90f,
-                sweepAngle = 360f,
-                useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-            )
-            drawArc(
-                color = accentColor,
-                startAngle = -90f,
-                sweepAngle = 360f * animatedProgress,
-                useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-            )
-        }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = "$percent%",
-                fontSize = 11.5.sp,
-                fontWeight = FontWeight.Bold,
-                color = scheme.onSurface,
-                maxLines = 1,
-                softWrap = false
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(7.dp)
+                    .background(
+                        if (active) scheme.primary else scheme.outline,
+                        MaterialShapes.Sunny.toShape()
+                    )
             )
             Text(
-                text = label,
-                fontSize = 7.5.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = accentColor,
+                text = if (active) "LIVE" else "IDLE",
+                fontSize = 8.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = content,
                 maxLines = 1,
                 softWrap = false
             )
@@ -799,7 +712,284 @@ private fun CircularLoadGauge(
 }
 
 @Composable
-private fun DynamicRefreshRateStrip(
+private fun MetricChip(
+    icon: ImageVector,
+    label: String
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = scheme.primary,
+            modifier = Modifier.size(12.dp)
+        )
+        Text(
+            text = label,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = scheme.onSurfaceVariant,
+            maxLines = 1,
+            softWrap = false
+        )
+    }
+}
+
+@Composable
+private fun PerformanceHero(
+    state: GameDeckUiState,
+    fpsColor: Color,
+    frametimeText: String
+) {
+    val scheme = MaterialTheme.colorScheme
+    val fps = state.fps.coerceAtLeast(0)
+
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = scheme.surfaceContainerHighest.copy(alpha = 0.86f)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "FRAME RATE",
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 1,
+                    softWrap = false
+                )
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = if (fps > 0) fps.toString() else "--",
+                        style = MaterialTheme.typography.displaySmall.copy(
+                            fontSize = 32.sp,
+                            lineHeight = 34.sp,
+                            fontWeight = FontWeight.Black
+                        ),
+                        color = fpsColor,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "FPS",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = scheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 3.dp),
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+                Text(
+                    text = if (fps > 0) "$frametimeText · ${state.targetHz} Hz" else frametimeText,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
+            Column(
+                modifier = Modifier.width(92.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
+                MiniMetric(
+                    label = "CPU",
+                    percent = state.cpuPercent,
+                    accent = scheme.primary
+                )
+                MiniMetric(
+                    label = "GPU",
+                    percent = state.gpuPercent,
+                    accent = scheme.tertiary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MiniMetric(
+    label: String,
+    percent: Int,
+    accent: Color
+) {
+    val scheme = MaterialTheme.colorScheme
+    val safePercent = percent.coerceIn(0, 100)
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Bold,
+                color = scheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = "$safePercent%",
+                fontSize = 8.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = accent,
+                maxLines = 1,
+                softWrap = false
+            )
+        }
+        LinearWavyProgressIndicator(
+            progress = { safePercent / 100f },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp),
+            color = accent,
+            trackColor = accent.copy(alpha = 0.16f)
+        )
+    }
+}
+
+@Composable
+private fun ProfileSection(
+    state: GameDeckUiState,
+    onProfileSelected: (String?) -> Unit,
+    onAutoModeToggle: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val autoMode = state.profileAutoMode
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Profile",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = scheme.onSurface,
+                maxLines = 1,
+                softWrap = false
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            ProfileModeBadge(
+                autoMode = autoMode,
+                activeProfile = state.profile
+            )
+        }
+
+        deckProfileOptions.chunked(2).forEach { rowOptions ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                rowOptions.forEach { option ->
+                    val selected = !autoMode &&
+                        deckOverrideSelected(state.profileOverride, option.label)
+                    ToggleButton(
+                        checked = selected,
+                        onCheckedChange = { checked ->
+                            if (checked && !autoMode) {
+                                onProfileSelected(option.command)
+                            }
+                        },
+                        enabled = !autoMode,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = option.label,
+                            fontSize = 10.sp,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+
+        ToggleButton(
+            checked = autoMode,
+            onCheckedChange = { onAutoModeToggle() },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Tune,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Auto mode",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    softWrap = false
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = if (autoMode) "ON" else "OFF",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileModeBadge(
+    autoMode: Boolean,
+    activeProfile: String
+) {
+    val scheme = MaterialTheme.colorScheme
+    val container by animateColorAsState(
+        targetValue = if (autoMode) scheme.primaryContainer else scheme.tertiaryContainer,
+        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+        label = "profileModeContainer"
+    )
+    val content by animateColorAsState(
+        targetValue = if (autoMode) scheme.onPrimaryContainer else scheme.onTertiaryContainer,
+        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+        label = "profileModeContent"
+    )
+
+    Surface(
+        shape = CircleShape,
+        color = container,
+        contentColor = content
+    ) {
+        Text(
+            text = if (autoMode) "AUTO · $activeProfile" else "MANUAL",
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            fontSize = 8.sp,
+            fontWeight = FontWeight.ExtraBold,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun RefreshRateSection(
     modes: List<Int>,
     selectedHz: Int?,
     liveHz: Int,
@@ -813,68 +1003,62 @@ private fun DynamicRefreshRateStrip(
         }
     }
 
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = scheme.surfaceContainerHighest.copy(alpha = 0.55f)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 9.dp, vertical = 7.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp)
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            Text(
+                text = "Refresh rate",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = scheme.onSurface,
+                maxLines = 1,
+                softWrap = false
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = if (selectedHz == null) "Auto · $liveHz Hz" else "$liveHz Hz",
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                color = scheme.primary,
+                maxLines = 1,
+                softWrap = false
+            )
+        }
+
+        if (options.size <= 4) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)
             ) {
-                Text(
-                    text = "Refresh rate",
-                    modifier = Modifier.weight(1f),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = scheme.onSurface,
-                    maxLines = 1,
-                    softWrap = false
-                )
-                Text(
-                    text = if (selectedHz == null) "Auto ($liveHz Hz)" else "$liveHz Hz",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = scheme.primary,
-                    maxLines = 1,
-                    softWrap = false
-                )
-            }
-
-            if (options.size <= 4) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    options.forEach { hz ->
-                        RrOptionPill(
-                            label = hz?.let { "${it}Hz" } ?: "Auto",
-                            selected = selectedHz == hz,
-                            modifier = Modifier.weight(1f),
-                            onClick = { onSelect(hz) }
-                        )
-                    }
+                options.forEachIndexed { index, hz ->
+                    RrToggle(
+                        label = hz?.let { "${it}Hz" } ?: "Auto",
+                        selected = selectedHz == hz,
+                        index = index,
+                        lastIndex = options.lastIndex,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onSelect(hz) }
+                    )
                 }
-            } else {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    options.forEach { hz ->
-                        RrOptionPill(
-                            label = hz?.let { "${it}Hz" } ?: "Auto",
-                            selected = selectedHz == hz,
-                            modifier = Modifier.widthIn(min = 48.dp),
-                            onClick = { onSelect(hz) }
-                        )
-                    }
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)
+            ) {
+                options.forEachIndexed { index, hz ->
+                    RrToggle(
+                        label = hz?.let { "${it}Hz" } ?: "Auto",
+                        selected = selectedHz == hz,
+                        index = index,
+                        lastIndex = options.lastIndex,
+                        modifier = Modifier.widthIn(min = 52.dp),
+                        onClick = { onSelect(hz) }
+                    )
                 }
             }
         }
@@ -882,32 +1066,37 @@ private fun DynamicRefreshRateStrip(
 }
 
 @Composable
-private fun RrOptionPill(
+private fun connectedShapes(index: Int, lastIndex: Int) = when (index) {
+    0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+    lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+    else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
+}
+
+@Composable
+private fun RrToggle(
     label: String,
     selected: Boolean,
+    index: Int,
+    lastIndex: Int,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    val scheme = MaterialTheme.colorScheme
-    Surface(
-        onClick = onClick,
-        modifier = modifier.height(24.dp),
-        shape = CircleShape,
-        color = if (selected) scheme.primary else scheme.surfaceContainerHigh
+    ToggleButton(
+        checked = selected,
+        onCheckedChange = { checked ->
+            if (checked) onClick()
+        },
+        shapes = connectedShapes(index, lastIndex),
+        modifier = modifier
     ) {
-        Box(
-            modifier = Modifier.padding(horizontal = 8.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = label,
-                fontSize = 9.5.sp,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                color = if (selected) scheme.onPrimary else scheme.onSurfaceVariant,
-                maxLines = 1,
-                softWrap = false
-            )
-        }
+        Text(
+            text = label,
+            fontSize = 9.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -918,36 +1107,43 @@ private fun ToolsDeckContent(
     onOpenManager: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
+    val dndText = if (state.dndEnabled) "Notifikasi dibisukan" else "Nonaktif"
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 12.dp, vertical = 12.dp),
+            .padding(horizontal = 14.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Text(
             text = "Tools",
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Black,
             color = scheme.onSurface,
             maxLines = 1
         )
+        Text(
+            text = "Kontrol cepat khusus sesi game",
+            style = MaterialTheme.typography.bodySmall,
+            color = scheme.onSurfaceVariant,
+            maxLines = 1
+        )
 
-        Surface(
-            onClick = onToggleDnd,
-            shape = RoundedCornerShape(16.dp),
-            color = if (state.dndEnabled) scheme.primaryContainer else scheme.surfaceContainerHighest.copy(alpha = 0.65f)
+        ToggleButton(
+            checked = state.dndEnabled,
+            onCheckedChange = { onToggleDnd() },
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 60.dp)
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 11.dp),
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     imageVector = Icons.Rounded.NotificationsOff,
                     contentDescription = null,
-                    tint = if (state.dndEnabled) scheme.primary else scheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(10.dp))
@@ -955,55 +1151,45 @@ private fun ToolsDeckContent(
                     Text(
                         text = "Jangan Ganggu",
                         fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (state.dndEnabled) scheme.onPrimaryContainer else scheme.onSurface,
+                        fontWeight = FontWeight.Bold,
                         maxLines = 1
                     )
                     Text(
-                        text = if (state.dndEnabled) "Notifikasi dibisukan" else "Nonaktif",
-                        fontSize = 10.sp,
-                        color = if (state.dndEnabled) {
-                            scheme.onPrimaryContainer.copy(alpha = 0.8f)
-                        } else {
-                            scheme.onSurfaceVariant
-                        },
+                        text = dndText,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Medium,
                         maxLines = 1
                     )
                 }
-                Switch(
-                    checked = state.dndEnabled,
-                    onCheckedChange = { onToggleDnd() }
+                Text(
+                    text = if (state.dndEnabled) "ON" else "OFF",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1
                 )
             }
         }
 
-        Surface(
+        FilledTonalButton(
             onClick = onOpenManager,
-            shape = RoundedCornerShape(16.dp),
-            color = scheme.surfaceContainerHighest.copy(alpha = 0.65f)
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            shapes = ButtonDefaults.shapes()
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 11.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Apps,
-                    contentDescription = null,
-                    tint = scheme.primary,
-                    modifier = Modifier.size(19.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = "Buka Lumina Manager",
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = scheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            Icon(
+                imageVector = Icons.Rounded.Apps,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Buka Lumina Manager",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
