@@ -16,6 +16,8 @@
 
 package com.luminatweaks.ui.component
 
+import androidx.compose.ui.graphics.RectangleShape
+
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
