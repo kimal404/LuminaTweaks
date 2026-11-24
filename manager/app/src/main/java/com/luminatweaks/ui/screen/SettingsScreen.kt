@@ -75,6 +75,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -99,6 +100,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.luminatweaks.R
+import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.ui.component.TouchOriginDialog
 import com.luminatweaks.ui.component.appBarFade
 import com.luminatweaks.ui.component.pressScale
@@ -144,6 +146,7 @@ fun SettingsScreen(
     var showCompatibilityScreen by remember { mutableStateOf(false) }
     var showTweaksScreen by remember { mutableStateOf(false) }
     var showUninstallDialog by remember { mutableStateOf(false) }
+    var isToastNotifications by remember { mutableStateOf(true) }
     var isUninstalling by remember { mutableStateOf(false) }
     var uninstallOriginPoint by remember { mutableStateOf(Offset(0.5f, 0.5f)) }
     val uninstallOrigin = rememberDialogOrigin()
@@ -154,6 +157,10 @@ fun SettingsScreen(
         showCompatibilityScreen && onNavigateToCompatibility == null -> "compatibility"
         showTweaksScreen && onNavigateToTweaks == null -> "tweaks"
         else -> "main"
+    }
+
+    LaunchedEffect(Unit) {
+        isToastNotifications = ConfigRepository.getToastNotifications()
     }
 
     LuminaDrillTransition(
@@ -268,7 +275,7 @@ fun SettingsScreen(
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 SettingsActionRow(
                                     index = 0,
-                                    count = 3,
+                                    count = 4,
                                     icon = Icons.Rounded.Tune,
                                     title = stringResource(R.string.settings_advanced_tweaks),
                                     subtitle = stringResource(R.string.settings_advanced_tweaks_desc),
@@ -283,7 +290,7 @@ fun SettingsScreen(
 
                                 SettingsActionRow(
                                     index = 1,
-                                    count = 3,
+                                    count = 4,
                                     icon = Icons.Rounded.Security,
                                     title = stringResource(R.string.settings_compatibility),
                                     subtitle = stringResource(R.string.settings_compatibility_desc),
@@ -298,11 +305,26 @@ fun SettingsScreen(
 
                                 SettingsActionRow(
                                     index = 2,
-                                    count = 3,
+                                    count = 4,
                                     icon = Icons.Rounded.AutoFixHigh,
                                     title = stringResource(R.string.settings_setup_wizard),
                                     subtitle = stringResource(R.string.settings_setup_wizard_desc),
                                     onClick = onOpenSetupWizard
+                                )
+
+                                SettingsSwitchRow(
+                                    index = 3,
+                                    count = 4,
+                                    icon = Icons.Rounded.Info,
+                                    title = stringResource(R.string.settings_toast_notifications),
+                                    subtitle = stringResource(R.string.settings_toast_notifications_desc),
+                                    checked = isToastNotifications,
+                                    onCheckedChange = { enabled ->
+                                        isToastNotifications = enabled
+                                        coroutineScope.launch {
+                                            ConfigRepository.setToastNotifications(enabled)
+                                        }
+                                    }
                                 )
                             }
                         }

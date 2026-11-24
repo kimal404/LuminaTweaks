@@ -174,6 +174,12 @@ fn set_dnd(binder: &mut binder_client::BinderClient, mode: &str) {
     }
 }
 
+fn notify_profile_toast(binder: &mut binder_client::BinderClient, profile: Profile, lite: bool) {
+    if detector::is_toast_enabled() {
+        let _ = binder.show_toast(&format!("Profile {}", profile.display_name(lite)));
+    }
+}
+
 fn write_runtime_file(path: &str, value: &str) -> bool {
     if let Some(parent) = std::path::Path::new(path).parent() {
         if std::fs::create_dir_all(parent).is_err() {
@@ -339,6 +345,7 @@ impl EngineRuntime {
                 None => is_global_lite,
             };
 
+            let had_profile = self.current_profile.is_some();
             let is_profile_changing =
                 self.current_profile != Some(target_profile) || self.current_lite != target_lite;
 
@@ -368,6 +375,9 @@ impl EngineRuntime {
                 self.current_profile = Some(target_profile);
                 self.current_lite = target_lite;
                 self.update_shared_state(target_profile, target_lite, target_pkg);
+                if had_profile {
+                    notify_profile_toast(binder, target_profile, target_lite);
+                }
             }
         }
 
@@ -402,17 +412,21 @@ impl EngineRuntime {
         }
     }
 
-    fn apply_manual_profile(&mut self, trigger: &str) {
+    fn apply_manual_profile(&mut self, trigger: &str, binder: &mut binder_client::BinderClient) {
         let profile = self.manual_profile.unwrap_or(Profile::Balance);
         let lite = is_lite_mode_active();
         if self.current_profile == Some(profile) && self.current_lite == lite {
             return;
         }
+        let had_profile = self.current_profile.is_some();
         apply_profile(profile, lite);
         self.current_profile = Some(profile);
         self.current_lite = lite;
         set_system_profile_prop(profile.display_name(lite));
         self.update_shared_state(profile, lite, self.active_target_pkg.as_deref());
+        if had_profile {
+            notify_profile_toast(binder, profile, lite);
+        }
         log!(
             "[PROFILE] Manual mode -> {} [{}]",
             profile.display_name(lite),
@@ -436,9 +450,13 @@ impl EngineRuntime {
             log!("[SYSTEM] DND restored -> {}", restore);
         }
 
+        let had_profile = self.current_profile.is_some();
         if self.current_profile != Some(Profile::Balance) || self.current_lite {
             engine::balance_profile();
             set_system_profile_prop("Balanced");
+            if had_profile {
+                notify_profile_toast(binder, Profile::Balance, false);
+            }
             log!(
                 "[RESET]  {} ({}) \u{2794} BALANCED [Trigger: {}]",
                 self.active_target_pkg.as_deref().unwrap_or("system"),
@@ -571,6 +589,7 @@ fn main() {
     let mut last_heartbeat = Instant::now();
     let mut reload_pending_at: Option<Instant> = None;
     let mut reload_force = false;
+    let mut pending_profile: Option<String> = None;
 
     loop {
         if SHUTDOWN.load(Ordering::Relaxed) {
@@ -593,9 +612,13 @@ fn main() {
         }
 
         let auto_profile = detector::is_auto_profile_enabled();
-        if let Some(name) = shared_state.take_requested_profile() {
+        let requested_profile = pending_profile
+            .take()
+            .or_else(|| shared_state.take_requested_profile());
+        if let Some(name) = requested_profile {
             if let Some(profile) = Profile::from_name(&name) {
                 let lite = is_lite_mode_active();
+                let had_profile = runtime.current_profile.is_some();
                 apply_profile(profile, lite);
                 runtime.manual_profile = Some(profile);
                 runtime.current_profile = Some(profile);
@@ -603,6 +626,9 @@ fn main() {
                 persist_manual_profile(profile);
                 set_system_profile_prop(profile.display_name(lite));
                 runtime.update_shared_state(profile, lite, runtime.active_target_pkg.as_deref());
+                if had_profile {
+                    notify_profile_toast(&mut binder_client, profile, lite);
+                }
                 log!(
                     "[PROFILE] Manual selection -> {}",
                     profile.display_name(lite)
@@ -659,7 +685,7 @@ fn main() {
                         runtime.reset_to_balance_triggered("Auto restored", &mut binder_client);
                     }
                 } else {
-                    runtime.apply_manual_profile("Config reload");
+                    runtime.apply_manual_profile("Config reload", &mut binder_client);
                 }
             }
             reload_force = false;
@@ -680,7 +706,7 @@ fn main() {
                         runtime.reset_to_balance_triggered("Auto restored", &mut binder_client);
                     }
                 } else {
-                    runtime.apply_manual_profile("Config reload");
+                    runtime.apply_manual_profile("Config reload", &mut binder_client);
                 }
             }
         }
@@ -967,9 +993,18 @@ fn main() {
         let poll_started = Instant::now();
         let had_event = binder_client.poll(timeout);
         if !had_event && !binder_client.is_push() {
-            let elapsed = poll_started.elapsed();
-            if elapsed < timeout {
-                thread::sleep(timeout - elapsed);
+            let mut remaining = timeout.saturating_sub(poll_started.elapsed());
+            while remaining > Duration::from_millis(0) {
+                if shared_state.reload_flag.load(Ordering::Relaxed) {
+                    break;
+                }
+                if let Some(name) = shared_state.take_requested_profile() {
+                    pending_profile = Some(name);
+                    break;
+                }
+                let step = remaining.min(Duration::from_millis(100));
+                thread::sleep(step);
+                remaining = timeout.saturating_sub(poll_started.elapsed());
             }
         }
     }

@@ -34,7 +34,9 @@ use std::time::Duration;
 
 use crate::binder::producer::{monotonic_ms, Event, Focus, Shared, PROTO_VERSION};
 use crate::binder::protocol as binder_protocol;
-use crate::binder::{filter_to_dnd_arg, get_interruption_filter, set_interruption_filter};
+use crate::binder::{
+    enqueue_text_toast, filter_to_dnd_arg, get_interruption_filter, set_interruption_filter,
+};
 
 const LINE_LIMIT: usize = 512;
 const WRITE_TIMEOUT: Duration = Duration::from_millis(5);
@@ -490,6 +492,14 @@ fn respond(command: &str, shared: &Shared) -> Option<String> {
                 Some("OK\n".to_string())
             } else {
                 Some("ERR 2 dnd unavailable\n".to_string())
+            }
+        }
+        other if other.starts_with("TOAST ") => {
+            let text = other[6..].trim();
+            if !text.is_empty() && enqueue_text_toast(text) {
+                Some("OK\n".to_string())
+            } else {
+                Some("ERR 2 toast unavailable\n".to_string())
             }
         }
         other => Some(format!("ERR 1 unknown {}\n", other)),

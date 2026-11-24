@@ -198,6 +198,9 @@ pub fn invalidate_config_cache() {
     if let Ok(mut guard) = CACHED_AUTO.lock() {
         *guard = None;
     }
+    if let Ok(mut guard) = CACHED_TOAST.lock() {
+        *guard = None;
+    }
 }
 
 fn normalize_option(val: &Value) -> Option<String> {
@@ -378,6 +381,7 @@ static CACHED_LOW_POWER: Mutex<Option<(Instant, bool)>> = Mutex::new(None);
 static CACHED_MASTER: Mutex<Option<(Instant, bool)>> = Mutex::new(None);
 static CACHED_LITE: Mutex<Option<(Instant, bool)>> = Mutex::new(None);
 static CACHED_AUTO: Mutex<Option<(Instant, bool)>> = Mutex::new(None);
+static CACHED_TOAST: Mutex<Option<(Instant, bool)>> = Mutex::new(None);
 
 pub fn is_low_power_active() -> bool {
     if let Ok(guard) = CACHED_LOW_POWER.lock() {
@@ -572,6 +576,36 @@ fn read_auto_profile() -> bool {
     }
 
     let val = get_system_prop("persist.lumina.autoprofile");
+    if val == "0" || val.eq_ignore_ascii_case("false") {
+        return false;
+    }
+    true
+}
+
+pub fn is_toast_enabled() -> bool {
+    if let Ok(guard) = CACHED_TOAST.lock() {
+        if let Some((at, value)) = *guard {
+            if at.elapsed() < CONFIG_CACHE_TTL {
+                return value;
+            }
+        }
+    }
+
+    let value = read_toast_enabled();
+    if let Ok(mut guard) = CACHED_TOAST.lock() {
+        *guard = Some((Instant::now(), value));
+    }
+    value
+}
+
+fn read_toast_enabled() -> bool {
+    if let Some(json) = read_global_json() {
+        if let Some(value) = json.get("toast_notifications") {
+            return is_truthy(value);
+        }
+    }
+
+    let val = get_system_prop("persist.lumina.toast");
     if val == "0" || val.eq_ignore_ascii_case("false") {
         return false;
     }

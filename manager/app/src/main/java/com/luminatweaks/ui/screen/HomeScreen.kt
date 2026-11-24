@@ -89,6 +89,8 @@ import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material3.CircularWavyProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -151,6 +153,7 @@ import com.luminatweaks.ui.theme.LocalPageTransition
 import com.luminatweaks.ui.theme.PageTransition
 import com.luminatweaks.util.DeviceUtil
 import com.luminatweaks.util.RootUtil
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -247,8 +250,9 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
     var isModuleInstalled by remember { mutableStateOf(true) }
     var isRebootRequired by remember { mutableStateOf(false) }
     var currentProfile by remember {
-        mutableStateOf(readSystemProperty("sys.lumina.profile") ?: "Balanced")
+        mutableStateOf(DaemonManager.normalizeProfileLabel(readSystemProperty("sys.lumina.profile")))
     }
+    val profileHoldUntil = remember { AtomicLong(0L) }
     var isRootGranted by remember { mutableStateOf(false) }
     var selinuxStatus by remember { mutableStateOf("Unknown") }
     var showRebootDialog by remember { mutableStateOf(false) }
@@ -299,10 +303,30 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
             withContext(Dispatchers.Main) {
                 batteryTemp = initialTemp
                 daemonPid = initialStatus.pid
-                currentProfile = propProfile ?: initialStatus.profile
+                currentProfile = DaemonManager.normalizeProfileLabel(propProfile ?: initialStatus.profile)
                 isRootGranted = initialRoot
                 selinuxStatus = initialSelinux
                 isChecking = false
+            }
+        }
+    }
+
+    LaunchedEffect(isScreenResumed, currentSubscreen, resumeToken) {
+        if (!isScreenResumed || currentSubscreen != null) {
+            return@LaunchedEffect
+        }
+
+        withContext(Dispatchers.IO) {
+            while (isActive) {
+                if (System.currentTimeMillis() >= profileHoldUntil.get()) {
+                    val propProfile = readSystemProperty("sys.lumina.profile")
+                    if (!propProfile.isNullOrBlank()) {
+                        withContext(Dispatchers.Main) {
+                            currentProfile = DaemonManager.normalizeProfileLabel(propProfile)
+                        }
+                    }
+                }
+                delay(1000L)
             }
         }
     }
@@ -330,7 +354,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                     continue
                 }
                 val currentTemp = DeviceUtil.getBatteryTemperature(context)
-                val propProfile = readSystemProperty("sys.lumina.profile")
                 val status = DaemonManager.getStatus()
                 val checkFallback = status.pid == null && fallbackChecks % 4 == 0
                 fallbackChecks++
@@ -350,7 +373,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                     daemonPid = status.pid
                     isRebootRequired = rebootNeeded
                     isModuleInstalled = installed
-                    currentProfile = propProfile ?: status.profile
                 }
                 delay(5000L)
             }
@@ -358,6 +380,20 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
     }
 
     val coroutineScope = rememberCoroutineScope()
+    val onSelectProfile: (String) -> Unit = { selected ->
+        val normalized = DaemonManager.normalizeProfileLabel(selected)
+        profileHoldUntil.set(System.currentTimeMillis() + 1000L)
+        currentProfile = normalized
+        coroutineScope.launch {
+            DaemonManager.setProfile(normalized)
+            delay(200L)
+            val synced = withContext(Dispatchers.IO) {
+                DaemonManager.normalizeProfileLabel(readSystemProperty("sys.lumina.profile"))
+            }
+            currentProfile = synced
+            profileHoldUntil.set(0L)
+        }
+    }
     val haptic = LocalHapticFeedback.current
 
     TouchOriginDialog(
@@ -431,7 +467,9 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
         DaemonManager.restartDaemon(context)
         val updated = DaemonManager.getStatus()
         daemonPid = updated.pid
-        currentProfile = readSystemProperty("sys.lumina.profile") ?: updated.profile
+        currentProfile = DaemonManager.normalizeProfileLabel(
+            readSystemProperty("sys.lumina.profile") ?: updated.profile
+        )
         if (updated.pid == null) {
             isRebootRequired = DaemonManager.isRebootRequired()
             isModuleInstalled = DaemonManager.isModuleInstalled()
@@ -499,7 +537,8 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             isRootGranted = isRootGranted,
                             selinuxStatus = selinuxStatus,
                             onRequestRebootDialog = { showRebootDialog = true },
-                            onRestartDaemon = restartAction
+                            onRestartDaemon = restartAction,
+                            onSelectProfile = onSelectProfile
                         )
                         1 -> AppsScreen(
                             pagerState = pagerState
@@ -574,7 +613,8 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             isRootGranted = isRootGranted,
                             selinuxStatus = selinuxStatus,
                             onRequestRebootDialog = { showRebootDialog = true },
-                            onRestartDaemon = restartAction
+                            onRestartDaemon = restartAction,
+                            onSelectProfile = onSelectProfile
                         )
                         1 -> AppsScreen(
                             pagerState = pagerState
@@ -736,12 +776,14 @@ fun HomeDashboardContent(
     selinuxStatus: String,
     onRequestRebootDialog: () -> Unit,
     onRestartDaemon: suspend () -> Unit,
+    onSelectProfile: (String) -> Unit,
     onNavigateToPersonalisasi: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     var isRestarting by remember { mutableStateOf(false) }
     var showPowerDialog by remember { mutableStateOf(false) }
+    var profileMenuExpanded by remember { mutableStateOf(false) }
     val isRunning = daemonPid != null
 
     val restartScope = rememberCoroutineScope()
@@ -760,10 +802,8 @@ fun HomeDashboardContent(
     val heroOrigin = rememberDialogOrigin()
     val topBarPowerOrigin = rememberDialogOrigin()
 
-    val profileDisplayValue = when {
-        currentProfile.equals("Eco", ignoreCase = true) -> "Powersave"
-        else -> currentProfile
-    }
+    val profileDisplayValue = DaemonManager.normalizeProfileLabel(currentProfile)
+    val profileOptions = listOf("Eco", "Balanced", "Performance", "Performance Lite")
 
     TouchOriginDialog(
         visible = showPowerDialog,
@@ -942,13 +982,41 @@ fun HomeDashboardContent(
                         highlight = false,
                         modifier = Modifier.weight(1f)
                     )
-                    HomeHardwareTile(
-                        label = stringResource(R.string.home_profile_auto).substringBefore(" ("),
-                        value = profileDisplayValue,
-                        icon = Icons.Rounded.Speed,
-                        highlight = true,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Box(modifier = Modifier.weight(1f)) {
+                        HomeHardwareTile(
+                            label = stringResource(R.string.home_profile_auto).substringBefore(" ("),
+                            value = profileDisplayValue,
+                            icon = Icons.Rounded.Speed,
+                            highlight = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { profileMenuExpanded = true }
+                        )
+                        DropdownMenu(
+                            expanded = profileMenuExpanded,
+                            onDismissRequest = { profileMenuExpanded = false }
+                        ) {
+                            profileOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option) },
+                                    onClick = {
+                                        profileMenuExpanded = false
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onSelectProfile(option)
+                                    },
+                                    trailingIcon = if (option == profileDisplayValue) {
+                                        {
+                                            Icon(
+                                                imageVector = Icons.Outlined.CheckCircle,
+                                                contentDescription = null
+                                            )
+                                        }
+                                    } else {
+                                        null
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
             }
 

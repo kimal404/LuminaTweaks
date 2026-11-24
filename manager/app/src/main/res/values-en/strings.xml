@@ -303,6 +303,8 @@ Features on this page are only active when the system is in the Performance prof
     <string name="home_core_info_unknown">Unknown</string>
     <string name="settings_setup_wizard">Setup Wizard</string>
     <string name="settings_setup_wizard_desc">Replay the initial setup and diagnostics</string>
+    <string name="settings_toast_notifications">Enable toast notifications</string>
+    <string name="settings_toast_notifications_desc">Show lightweight toast notifications when the active profile changes</string>
     <string name="home_version_release_format">v%1$s (Release)</string>
     <string name="home_quick_trim">Trim</string>
     <string name="home_quick_cache">Cache</string>

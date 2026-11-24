@@ -117,6 +117,16 @@ impl BinderClient {
         self.send_command(&format!("DND {}", mode))
     }
 
+    /// Sends a lightweight toast request through the persistent binder helper.
+    /// Fire-and-forget: waiting for a reply would race with the event stream.
+    pub fn show_toast(&mut self, text: &str) -> bool {
+        let clean: String = text.chars().filter(|c| *c != '\r' && *c != '\n').collect();
+        if clean.is_empty() {
+            return false;
+        }
+        self.send_command(&format!("TOAST {}", clean))
+    }
+
     pub fn take_died(&mut self) -> Option<Died> {
         self.died.pop_front()
     }

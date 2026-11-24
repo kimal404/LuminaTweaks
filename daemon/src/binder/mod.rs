@@ -82,6 +82,7 @@ static TX_INTERACTIVE: AtomicU32 = AtomicU32::new(0);
 static TX_POWER_SAVE: AtomicU32 = AtomicU32::new(0);
 static TX_DND_SET: AtomicU32 = AtomicU32::new(0);
 static TX_DND_GET: AtomicU32 = AtomicU32::new(0);
+static TX_TOAST: AtomicU32 = AtomicU32::new(0);
 static SHARED: OnceLock<Arc<Shared>> = OnceLock::new();
 static THREAD_POOL_STARTED: AtomicBool = AtomicBool::new(false);
 static SCREEN_GENERATION: AtomicU64 = AtomicU64::new(0);
@@ -371,6 +372,7 @@ fn attach(codes: &resolver::Codes, shared: &Shared) -> Result<Handles, String> {
     TX_POWER_SAVE.store(codes.is_power_save, Ordering::Relaxed);
     TX_DND_SET.store(codes.set_interruption_filter, Ordering::Relaxed);
     TX_DND_GET.store(codes.get_interruption_filter, Ordering::Relaxed);
+    TX_TOAST.store(codes.enqueue_text_toast, Ordering::Relaxed);
 
     associate(api, handles.activity, ACTIVITY_DESCRIPTOR)?;
     if !handles.display.is_null() {
@@ -937,6 +939,142 @@ pub fn get_interruption_filter() -> Option<i32> {
     transact_service_int("notification", NOTIFICATION_DESCRIPTOR, code, None, true)
         .ok()
         .flatten()
+}
+
+unsafe extern "C" fn noop_transact(
+    _binder: *mut AIBinder,
+    _code: u32,
+    _input: *const AParcel,
+    _output: *mut AParcel,
+) -> i32 {
+    ffi::STATUS_OK
+}
+
+fn enqueue_text_toast_on(
+    api: &'static ffi::Api,
+    service: *mut AIBinder,
+    token: *mut AIBinder,
+    code: u32,
+    text: &str,
+    with_ui_context: bool,
+    manual_token: bool,
+) -> bool {
+    let mut input: *mut AParcel = std::ptr::null_mut();
+    unsafe {
+        if (api.prepare_transaction)(service, &mut input) != ffi::STATUS_OK || input.is_null() {
+            return false;
+        }
+    }
+
+    if manual_token {
+        let (Some(write_token), Some(interface)) =
+            (api.write_interface_token, ffi::interface_token(NOTIFICATION_DESCRIPTOR))
+        else {
+            unsafe { (api.parcel_delete)(input) };
+            return false;
+        };
+        if unsafe { write_token(input, interface.as_ptr()) } != ffi::STATUS_OK {
+            unsafe { (api.parcel_delete)(input) };
+            return false;
+        }
+    }
+
+    let Some(write_string) = api.write_string else {
+        unsafe { (api.parcel_delete)(input) };
+        return false;
+    };
+    let package = std::ffi::CString::new("android").unwrap();
+    let message = match std::ffi::CString::new(text) {
+        Ok(value) => value,
+        Err(_) => {
+            unsafe { (api.parcel_delete)(input) };
+            return false;
+        }
+    };
+
+    unsafe {
+        if write_string(input, package.as_ptr(), package.as_bytes().len() as i32) != ffi::STATUS_OK
+            || (api.write_strong_binder)(input, token) != ffi::STATUS_OK
+            || (api.write_int32)(input, 1) != ffi::STATUS_OK
+            || write_string(input, message.as_ptr(), message.as_bytes().len() as i32)
+                != ffi::STATUS_OK
+            || (api.write_int32)(input, 0) != ffi::STATUS_OK
+            || (with_ui_context && (api.write_int32)(input, 0) != ffi::STATUS_OK)
+            || (api.write_int32)(input, 0) != ffi::STATUS_OK
+            || (api.write_strong_binder)(input, std::ptr::null_mut()) != ffi::STATUS_OK
+        {
+            (api.parcel_delete)(input);
+            return false;
+        }
+    }
+
+    let mut output: *mut AParcel = std::ptr::null_mut();
+    let status = unsafe { (api.transact)(service, code, &mut input, &mut output, 0) };
+    unsafe { (api.parcel_delete)(input) };
+
+    let mut ok = status == ffi::STATUS_OK;
+    if !output.is_null() {
+        let mut reply: *mut AStatus = std::ptr::null_mut();
+        unsafe {
+            if (api.read_status_header)(output, &mut reply) == ffi::STATUS_OK && !reply.is_null() {
+                if !(api.status_is_ok)(reply) {
+                    ok = false;
+                }
+                (api.status_delete)(reply);
+            }
+            (api.parcel_delete)(output);
+        }
+    }
+    ok
+}
+
+/// Enqueues a short system toast through `INotificationManager`.
+/// Runs inside the `lumina-binder` helper process; callers fall back silently.
+pub fn enqueue_text_toast(text: &str) -> bool {
+    let code = TX_TOAST.load(Ordering::Relaxed);
+    if code == 0 {
+        return false;
+    }
+    let Some(api) = ffi::api() else {
+        return false;
+    };
+
+    let service = ffi::wait_for_service(api, "notification");
+    if service.is_null() {
+        return false;
+    }
+
+    let token = match new_binder(api, "android.os.Binder", noop_transact) {
+        Ok(binder) => binder,
+        Err(_) => {
+            unsafe { (api.dec_strong)(service) };
+            return false;
+        }
+    };
+    if token.is_null() {
+        unsafe { (api.dec_strong)(service) };
+        return false;
+    }
+
+    let mut ok = false;
+    for with_ui_context in [true, false] {
+        if enqueue_text_toast_on(api, service, token, code, text, with_ui_context, false) {
+            ok = true;
+            break;
+        }
+        if api.write_interface_token.is_some()
+            && enqueue_text_toast_on(api, service, token, code, text, with_ui_context, true)
+        {
+            ok = true;
+            break;
+        }
+    }
+
+    unsafe {
+        (api.dec_strong)(token);
+        (api.dec_strong)(service);
+    }
+    ok
 }
 
 unsafe extern "C" fn on_create(args: *mut c_void) -> *mut c_void {

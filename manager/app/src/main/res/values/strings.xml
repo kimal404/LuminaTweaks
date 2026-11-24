@@ -304,6 +304,8 @@ Fitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. P
     <string name="home_core_info_unknown">Tidak diketahui</string>
     <string name="settings_setup_wizard">Setup Wizard</string>
     <string name="settings_setup_wizard_desc">Jalankan ulang panduan awal dan diagnostik</string>
+    <string name="settings_toast_notifications">Aktifkan notifikasi toast</string>
+    <string name="settings_toast_notifications_desc">Tampilkan notifikasi toast ringan saat profil aktif berubah</string>
     <string name="home_version_release_format">v%1$s (Release)</string>
     <string name="home_quick_trim">Trim</string>
     <string name="home_quick_cache">Cache</string>

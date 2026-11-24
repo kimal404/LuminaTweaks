@@ -201,6 +201,9 @@ object ConfigRepository {
         if (!json.has("auto_profile")) {
             json.put("auto_profile", true)
         }
+        if (!json.has("toast_notifications")) {
+            json.put("toast_notifications", true)
+        }
         writeFileAtomically(GLOBAL_CONFIG_PATH, json.toString(), reloadDaemon = true)
     }
 
@@ -360,6 +363,31 @@ object ConfigRepository {
             val propVal = if (enabled) "1" else "0"
             runSuCmd("setprop persist.lumina.autoprofile $propVal", 4)
         }
+    }
+
+    suspend fun getToastNotifications(): Boolean = withContext(Dispatchers.IO) {
+        val content = runSuCmd("cat $GLOBAL_CONFIG_PATH 2>/dev/null", 4)
+        val fromJson = if (content.isNotBlank()) {
+            try {
+                JSONObject(content).optBoolean("toast_notifications", true)
+            } catch (_: Exception) {
+                null
+            }
+        } else {
+            null
+        }
+        if (fromJson != null) return@withContext fromJson
+        val prop = runSuCmd("getprop persist.lumina.toast", 3).trim()
+        prop != "0" && !prop.equals("false", ignoreCase = true)
+    }
+
+    suspend fun setToastNotifications(enabled: Boolean) = withContext(Dispatchers.IO) {
+        fileMutex.withLock {
+            updateGlobalConfigInternal { it.put("toast_notifications", enabled) }
+            val propVal = if (enabled) "1" else "0"
+            runSuCmd("setprop persist.lumina.toast $propVal", 4)
+        }
+        DaemonManager.reloadConfig()
     }
 
     suspend fun setAutoDnd(enabled: Boolean) = withContext(Dispatchers.IO) {
@@ -542,6 +570,9 @@ object ConfigRepository {
         globalJson.put("disabled_games", disabledSet)
         if (!globalJson.has("auto_profile")) {
             globalJson.put("auto_profile", true)
+        }
+        if (!globalJson.has("toast_notifications")) {
+            globalJson.put("toast_notifications", true)
         }
         writeFileAtomically(GLOBAL_CONFIG_PATH, globalJson.toString(), reloadDaemon = true)
     }

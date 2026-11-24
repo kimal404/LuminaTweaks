@@ -76,6 +76,17 @@ object DaemonManager {
         }
     }
 
+    fun normalizeProfileLabel(raw: String?): String {
+        return when (raw?.trim()?.lowercase()) {
+            "eco", "powersave", "power save", "hemat daya" -> "Eco"
+            "performance lite", "performance_lite", "performance-lite", "performa lite" ->
+                "Performance Lite"
+            "performance", "performa" -> "Performance"
+            "balanced", "balance", "seimbang" -> "Balanced"
+            else -> "Balanced"
+        }
+    }
+
     private fun readHeartbeatAgeMs(): Long? {
         var freshest: Long? = readSystemProperty("sys.lumina.alive")
             ?.toLongOrNull()
@@ -252,9 +263,15 @@ object DaemonManager {
             "printf '$command\\n' | nc -w 1 -U $IPC_SOCKET_FALLBACK 2>/dev/null || " +
             "printf '$command\\n' | toybox nc -w 1 -U $IPC_SOCKET_FALLBACK 2>/dev/null)"
 
+    suspend fun reloadConfig(): Boolean = withContext(Dispatchers.IO) {
+        runSuCmd(ipcCommand("RELOAD"), 4).contains("OK")
+    }
+
     suspend fun setProfile(name: String): Boolean = withContext(Dispatchers.IO) {
         val safe = when (name.trim().lowercase()) {
-            "eco", "powersave" -> "Eco"
+            "eco", "powersave", "power save", "hemat daya" -> "Eco"
+            "performance lite", "performance_lite", "performance-lite", "performa lite" ->
+                "Performance Lite"
             "performance", "performa" -> "Performance"
             else -> "Balanced"
         }
@@ -309,7 +326,7 @@ object DaemonManager {
         val pid = getDaemonPid()
             ?: return@withContext DaemonStatus(null, "-", "-")
 
-        val profile = readSystemProperty("sys.lumina.profile") ?: "Balanced"
+        val profile = normalizeProfileLabel(readSystemProperty("sys.lumina.profile"))
         DaemonStatus(
             pid = pid,
             profile = profile,

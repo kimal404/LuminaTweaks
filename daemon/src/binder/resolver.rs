@@ -24,11 +24,11 @@ use std::time::{Duration, Instant};
 use crate::core::detector::get_system_prop;
 
 const RESOLVE_TIMEOUT: Duration = Duration::from_secs(5);
-const CACHE_SCHEMA: u32 = 2;
+const CACHE_SCHEMA: u32 = 3;
 const CACHE_PATH: &str = "/data/adb/.config/lumina/binder_codes.json";
 const CONFIG_DIR: &str = "/data/adb/.config/lumina";
 
-const QUERIES: [&str; 10] = [
+const QUERIES: [&str; 11] = [
     "android.app.IActivityManager.Stub::TRANSACTION_registerProcessObserver",
     "android.app.IProcessObserver.Stub::TRANSACTION_onForegroundActivitiesChanged",
     "android.app.IProcessObserver.Stub::TRANSACTION_onProcessDied",
@@ -39,6 +39,7 @@ const QUERIES: [&str; 10] = [
     "android.app.INotificationManager.Stub::TRANSACTION_setInterruptionFilter",
     "android.app.INotificationManager.Stub::TRANSACTION_getInterruptionFilter",
     "android.hardware.display.IDisplayManager.Stub::TRANSACTION_registerCallbackWithEventMask",
+    "android.app.INotificationManager.Stub::TRANSACTION_enqueueTextToast",
 ];
 
 #[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize)]
@@ -55,6 +56,9 @@ pub struct Codes {
     /// `registerCallbackWithEventMask` (Android 14+). Zero on older builds.
     #[serde(default)]
     pub display_register_with_mask: u32,
+    /// `enqueueTextToast`. Zero on builds that only expose the legacy toast path.
+    #[serde(default)]
+    pub enqueue_text_toast: u32,
 }
 
 impl Codes {
@@ -202,6 +206,7 @@ pub fn resolve(apk: &Path) -> Option<Codes> {
         set_interruption_filter: resolved.get(QUERIES[7]).copied().unwrap_or(0),
         get_interruption_filter: resolved.get(QUERIES[8]).copied().unwrap_or(0),
         display_register_with_mask: resolved.get(QUERIES[9]).copied().unwrap_or(0),
+        enqueue_text_toast: resolved.get(QUERIES[10]).copied().unwrap_or(0),
     };
 
     if !codes.essential_ok() {
