@@ -17,7 +17,7 @@
     <string name="profile_title">App Profile</string>
     <string name="profile_app_info">Info Aplikasi</string>
     <string name="profile_override_notice">Pengaturan di sini hanya berlaku untuk aplikasi ini dan akan mengabaikan pengaturan global yang sudah ada</string>
-    <string name="profile_master_switch">Saklar Utama</string>
+    <string name="profile_master_switch">Aktifkan Tweaks</string>
     <string name="profile_lite_mode">Lite Mode</string>
     <string name="profile_lite_mode_desc">Profil gaming yang lebih ringan untuk hemat baterai</string>
     <string name="profile_refresh_rate">Refresh Rate</string>

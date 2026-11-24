@@ -16,7 +16,7 @@
     <string name="profile_title">App Profile</string>
     <string name="profile_app_info">App Info</string>
     <string name="profile_override_notice">Settings here only apply to this app and will override existing global settings</string>
-    <string name="profile_master_switch">Master Switch</string>
+    <string name="profile_master_switch">Enable Tweaks</string>
     <string name="profile_lite_mode">Lite Mode</string>
     <string name="profile_lite_mode_desc">Lighter gaming profile to save battery</string>
     <string name="profile_refresh_rate">Refresh Rate</string>

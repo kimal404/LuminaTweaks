@@ -27,8 +27,8 @@
 //! An earlier revision flipped this around and had the app host a
 //! `LocalServerSocket` in `filesDir`. On device that server socket was never
 //! created (no `Manager bridge linked` line ever appeared, and it still failed
-//! with SELinux permissive), so every `SESSION_READ` silently fell back to an
-//! empty local mirror. Hosting here removes that failure mode entirely.
+//! with SELinux permissive), so every read silently fell back to an empty local
+//! mirror. Hosting here removes that failure mode entirely.
 //!
 //! Requests are framed so multi-kilobyte JSON survives an arbitrary poll
 //! boundary:
@@ -38,9 +38,6 @@
 //! response: OK <payload-bytes>\n<payload-bytes bytes>
 //!           ERR <reason>\n
 //! ```
-//!
-//! The bridge only exposes the two session files, validates that writes are
-//! JSON arrays, and persists them atomically with `0644` permissions.
 
 #![allow(dead_code)]
 
@@ -53,8 +50,6 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 
-use crate::core::detector::CONFIG_DIR;
-
 /// Primary endpoint: the standard socket namespace is reachable from both the
 /// root daemon and `untrusted_app` once the module's sepolicy rules are in
 /// place. The runtime-directory path is kept as a fallback for ROMs that keep
@@ -63,13 +58,11 @@ const BRIDGE_SOCKETS: [&str; 2] = [
     "/dev/socket/lumina_bridge.sock",
     "/data/adb/.config/lumina/lumina_bridge.sock",
 ];
-const SESSIONS_FILE: &str = "sessions.json";
-const RECORD_APPS_FILE: &str = "record_apps.json";
 
 const READ_TIMEOUT: Duration = Duration::from_secs(2);
-// A SESSION_READ response can carry the whole sessions.json (hundreds of KB).
-// Give the write side enough headroom that a busy app thread cannot turn a
-// complete payload into a partial one.
+// A response can carry a sizeable Angle status payload. Give the write side
+// enough headroom that a busy app thread cannot turn a complete payload into a
+// partial one.
 const WRITE_TIMEOUT: Duration = Duration::from_secs(8);
 const MAX_PAYLOAD: usize = 4 * 1024 * 1024;
 
@@ -207,9 +200,6 @@ fn serve(stream: UnixStream) -> bool {
 
         let handled = match command.as_str() {
             "PING" => respond_ok(&mut writer, &[]),
-            "SESSION_READ" => respond_file(&mut writer, SESSIONS_FILE),
-            "RECORD_APPS_READ" => respond_file(&mut writer, RECORD_APPS_FILE),
-            "SESSION_WRITE" => write_json(&mut writer, SESSIONS_FILE, &payload),
             "ANGLE_STATUS" => {
                 let support = crate::core::angle::detect_angle_support();
                 let json = serde_json::json!({
@@ -221,16 +211,6 @@ fn serve(stream: UnixStream) -> bool {
                     "detail": support.describe(),
                 });
                 respond_ok(&mut writer, json.to_string().as_bytes())
-            }
-            "RECORD_APPS_WRITE" => {
-                // Drop the recorder's mtime cache so a freshly armed package is
-                // picked up on the next tick (~400 ms) instead of after the
-                // 2 s config poll.
-                let written = write_json(&mut writer, RECORD_APPS_FILE, &payload);
-                if written.is_ok() {
-                    crate::core::mark_record_apps_stale();
-                }
-                written
             }
             other => {
                 let reason = format!("unknown {}", other);
@@ -245,33 +225,6 @@ fn serve(stream: UnixStream) -> bool {
     }
 }
 
-fn config_path(name: &str) -> String {
-    format!("{}/{}", CONFIG_DIR, name)
-}
-
-fn respond_file(writer: &mut UnixStream, name: &str) -> std::io::Result<()> {
-    match fs::read(config_path(name)) {
-        Ok(content) => respond_ok(writer, &content),
-        // "Not found" is returned as an empty success so the Manager can fall
-        // back to its local mirror instead of mistaking it for an empty file.
-        Err(error) if error.kind() == ErrorKind::NotFound => respond_ok(writer, &[]),
-        Err(error) => respond_error(writer, &error.to_string()),
-    }
-}
-
-fn write_json(writer: &mut UnixStream, name: &str, payload: &[u8]) -> std::io::Result<()> {
-    match serde_json::from_slice::<serde_json::Value>(payload) {
-        Ok(serde_json::Value::Array(_)) => {}
-        Ok(_) => return respond_error(writer, "expected a JSON array"),
-        Err(_) => return respond_error(writer, "invalid JSON"),
-    }
-
-    match write_atomic(&config_path(name), payload) {
-        Ok(()) => respond_ok(writer, &[]),
-        Err(error) => respond_error(writer, &error.to_string()),
-    }
-}
-
 fn respond_ok(writer: &mut UnixStream, payload: &[u8]) -> std::io::Result<()> {
     write!(writer, "OK {}\n", payload.len())?;
     if !payload.is_empty() {
@@ -283,23 +236,4 @@ fn respond_ok(writer: &mut UnixStream, payload: &[u8]) -> std::io::Result<()> {
 fn respond_error(writer: &mut UnixStream, reason: &str) -> std::io::Result<()> {
     writeln!(writer, "ERR {}", reason)?;
     writer.flush()
-}
-
-/// Mirrors the daemon's persistence rules: parent directory creation, a
-/// `.tmp` sibling, `0644`, then an atomic rename. A half-written file can
-/// therefore never be observed by the recorder or the UI.
-fn write_atomic(path: &str, content: &[u8]) -> std::io::Result<()> {
-    if let Some(parent) = Path::new(path).parent() {
-        fs::create_dir_all(parent)?;
-    }
-
-    let temp = format!("{}.tmp", path);
-    fs::write(&temp, content)?;
-    let result = fs::set_permissions(&temp, fs::Permissions::from_mode(0o644))
-        .and_then(|_| fs::rename(&temp, path));
-
-    if result.is_err() {
-        let _ = fs::remove_file(&temp);
-    }
-    result
 }

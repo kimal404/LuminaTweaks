@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BatterySaver
@@ -55,6 +56,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -68,6 +70,8 @@ import com.luminatweaks.ui.component.AospPreferenceSwitch
 import com.luminatweaks.ui.component.AospSectionHeader
 import com.luminatweaks.ui.component.LuminaBackButton
 import com.luminatweaks.ui.component.AospTopBar
+import com.luminatweaks.ui.component.rememberHeaderScrolled
+import com.luminatweaks.ui.component.scrolledHeader
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -107,6 +111,8 @@ fun UtilityScreen(
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val bottomPadding = if (isFloating) 100.dp + navInset else 24.dp + navInset
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val listState = rememberLazyListState()
+    val headerScrolled by rememberHeaderScrolled(listState)
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -117,11 +123,13 @@ fun UtilityScreen(
                 title = stringResource(R.string.utility_screen_title),
                 subtitle = localizedLabel("Manajemen daya & standby", "Power and standby management"),
                 scrollBehavior = scrollBehavior,
-                navigationIcon = { LuminaBackButton(onBack = onBack) }
+                navigationIcon = { LuminaBackButton(onBack = onBack) },
+                scrolled = headerScrolled
             )
         }
     ) { innerPadding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = innerPadding.calculateTopPadding() + 4.dp,

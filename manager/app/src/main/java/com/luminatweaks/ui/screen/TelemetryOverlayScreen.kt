@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -97,7 +98,9 @@ import androidx.compose.ui.unit.sp
 import com.luminatweaks.R
 import com.luminatweaks.ui.component.LuminaBackButton
 import com.luminatweaks.ui.component.pressScale
+import com.luminatweaks.ui.component.rememberHeaderScrolled
 import com.luminatweaks.ui.component.rememberSliderHaptics
+import com.luminatweaks.ui.component.scrolledHeader
 import java.util.Locale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -377,6 +380,8 @@ internal fun TelemetryOverlayScreen(
     var alphaDraft by remember(config.bgAlpha) { mutableFloatStateOf(config.bgAlpha) }
 
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val listState = rememberLazyListState()
+    val headerScrolled by rememberHeaderScrolled(listState)
 
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
@@ -385,7 +390,7 @@ internal fun TelemetryOverlayScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.background)
+                    .scrolledHeader(headerScrolled, MaterialTheme.colorScheme.background)
                     .statusBarsPadding()
             ) {
                 TopAppBar(
@@ -404,7 +409,8 @@ internal fun TelemetryOverlayScreen(
                         )
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent
                     ),
                     windowInsets = WindowInsets(0, 0, 0, 0)
                 )
@@ -412,6 +418,7 @@ internal fun TelemetryOverlayScreen(
         }
     ) { innerPadding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = innerPadding.calculateTopPadding() + 4.dp,

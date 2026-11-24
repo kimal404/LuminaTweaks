@@ -60,7 +60,6 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Info
-import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.PowerSettingsNew
@@ -82,7 +81,6 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -107,9 +105,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.LifecycleOwner
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.luminatweaks.R
@@ -180,26 +175,6 @@ fun AppProfileScreen(
             var showLiteModeSheet by remember { mutableStateOf(false) }
             var showRefreshRateSheet by remember { mutableStateOf(false) }
             var showDndSheet by remember { mutableStateOf(false) }
-            val scope = rememberCoroutineScope()
-            var isSessionRecordEnabled by remember(app.packageName) { mutableStateOf(false) }
-
-            DisposableEffect(context, app.packageName) {
-                val lifecycleOwner = context as? LifecycleOwner
-                var observer: LifecycleEventObserver? = null
-                fun refreshRecordingState() {
-                    scope.launch {
-                        isSessionRecordEnabled = ConfigRepository.recordEnabled(context, app.packageName)
-                    }
-                }
-                refreshRecordingState()
-
-                if (lifecycleOwner != null) {
-                    observer = LifecycleEventObserver { _, event ->
-                        if (event == Lifecycle.Event.ON_RESUME) refreshRecordingState()
-                    }.also { lifecycleOwner.lifecycle.addObserver(it) }
-                }
-                onDispose { observer?.let { lifecycleOwner?.lifecycle?.removeObserver(it) } }
-            }
 
             LaunchedEffect(Unit) {
                 rrModes = ConfigRepository.getRefreshRateModes()
@@ -496,31 +471,9 @@ fun AppProfileScreen(
 
                                 ProfileSectionHeader(title = stringResource(R.string.profile_section_additional))
                                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    ProfileSwitchRow(
-                                        index = 0,
-                                        count = 2,
-                                        icon = Icons.Rounded.Insights,
-                                        title = localizedLabel("Rekam Statistik Sesi", "Record Session Stats"),
-                                        subtitle = localizedLabel(
-                                            "Simpan riwayat FPS, suhu & daya saat aplikasi berjalan",
-                                            "Log FPS, temperature & power while this app runs"
-                                        ),
-                                        checked = isSessionRecordEnabled,
-                                        onCheckedChange = { enabled ->
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            isSessionRecordEnabled = enabled
-                                            scope.launch {
-                                                ConfigRepository.setRecordEnabled(
-                                                    context,
-                                                    app.packageName,
-                                                    enabled
-                                                )
-                                            }
-                                        }
-                                    )
                                     ProfileActionRow(
-                                        index = 1,
-                                        count = 2,
+                                        index = 0,
+                                        count = 1,
                                         icon = Icons.Rounded.NotificationsOff,
                                         title = stringResource(R.string.profile_dnd),
                                         subtitle = OptionItem.fromValue(profile.dnd).getLabel(),

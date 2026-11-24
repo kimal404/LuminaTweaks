@@ -52,7 +52,6 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         LuminaBridge.start(applicationContext)
-        com.luminatweaks.data.ConfigRepository.initialize(applicationContext)
         if (com.luminatweaks.gamedeck.GameDeckPrefs.load(this).enabled) {
             com.luminatweaks.gamedeck.GameDeckService.sync(this)
         }

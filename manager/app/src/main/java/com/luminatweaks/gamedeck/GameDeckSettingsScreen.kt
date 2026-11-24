@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -58,6 +59,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -69,6 +71,8 @@ import androidx.core.graphics.drawable.toBitmap
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.model.AppItem
 import com.luminatweaks.ui.component.LuminaBackButton
+import com.luminatweaks.ui.component.rememberHeaderScrolled
+import com.luminatweaks.ui.component.scrolledHeader
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -81,6 +85,8 @@ private val deckIconCache = mutableMapOf<String, Drawable?>()
 fun GameDeckSettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+    val headerScrolled by rememberHeaderScrolled(listState)
     var config by remember { mutableStateOf(GameDeckPrefs.load(context)) }
     var showAppPicker by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
@@ -135,7 +141,7 @@ fun GameDeckSettingsScreen(onBack: () -> Unit) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.background)
+                    .scrolledHeader(headerScrolled, MaterialTheme.colorScheme.background)
                     .statusBarsPadding()
             ) {
                 TopAppBar(
@@ -149,13 +155,15 @@ fun GameDeckSettingsScreen(onBack: () -> Unit) {
                         LuminaBackButton(onBack = onBack, contentDescription = "Kembali")
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent
                     )
                 )
             }
         }
     ) { innerPadding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = innerPadding.calculateTopPadding() + 8.dp,

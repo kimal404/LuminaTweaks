@@ -90,9 +90,6 @@ object ConfigRepository {
     private const val IPC_SOCKET_PRIMARY = "$CONFIG_DIR/lumina.sock"
     private const val IPC_SOCKET_FALLBACK = "/data/local/tmp/lumina_ipc.sock"
     private const val BATCH_SEP = "___LUMINA_SEP___"
-    private const val RECORD_PREFS_NAME = "lumina_session_stats"
-    private const val RECORD_APPS_KEY = "record_packages_set"
-    private const val RECORD_APPS_MIRROR = "record_apps.json"
 
     private val GAMELIST_JSON_CANDIDATES = listOf(
         "/data/adb/.config/lumina/gamelist.json",
@@ -137,24 +134,7 @@ object ConfigRepository {
     var customGames: Set<String> = emptySet()
 
     @Volatile
-    private var cachedRecordApps: Set<String>? = null
-
-    @Volatile
-    private var appContext: Context? = null
-
-    @Volatile
     private var cachedAngleStatus: AngleStatus? = null
-
-    fun initialize(context: Context) {
-        val app = context.applicationContext
-        appContext = app
-        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-            fileMutex.withLock {
-                val snapshot = readRecordApps(app)
-                persistRecordAppsLocked(app, snapshot)
-            }
-        }
-    }
 
     private fun runSuCmd(cmd: String, timeoutSeconds: Long = 6): String {
         return try {
@@ -498,8 +478,7 @@ object ConfigRepository {
                         textureEnabled = resolvedTextureEnabled,
                         textureDetail = resolvedLod,
                         pixelSharp = obj.optBoolean("pixel_sharp", false),
-                        hardDistance = obj.optBoolean("hard_distance", false),
-                        recordSession = obj.optBoolean("record_session", false)
+                        hardDistance = obj.optBoolean("hard_distance", false)
                     )
                 }
             }
@@ -514,15 +493,6 @@ object ConfigRepository {
             }
             val loaded = loadAppConfigsInternal()
             cachedAppConfigs = loaded
-            if (appContext != null) {
-
-                val fromProfiles = loaded.values.filter { it.recordSession }.map { it.pkg }.toSet()
-                if (fromProfiles.isNotEmpty()) {
-                    val merged = readRecordApps(appContext!!) + fromProfiles
-                    cachedRecordApps = merged
-                    persistRecordAppsLocked(appContext!!, merged)
-                }
-            }
             refreshGameSets(loaded)
             loaded
         }
@@ -555,7 +525,6 @@ object ConfigRepository {
                 put("texture_detail", normalizedLod)
                 put("pixel_sharp", item.pixelSharp)
                 put("hard_distance", item.hardDistance)
-                put("record_session", item.recordSession)
             }
             arr.put(obj)
         }
@@ -814,9 +783,6 @@ object ConfigRepository {
         notifyDaemonReload()
     }
 
-    private fun recordAppsPrefs(context: Context) =
-        context.getSharedPreferences(RECORD_PREFS_NAME, Context.MODE_PRIVATE)
-
     suspend fun getAngleStatus(context: Context): AngleStatus = withContext(Dispatchers.IO) {
         cachedAngleStatus?.let { return@withContext it }
 
@@ -840,108 +806,5 @@ object ConfigRepository {
 
         cachedAngleStatus = parsed
         parsed
-    }
-
-    suspend fun recordEnabled(context: Context, packageName: String): Boolean =
-        withContext(Dispatchers.IO) {
-            val pkg = packageName.substringBefore(':').trim()
-            if (pkg.isEmpty()) return@withContext false
-            if (readRecordApps(context).contains(pkg)) return@withContext true
-
-            val fromProfile = (cachedAppConfigs ?: getAppConfigs())[pkg]?.recordSession
-            if (fromProfile == true) {
-                cachedRecordApps = (cachedRecordApps.orEmpty() + pkg)
-                true
-            } else {
-                false
-            }
-        }
-
-    suspend fun setRecordEnabled(
-        context: Context,
-        packageName: String,
-        enabled: Boolean
-    ): Set<String> = withContext(Dispatchers.IO) {
-        val pkg = packageName.substringBefore(':').trim()
-        if (pkg.isEmpty()) return@withContext readRecordApps(context)
-
-        fileMutex.withLock {
-
-            val configs = (cachedAppConfigs ?: loadAppConfigsInternal()).toMutableMap()
-            val existing = configs[pkg]
-            val updatedProfile = (existing ?: AppProfileConfig(pkg = pkg))
-                .copy(recordSession = enabled)
-            if (existing != updatedProfile) {
-                configs[pkg] = updatedProfile
-                cachedAppConfigs = configs
-                runCatching { persistAppConfigsInternal(configs) }
-            }
-
-            val current = readRecordApps(context).toMutableSet()
-            if (enabled) current.add(pkg) else current.remove(pkg)
-            val snapshot = current.toSet()
-            cachedRecordApps = snapshot
-
-            recordAppsPrefs(context)
-                .edit()
-                .putStringSet(RECORD_APPS_KEY, snapshot)
-                .commit()
-
-            persistRecordAppsLocked(context, snapshot)
-            snapshot
-        }
-    }
-
-    private suspend fun persistRecordAppsLocked(context: Context, snapshot: Set<String>) {
-        val json = JSONArray(snapshot.sorted()).toString()
-
-        cachedAppConfigs?.let { cached ->
-            val next = cached.mapValues { (pkg, profile) ->
-                val wanted = snapshot.contains(pkg)
-                if (profile.recordSession == wanted) profile else profile.copy(recordSession = wanted)
-            }
-            cachedAppConfigs = next
-        }
-
-        runCatching {
-            File(context.filesDir, RECORD_APPS_MIRROR).writeText("$json\n")
-        }
-        runCatching { LuminaBridge.writeRecordApps(context, json) }
-    }
-
-    suspend fun getRecordedPackages(context: Context): Set<String> = withContext(Dispatchers.IO) {
-        readRecordApps(context)
-    }
-
-    private suspend fun readRecordApps(context: Context): Set<String> {
-        cachedRecordApps?.let { return it }
-
-        val bridged = runCatching { LuminaBridge.readRecordApps(context) }
-            .getOrNull()
-            ?.takeIf { it.isNotBlank() }
-        parseRecordApps(bridged)?.let { return it }
-
-        val mirror = runCatching {
-            File(context.filesDir, RECORD_APPS_MIRROR).takeIf { it.canRead() }?.readText()
-        }.getOrNull()
-        parseRecordApps(mirror)?.let { return it }
-
-        return recordAppsPrefs(context)
-            .getStringSet(RECORD_APPS_KEY, emptySet())
-            .orEmpty()
-            .toSet()
-    }
-
-    private fun parseRecordApps(raw: String?): Set<String>? {
-        if (raw.isNullOrBlank()) return null
-        return runCatching {
-            val arr = JSONArray(raw.trim())
-            buildSet {
-                for (index in 0 until arr.length()) {
-                    val pkg = arr.optString(index).substringBefore(':').trim()
-                    if (pkg.isNotEmpty()) add(pkg)
-                }
-            }
-        }.getOrNull()
     }
 }

@@ -38,7 +38,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Zero-root transport for the two session files.
+ * Zero-root transport for privileged config and sysfs operations.
  *
  * The Manager cannot open `/data/adb` (mode `0700`, `adb_data_file`), and
  * spawning `su` for every read and write is expensive. The privileged
@@ -58,9 +58,8 @@ object LuminaBridge {
         "/data/adb/.config/lumina/lumina_bridge.sock"
     )
 
-    // A single SESSION_READ can return several hundred KB of JSON. The local
-    // socket is fast, but a busy device or a cold helper can still take longer
-    // than a couple of seconds end to end, and a timeout reads as "no data".
+    // A large config payload can still take a moment end to end on a busy
+    // device, and a timeout reads as "no data".
     private const val REQUEST_TIMEOUT_MS = 8_000L
     private const val SOCKET_TIMEOUT_MS = 8_000
     private const val CONNECT_RETRY_DELAY_MS = 150L
@@ -84,18 +83,6 @@ object LuminaBridge {
             clientLoop()
         }
     }
-
-    suspend fun readSessions(context: Context): String? =
-        request(context, "SESSION_READ")?.toString(Charsets.UTF_8)
-
-    suspend fun writeSessions(context: Context, json: String): Boolean =
-        request(context, "SESSION_WRITE", json.toByteArray(Charsets.UTF_8)) != null
-
-    suspend fun readRecordApps(context: Context): String? =
-        request(context, "RECORD_APPS_READ")?.toString(Charsets.UTF_8)
-
-    suspend fun writeRecordApps(context: Context, json: String): Boolean =
-        request(context, "RECORD_APPS_WRITE", json.toByteArray(Charsets.UTF_8)) != null
 
     suspend fun readAngleStatus(context: Context): String? =
         request(context, "ANGLE_STATUS")?.toString(Charsets.UTF_8)

@@ -485,10 +485,18 @@ fun AospTopBar(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     navigationIcon: (@Composable () -> Unit)? = null,
-    actions: (@Composable RowScope.() -> Unit)? = null
+    actions: (@Composable RowScope.() -> Unit)? = null,
+    containerColor: Color = MaterialTheme.colorScheme.background,
+    scrolled: Boolean? = null
 ) {
     val collapsedFraction = scrollBehavior.state.collapsedFraction
     val titleSize = (26f - (6f * collapsedFraction)).sp
+    val scrimSurface = if (containerColor == Color.Transparent) {
+        MaterialTheme.colorScheme.background
+    } else {
+        containerColor
+    }
+    val headerScrolled = scrolled ?: (scrollBehavior.state.overlappedFraction > 0.01f)
     LargeTopAppBar(
         title = {
             if (subtitle.isNullOrBlank()) {
@@ -521,7 +529,7 @@ fun AospTopBar(
                 }
             }
         },
-        modifier = modifier,
+        modifier = modifier.scrolledHeader(headerScrolled, scrimSurface),
         navigationIcon = navigationIcon ?: {},
         actions = actions ?: {},
         collapsedHeight = 56.dp,
@@ -529,8 +537,8 @@ fun AospTopBar(
         windowInsets = WindowInsets.statusBars,
         scrollBehavior = scrollBehavior,
         colors = TopAppBarDefaults.largeTopAppBarColors(
-            containerColor = MaterialTheme.colorScheme.background,
-            scrolledContainerColor = MaterialTheme.colorScheme.background,
+            containerColor = Color.Transparent,
+            scrolledContainerColor = Color.Transparent,
             titleContentColor = MaterialTheme.colorScheme.onBackground,
             navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
             actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant

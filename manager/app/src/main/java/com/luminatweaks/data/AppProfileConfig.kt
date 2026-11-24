@@ -30,7 +30,5 @@ data class AppProfileConfig(
     val textureEnabled: Boolean = false,
     val textureDetail: Int = 0,
     val pixelSharp: Boolean = false,
-    val hardDistance: Boolean = false,
-    /** "Rekam Statistik Sesi": persists session telemetry for this package. */
-    val recordSession: Boolean = false
+    val hardDistance: Boolean = false
 )

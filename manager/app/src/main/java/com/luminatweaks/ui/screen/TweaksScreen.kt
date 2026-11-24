@@ -64,7 +64,6 @@ import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.Info
-import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Speed
@@ -221,7 +220,6 @@ private suspend fun awaitPagerSettled(pagerState: PagerState?) {
 fun TweaksScreen(
     pagerState: PagerState? = null,
     onOpenFloatingHud: (() -> Unit)? = null,
-    onOpenSessionStats: (() -> Unit)? = null,
     onBackClick: (() -> Unit)? = null
 ) {
     BackHandler(enabled = onBackClick != null) { onBackClick?.invoke() }
@@ -279,7 +277,6 @@ fun TweaksScreen(
     val rendererOrigin = rememberDialogOrigin()
     val ioSchedulerOrigin = rememberDialogOrigin()
     var inFloatingFpsSubpage by rememberSaveable { mutableStateOf(false) }
-    var inSessionStatsSubpage by remember { mutableStateOf(false) }
     var inGameBarSubpage by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(inGameBarSubpage) {
         if (!inGameBarSubpage) {
@@ -358,12 +355,6 @@ fun TweaksScreen(
             .filter { it.isNotBlank() }
             .distinct()
     }
-
-    if (inSessionStatsSubpage) {
-        SessionStatsScreen(onBack = { inSessionStatsSubpage = false })
-        return
-    }
-
 
     if (inGameBarSubpage) {
         BackHandler { inGameBarSubpage = false }
@@ -652,7 +643,7 @@ fun TweaksScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     ConnectedTweakActionRow(
                         index = 0,
-                        count = 5,
+                        count = 4,
                         icon = Icons.Rounded.Speed,
                         title = "Floating HUD",
                         subtitle = telemetrySubtitle,
@@ -666,10 +657,9 @@ fun TweaksScreen(
                         }
                     )
 
-
                     ConnectedTweakActionRow(
                         index = 1,
-                        count = 5,
+                        count = 4,
                         icon = Icons.Rounded.SportsEsports,
                         title = "Game Bar",
                         subtitle = if (gameBarEnabled) {
@@ -689,25 +679,7 @@ fun TweaksScreen(
 
                     ConnectedTweakActionRow(
                         index = 2,
-                        count = 5,
-                        icon = Icons.Rounded.Insights,
-                        title = localizedLabel("Statistik Sesi", "Session Stats"),
-                        subtitle = localizedLabel(
-                            "Riwayat FPS, stabilitas frame & suhu saat bermain",
-                            "FPS history, frame stability & thermal logs during gameplay"
-                        ),
-                        onClick = {
-                            if (onOpenSessionStats != null) {
-                                onOpenSessionStats()
-                            } else {
-                                inSessionStatsSubpage = true
-                            }
-                        }
-                    )
-
-                    ConnectedTweakActionRow(
-                        index = 3,
-                        count = 5,
+                        count = 4,
                         icon = Icons.Rounded.DeveloperBoard,
                         title = stringResource(R.string.hardware_diag_title),
                         subtitle = stringResource(R.string.hardware_diag_desc),
@@ -715,8 +687,8 @@ fun TweaksScreen(
                     )
 
                     ConnectedTweakActionRow(
-                        index = 4,
-                        count = 5,
+                        index = 3,
+                        count = 4,
                         icon = Icons.Rounded.Widgets,
                         title = stringResource(R.string.utility_screen_title),
                         subtitle = stringResource(R.string.utility_screen_desc),

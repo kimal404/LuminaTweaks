@@ -15,19 +15,16 @@
 package com.luminatweaks.data
 
 import android.content.Context
-import android.os.Build
 import com.luminatweaks.util.DeviceUtil
 import java.io.File
 import kotlin.math.abs
-import kotlin.math.ceil
 
 /**
- * Unprivileged telemetry collectors for the Active Session screen.
+ * Unprivileged telemetry collectors shared by the Game Deck.
  *
- * The FPS / frame-time feed is the same file and property `luminad` already
- * publishes for the Floating HUD. Everything else is read straight from
- * world-readable procfs/sysfs nodes, so this screen never spawns `su` and each
- * refresh costs only a handful of small file reads.
+ * The FPS / frame-time feed is the same file and property `luminad` publishes
+ * for the Floating HUD. Hardware readings come from world-readable procfs and
+ * sysfs nodes, so callers never need to spawn `su`.
  */
 
 data class LiveFeedSample(
@@ -35,8 +32,7 @@ data class LiveFeedSample(
     val frametimeMs: Float,
     val epochMs: Long,
     val gameActive: Boolean,
-    val packageName: String?,
-    val sessionStartedAtMs: Long?
+    val packageName: String?
 )
 
 object LiveSessionFeed {
@@ -76,49 +72,18 @@ object LiveSessionFeed {
             ?.substringBefore(':')
             ?.trim()
             ?.takeIf { it.isNotEmpty() && it != "-" }
-        val sessionStartedAtMs = parts.getOrNull(5)
-            ?.toLongOrNull()
-            ?.takeIf { it > 0L }
         return LiveFeedSample(
             fps = if (fps > 0f) fps else 0f,
             frametimeMs = if (frametime > 0f) frametime else 0f,
             epochMs = epochMs,
             gameActive = gameActive,
-            packageName = packageName,
-            sessionStartedAtMs = sessionStartedAtMs
+            packageName = packageName
         )
     }
 
     private fun readText(path: String): String? = runCatching {
         File(path).takeIf { it.exists() && it.canRead() }?.readText()?.trim()
     }.getOrNull()
-}
-
-data class SessionDeviceContext(
-    val platform: String,
-    val model: String,
-    val osVersion: String,
-    val profile: String
-)
-
-object SessionDeviceInfo {
-    fun read(context: Context): SessionDeviceContext {
-        val soc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            Build.SOC_MODEL.takeIf { it.isNotBlank() && it != Build.UNKNOWN }
-        } else {
-            null
-        }
-        val platform = soc
-            ?: Build.HARDWARE.replace('_', ' ').trim()
-                .replaceFirstChar { it.uppercase() }
-                .ifBlank { Build.BOARD.ifBlank { "Unknown" } }
-        return SessionDeviceContext(
-            platform = platform,
-            model = DeviceUtil.getMarketDeviceName(context),
-            osVersion = "Android ${Build.VERSION.RELEASE}",
-            profile = DeviceUtil.readSystemProperty("sys.lumina.profile") ?: "Balanced"
-        )
-    }
 }
 
 internal data class CpuTimes(val total: Long, val idle: Long)
@@ -238,165 +203,3 @@ internal class SysfsTelemetry {
     }
 }
 
-data class ActiveSessionPoint(
-    val elapsedSec: Int,
-    val fps: Float,
-    val frametimeMs: Float,
-    val tempC: Float?,
-    val cpuPct: Float?,
-    val gpuPct: Float?,
-    val powerW: Float?
-)
-
-data class ActiveSessionSnapshot(
-    val hasFeed: Boolean = false,
-    val gameActive: Boolean = false,
-    val packageName: String? = null,
-    val startedAtMs: Long? = null,
-    val elapsedSec: Int = 0,
-    val maxFps: Float = 0f,
-    val minFps: Float = 0f,
-    val avgFps: Float = 0f,
-    val varianceFps: Float = 0f,
-    val smoothnessPct: Float = 0f,
-    val fivePercentLowFps: Float? = null,
-    val maxTempC: Float? = null,
-    val avgPowerW: Float? = null,
-    val points: List<ActiveSessionPoint> = emptyList()
-)
-
-/**
- * Rolling 1 Hz sampler for the Active Session screen. Charts and aggregates
- * mutate in place and publish one immutable snapshot per tick, which keeps
- * recomposition bounded to roughly one frame per second.
- */
-class ActiveSessionMonitor(context: Context) {
-    private val appContext = context.applicationContext
-    private val sysfs = SysfsTelemetry()
-    private val points = ArrayList<ActiveSessionPoint>(MAX_POINTS)
-
-    private var startedAtMs: Long? = null
-    private var sessionPackage: String? = null
-    private var lastFeedEpochMs = 0L
-
-    fun poll(): ActiveSessionSnapshot {
-        val feed = LiveSessionFeed.read(appContext)
-        val now = System.currentTimeMillis()
-        val active = feed != null && feed.gameActive && feed.fps > 0f
-
-        if (active) {
-            val packageChanged = feed!!.packageName != null &&
-                sessionPackage != null &&
-                feed.packageName != sessionPackage
-            if (startedAtMs == null || packageChanged) {
-                reset(feed.packageName, feed.sessionStartedAtMs ?: now)
-            } else if (sessionPackage == null) {
-                sessionPackage = feed.packageName
-            }
-            val recordedStart = feed.sessionStartedAtMs
-            if (recordedStart != null && (startedAtMs == null || recordedStart < startedAtMs!!)) {
-                startedAtMs = recordedStart
-            }
-            if (feed.epochMs != lastFeedEpochMs) {
-                lastFeedEpochMs = feed.epochMs
-            }
-        }
-
-        val temp = sysfs.batteryTempC(appContext)
-        val cpu = sysfs.cpuPercent()
-        val gpu = sysfs.gpuPercent()
-        val powerMw = sysfs.powerMw()
-
-        if (active && startedAtMs != null && feed != null) {
-            if (feed.epochMs != lastFeedEpochMs) {
-                lastFeedEpochMs = feed.epochMs
-                val elapsed = ((now - startedAtMs!!) / 1_000L).toInt().coerceAtLeast(0)
-                val frametime = feed.frametimeMs.takeIf { it > 0f } ?: (1_000f / feed.fps)
-                points.add(
-                    ActiveSessionPoint(
-                        elapsedSec = elapsed,
-                        fps = feed.fps,
-                        frametimeMs = frametime,
-                        tempC = temp,
-                        cpuPct = cpu,
-                        gpuPct = gpu,
-                        powerW = powerMw?.let { it / 1_000f }
-                    )
-                )
-                if (points.size > MAX_POINTS) {
-                    points.removeAt(0)
-                }
-            }
-        }
-
-        return buildSnapshot(feed, active, now)
-    }
-
-    private fun reset(packageName: String?, now: Long) {
-        points.clear()
-        startedAtMs = now
-        sessionPackage = packageName
-        lastFeedEpochMs = 0L
-    }
-
-    private fun buildSnapshot(
-        feed: LiveFeedSample?,
-        active: Boolean,
-        now: Long
-    ): ActiveSessionSnapshot {
-        val fpsValues = points.map { it.fps }
-        val count = fpsValues.size
-        val average = if (count > 0) fpsValues.average().toFloat() else 0f
-        val maxFps = fpsValues.maxOrNull() ?: 0f
-        val minFps = fpsValues.minOrNull() ?: 0f
-        val variance = if (count > 1) {
-            fpsValues.sumOf { value ->
-                val delta = (value - average).toDouble()
-                delta * delta
-            }.div(count.toDouble()).toFloat()
-        } else {
-            0f
-        }
-        val smoothness = if (count > 0) {
-            fpsValues.count { it >= 45f } * 100f / count
-        } else {
-            0f
-        }
-        val fivePercentLow = fivePercentLowFps()
-        val temps = points.mapNotNull { it.tempC }
-        val powers = points.mapNotNull { it.powerW }
-
-        return ActiveSessionSnapshot(
-            hasFeed = feed != null,
-            gameActive = active,
-            packageName = sessionPackage ?: feed?.packageName,
-            startedAtMs = startedAtMs,
-            elapsedSec = startedAtMs?.let { ((now - it) / 1_000L).toInt().coerceAtLeast(0) } ?: 0,
-            maxFps = maxFps,
-            minFps = minFps,
-            avgFps = average,
-            varianceFps = variance,
-            smoothnessPct = smoothness,
-            fivePercentLowFps = fivePercentLow,
-            maxTempC = temps.maxOrNull(),
-            avgPowerW = if (powers.isNotEmpty()) powers.average().toFloat() else null,
-            points = points.toList()
-        )
-    }
-
-    private fun fivePercentLowFps(): Float? {
-        if (points.isEmpty()) return null
-        val slowest = points.map { it.frametimeMs }
-            .filter { it > 0f }
-            .sortedDescending()
-        if (slowest.isEmpty()) return null
-        val take = ceil(slowest.size * 0.05).toInt().coerceIn(1, slowest.size)
-        val averageFrameMs = slowest.take(take).average()
-        if (averageFrameMs <= 0.0) return null
-        return (1_000.0 / averageFrameMs).toFloat()
-    }
-
-    private companion object {
-        const val MAX_POINTS = 1_800
-    }
-}

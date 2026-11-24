@@ -187,23 +187,14 @@ fn write_status_file(path: &str, frame: &str) {
     }
 }
 
-fn write_status(
-    fps: f32,
-    frametime_ms: f32,
-    game_active: bool,
-    package: Option<&str>,
-    session_start_ms: Option<u64>,
-) {
+fn write_status(fps: f32, frametime_ms: f32, game_active: bool, package: Option<&str>) {
     let frame = format!(
-        "{:.1} {} {:.1} {} {} {}",
+        "{:.1} {} {:.1} {} {}",
         fps,
         epoch_ms(),
         frametime_ms.max(0.0),
         if game_active { 1 } else { 0 },
         package.unwrap_or("-"),
-        session_start_ms
-            .map(|start| start.to_string())
-            .unwrap_or_else(|| "-".to_string())
     );
     write_status_file(STATUS_PATH, &frame);
     write_status_file(PUBLIC_STATUS_PATH, &frame);
@@ -213,8 +204,8 @@ fn write_status(
     publish_property(&frame);
 }
 
-fn write_idle(game_active: bool, package: Option<&str>, session_start_ms: Option<u64>) {
-    write_status(IDLE_MARKER, 0.0, game_active, package, session_start_ms);
+fn write_idle(game_active: bool, package: Option<&str>) {
+    write_status(IDLE_MARKER, 0.0, game_active, package);
 }
 
 fn publish_property(frame: &str) {
@@ -654,14 +645,13 @@ enum Request {
         package: Option<String>,
         game_active: bool,
         pid: i32,
-        session_start_ms: Option<u64>,
     },
     Stop,
 }
 
 pub struct FpsMonitor {
     tx: Sender<Request>,
-    last: Option<(Option<String>, bool, i32, Option<u64>)>,
+    last: Option<(Option<String>, bool, i32)>,
     stopped: Arc<Mutex<bool>>,
     tap: FrameTap,
 }
@@ -690,28 +680,21 @@ impl FpsMonitor {
         self.tap.clone()
     }
 
-    pub fn observe(
-        &mut self,
-        package: Option<&str>,
-        game_active: bool,
-        pid: i32,
-        session_start_ms: Option<u64>,
-    ) {
+    pub fn observe(&mut self, package: Option<&str>, game_active: bool, pid: i32) {
         let package = package.map(str::to_string);
         let pid = pid.max(0);
-        let current = (package, game_active, pid, session_start_ms);
+        let current = (package, game_active, pid);
 
         if self.last.as_ref() == Some(&current) {
             return;
         }
 
-        let (package, game_active, pid, session_start_ms) = current.clone();
+        let (package, game_active, pid) = current.clone();
         self.last = Some(current);
         let _ = self.tx.send(Request::Track {
             package,
             game_active,
             pid,
-            session_start_ms,
         });
     }
 
@@ -727,7 +710,6 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>, tap: FrameTap)
     let mut package: Option<String> = None;
     let mut game_active = false;
     let mut pid = 0;
-    let mut session_start_ms: Option<u64> = None;
 
     let mut source = Source::TimeStats;
     let mut missing = 0u32;
@@ -746,7 +728,7 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>, tap: FrameTap)
                 disable_timestats();
             }
             drop(ebpf.take());
-            write_idle(false, None, None);
+            write_idle(false, None);
             return;
         }
 
@@ -765,12 +747,8 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>, tap: FrameTap)
                 package: next,
                 game_active: next_game,
                 pid: next_pid,
-                session_start_ms: next_start,
             }) => {
-                let changed = next != package
-                    || next_game != game_active
-                    || next_pid != pid
-                    || next_start != session_start_ms;
+                let changed = next != package || next_game != game_active || next_pid != pid;
                 if next != package {
                     last_window_start = 0;
                     last_layer = None;
@@ -787,7 +765,6 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>, tap: FrameTap)
                 package = next;
                 game_active = next_game;
                 pid = next_pid;
-                session_start_ms = next_start;
                 if changed {
                     if package.is_none() {
                         if timestats_ready {
@@ -796,10 +773,10 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>, tap: FrameTap)
                         }
                         drop(ebpf.take());
                         ebpf_failed_at = None;
-                        write_idle(false, None, None);
+                        write_idle(false, None);
                         continue;
                     }
-                    write_idle(game_active, package.as_deref(), session_start_ms);
+                    write_idle(game_active, package.as_deref());
                 }
             }
             Ok(Request::Stop) | Err(mpsc::RecvTimeoutError::Disconnected) => {
@@ -807,7 +784,7 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>, tap: FrameTap)
                     disable_timestats();
                 }
                 drop(ebpf.take());
-                write_idle(false, None, None);
+                write_idle(false, None);
                 return;
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {}
@@ -843,13 +820,7 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>, tap: FrameTap)
                 disable_timestats();
                 timestats_ready = false;
             }
-            write_status(
-                fps,
-                frametime,
-                game_active,
-                package.as_deref(),
-                session_start_ms,
-            );
+            write_status(fps, frametime, game_active, package.as_deref());
             continue;
         }
         if ebpf_fresh || ebpf_warming {
@@ -866,7 +837,7 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>, tap: FrameTap)
                 last_window_start = 0;
                 last_layer = None;
             } else {
-                write_idle(game_active, package.as_deref(), session_start_ms);
+                write_idle(game_active, package.as_deref());
                 continue;
             }
         }
@@ -922,13 +893,7 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>, tap: FrameTap)
                 missing = 0;
                 slow = fps < 1.0 || source != Source::Vendor;
                 tap.push_window(fps, frametime);
-                write_status(
-                    fps,
-                    frametime,
-                    game_active,
-                    package.as_deref(),
-                    session_start_ms,
-                );
+                write_status(fps, frametime, game_active, package.as_deref());
             }
             None => {
                 missing += 1;
@@ -945,7 +910,7 @@ fn sampler_loop(rx: Receiver<Request>, stopped: Arc<Mutex<bool>>, tap: FrameTap)
                         unavailable_at = Some(Instant::now());
                     }
 
-                    write_idle(game_active, package.as_deref(), session_start_ms);
+                    write_idle(game_active, package.as_deref());
                 }
             }
         }

@@ -19,7 +19,6 @@
 #[macro_use]
 mod core;
 mod binder;
-mod session;
 mod tweaks;
 
 use binder::client as binder_client;
@@ -568,7 +567,6 @@ fn main() {
     let mut fas_controller = fas::FasController::new(fps_monitor.tap());
     let mut thermal_monitor = thermal::ThermalMonitor::new();
     let mut performance_guard = false;
-    let mut session_recorder = session::SessionRecorder::new(fps_monitor.tap());
     let mut last_heartbeat = Instant::now();
     let mut reload_pending_at: Option<Instant> = None;
     let mut reload_force = false;
@@ -580,7 +578,6 @@ fn main() {
             engine::restore_balance();
             utility_ctrl.restore();
             TextureController::restore();
-            session_recorder.shutdown();
             fps_monitor.stop();
             core::ipc::cleanup_socket();
             capability::flush(true);
@@ -625,7 +622,7 @@ fn main() {
                 }
             } else {
                 log!("[POWER]  Screen OFF \u{2794} Background workers paused");
-                fps_monitor.observe(None, false, 0, None);
+                fps_monitor.observe(None, false, 0);
             }
             last_screen_state = Some(screen_awake);
         }
@@ -705,7 +702,7 @@ fn main() {
                     runtime.left_foreground_at = None;
                     runtime.target_game_pid = 0;
                 }
-                fps_monitor.observe(None, false, 0, None);
+                fps_monitor.observe(None, false, 0);
                 TextureController::sync_config(None);
                 last_pkg_for_texture = None;
                 suppress_fallback = true;
@@ -848,16 +845,14 @@ fn main() {
         };
 
         let preview_active = screen_awake && shared_state.fps_preview_active();
-        let record_candidate = session_recorder.candidate(screen_awake, focused.as_deref());
         let fps_package = if preview_active {
             current_target.clone().or_else(|| focused.clone())
         } else if screen_awake {
-            record_candidate.clone()
+            current_target.clone()
         } else {
             None
         };
-        let fps_game_active = (preview_active && current_target.is_some())
-            || (screen_awake && record_candidate.is_some());
+        let fps_game_active = screen_awake && current_target.is_some();
         let fps_pid = if fps_game_active {
             fps_package
                 .as_deref()
@@ -875,21 +870,7 @@ fn main() {
             0
         };
 
-        let profile_label = runtime
-            .current_profile
-            .unwrap_or(Profile::Balance)
-            .display_name(runtime.current_lite);
-        session_recorder.tick(screen_awake, focused.as_deref(), profile_label);
-        let session_start_ms = session_recorder
-            .active_start_ms()
-            .filter(|(package, _)| fps_package.as_deref() == Some(package.as_str()))
-            .map(|(_, start)| start);
-        fps_monitor.observe(
-            fps_package.as_deref(),
-            fps_game_active,
-            fps_pid,
-            session_start_ms,
-        );
+        fps_monitor.observe(fps_package.as_deref(), fps_game_active, fps_pid);
 
         let thermal_pressure =
             if screen_awake && runtime.current_profile == Some(Profile::Performance) {
@@ -924,7 +905,7 @@ fn main() {
 
         let sleep_ms = if binder_client.is_push() {
             250
-        } else if current_target.is_some() || record_candidate.is_some() {
+        } else if current_target.is_some() {
             400
         } else {
             1200
