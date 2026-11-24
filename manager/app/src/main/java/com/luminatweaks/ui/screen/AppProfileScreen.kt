@@ -31,6 +31,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -96,7 +97,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -171,7 +171,6 @@ fun AppProfileScreen(
 
             var rrModes by remember { mutableStateOf<List<DisplayRrMode>>(emptyList()) }
 
-            var showProfileSheet by remember { mutableStateOf(false) }
             var showLiteModeSheet by remember { mutableStateOf(false) }
             var showRefreshRateSheet by remember { mutableStateOf(false) }
             var showDndSheet by remember { mutableStateOf(false) }
@@ -183,16 +182,6 @@ fun AppProfileScreen(
             val triStateOptions = remember {
                 listOf(OptionItem.OFF, OptionItem.DEFAULT, OptionItem.ON)
             }
-
-            val profileOptions = listOf(
-                ProfileSheetOption("default", stringResource(R.string.opt_default)),
-                ProfileSheetOption("powersave", stringResource(R.string.aosp_profile_powersave)),
-                ProfileSheetOption("balanced", stringResource(R.string.aosp_profile_balanced)),
-                ProfileSheetOption("performance", stringResource(R.string.aosp_profile_performance))
-            )
-            val currentAppProfileLabel = profileOptions
-                .find { it.value == profile.profile }?.label
-                ?: stringResource(R.string.opt_default)
 
             val isTextureLocked = profile.textureEnabled || profile.textureLod > 0
 
@@ -431,16 +420,7 @@ fun AppProfileScreen(
                                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     ProfileActionRow(
                                         index = 0,
-                                        count = 2,
-                                        icon = Icons.Rounded.Speed,
-                                        title = stringResource(R.string.profile_app_profile),
-                                        subtitle = currentAppProfileLabel,
-                                        highlightSubtitle = true,
-                                        onClick = { showProfileSheet = true }
-                                    )
-                                    ProfileActionRow(
-                                        index = 1,
-                                        count = 2,
+                                        count = 1,
                                         icon = Icons.Rounded.BatterySaver,
                                         title = stringResource(R.string.profile_lite_mode),
                                         subtitle = OptionItem.fromValue(profile.liteMode).getLabel(),
@@ -485,17 +465,6 @@ fun AppProfileScreen(
                     }
                 }
             }
-
-            ProfileOptionSheet(
-                show = showProfileSheet,
-                title = stringResource(R.string.dialog_select_profile),
-                options = profileOptions,
-                isSelected = { it == profile.profile },
-                onSelect = { value ->
-                    onProfileChanged(profile.copy(profile = value))
-                },
-                onDismiss = { showProfileSheet = false }
-            )
 
             ProfileOptionSheet(
                 show = showLiteModeSheet,

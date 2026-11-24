@@ -979,6 +979,8 @@ unsafe extern "C" fn on_transact(
 
         if foreground != 0 {
             handle_foreground(pid, uid);
+        } else {
+            handle_background(pid);
         }
         return ffi::STATUS_OK;
     }
@@ -1036,6 +1038,18 @@ fn handle_foreground(pid: i32, uid: i32) {
     // without polling the framework in a fixed interval.
     shared.request_screen();
     shared.push_event(Event::Focus(focus));
+}
+
+fn handle_background(pid: i32) {
+    let Some(shared) = SHARED.get() else {
+        return;
+    };
+    if pid <= 0 {
+        return;
+    }
+    if shared.clear_focus(pid).is_some() {
+        shared.request_screen();
+    }
 }
 
 fn handle_died(pid: i32, uid: i32) {

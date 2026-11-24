@@ -246,6 +246,9 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                 if (gameActive && !wasGameActive) {
                     manualOverride = null
                 }
+                if (!gameActive && wasGameActive && manualOverride != true) {
+                    restoreManagerProfileIfNeeded()
+                }
                 wasGameActive = gameActive
 
                 if (!config.enabled && manualOverride != true) {

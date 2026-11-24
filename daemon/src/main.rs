@@ -323,12 +323,7 @@ impl EngineRuntime {
         }
 
         if update_profile {
-            let selected = target_cfg
-                .as_ref()
-                .and_then(|cfg| Profile::from_name(&cfg.profile));
-            let target_profile = if let Some(profile) = selected {
-                profile
-            } else if target_cfg.is_some() {
+            let target_profile = if target_cfg.is_some() {
                 Profile::Performance
             } else if self.low_power {
                 Profile::Eco
@@ -678,13 +673,19 @@ fn main() {
         let mut suppress_fallback = false;
 
         while let Some(died) = binder_client.take_died() {
+            let main_proc_gone = active_pkg
+                .as_deref()
+                .map(|pkg| detector::find_pid_for_pkg(pkg).is_none())
+                .unwrap_or(false);
             let matches_target = active_pkg.as_deref().is_some()
                 && (active_pkg.as_deref() == died.package.as_deref()
                     || (runtime.target_game_pid > 0 && runtime.target_game_pid == died.pid)
-                    || (active_pid > 0 && active_pid == died.pid));
+                    || (active_pid > 0 && active_pid == died.pid)
+                    || (died.package.is_none() && main_proc_gone));
 
             let confirmed_dead = died.pid <= 0
-                || !detector::pid_matches_package(died.pid, died.package.as_deref().unwrap_or(""));
+                || !detector::pid_matches_package(died.pid, died.package.as_deref().unwrap_or(""))
+                || main_proc_gone;
 
             if matches_target && confirmed_dead {
                 if auto_profile {
@@ -716,6 +717,7 @@ fn main() {
             suppress_fallback = true;
         }
 
+        let binder_push = binder_client.is_push();
         let binder_focus = binder_client.focused_package();
         let focused = if screen_awake {
             match binder_focus {
@@ -729,6 +731,7 @@ fn main() {
                     }
                     Some(package)
                 }
+                Some(_) if binder_push => None,
                 Some(_) | None if suppress_fallback => None,
                 Some(_) | None => get_focused_package(),
             }
@@ -769,12 +772,12 @@ fn main() {
                     runtime.target_game_pid = pid;
                     if is_app_enabled(saved_pkg) {
                         if runtime.left_foreground_at.is_none() {
-                            log!("[SYSTEM] Focus lost -> {} grace 15s", saved_pkg);
+                            log!("[SYSTEM] Focus lost -> {} grace 3s", saved_pkg);
                             runtime.left_foreground_at = Some(Instant::now());
                         }
 
                         if let Some(left_time) = runtime.left_foreground_at {
-                            if left_time.elapsed() < Duration::from_secs(15) {
+                            if left_time.elapsed() < Duration::from_secs(3) {
                                 Some(saved_pkg.clone())
                             } else {
                                 log!("[SYSTEM] Grace expired -> {}", saved_pkg);
@@ -792,14 +795,14 @@ fn main() {
                         runtime.left_foreground_at = None;
                         None
                     }
-                } else if detector::process_exists(runtime.target_game_pid) {
+                } else if detector::process_exists(runtime.target_game_pid) && detector::pid_matches_package(runtime.target_game_pid, saved_pkg) {
                     if runtime.left_foreground_at.is_none() {
-                        log!("[SYSTEM] Focus lost -> {} grace 15s", saved_pkg);
+                        log!("[SYSTEM] Focus lost -> {} grace 3s", saved_pkg);
                         runtime.left_foreground_at = Some(Instant::now());
                     }
 
                     if let Some(left_time) = runtime.left_foreground_at {
-                        if left_time.elapsed() < Duration::from_secs(15) {
+                        if left_time.elapsed() < Duration::from_secs(3) {
                             Some(saved_pkg.clone())
                         } else {
                             log!("[SYSTEM] Grace expired -> {}", saved_pkg);

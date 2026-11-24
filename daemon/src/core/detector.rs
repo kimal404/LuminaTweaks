@@ -1078,18 +1078,16 @@ pub fn pid_matches_package(pid: i32, pkg: &str) -> bool {
     let Ok(raw) = std::str::from_utf8(first) else {
         return false;
     };
-    let name = sanitize_pkg_name(raw);
+    let name = raw.trim_matches('\0').trim();
     name == target
-        || name
-            .strip_prefix(target)
-            .map(|rest| rest.starts_with(':'))
-            .unwrap_or(false)
 }
 
 pub fn find_pid_for_pkg(pkg: &str) -> Option<i32> {
     let target = sanitize_pkg_name(pkg);
+    if target.is_empty() {
+        return None;
+    }
     let entries = std::fs::read_dir("/proc").ok()?;
-    let mut fallback: Option<i32> = None;
 
     for entry in entries.flatten() {
         let name = entry.file_name();
@@ -1109,20 +1107,13 @@ pub fn find_pid_for_pkg(pkg: &str) -> Option<i32> {
         let Ok(raw) = std::str::from_utf8(first) else {
             continue;
         };
-        let proc_name = sanitize_pkg_name(raw);
+        let proc_name = raw.trim_matches('\0').trim();
         if proc_name == target {
             return Some(pid);
         }
-        if fallback.is_none() {
-            if let Some(rest) = proc_name.strip_prefix(&target) {
-                if rest.starts_with(':') {
-                    fallback = Some(pid);
-                }
-            }
-        }
     }
 
-    fallback
+    None
 }
 
 fn focused_package_uncached() -> Option<String> {

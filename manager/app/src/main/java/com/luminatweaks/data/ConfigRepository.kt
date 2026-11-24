@@ -469,7 +469,6 @@ object ConfigRepository {
                         } else {
                             obj.optBoolean("saklar_utama", false)
                         },
-                        profile = normalizeProfileName(rawProfile),
                         liteMode = resolvedLite,
                         refreshRate = obj.optString("refresh_rate", "default"),
                         dnd = obj.optString("dnd", "default"),
@@ -515,7 +514,6 @@ object ConfigRepository {
                 put("saklar_utama", item.saklarUtama)
                 put("disabled", item.disabled)
                 put("custom", item.custom)
-                put("profile", normalizeProfileName(item.profile))
                 put("lite_mode", item.liteMode)
                 put("refresh_rate", item.refreshRate)
                 put("dnd", item.dnd)
@@ -551,13 +549,12 @@ object ConfigRepository {
                 profile.textureEnabled || normalizedLod > 0 -> "angle"
                 else -> "native"
             }
-            val resolvedLite = if (isPerformanceLiteProfile(profile.profile) && profile.liteMode == "default") {
+            val resolvedLite = if (profile.liteMode == "default" && isPerformanceLiteProfile(obj.optString("profile", ""))) {
                 "on"
             } else {
                 profile.liteMode
             }
             val normalizedProfile = profile.copy(
-                profile = normalizeProfileName(profile.profile),
                 liteMode = resolvedLite,
                 textureDriver = normalizedDriver,
                 textureLod = normalizedLod,

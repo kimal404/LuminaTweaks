@@ -21,7 +21,6 @@ data class AppProfileConfig(
     val saklarUtama: Boolean = false,
     val disabled: Boolean = false,
     val custom: Boolean = false,
-    val profile: String = "default",
     val liteMode: String = "default",
     val refreshRate: String = "default",
     val dnd: String = "default",
