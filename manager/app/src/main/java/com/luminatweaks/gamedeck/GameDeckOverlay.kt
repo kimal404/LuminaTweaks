@@ -36,9 +36,7 @@ import androidx.compose.material.icons.rounded.BatteryFull
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.GridView
-import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.NotificationsOff
-import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Icon
@@ -80,17 +78,20 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlinx.coroutines.delay
 
-private data class DeckProfileItem(
-    val value: String,
+private data class DeckProfileOption(
     val label: String,
-    val icon: ImageVector
+    val command: String
 )
 
-private val deckProfiles = listOf(
-    DeckProfileItem("Eco", "Eco", Icons.Rounded.Memory),
-    DeckProfileItem("Balanced", "Balanced", Icons.Rounded.Tune),
-    DeckProfileItem("Performance", "Performance", Icons.Rounded.Speed)
+private val deckProfileOptions = listOf(
+    DeckProfileOption("Eco", "eco"),
+    DeckProfileOption("Balanced", "balanced"),
+    DeckProfileOption("Performance", "performance"),
+    DeckProfileOption("Performance Lite", "performance_lite")
 )
+
+private fun deckOverrideSelected(current: String, label: String): Boolean =
+    current.trim().equals(label, ignoreCase = true)
 
 @Composable
 fun GameDeckRoot(
@@ -98,7 +99,7 @@ fun GameDeckRoot(
     isWindowExpanded: Boolean,
     onExpand: () -> Unit,
     onCollapse: () -> Unit,
-    onProfileSelected: (String) -> Unit,
+    onProfileSelected: (String?) -> Unit,
     onRefreshRateSelected: (Int?) -> Unit,
     onToggleDnd: () -> Unit,
     onQuickAppClick: (String) -> Unit,
@@ -236,7 +237,7 @@ private fun EdgeDeckHandle(
 private fun GameDeckWorkspace(
     state: GameDeckUiState,
     onCollapse: () -> Unit,
-    onProfileSelected: (String) -> Unit,
+    onProfileSelected: (String?) -> Unit,
     onRefreshRateSelected: (Int?) -> Unit,
     onToggleDnd: () -> Unit,
     onQuickAppClick: (String) -> Unit,
@@ -494,7 +495,7 @@ private fun DockRailAppIcon(
 private fun DeckCard(
     state: GameDeckUiState,
     selectedTab: Int,
-    onProfileSelected: (String) -> Unit,
+    onProfileSelected: (String?) -> Unit,
     onRefreshRateSelected: (Int?) -> Unit,
     onToggleDnd: () -> Unit,
     onOpenManager: () -> Unit
@@ -528,7 +529,7 @@ private fun DeckCard(
 @Composable
 private fun DashboardDeckContent(
     state: GameDeckUiState,
-    onProfileSelected: (String) -> Unit,
+    onProfileSelected: (String?) -> Unit,
     onRefreshRateSelected: (Int?) -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -638,35 +639,31 @@ private fun DashboardDeckContent(
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            deckProfiles.chunked(2).forEach { rowItems ->
-                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    rowItems.forEach { item ->
-                        val selected = deckProfileMatches(state.profile, item.value)
+            deckProfileOptions.chunked(2).forEach { rowOptions ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    rowOptions.forEach { option ->
+                        val selected = deckOverrideSelected(
+                            state.profileOverride,
+                            option.label
+                        )
                         Surface(
-                            onClick = { onProfileSelected(item.value) },
+                            onClick = { onProfileSelected(option.command) },
                             modifier = Modifier
                                 .weight(1f)
-                                .height(32.dp),
+                                .height(30.dp),
                             shape = RoundedCornerShape(11.dp),
                             color = if (selected) scheme.primary else scheme.surfaceContainerHighest
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(horizontal = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    imageVector = item.icon,
-                                    contentDescription = null,
-                                    tint = if (selected) scheme.onPrimary else scheme.onSurfaceVariant,
-                                    modifier = Modifier.size(13.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = item.label,
-                                    fontSize = 11.sp,
+                                    text = option.label,
+                                    fontSize = 10.5.sp,
                                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                                     color = if (selected) scheme.onPrimary else scheme.onSurface,
                                     maxLines = 1,
@@ -675,6 +672,38 @@ private fun DashboardDeckContent(
                             }
                         }
                     }
+                }
+            }
+
+            val autoSelected = deckOverrideSelected(state.profileOverride, "Auto")
+            Surface(
+                onClick = { onProfileSelected(null) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(28.dp),
+                shape = RoundedCornerShape(11.dp),
+                color = if (autoSelected) scheme.primary else scheme.surfaceContainerHighest
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Tune,
+                        contentDescription = null,
+                        tint = if (autoSelected) scheme.onPrimary else scheme.onSurfaceVariant,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Auto",
+                        fontSize = 10.5.sp,
+                        fontWeight = if (autoSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (autoSelected) scheme.onPrimary else scheme.onSurface,
+                        maxLines = 1,
+                        softWrap = false
+                    )
                 }
             }
         }
@@ -961,16 +990,6 @@ private fun ToolsDeckContent(
                 )
             }
         }
-    }
-}
-
-internal fun deckProfileMatches(current: String, option: String): Boolean {
-    val value = current.lowercase(Locale.ROOT)
-    return when (option) {
-        "Eco" -> value.contains("eco") || value.contains("power") || value.contains("hemat")
-        "Balanced" -> value.contains("balanc")
-        "Performance" -> value.contains("perform")
-        else -> value == option.lowercase(Locale.ROOT)
     }
 }
 

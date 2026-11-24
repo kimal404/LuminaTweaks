@@ -397,7 +397,6 @@ Fitur di halaman ini hanya aktif ketika sistem berada pada profil Performance. P
     <string name="profile_desc_balanced">Keseimbangan antara performa, suhu, dan konsumsi daya</string>
     <string name="profile_desc_performance">Performa puncak untuk game berat dengan clock tinggi dan perlindungan suhu</string>
     <string name="section_automation">Otomatisasi</string>
-    <string name="home_profile_auto">Profil (Otomatis)</string>
     <string name="section_compatibility">Kompatibilitas</string>
     <string name="settings_compatibility">Capability Engine</string>
     <string name="settings_compatibility_desc">Periksa dukungan tweak, verifikasi nilai, dan rollback otomatis</string>

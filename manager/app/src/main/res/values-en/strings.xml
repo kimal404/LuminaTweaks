@@ -396,7 +396,6 @@ Features on this page are only active when the system is in the Performance prof
     <string name="profile_desc_balanced">Balanced performance, thermals, and power consumption</string>
     <string name="profile_desc_performance">Peak performance for heavy games with high clocks and thermal protection</string>
     <string name="section_automation">Automation</string>
-    <string name="home_profile_auto">Profile (Automatic)</string>
     <string name="section_compatibility">Compatibility</string>
     <string name="settings_compatibility">Capability Engine</string>
     <string name="settings_compatibility_desc">Check tweak support, verify values, and automatic rollback</string>

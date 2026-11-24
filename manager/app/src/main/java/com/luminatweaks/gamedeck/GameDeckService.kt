@@ -132,7 +132,6 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     private var layoutParams: WindowManager.LayoutParams? = null
     private var telemetryJob: Job? = null
     private var transitionJob: Job? = null
-    private var profileJob: Job? = null
     private var recomposer: Recomposer? = null
     private var recomposerJob: Job? = null
     private var lastForegroundPkg: String? = null
@@ -148,9 +147,8 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     private var windowKey = ""
     private var freeformUnlocked = false
 
-    private var deckManualProfile: String? = null
-    private var savedAutoProfileBeforeDeck: Boolean? = null
-    private var manualProfileGraceUntilMs = 0L
+    private var pendingOverrideLabel: String? = null
+    private var pendingOverrideUntilMs = 0L
     private var prevRootCpuTotal = 0L
     private var prevRootCpuIdle = 0L
     private var lastCpuPercent = 0
@@ -164,7 +162,6 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
-        savedAutoProfileBeforeDeck = readAutoProfileSetting()
         startForegroundCompat()
     }
 
@@ -183,7 +180,6 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             ACTION_HIDE_NOW -> {
                 manualOverride = false
                 if (!activeConfig.enabled) {
-                    restoreManagerProfileIfNeeded()
                     stopSelf()
                     return START_NOT_STICKY
                 }
@@ -193,7 +189,6 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             ACTION_STOP -> {
                 GameDeckPrefs.save(this, activeConfig.copy(enabled = false))
                 manualOverride = false
-                restoreManagerProfileIfNeeded()
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -203,7 +198,6 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         }
 
         if (!activeConfig.enabled && manualOverride != true) {
-            restoreManagerProfileIfNeeded()
             stopSelf()
             return START_NOT_STICKY
         }
@@ -219,10 +213,8 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     }
 
     override fun onDestroy() {
-        restoreManagerProfileIfNeeded()
         telemetryJob?.cancel()
         transitionJob?.cancel()
-        profileJob?.cancel()
         detachOverlay()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
@@ -247,13 +239,9 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                 if (gameActive && !wasGameActive) {
                     manualOverride = null
                 }
-                if (!gameActive && wasGameActive && manualOverride != true) {
-                    restoreManagerProfileIfNeeded()
-                }
                 wasGameActive = gameActive
 
                 if (!config.enabled && manualOverride != true) {
-                    restoreManagerProfileIfNeeded()
                     stopSelf()
                     break
                 }
@@ -289,11 +277,11 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                 if (now - lastMetricsMs >= interval || uiState.value.quickApps.size != config.quickApps.size) {
                     lastMetricsMs = now
                     val snapshot = withContext(Dispatchers.IO) { collectSnapshot(config, isExpanded, feed) }
-                    val afterMs = System.currentTimeMillis()
-                    val resolvedProfile = deckManualProfile ?: if (afterMs < manualProfileGraceUntilMs) {
-                        uiState.value.profile
-                    } else {
-                        snapshot.profile
+                    if (pendingOverrideLabel != null &&
+                        (snapshot.profileOverride == pendingOverrideLabel ||
+                            now >= pendingOverrideUntilMs)
+                    ) {
+                        pendingOverrideLabel = null
                     }
                     uiState.value = uiState.value.copy(
                         expanded = isExpanded,
@@ -306,8 +294,8 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         gpuPercent = snapshot.gpuPercent,
                         tempLabel = snapshot.tempLabel,
                         batteryPercent = snapshot.batteryPercent,
-                        profile = resolvedProfile,
-                        autoProfile = snapshot.autoProfile,
+                        profile = snapshot.profile,
+                        profileOverride = pendingOverrideLabel ?: snapshot.profileOverride,
                         rrModes = snapshot.rrModes,
                         selectedRrHz = snapshot.selectedRrHz,
                         dndEnabled = snapshot.dndEnabled,
@@ -328,7 +316,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         val tempLabel: String,
         val batteryPercent: Int,
         val profile: String,
-        val autoProfile: Boolean,
+        val profileOverride: String,
         val rrModes: List<Int>,
         val selectedRrHz: Int?,
         val dndEnabled: Boolean,
@@ -368,7 +356,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         val gpu = if (collectHeavy) readGpuLoad() else lastGpuPercent
 
         val profileProp = DeviceUtil.readSystemProperty("sys.lumina.profile") ?: "Balanced"
-        val autoProp = readAutoProfileSetting()
+        val overrideProp = DeviceUtil.readSystemProperty("sys.lumina.profile_override") ?: "Auto"
 
         return DeckSnapshot(
             fps = fps,
@@ -379,7 +367,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             tempLabel = DeviceUtil.getBatteryTemperature(this),
             batteryPercent = battery,
             profile = profileProp,
-            autoProfile = autoProp,
+            profileOverride = overrideProp,
             rrModes = supportedRefreshRates(),
             selectedRrHz = GameDeckPrefs.refreshRateHint(this),
             dndEnabled = (getSystemService(NotificationManager::class.java)
@@ -531,7 +519,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         isWindowExpanded = isWindowExpandedState.value,
                         onExpand = { setExpanded(true) },
                         onCollapse = { setExpanded(false) },
-                        onProfileSelected = ::selectProfile,
+                        onProfileSelected = ::selectProfileOverride,
                         onRefreshRateSelected = ::selectRefreshRate,
                         onToggleDnd = ::toggleDnd,
                         onQuickAppClick = ::launchFreeformApp,
@@ -663,42 +651,34 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         }
     }
 
-    private fun readAutoProfileSetting(): Boolean =
-        DeviceUtil.readSystemProperty("persist.lumina.autoprofile")
-            .let { it == null || (!it.equals("0", true) && !it.equals("false", true)) }
-
-    private fun selectProfile(name: String) {
-        profileJob?.cancel()
-        if (savedAutoProfileBeforeDeck == null) {
-            savedAutoProfileBeforeDeck = readAutoProfileSetting()
+    private fun selectProfileOverride(name: String?) {
+        val label = when (name) {
+            null -> "Auto"
+            "eco" -> "Eco"
+            "performance" -> "Performance"
+            "performance_lite" -> "Performance Lite"
+            else -> "Balanced"
         }
-        deckManualProfile = name
-        manualProfileGraceUntilMs = System.currentTimeMillis() + 5_000L
-        uiState.value = uiState.value.copy(profile = name)
+        pendingOverrideLabel = label
+        pendingOverrideUntilMs = System.currentTimeMillis() + 4_000L
+        uiState.value = uiState.value.copy(profileOverride = label)
 
-        profileJob = serviceScope.launch {
+        serviceScope.launch {
             val ok = withContext(Dispatchers.IO) {
-                runCatching { DaemonManager.setAutoProfile(false) }
-                DaemonManager.setProfile(name)
+                if (name == null) {
+                    DaemonManager.clearProfileOverride()
+                } else {
+                    DaemonManager.setProfileOverride(name)
+                }
             }
             if (!ok) {
+                pendingOverrideLabel = null
                 Toast.makeText(
                     this@GameDeckService,
-                    localizedText("Daemon Lumina tidak aktif", "Lumina daemon is offline"),
+                    localizedText("Gagal menerapkan profil", "Failed to apply profile"),
                     Toast.LENGTH_SHORT
                 ).show()
             }
-        }
-    }
-
-    private fun restoreManagerProfileIfNeeded() {
-        val restoreAuto = savedAutoProfileBeforeDeck ?: true
-        val currentAuto = readAutoProfileSetting()
-        if (deckManualProfile == null && currentAuto == restoreAuto) return
-        deckManualProfile = null
-        savedAutoProfileBeforeDeck = null
-        CoroutineScope(Dispatchers.IO).launch {
-            runCatching { DaemonManager.setAutoProfile(restoreAuto) }
         }
     }
 

@@ -60,7 +60,6 @@ data class TweaksUiState(
     val currentRrId: Int? = null,
     val currentRendererId: String = "default",
     val isAutoDnd: Boolean = false,
-    val isAutoProfile: Boolean = true,
     val currentIoScheduler: String = "mq-deadline",
     val zramSizeGb: Int = 8,
     val zramAlgorithm: String = "zstd",
@@ -198,9 +197,6 @@ object ConfigRepository {
             JSONObject()
         }
         updater(json)
-        if (!json.has("auto_profile")) {
-            json.put("auto_profile", true)
-        }
         if (!json.has("toast_notifications")) {
             json.put("toast_notifications", true)
         }
@@ -249,7 +245,6 @@ object ConfigRepository {
 
         val isLite = globalJson?.optBoolean("lite_mode_global", false) ?: false
         val isAutoDnd = globalJson?.optBoolean("auto_dnd", false) ?: false
-        val isAutoProfile = globalJson?.optBoolean("auto_profile", true) ?: true
         val currentIoSched = globalJson?.optString("io_scheduler", "mq-deadline")?.takeIf { it.isNotBlank() } ?: "mq-deadline"
         val zramSize = globalJson?.optInt("zram_size_gb", 8) ?: 8
         val zramAlgo = globalJson?.optString("zram_algorithm", "zstd")?.takeIf { it.isNotBlank() } ?: "zstd"
@@ -308,7 +303,6 @@ object ConfigRepository {
             currentRrId = currentRr,
             currentRendererId = currentRenderer,
             isAutoDnd = isAutoDnd,
-            isAutoProfile = isAutoProfile,
             currentIoScheduler = currentIoSched,
             zramSizeGb = zramSize,
             zramAlgorithm = zramAlgo,
@@ -353,15 +347,6 @@ object ConfigRepository {
             updateGlobalConfigInternal { it.put("lite_mode_global", enabled) }
             val propVal = if (enabled) "1" else "0"
             runSuCmd("setprop persist.lumina.litemode $propVal && echo '$propVal' > $CONFIG_DIR/lite_mode.conf", 4)
-        }
-    }
-
-    suspend fun setAutoProfile(enabled: Boolean) = withContext(Dispatchers.IO) {
-        cachedTweaksState = cachedTweaksState?.copy(isAutoProfile = enabled)
-        fileMutex.withLock {
-            updateGlobalConfigInternal { it.put("auto_profile", enabled) }
-            val propVal = if (enabled) "1" else "0"
-            runSuCmd("setprop persist.lumina.autoprofile $propVal", 4)
         }
     }
 
@@ -568,9 +553,6 @@ object ConfigRepository {
         val disabledSet = JSONArray()
         configs.values.filter { it.disabled }.forEach { disabledSet.put(it.pkg) }
         globalJson.put("disabled_games", disabledSet)
-        if (!globalJson.has("auto_profile")) {
-            globalJson.put("auto_profile", true)
-        }
         if (!globalJson.has("toast_notifications")) {
             globalJson.put("toast_notifications", true)
         }

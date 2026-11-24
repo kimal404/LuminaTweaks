@@ -26,7 +26,7 @@ use core::detector::{
     get_app_config, get_focused_package, is_app_enabled, is_auto_dnd_enabled, is_lite_mode_active,
     is_low_power_active, is_master_enabled,
 };
-use core::ipc::{IpcServer, SharedState};
+use core::ipc::{IpcServer, ProfileOverrideRequest, SharedState};
 use core::{capability, detector, perf, watcher};
 use std::collections::hash_map::DefaultHasher;
 use std::fs::{File, OpenOptions};
@@ -62,7 +62,7 @@ const LEGACY_PID_FILE_PATH: &str = "/data/local/tmp/lumina.pid";
 const LEGACY_HEARTBEAT_FILE_PATH: &str = "/data/local/tmp/lumina.alive";
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 const CONFIG_FALLBACK_INTERVAL: Duration = Duration::from_secs(5);
-const MANUAL_PROFILE_PATH: &str = "/data/adb/.config/lumina/profile.conf";
+const LEGACY_PROFILE_STATE_PATH: &str = "/data/adb/.config/lumina/profile.conf";
 
 extern "C" fn handle_signal(_: i32) {
     SHUTDOWN.store(true, Ordering::Relaxed);
@@ -133,16 +133,6 @@ fn apply_profile(profile: Profile, lite: bool) {
     capability::log_summary("profile");
 }
 
-fn read_saved_manual_profile() -> Option<Profile> {
-    std::fs::read_to_string(MANUAL_PROFILE_PATH)
-        .ok()
-        .and_then(|value| Profile::from_name(&value))
-}
-
-fn persist_manual_profile(profile: Profile) {
-    let _ = write_runtime_file(MANUAL_PROFILE_PATH, &format!("{}\n", profile.as_str()));
-}
-
 fn config_hash() -> u64 {
     let mut hasher = DefaultHasher::new();
     for path in [
@@ -168,6 +158,20 @@ fn kernel_release() -> String {
 
 fn set_system_profile_prop(name: &str) {
     let _ = core::sysprop::set("sys.lumina.profile", name);
+}
+
+fn set_profile_override_prop(name: &str) {
+    let _ = core::sysprop::set("sys.lumina.profile_override", name);
+}
+
+fn decode_profile_override(name: &str) -> Option<(Profile, bool)> {
+    match name.trim().to_ascii_lowercase().as_str() {
+        "eco" => Some((Profile::Eco, false)),
+        "balanced" => Some((Profile::Balance, false)),
+        "performance" => Some((Profile::Performance, false)),
+        "performance_lite" => Some((Profile::Performance, true)),
+        _ => None,
+    }
 }
 
 fn set_dnd(binder: &mut binder_client::BinderClient, mode: &str) {
@@ -264,10 +268,16 @@ fn publish_selinux_status() {
     let _ = core::sysprop::set("sys.lumina.selinux", status);
 }
 
+struct ProfileOverride {
+    profile: Profile,
+    lite: bool,
+    target_pkg: Option<String>,
+}
+
 struct EngineRuntime {
     current_profile: Option<Profile>,
     current_lite: bool,
-    manual_profile: Option<Profile>,
+    profile_override: Option<ProfileOverride>,
     active_target_pkg: Option<String>,
     active_target_pid: i32,
     target_game_pid: i32,
@@ -285,12 +295,13 @@ struct EngineRuntime {
 impl EngineRuntime {
     fn new(shared_state: Arc<SharedState>) -> Self {
         set_system_profile_prop("Balanced");
+        set_profile_override_prop("Auto");
         TextureController::ensure_setup();
 
         Self {
             current_profile: None,
             current_lite: false,
-            manual_profile: read_saved_manual_profile(),
+            profile_override: None,
             active_target_pkg: None,
             active_target_pid: 0,
             target_game_pid: 0,
@@ -312,6 +323,70 @@ impl EngineRuntime {
         }
         if let Ok(mut pkg) = self.shared_state.active_package.lock() {
             *pkg = target_pkg.map(|s| s.to_string());
+        }
+    }
+
+    fn apply_profile_override(&mut self, profile: Profile, lite: bool, trigger: &str) {
+        let target_pkg = self.active_target_pkg.clone();
+        let already_applied = matches!(
+            self.profile_override.as_ref(),
+            Some(current)
+                if current.profile == profile
+                    && current.lite == lite
+                    && current.target_pkg == target_pkg
+        ) && self.current_profile == Some(profile)
+            && self.current_lite == lite;
+
+        self.profile_override = Some(ProfileOverride {
+            profile,
+            lite,
+            target_pkg,
+        });
+        set_profile_override_prop(profile.display_name(lite));
+
+        if already_applied {
+            return;
+        }
+
+        let had_profile = self.current_profile.is_some();
+        apply_profile(profile, lite);
+        self.current_profile = Some(profile);
+        self.current_lite = lite;
+        set_system_profile_prop(profile.display_name(lite));
+        self.update_shared_state(profile, lite, self.active_target_pkg.as_deref());
+        if had_profile {
+            notify_profile_toast(profile, lite);
+        }
+        log!(
+            "[PROFILE] Deck override -> {} [{}]",
+            profile.display_name(lite),
+            trigger
+        );
+    }
+
+    fn clear_profile_override(&mut self, trigger: &str) -> bool {
+        if self.profile_override.take().is_none() {
+            return false;
+        }
+        set_profile_override_prop("Auto");
+        log!("[PROFILE] Deck override cleared [{}]", trigger);
+        true
+    }
+
+    fn sync_profile_override_target(&mut self) -> bool {
+        let active_pkg = self.active_target_pkg.clone();
+        let Some(override_state) = self.profile_override.as_mut() else {
+            return false;
+        };
+
+        match (&override_state.target_pkg, &active_pkg) {
+            (None, Some(pkg)) => {
+                override_state.target_pkg = Some(pkg.clone());
+                false
+            }
+            (Some(saved), Some(current)) => saved != current,
+            (Some(_), None) => true,
+            (None, None) => false,
         }
     }
 
@@ -429,28 +504,6 @@ impl EngineRuntime {
         }
     }
 
-    fn apply_manual_profile(&mut self, trigger: &str) {
-        let profile = self.manual_profile.unwrap_or(Profile::Balance);
-        let lite = is_lite_mode_active();
-        if self.current_profile == Some(profile) && self.current_lite == lite {
-            return;
-        }
-        let had_profile = self.current_profile.is_some();
-        apply_profile(profile, lite);
-        self.current_profile = Some(profile);
-        self.current_lite = lite;
-        set_system_profile_prop(profile.display_name(lite));
-        self.update_shared_state(profile, lite, self.active_target_pkg.as_deref());
-        if had_profile {
-            notify_profile_toast(profile, lite);
-        }
-        log!(
-            "[PROFILE] Manual mode -> {} [{}]",
-            profile.display_name(lite),
-            trigger
-        );
-    }
-
     fn reset_to_balance(&mut self, binder: &mut binder_client::BinderClient) {
         self.reset_to_balance_triggered("Inactive", binder);
     }
@@ -460,6 +513,8 @@ impl EngineRuntime {
         trigger: &str,
         binder: &mut binder_client::BinderClient,
     ) {
+        self.clear_profile_override(trigger);
+
         if self.dnd_override {
             let restore = engine::zen_to_dnd_arg(&self.prev_zen_mode);
             set_dnd(binder, restore);
@@ -553,11 +608,10 @@ fn main() {
     engine::sync_global_tweaks();
     engine::apply_boot_profile();
 
-    let _ = std::fs::remove_file(MANUAL_PROFILE_PATH);
-    detector::set_auto_profile(true);
+    let _ = std::fs::remove_file(LEGACY_PROFILE_STATE_PATH);
     engine::balance_profile();
     set_system_profile_prop("Balanced");
-    log!("[PROFILE] Boot reset -> auto/Balanced (stale manual state cleared)");
+    log!("[PROFILE] Boot reset -> auto/Balanced (legacy manual state cleared)");
     capability::log_summary("boot");
     soc::vendor();
     if !crate::tweaks::mitigation::active_items().is_empty() {
@@ -572,20 +626,6 @@ fn main() {
     log!("[DAEMON] Subsystems online, entering main event loop");
     capability::probe_all();
     let mut runtime = EngineRuntime::new(Arc::clone(&shared_state));
-    if !detector::is_auto_profile_enabled() {
-        if let Some(profile) = runtime.manual_profile {
-            let lite = is_lite_mode_active();
-            apply_profile(profile, lite);
-            runtime.current_profile = Some(profile);
-            runtime.current_lite = lite;
-            runtime.update_shared_state(profile, lite, None);
-            set_system_profile_prop(profile.display_name(lite));
-            log!(
-                "[PROFILE] Manual mode active -> {}",
-                profile.display_name(lite)
-            );
-        }
-    }
     let mut binder_client = binder_client::BinderClient::new();
     let _ = binder_client.poll(Duration::from_millis(200));
     if binder_client.is_push() {
@@ -606,7 +646,6 @@ fn main() {
     let mut last_heartbeat = Instant::now();
     let mut reload_pending_at: Option<Instant> = None;
     let mut reload_force = false;
-    let mut pending_profile: Option<String> = None;
 
     loop {
         if SHUTDOWN.load(Ordering::Relaxed) {
@@ -628,31 +667,20 @@ fn main() {
             last_heartbeat = Instant::now();
         }
 
-        let requested_profile = pending_profile
-            .take()
-            .or_else(|| shared_state.take_requested_profile());
-        if let Some(name) = requested_profile {
-            if let Some(profile) = Profile::from_name(&name) {
-                let lite = is_lite_mode_active();
-                detector::set_auto_profile(false);
-                let had_profile = runtime.current_profile.is_some();
-                apply_profile(profile, lite);
-                runtime.manual_profile = Some(profile);
-                runtime.current_profile = Some(profile);
-                runtime.current_lite = lite;
-                persist_manual_profile(profile);
-                set_system_profile_prop(profile.display_name(lite));
-                runtime.update_shared_state(profile, lite, runtime.active_target_pkg.as_deref());
-                if had_profile {
-                    notify_profile_toast(profile, lite);
+        if let Some(request) = shared_state.take_profile_override_request() {
+            match request {
+                ProfileOverrideRequest::Set(name) => {
+                    if let Some((profile, lite)) = decode_profile_override(&name) {
+                        runtime.apply_profile_override(profile, lite, "Game Deck");
+                    } else {
+                        log!("[PROFILE] Ignored invalid deck override: {}", name);
+                    }
                 }
-                log!(
-                    "[PROFILE] Manual selection -> {}",
-                    profile.display_name(lite)
-                );
+                ProfileOverrideRequest::Clear => {
+                    runtime.clear_profile_override("Game Deck");
+                }
             }
         }
-        let auto_profile = detector::is_auto_profile_enabled();
 
         let loop_started = Instant::now();
         let screen_awake = binder_client
@@ -696,15 +724,6 @@ fn main() {
                 log!("[SYSTEM] Config reload applied");
                 detector::invalidate_config_cache();
                 engine::sync_global_tweaks();
-                if detector::is_auto_profile_enabled() {
-                    let _ = std::fs::remove_file(MANUAL_PROFILE_PATH);
-                    runtime.manual_profile = None;
-                    if runtime.current_profile != Some(Profile::Balance) || runtime.current_lite {
-                        runtime.reset_to_balance_triggered("Auto restored", &mut binder_client);
-                    }
-                } else {
-                    runtime.apply_manual_profile("Config reload");
-                }
             }
             reload_force = false;
         } else if reload_pending_at.is_none()
@@ -717,15 +736,6 @@ fn main() {
                 log!("[SYSTEM] Config reload applied");
                 detector::invalidate_config_cache();
                 engine::sync_global_tweaks();
-                if detector::is_auto_profile_enabled() {
-                    let _ = std::fs::remove_file(MANUAL_PROFILE_PATH);
-                    runtime.manual_profile = None;
-                    if runtime.current_profile != Some(Profile::Balance) || runtime.current_lite {
-                        runtime.reset_to_balance_triggered("Auto restored", &mut binder_client);
-                    }
-                } else {
-                    runtime.apply_manual_profile("Config reload");
-                }
             }
         }
 
@@ -753,21 +763,16 @@ fn main() {
             let confirmed_dead = died.pid <= 0 || main_proc_gone || died_is_main_pid;
 
             if matches_target && confirmed_dead {
-                if auto_profile {
-                    log!(
-                        "[RESET]  {} ({}) \u{2794} BALANCED [Trigger: Died 0ms | uid {}]",
-                        active_pkg
-                            .as_deref()
-                            .or(died.package.as_deref())
-                            .unwrap_or("-"),
-                        died.pid,
-                        died.uid
-                    );
-                    runtime.reset_to_balance_triggered("Died 0ms", &mut binder_client);
-                } else {
-                    runtime.left_foreground_at = None;
-                    runtime.target_game_pid = 0;
-                }
+                log!(
+                    "[RESET]  {} ({}) \u{2794} BALANCED [Trigger: Died 0ms | uid {}]",
+                    active_pkg
+                        .as_deref()
+                        .or(died.package.as_deref())
+                        .unwrap_or("-"),
+                    died.pid,
+                    died.uid
+                );
+                runtime.reset_to_balance_triggered("Died 0ms", &mut binder_client);
                 fps_monitor.observe(None, false, 0);
                 TextureController::sync_config(None);
                 last_pkg_for_texture = None;
@@ -815,8 +820,7 @@ fn main() {
             .map(|package| detector::sanitize_pkg_name(&package).to_string())
             .filter(|package| !package.is_empty());
 
-        if auto_profile && runtime.active_target_pkg.is_some() && (launcher_focus || focus_released)
-        {
+        if runtime.active_target_pkg.is_some() && (launcher_focus || focus_released) {
             runtime.reset_to_balance_triggered(
                 if launcher_focus {
                     "Launcher focus"
@@ -929,7 +933,11 @@ fn main() {
                 last_pkg_for_texture = target.clone();
             }
 
-            runtime.apply_target(target.as_deref(), &mut binder_client, auto_profile);
+            if runtime.sync_profile_override_target() {
+                runtime.clear_profile_override("Target changed");
+            }
+            let override_active = runtime.profile_override.is_some();
+            runtime.apply_target(target.as_deref(), &mut binder_client, !override_active);
             target
         } else {
             runtime.reset_to_balance(&mut binder_client);
@@ -1016,10 +1024,6 @@ fn main() {
                 if shared_state.reload_flag.load(Ordering::Relaxed) {
                     break;
                 }
-                if let Some(name) = shared_state.take_requested_profile() {
-                    pending_profile = Some(name);
-                    break;
-                }
                 let step = remaining.min(Duration::from_millis(100));
                 thread::sleep(step);
                 remaining = timeout.saturating_sub(poll_started.elapsed());
@@ -1030,7 +1034,25 @@ fn main() {
 
 #[cfg(test)]
 mod profile_tests {
-    use super::Profile;
+    use super::{decode_profile_override, Profile};
+
+    #[test]
+    fn decodes_deck_profile_override() {
+        assert_eq!(decode_profile_override("eco"), Some((Profile::Eco, false)));
+        assert_eq!(
+            decode_profile_override("balanced"),
+            Some((Profile::Balance, false))
+        );
+        assert_eq!(
+            decode_profile_override("performance"),
+            Some((Profile::Performance, false))
+        );
+        assert_eq!(
+            decode_profile_override("performance_lite"),
+            Some((Profile::Performance, true))
+        );
+        assert_eq!(decode_profile_override("invalid"), None);
+    }
 
     #[test]
     fn resolves_dynamic_profiles() {

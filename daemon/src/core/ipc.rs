@@ -33,10 +33,16 @@ fn ensure_parent_dir(path: &str) {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProfileOverrideRequest {
+    Set(String),
+    Clear,
+}
+
 pub struct SharedState {
     pub current_profile: std::sync::Mutex<String>,
     pub active_package: std::sync::Mutex<Option<String>>,
-    pub requested_profile: std::sync::Mutex<Option<String>>,
+    pub profile_override_request: std::sync::Mutex<Option<ProfileOverrideRequest>>,
     pub reload_flag: AtomicBool,
     pub fps_preview_until_ms: AtomicU64,
 }
@@ -46,20 +52,26 @@ impl SharedState {
         Self {
             current_profile: std::sync::Mutex::new("Balanced".to_string()),
             active_package: std::sync::Mutex::new(None),
-            requested_profile: std::sync::Mutex::new(None),
+            profile_override_request: std::sync::Mutex::new(None),
             reload_flag: AtomicBool::new(false),
             fps_preview_until_ms: AtomicU64::new(0),
         }
     }
 
-    pub fn request_profile(&self, name: &str) {
-        if let Ok(mut slot) = self.requested_profile.lock() {
-            *slot = Some(name.trim().to_string());
+    pub fn request_profile_override(&self, name: &str) {
+        if let Ok(mut slot) = self.profile_override_request.lock() {
+            *slot = Some(ProfileOverrideRequest::Set(name.trim().to_string()));
         }
     }
 
-    pub fn take_requested_profile(&self) -> Option<String> {
-        self.requested_profile
+    pub fn request_profile_override_clear(&self) {
+        if let Ok(mut slot) = self.profile_override_request.lock() {
+            *slot = Some(ProfileOverrideRequest::Clear);
+        }
+    }
+
+    pub fn take_profile_override_request(&self) -> Option<ProfileOverrideRequest> {
+        self.profile_override_request
             .lock()
             .ok()
             .and_then(|mut slot| slot.take())
@@ -216,37 +228,27 @@ fn handle_client(stream: UnixStream, shared_state: Arc<SharedState>) {
                     let writer = reader.get_mut();
                     let _ = writer.write_all(b"OK\n");
                     let _ = writer.flush();
-                } else if let Some(rest) = trimmed.strip_prefix("SET_PROFILE ") {
-                    let name = rest.trim();
-                    if !name.is_empty()
-                        && name
-                            .chars()
-                            .all(|c| c.is_ascii_alphanumeric() || c == ' ' || c == '_')
-                    {
-                        shared_state.request_profile(name);
-                        let writer = reader.get_mut();
+                } else if let Some(rest) = trimmed.strip_prefix("SET_PROFILE_OVERRIDE ") {
+                    let normalized = match rest.trim().to_ascii_lowercase().as_str() {
+                        "eco" | "powersave" | "power save" | "hemat daya" => Some("eco"),
+                        "balanced" | "balance" | "seimbang" => Some("balanced"),
+                        "performance" | "performa" => Some("performance"),
+                        "performance lite" | "performance_lite" | "performance-lite"
+                        | "performa lite" => Some("performance_lite"),
+                        _ => None,
+                    };
+                    let writer = reader.get_mut();
+                    if let Some(name) = normalized {
+                        shared_state.request_profile_override(name);
                         let _ = writer.write_all(b"OK\n");
-                        let _ = writer.flush();
                     } else {
-                        let writer = reader.get_mut();
                         let _ = writer.write_all(b"ERR invalid profile\n");
-                        let _ = writer.flush();
                     }
-                } else if trimmed == "GET_AUTO_PROFILE" {
-                    let enabled = crate::core::detector::is_auto_profile_enabled();
-                    let resp = format!("AUTO_PROFILE {}\n", enabled);
-                    let writer = reader.get_mut();
-                    let _ = writer.write_all(resp.as_bytes());
                     let _ = writer.flush();
-                } else if let Some(rest) = trimmed.strip_prefix("SET_AUTO_PROFILE ") {
-                    let enabled = matches!(
-                        rest.trim().to_ascii_lowercase().as_str(),
-                        "1" | "on" | "true" | "enable" | "enabled"
-                    );
-                    let ok = crate::core::detector::set_auto_profile(enabled);
+                } else if trimmed == "CLEAR_PROFILE_OVERRIDE" {
+                    shared_state.request_profile_override_clear();
                     let writer = reader.get_mut();
-                    let response = if ok { "OK\n" } else { "ERR write failed\n" };
-                    let _ = writer.write_all(response.as_bytes());
+                    let _ = writer.write_all(b"OK\n");
                     let _ = writer.flush();
                 } else if trimmed == "RELOAD" || trimmed == "RELOAD_CONFIG" {
                     shared_state.reload_flag.store(true, Ordering::Relaxed);

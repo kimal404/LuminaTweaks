@@ -267,15 +267,19 @@ object DaemonManager {
         runSuCmd(ipcCommand("RELOAD"), 4).contains("OK")
     }
 
-    suspend fun setProfile(name: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun setProfileOverride(name: String): Boolean = withContext(Dispatchers.IO) {
         val safe = when (name.trim().lowercase()) {
-            "eco", "powersave", "power save", "hemat daya" -> "Eco"
+            "eco", "powersave", "power save", "hemat daya" -> "eco"
             "performance lite", "performance_lite", "performance-lite", "performa lite" ->
-                "Performance Lite"
-            "performance", "performa" -> "Performance"
-            else -> "Balanced"
+                "performance_lite"
+            "performance", "performa" -> "performance"
+            else -> "balanced"
         }
-        runSuCmd(ipcCommand("SET_PROFILE $safe"), 4).contains("OK")
+        runSuCmd(ipcCommand("SET_PROFILE_OVERRIDE $safe"), 4).contains("OK")
+    }
+
+    suspend fun clearProfileOverride(): Boolean = withContext(Dispatchers.IO) {
+        runSuCmd(ipcCommand("CLEAR_PROFILE_OVERRIDE"), 4).contains("OK")
     }
 
     suspend fun requestFpsPreview(seconds: Int): Boolean = withContext(Dispatchers.IO) {
@@ -301,19 +305,6 @@ object DaemonManager {
             .trim()
             .lowercase()
         if (mode == "strict") "strict" else "observe"
-    }
-
-    suspend fun setAutoProfile(enabled: Boolean): Boolean = withContext(Dispatchers.IO) {
-        runSuCmd(ipcCommand("SET_AUTO_PROFILE ${if (enabled) 1 else 0}"), 4).contains("OK")
-    }
-
-    suspend fun getAutoProfileEnabled(): Boolean? = withContext(Dispatchers.IO) {
-        val output = runSuCmd(ipcCommand("GET_AUTO_PROFILE"), 4)
-        when {
-            output.contains("AUTO_PROFILE true", ignoreCase = true) -> true
-            output.contains("AUTO_PROFILE false", ignoreCase = true) -> false
-            else -> null
-        }
     }
 
     suspend fun getDaemonPid(): String? = withContext(Dispatchers.IO) {
