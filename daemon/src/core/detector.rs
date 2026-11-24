@@ -180,6 +180,7 @@ static GLOBAL_JSON_CACHE: Mutex<Option<(Instant, Value)>> = Mutex::new(None);
 static APP_JSON_CACHE: Mutex<Option<(Instant, Value)>> = Mutex::new(None);
 static PROC_CACHE: Mutex<Option<(Instant, HashSet<String>)>> = Mutex::new(None);
 static FOCUS_FALLBACK_CACHE: Mutex<Option<(Instant, Option<String>)>> = Mutex::new(None);
+static TOP_RESUMED_CACHE: Mutex<Option<(Instant, Option<String>)>> = Mutex::new(None);
 
 pub fn invalidate_config_cache() {
     if let Ok(mut guard) = GLOBAL_JSON_CACHE.lock() {
@@ -1138,6 +1139,47 @@ pub fn get_focused_package_cached() -> Option<String> {
 
     let pkg = focused_package_uncached();
     if let Ok(mut guard) = FOCUS_FALLBACK_CACHE.lock() {
+        *guard = Some((Instant::now(), pkg.clone()));
+    }
+    pkg
+}
+
+fn parse_top_resumed_package(output: &str) -> Option<String> {
+    for line in output.lines() {
+        if !line.contains("topResumedActivity") && !line.contains("mResumedActivity") {
+            continue;
+        }
+        let activity = line
+            .split_whitespace()
+            .find(|token| token.contains('/') && token.contains('.'))?;
+        let package = activity.split('/').next()?.trim();
+        if !package.is_empty() {
+            return Some(package.to_string());
+        }
+    }
+    None
+}
+
+pub fn get_top_resumed_package_cached() -> Option<String> {
+    if let Ok(guard) = TOP_RESUMED_CACHE.lock() {
+        if let Some((at, pkg)) = guard.as_ref() {
+            if at.elapsed() < Duration::from_millis(750) {
+                return pkg.clone();
+            }
+        }
+    }
+
+    let output = Command::new("sh")
+        .args([
+            "-c",
+            "timeout 1 dumpsys activity activities 2>/dev/null | grep -m1 -E 'topResumedActivity|mResumedActivity' || true",
+        ])
+        .output()
+        .ok()
+        .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
+        .unwrap_or_default();
+    let pkg = parse_top_resumed_package(&output);
+    if let Ok(mut guard) = TOP_RESUMED_CACHE.lock() {
         *guard = Some((Instant::now(), pkg.clone()));
     }
     pkg

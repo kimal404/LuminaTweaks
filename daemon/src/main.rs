@@ -788,7 +788,29 @@ fn main() {
         }
 
         let binder_push = binder_client.is_push();
-        let binder_focus = binder_client.focused_package();
+        let raw_binder_focus = binder_client.focused_package();
+        let verify_top = binder_push
+            && screen_awake
+            && runtime.active_target_pkg.is_some()
+            && raw_binder_focus
+                .as_deref()
+                .map(detector::is_launcher_package)
+                .unwrap_or(true);
+        let top_resumed = if verify_top {
+            detector::get_top_resumed_package_cached()
+        } else {
+            None
+        };
+        let (binder_focus, focus_from_fallback) = match (raw_binder_focus, top_resumed) {
+            (Some(pkg), Some(top))
+                if detector::is_launcher_package(&pkg) && !detector::is_launcher_package(&top) =>
+            {
+                (Some(top), true)
+            }
+            (None, Some(top)) if !detector::is_launcher_package(&top) => (Some(top), true),
+            (focus, _) => (focus, false),
+        };
+        let active_pid = if focus_from_fallback { 0 } else { active_pid };
         let launcher_focus = binder_push
             && screen_awake
             && binder_focus
