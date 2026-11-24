@@ -32,6 +32,7 @@
 pub mod client;
 mod ffi;
 pub mod ipc;
+pub mod manager_bridge;
 pub mod producer;
 pub mod protocol;
 mod resolver;

@@ -448,8 +448,18 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
             PersonalisasiScreen(onBackClick = { currentSubscreen = null })
         } else if (subscreen == "compatibility") {
             CompatibilityScreen(onBackClick = { currentSubscreen = null })
+        } else if (subscreen == "session_stats") {
+            BackHandler { currentSubscreen = null }
+            SessionStatsScreen(onBack = { currentSubscreen = null })
         } else if (subscreen == "tweaks") {
-            TweaksScreen(onBackClick = { currentSubscreen = null })
+            TweaksScreen(
+                onOpenFloatingHud = {
+                    overlayConfig = FloatingFpsPrefs.load(context)
+                    currentSubscreen = "telemetry_overlay"
+                },
+                onOpenSessionStats = { currentSubscreen = "session_stats" },
+                onBackClick = { currentSubscreen = null }
+            )
         } else if (subscreen == "telemetry_overlay") {
             BackHandler { currentSubscreen = null }
             TelemetryOverlayScreen(
@@ -504,6 +514,7 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                         )
                         1 -> AppsScreen(
                             pagerState = pagerState,
+                            onOpenSessionStats = { currentSubscreen = "session_stats" }
                         )
                         2 -> SettingsScreen(
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" },
@@ -572,6 +583,7 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                         )
                         1 -> AppsScreen(
                             pagerState = pagerState,
+                            onOpenSessionStats = { currentSubscreen = "session_stats" }
                         )
                         2 -> SettingsScreen(
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" },

@@ -36,6 +36,7 @@ fn ensure_parent_dir(path: &str) {
 pub struct SharedState {
     pub current_profile: std::sync::Mutex<String>,
     pub active_package: std::sync::Mutex<Option<String>>,
+    pub requested_profile: std::sync::Mutex<Option<String>>,
     pub reload_flag: AtomicBool,
     pub fps_preview_until_ms: AtomicU64,
 }
@@ -45,9 +46,23 @@ impl SharedState {
         Self {
             current_profile: std::sync::Mutex::new("Balanced".to_string()),
             active_package: std::sync::Mutex::new(None),
+            requested_profile: std::sync::Mutex::new(None),
             reload_flag: AtomicBool::new(false),
             fps_preview_until_ms: AtomicU64::new(0),
         }
+    }
+
+    pub fn request_profile(&self, name: &str) {
+        if let Ok(mut slot) = self.requested_profile.lock() {
+            *slot = Some(name.trim().to_string());
+        }
+    }
+
+    pub fn take_requested_profile(&self) -> Option<String> {
+        self.requested_profile
+            .lock()
+            .ok()
+            .and_then(|mut slot| slot.take())
     }
 
     pub fn request_fps_preview(&self, seconds: u64) {
@@ -200,6 +215,38 @@ fn handle_client(stream: UnixStream, shared_state: Arc<SharedState>) {
                     }
                     let writer = reader.get_mut();
                     let _ = writer.write_all(b"OK\n");
+                    let _ = writer.flush();
+                } else if let Some(rest) = trimmed.strip_prefix("SET_PROFILE ") {
+                    let name = rest.trim();
+                    if !name.is_empty()
+                        && name
+                            .chars()
+                            .all(|c| c.is_ascii_alphanumeric() || c == ' ' || c == '_')
+                    {
+                        shared_state.request_profile(name);
+                        let writer = reader.get_mut();
+                        let _ = writer.write_all(b"OK\n");
+                        let _ = writer.flush();
+                    } else {
+                        let writer = reader.get_mut();
+                        let _ = writer.write_all(b"ERR invalid profile\n");
+                        let _ = writer.flush();
+                    }
+                } else if trimmed == "GET_AUTO_PROFILE" {
+                    let enabled = crate::core::detector::is_auto_profile_enabled();
+                    let resp = format!("AUTO_PROFILE {}\n", enabled);
+                    let writer = reader.get_mut();
+                    let _ = writer.write_all(resp.as_bytes());
+                    let _ = writer.flush();
+                } else if let Some(rest) = trimmed.strip_prefix("SET_AUTO_PROFILE ") {
+                    let enabled = matches!(
+                        rest.trim().to_ascii_lowercase().as_str(),
+                        "1" | "on" | "true" | "enable" | "enabled"
+                    );
+                    let ok = crate::core::detector::set_auto_profile(enabled);
+                    let writer = reader.get_mut();
+                    let response = if ok { "OK\n" } else { "ERR write failed\n" };
+                    let _ = writer.write_all(response.as_bytes());
                     let _ = writer.flush();
                 } else if trimmed == "RELOAD" || trimmed == "RELOAD_CONFIG" {
                     shared_state.reload_flag.store(true, Ordering::Relaxed);

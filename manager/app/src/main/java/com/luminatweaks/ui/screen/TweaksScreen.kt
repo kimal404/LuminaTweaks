@@ -56,15 +56,21 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import com.luminatweaks.gamedeck.GameDeckSettingsScreen
+import com.luminatweaks.gamedeck.GameDeckPrefs
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.Storage
+import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -215,6 +221,7 @@ private suspend fun awaitPagerSettled(pagerState: PagerState?) {
 fun TweaksScreen(
     pagerState: PagerState? = null,
     onOpenFloatingHud: (() -> Unit)? = null,
+    onOpenSessionStats: (() -> Unit)? = null,
     onBackClick: (() -> Unit)? = null
 ) {
     BackHandler(enabled = onBackClick != null) { onBackClick?.invoke() }
@@ -225,6 +232,7 @@ fun TweaksScreen(
     val cached = ConfigRepository.cachedTweaksState
 
     var isGlobalLiteMode by remember { mutableStateOf(cached?.isGlobalLiteMode ?: false) }
+    var isGlobalTextureEnabled by remember { mutableStateOf(cached?.isGlobalTextureEnabled ?: false) }
     var rrModes by remember { mutableStateOf<List<DisplayRrMode>>(cached?.rrModes ?: emptyList()) }
     var currentRrId by remember { mutableStateOf<Int?>(cached?.currentRrId) }
     var liveRefreshRate by remember { mutableIntStateOf(60) }
@@ -233,6 +241,7 @@ fun TweaksScreen(
     var availableIoSchedulers by remember { mutableStateOf(emptyList<String>()) }
 
     var fpsConfig by remember { mutableStateOf(FloatingFpsPrefs.load(context)) }
+    var gameBarEnabled by remember { mutableStateOf(GameDeckPrefs.load(context).enabled) }
     val updateFpsConfig: (FloatingFpsConfig) -> Unit = { updated ->
         val wasEnabled = fpsConfig.enabled
         fpsConfig = updated
@@ -270,6 +279,16 @@ fun TweaksScreen(
     val rendererOrigin = rememberDialogOrigin()
     val ioSchedulerOrigin = rememberDialogOrigin()
     var inFloatingFpsSubpage by rememberSaveable { mutableStateOf(false) }
+    var inSessionStatsSubpage by remember { mutableStateOf(false) }
+    var inGameBarSubpage by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(inGameBarSubpage) {
+        if (!inGameBarSubpage) {
+            gameBarEnabled = GameDeckPrefs.load(context).enabled
+        }
+    }
+    var inMemoryZramSubpage by rememberSaveable { mutableStateOf(false) }
+    var inHardwareDiagnosticSubpage by rememberSaveable { mutableStateOf(false) }
+    var inUtilitySubpage by rememberSaveable { mutableStateOf(false) }
 
 
     val defaultDynamicLabel = stringResource(R.string.tweaks_rr_default_dynamic)
@@ -283,6 +302,7 @@ fun TweaksScreen(
         awaitPagerSettled(pagerState)
         val state = ConfigRepository.getTweaksState(forceRefresh = true)
         isGlobalLiteMode = state.isGlobalLiteMode
+        isGlobalTextureEnabled = state.isGlobalTextureEnabled
         rrModes = state.rrModes
         currentRrId = state.currentRrId
         currentRendererId = normalizeRendererId(state.currentRendererId)
@@ -321,6 +341,12 @@ fun TweaksScreen(
         getRendererShortLabel(currentRendererId, defaultRendererLabel)
     }
 
+    val effectiveRendererText = if (isGlobalTextureEnabled) {
+        stringResource(R.string.tweaks_renderer_locked_note)
+    } else {
+        currentRendererShortText
+    }
+
     val rendererOptions = remember(defaultRendererLabel) {
         RENDERER_OPTIONS.map {
             TweakDialogOption(it.id, getRendererDisplayLabel(it.id, defaultRendererLabel))
@@ -333,6 +359,18 @@ fun TweaksScreen(
             .distinct()
     }
 
+    if (inSessionStatsSubpage) {
+        SessionStatsScreen(onBack = { inSessionStatsSubpage = false })
+        return
+    }
+
+
+    if (inGameBarSubpage) {
+        BackHandler { inGameBarSubpage = false }
+        GameDeckSettingsScreen(onBack = { inGameBarSubpage = false })
+        return
+    }
+
     if (inFloatingFpsSubpage) {
         BackHandler { inFloatingFpsSubpage = false }
         TelemetryOverlayScreen(
@@ -341,6 +379,24 @@ fun TweaksScreen(
             onConfigChange = updateFpsConfig,
             onBack = { inFloatingFpsSubpage = false }
         )
+        return
+    }
+
+    if (inHardwareDiagnosticSubpage) {
+        BackHandler { inHardwareDiagnosticSubpage = false }
+        HardwareDiagnosticScreen(onBack = { inHardwareDiagnosticSubpage = false })
+        return
+    }
+
+    if (inUtilitySubpage) {
+        BackHandler { inUtilitySubpage = false }
+        UtilityScreen(onBack = { inUtilitySubpage = false })
+        return
+    }
+
+    if (inMemoryZramSubpage) {
+        BackHandler { inMemoryZramSubpage = false }
+        MemoryZramScreen(onBack = { inMemoryZramSubpage = false })
         return
     }
 
@@ -532,10 +588,11 @@ fun TweaksScreen(
                         modifier = Modifier
                             .weight(1f)
                             .then(rendererOrigin.trackedModifier()),
-                        icon = Icons.Rounded.DeveloperBoard,
+                        icon = if (isGlobalTextureEnabled) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
                         label = stringResource(R.string.tweaks_renderer),
-                        value = currentRendererShortText,
-                        highlight = true,
+                        value = effectiveRendererText,
+                        highlight = !isGlobalTextureEnabled,
+                        enabled = !isGlobalTextureEnabled,
                         onClick = { showRenderDialog = true }
                     )
                 }
@@ -549,10 +606,19 @@ fun TweaksScreen(
 
             item(key = "group_additional") {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    ConnectedTweakActionRow(
+                        index = 0,
+                        count = 2,
+                        icon = Icons.Rounded.Memory,
+                        title = stringResource(R.string.tweak_memory_zram),
+                        subtitle = stringResource(R.string.tweak_memory_zram_desc),
+                        onClick = { inMemoryZramSubpage = true }
+                    )
+
                     Box(modifier = ioSchedulerOrigin.trackedModifier()) {
                         ConnectedTweakActionRow(
-                            index = 0,
-                            count = 1,
+                            index = 1,
+                            count = 2,
                             icon = Icons.Rounded.Storage,
                             title = stringResource(R.string.tweak_io_scheduler),
                             subtitle = currentIoScheduler,
@@ -586,7 +652,7 @@ fun TweaksScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     ConnectedTweakActionRow(
                         index = 0,
-                        count = 1,
+                        count = 5,
                         icon = Icons.Rounded.Speed,
                         title = "Floating HUD",
                         subtitle = telemetrySubtitle,
@@ -598,6 +664,63 @@ fun TweaksScreen(
                                 inFloatingFpsSubpage = true
                             }
                         }
+                    )
+
+
+                    ConnectedTweakActionRow(
+                        index = 1,
+                        count = 5,
+                        icon = Icons.Rounded.SportsEsports,
+                        title = "Game Bar",
+                        subtitle = if (gameBarEnabled) {
+                            localizedLabel(
+                                "Aktif · DockRail, profil, FPS, CPU/GPU & freeform apps",
+                                "Active · DockRail, profile, FPS, CPU/GPU & freeform apps"
+                            )
+                        } else {
+                            localizedLabel(
+                                "DockRail & DeckCard untuk profil, FPS, CPU/GPU & freeform apps",
+                                "DockRail & DeckCard for profile, FPS, CPU/GPU & freeform apps"
+                            )
+                        },
+                        highlightSubtitle = gameBarEnabled,
+                        onClick = { inGameBarSubpage = true }
+                    )
+
+                    ConnectedTweakActionRow(
+                        index = 2,
+                        count = 5,
+                        icon = Icons.Rounded.Insights,
+                        title = localizedLabel("Statistik Sesi", "Session Stats"),
+                        subtitle = localizedLabel(
+                            "Riwayat FPS, stabilitas frame & suhu saat bermain",
+                            "FPS history, frame stability & thermal logs during gameplay"
+                        ),
+                        onClick = {
+                            if (onOpenSessionStats != null) {
+                                onOpenSessionStats()
+                            } else {
+                                inSessionStatsSubpage = true
+                            }
+                        }
+                    )
+
+                    ConnectedTweakActionRow(
+                        index = 3,
+                        count = 5,
+                        icon = Icons.Rounded.DeveloperBoard,
+                        title = stringResource(R.string.hardware_diag_title),
+                        subtitle = stringResource(R.string.hardware_diag_desc),
+                        onClick = { inHardwareDiagnosticSubpage = true }
+                    )
+
+                    ConnectedTweakActionRow(
+                        index = 4,
+                        count = 5,
+                        icon = Icons.Rounded.Widgets,
+                        title = stringResource(R.string.utility_screen_title),
+                        subtitle = stringResource(R.string.utility_screen_desc),
+                        onClick = { inUtilitySubpage = true }
                     )
                 }
             }

@@ -60,10 +60,12 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -80,6 +82,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -104,6 +107,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.luminatweaks.R
@@ -147,7 +153,21 @@ fun AppProfileScreen(
     onProfileChanged: (AppProfileConfig) -> Unit,
     onBack: () -> Unit
 ) {
-    BackHandler(onBack = onBack)
+    var inTeksturRinganScreen by remember { mutableStateOf(false) }
+
+    LuminaDrillTransition(
+        targetState = inTeksturRinganScreen,
+        isForward = { _, target -> target }
+    ) { showTextureScreen ->
+        if (showTextureScreen) {
+            TeksturRinganScreen(
+                appName = app.name,
+                profile = profile,
+                onProfileChanged = onProfileChanged,
+                onBack = { inTeksturRinganScreen = false }
+            )
+        } else {
+            BackHandler(onBack = onBack)
 
             val context = LocalContext.current
             val haptic = LocalHapticFeedback.current
@@ -156,9 +176,31 @@ fun AppProfileScreen(
 
             var rrModes by remember { mutableStateOf<List<DisplayRrMode>>(emptyList()) }
 
+            var showProfileSheet by remember { mutableStateOf(false) }
             var showLiteModeSheet by remember { mutableStateOf(false) }
             var showRefreshRateSheet by remember { mutableStateOf(false) }
             var showDndSheet by remember { mutableStateOf(false) }
+            val scope = rememberCoroutineScope()
+            var isSessionRecordEnabled by remember(app.packageName) { mutableStateOf(false) }
+
+            DisposableEffect(context, app.packageName) {
+                val lifecycleOwner = context as? LifecycleOwner
+                var observer: LifecycleEventObserver? = null
+                fun refreshRecordingState() {
+                    scope.launch {
+                        isSessionRecordEnabled = ConfigRepository.recordEnabled(context, app.packageName)
+                    }
+                }
+                refreshRecordingState()
+
+                if (lifecycleOwner != null) {
+                    observer = LifecycleEventObserver { _, event ->
+                        if (event == Lifecycle.Event.ON_RESUME) refreshRecordingState()
+                    }.also { lifecycleOwner.lifecycle.addObserver(it) }
+                }
+                onDispose { observer?.let { lifecycleOwner?.lifecycle?.removeObserver(it) } }
+            }
+
             LaunchedEffect(Unit) {
                 rrModes = ConfigRepository.getRefreshRateModes()
             }
@@ -167,6 +209,18 @@ fun AppProfileScreen(
                 listOf(OptionItem.OFF, OptionItem.DEFAULT, OptionItem.ON)
             }
 
+            val profileOptions = listOf(
+                ProfileSheetOption("default", stringResource(R.string.opt_default)),
+                ProfileSheetOption("powersave", stringResource(R.string.aosp_profile_powersave)),
+                ProfileSheetOption("balanced", stringResource(R.string.aosp_profile_balanced)),
+                ProfileSheetOption("performance", stringResource(R.string.aosp_profile_performance))
+            )
+            val currentAppProfileLabel = profileOptions
+                .find { it.value == profile.profile }?.label
+                ?: stringResource(R.string.opt_default)
+
+            val isTextureLocked = profile.textureEnabled || profile.textureLod > 0
+
             val currentHzLabel = if (profile.refreshRate == "default" || profile.refreshRate.isBlank()) {
                 stringResource(R.string.opt_default)
             } else {
@@ -174,6 +228,18 @@ fun AppProfileScreen(
                     it.id.toString() == profile.refreshRate || it.hz.toString() == profile.refreshRate
                 }
                 if (matched != null) "${matched.hz} Hz" else stringResource(R.string.profile_mode_format, profile.refreshRate)
+            }
+
+            val currentTextureLabel = if (!isTextureLocked) {
+                stringResource(R.string.opt_off)
+            } else {
+                when (profile.textureLod.coerceAtLeast(profile.textureDetail)) {
+                    1 -> stringResource(R.string.texture_level_1)
+                    2 -> stringResource(R.string.texture_level_2)
+                    3 -> stringResource(R.string.texture_level_3)
+                    4 -> stringResource(R.string.texture_level_4)
+                    else -> stringResource(R.string.opt_active)
+                }
             }
 
             val packageInfo = remember(app.packageName) {
@@ -390,7 +456,16 @@ fun AppProfileScreen(
                                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     ProfileActionRow(
                                         index = 0,
-                                        count = 1,
+                                        count = 2,
+                                        icon = Icons.Rounded.Speed,
+                                        title = stringResource(R.string.profile_app_profile),
+                                        subtitle = currentAppProfileLabel,
+                                        highlightSubtitle = true,
+                                        onClick = { showProfileSheet = true }
+                                    )
+                                    ProfileActionRow(
+                                        index = 1,
+                                        count = 2,
                                         icon = Icons.Rounded.BatterySaver,
                                         title = stringResource(R.string.profile_lite_mode),
                                         subtitle = OptionItem.fromValue(profile.liteMode).getLabel(),
@@ -402,7 +477,15 @@ fun AppProfileScreen(
                                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     ProfileActionRow(
                                         index = 0,
-                                        count = 1,
+                                        count = 2,
+                                        icon = Icons.Rounded.Tune,
+                                        title = stringResource(R.string.profile_texture),
+                                        subtitle = currentTextureLabel,
+                                        onClick = { inTeksturRinganScreen = true }
+                                    )
+                                    ProfileActionRow(
+                                        index = 1,
+                                        count = 2,
                                         icon = Icons.Rounded.Speed,
                                         title = stringResource(R.string.profile_refresh_rate),
                                         subtitle = currentHzLabel,
@@ -413,9 +496,31 @@ fun AppProfileScreen(
 
                                 ProfileSectionHeader(title = stringResource(R.string.profile_section_additional))
                                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    ProfileActionRow(
+                                    ProfileSwitchRow(
                                         index = 0,
-                                        count = 1,
+                                        count = 2,
+                                        icon = Icons.Rounded.Insights,
+                                        title = localizedLabel("Rekam Statistik Sesi", "Record Session Stats"),
+                                        subtitle = localizedLabel(
+                                            "Simpan riwayat FPS, suhu & daya saat aplikasi berjalan",
+                                            "Log FPS, temperature & power while this app runs"
+                                        ),
+                                        checked = isSessionRecordEnabled,
+                                        onCheckedChange = { enabled ->
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            isSessionRecordEnabled = enabled
+                                            scope.launch {
+                                                ConfigRepository.setRecordEnabled(
+                                                    context,
+                                                    app.packageName,
+                                                    enabled
+                                                )
+                                            }
+                                        }
+                                    )
+                                    ProfileActionRow(
+                                        index = 1,
+                                        count = 2,
                                         icon = Icons.Rounded.NotificationsOff,
                                         title = stringResource(R.string.profile_dnd),
                                         subtitle = OptionItem.fromValue(profile.dnd).getLabel(),
@@ -427,6 +532,17 @@ fun AppProfileScreen(
                     }
                 }
             }
+
+            ProfileOptionSheet(
+                show = showProfileSheet,
+                title = stringResource(R.string.dialog_select_profile),
+                options = profileOptions,
+                isSelected = { it == profile.profile },
+                onSelect = { value ->
+                    onProfileChanged(profile.copy(profile = value))
+                },
+                onDismiss = { showProfileSheet = false }
+            )
 
             ProfileOptionSheet(
                 show = showLiteModeSheet,
@@ -469,6 +585,8 @@ fun AppProfileScreen(
                 },
                 onDismiss = { showDndSheet = false }
             )
+        }
+    }
 }
 
 @Composable

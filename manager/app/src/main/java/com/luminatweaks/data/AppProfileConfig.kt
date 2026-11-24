@@ -21,7 +21,16 @@ data class AppProfileConfig(
     val saklarUtama: Boolean = false,
     val disabled: Boolean = false,
     val custom: Boolean = false,
+    val profile: String = "default",
     val liteMode: String = "default",
     val refreshRate: String = "default",
-    val dnd: String = "default"
+    val dnd: String = "default",
+    val textureDriver: String = "native",
+    val textureLod: Int = 0,
+    val textureEnabled: Boolean = false,
+    val textureDetail: Int = 0,
+    val pixelSharp: Boolean = false,
+    val hardDistance: Boolean = false,
+    /** "Rekam Statistik Sesi": persists session telemetry for this package. */
+    val recordSession: Boolean = false
 )

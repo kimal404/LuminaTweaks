@@ -252,6 +252,15 @@ object DaemonManager {
             "printf '$command\\n' | nc -w 1 -U $IPC_SOCKET_FALLBACK 2>/dev/null || " +
             "printf '$command\\n' | toybox nc -w 1 -U $IPC_SOCKET_FALLBACK 2>/dev/null)"
 
+    suspend fun setProfile(name: String): Boolean = withContext(Dispatchers.IO) {
+        val safe = when (name.trim().lowercase()) {
+            "eco", "powersave" -> "Eco"
+            "performance", "performa" -> "Performance"
+            else -> "Balanced"
+        }
+        runSuCmd(ipcCommand("SET_PROFILE $safe"), 4).contains("OK")
+    }
+
     suspend fun requestFpsPreview(seconds: Int): Boolean = withContext(Dispatchers.IO) {
         val clamped = seconds.coerceIn(1, 3600)
         runSuCmd(ipcCommand("FPS_PREVIEW $clamped"), 4).contains("OK")
@@ -275,6 +284,19 @@ object DaemonManager {
             .trim()
             .lowercase()
         if (mode == "strict") "strict" else "observe"
+    }
+
+    suspend fun setAutoProfile(enabled: Boolean): Boolean = withContext(Dispatchers.IO) {
+        runSuCmd(ipcCommand("SET_AUTO_PROFILE ${if (enabled) 1 else 0}"), 4).contains("OK")
+    }
+
+    suspend fun getAutoProfileEnabled(): Boolean? = withContext(Dispatchers.IO) {
+        val output = runSuCmd(ipcCommand("GET_AUTO_PROFILE"), 4)
+        when {
+            output.contains("AUTO_PROFILE true", ignoreCase = true) -> true
+            output.contains("AUTO_PROFILE false", ignoreCase = true) -> false
+            else -> null
+        }
     }
 
     suspend fun getDaemonPid(): String? = withContext(Dispatchers.IO) {

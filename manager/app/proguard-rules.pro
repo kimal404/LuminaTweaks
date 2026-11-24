@@ -1,1 +1,2 @@
 -keep class com.luminatweaks.model.DiagnosticLogEntry { *; }
+-keep class com.luminatweaks.model.HardwareDiagnosticState { *; }
