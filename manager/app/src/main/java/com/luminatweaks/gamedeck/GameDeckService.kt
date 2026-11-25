@@ -21,6 +21,7 @@ import android.media.AudioManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.provider.Settings
 import android.view.Display
 import android.view.Gravity
@@ -74,6 +75,10 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         private const val CHANNEL_ID = "lumina_game_deck_channel"
         private const val NOTIFICATION_ID = 4046
         private const val GAME_STALE_GRACE_MS = 10_000L
+        private const val GAME_PROBE_INTERVAL_MS = 2_000L
+        private const val HIDDEN_POLL_MS = 1_500L
+        private const val COLLAPSED_POLL_MS = 1_500L
+        private const val EXPANDED_POLL_MS = 1_000L
         private const val REOPEN_COOLDOWN_MS = 320L
         private const val EXPANDED_HEIGHT_FRACTION = 0.86f
         private const val EXPANDED_MAX_HEIGHT_DP = 348f
@@ -169,10 +174,13 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     private var lastSliderInteractionMs = 0L
     private var lastNonZeroVolumePct = 50
     private var brightnessApplyJob: Job? = null
-    private var prevRootCpuTotal = 0L
-    private var prevRootCpuIdle = 0L
     private var lastCpuPercent = 0
     private var lastGpuPercent = 0
+    private var cachedRrModes: List<Int>? = null
+    private var cachedQuickAppsKey = ""
+    private var cachedQuickApps: List<GameDeckQuickApp> = emptyList()
+    private var lastGameProbeMs = 0L
+    private var lastGameProbeResult = false
 
     override fun onCreate() {
         super.onCreate()
@@ -240,6 +248,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        cachedRrModes = null
         updateWindowLayout()
     }
 
@@ -258,9 +267,18 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         if (telemetryJob?.isActive == true) return
         telemetryJob = serviceScope.launch {
             while (isActive) {
-                val config = GameDeckPrefs.load(this@GameDeckService)
-                activeConfig = config.copy(edgeYOffsetPx = edgeYOffsetPx)
                 val now = System.currentTimeMillis()
+                val config = activeConfig
+                val interactive = getSystemService(PowerManager::class.java)?.isInteractive != false
+                if (!interactive) {
+                    if (isAttached) {
+                        detachOverlay()
+                        updateNotification(false)
+                    }
+                    delay(HIDDEN_POLL_MS)
+                    continue
+                }
+
                 val feed = withContext(Dispatchers.IO) { LiveSessionFeed.read(this@GameDeckService) }
                 val gameActive = (feed?.gameActive == true) ||
                     withContext(Dispatchers.IO) { isForegroundGameActive(now) }
@@ -293,7 +311,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         detachOverlay()
                         updateNotification(false)
                     }
-                    delay(500L)
+                    delay(HIDDEN_POLL_MS)
                     continue
                 }
 
@@ -308,10 +326,16 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                     updateWindowLayout()
                 }
 
-                val interval = if (isExpanded) 850L else 2_500L
-                if (now - lastMetricsMs >= interval || uiState.value.quickApps.size != config.quickApps.size) {
+                if (!isExpanded) {
+                    delay(COLLAPSED_POLL_MS)
+                    continue
+                }
+
+                if (now - lastMetricsMs >= EXPANDED_POLL_MS ||
+                    uiState.value.quickApps.size != config.quickApps.size
+                ) {
                     lastMetricsMs = now
-                    val snapshot = withContext(Dispatchers.IO) { collectSnapshot(config, isExpanded, feed) }
+                    val snapshot = withContext(Dispatchers.IO) { collectSnapshot(config, true, feed) }
                     if (pendingOverrideLabel != null &&
                         (snapshot.profileOverride == pendingOverrideLabel ||
                             now >= pendingOverrideUntilMs)
@@ -341,7 +365,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         quickApps = snapshot.quickApps
                     )
                 }
-                delay(450L)
+                delay(EXPANDED_POLL_MS)
             }
         }
     }
@@ -387,12 +411,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                 if (level >= 0) (level * 100f / scale).roundToInt() else 0
             } ?: 0
 
-        val quickApps = config.quickApps.map { pkg ->
-            val label = runCatching {
-                packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
-            }.getOrDefault(pkg)
-            GameDeckQuickApp(pkg, label)
-        }.sortedBy { it.label.lowercase(Locale.ROOT) }
+        val quickApps = resolveQuickApps(config)
 
         val cpu = if (collectHeavy) readCpuLoad() else lastCpuPercent
         val gpu = if (collectHeavy) readGpuLoad() else lastGpuPercent
@@ -435,78 +454,46 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         )
     }
 
-    private fun runRootRead(cmd: String): String {
-        return runCatching {
-            val process = ProcessBuilder("su", "-c", cmd)
-                .redirectErrorStream(true)
-                .start()
-            if (!process.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) {
-                process.destroyForcibly()
-                return ""
-            }
-            process.inputStream.bufferedReader().use { it.readText() }.trim()
-        }.getOrDefault("")
+    private fun resolveQuickApps(config: GameDeckConfig): List<GameDeckQuickApp> {
+        val key = config.quickApps.joinToString("|")
+        if (key == cachedQuickAppsKey) return cachedQuickApps
+        val apps = config.quickApps.map { pkg ->
+            val label = runCatching {
+                packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+            }.getOrDefault(pkg)
+            GameDeckQuickApp(pkg, label)
+        }.sortedBy { it.label.lowercase(Locale.ROOT) }
+        cachedQuickAppsKey = key
+        cachedQuickApps = apps
+        return apps
     }
 
     private fun readCpuLoad(): Int {
         val direct = sysfs.cpuPercent()?.roundToInt()?.coerceIn(0, 100)
         if (direct != null) {
             lastCpuPercent = direct
-            return direct
         }
-        val line = runRootRead("head -n 1 /proc/stat 2>/dev/null")
-        if (!line.startsWith("cpu ")) return lastCpuPercent
-        val parts = line.split(Regex("\\s+")).drop(1).mapNotNull { it.toLongOrNull() }
-        if (parts.size < 5) return lastCpuPercent
-        val idle = parts[3] + parts[4]
-        val total = parts.sum()
-        val dTotal = total - prevRootCpuTotal
-        val dIdle = idle - prevRootCpuIdle
-        prevRootCpuTotal = total
-        prevRootCpuIdle = idle
-        if (dTotal <= 0L || dTotal == total) return lastCpuPercent
-        val pct = (((dTotal - dIdle).toDouble() / dTotal.toDouble()) * 100.0)
-            .roundToInt()
-            .coerceIn(0, 100)
-        lastCpuPercent = pct
-        return pct
+        return lastCpuPercent
     }
 
     private fun readGpuLoad(): Int {
         val direct = sysfs.gpuPercent()?.roundToInt()?.coerceIn(0, 100)
         if (direct != null) {
             lastGpuPercent = direct
-            return direct
-        }
-        val cmd = "for p in " +
-            "/sys/module/ged/parameters/gpu_loading " +
-            "/sys/kernel/ged/hal/gpu_utilization " +
-            "/sys/class/misc/mali0/device/utilization " +
-            "/sys/class/devfreq/gpufreq/gpu_busy_percentage " +
-            "/sys/kernel/gpu/gpu_busy; do " +
-            "[ -r \"\$p\" ] && { cat \"\$p\"; break; }; done; " +
-            "[ -r /sys/class/kgsl/kgsl-3d0/gpubusy ] && cat /sys/class/kgsl/kgsl-3d0/gpubusy"
-        val raw = runRootRead(cmd)
-        if (raw.isEmpty()) return lastGpuPercent
-        val tokens = raw.split(Regex("\\s+"))
-        val pct = if (tokens.size >= 2) {
-            val busy = tokens[0].toFloatOrNull()
-            val total = tokens[1].toFloatOrNull()
-            if (busy != null && total != null && total > 0f) {
-                (busy / total * 100f).roundToInt().coerceIn(0, 100)
-            } else {
-                tokens[0].replace("%", "").toFloatOrNull()?.roundToInt()?.coerceIn(0, 100)
-            }
-        } else {
-            tokens[0].replace("%", "").toFloatOrNull()?.roundToInt()?.coerceIn(0, 100)
-        }
-        if (pct != null) {
-            lastGpuPercent = pct
         }
         return lastGpuPercent
     }
 
     private fun isForegroundGameActive(nowMs: Long): Boolean {
+        if (nowMs - lastGameProbeMs < GAME_PROBE_INTERVAL_MS) {
+            return lastGameProbeResult
+        }
+        lastGameProbeMs = nowMs
+        lastGameProbeResult = probeForegroundGame(nowMs)
+        return lastGameProbeResult
+    }
+
+    private fun probeForegroundGame(nowMs: Long): Boolean {
         val usm = getSystemService(UsageStatsManager::class.java) ?: return false
         val lookback = if (lastForegroundPkg == null) 120_000L else 10_000L
         val events = runCatching { usm.queryEvents(nowMs - lookback, nowMs) }.getOrNull()
@@ -984,14 +971,17 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     }
 
     private fun supportedRefreshRates(): List<Int> {
+        cachedRrModes?.let { return it }
         val display = currentDisplay() ?: return emptyList()
-        return runCatching {
+        val modes = runCatching {
             display.supportedModes
                 .map { (it.refreshRate + 0.5f).toInt() }
                 .filter { it >= 30 }
                 .distinct()
                 .sorted()
         }.getOrDefault(emptyList())
+        cachedRrModes = modes
+        return modes
     }
 
     @Suppress("DEPRECATION")
