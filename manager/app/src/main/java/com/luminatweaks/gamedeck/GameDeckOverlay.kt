@@ -2433,27 +2433,32 @@ private fun DashboardDeckContent(
                 }
                 }
                 "refresh_rate" -> {
-                if (state.showRefreshRateWidget) {
-                            RefreshRateBentoTile(
-                                modes = state.rrModes,
-                                selectedHz = state.selectedRrHz,
-                                liveHz = state.targetHz,
-                                onSelect = onRefreshRateSelected,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        if (state.showKeepScreenOnWidget) {
-                            CompactToolBentoTile(
-                                icon = Icons.Rounded.Visibility,
-                                title = "Layar Nyala",
-                                subtitle = if (state.keepScreenOn) "Tetap menyala" else "Normal sistem",
-                                active = state.keepScreenOn,
-                                onClick = onToggleKeepScreenOn,
-                                modifier = Modifier.weight(1f)
-                            )
+                    if (state.showRefreshRateWidget || state.showKeepScreenOnWidget) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (state.showRefreshRateWidget) {
+                                RefreshRateBentoTile(
+                                    modes = state.rrModes,
+                                    selectedHz = state.selectedRrHz,
+                                    liveHz = state.targetHz,
+                                    onSelect = onRefreshRateSelected,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            if (state.showKeepScreenOnWidget) {
+                                CompactToolBentoTile(
+                                    icon = Icons.Rounded.Visibility,
+                                    title = "Layar Nyala",
+                                    subtitle = if (state.keepScreenOn) "Tetap menyala" else "Normal sistem",
+                                    active = state.keepScreenOn,
+                                    onClick = onToggleKeepScreenOn,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
                     }
-                }
                 }
                 "sliders" -> {
                 if (state.showSlidersWidget) {
@@ -2468,6 +2473,7 @@ private fun DashboardDeckContent(
                 }
                 }
             }
+        }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -2499,6 +2505,7 @@ private fun DashboardDeckContent(
                     )
                 }
             }
+        }
     }
 }
 
