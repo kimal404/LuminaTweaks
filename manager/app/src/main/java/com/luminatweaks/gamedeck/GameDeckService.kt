@@ -73,7 +73,8 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         private const val GAME_STALE_GRACE_MS = 10_000L
         private const val COLLAPSE_ANIMATION_MS = 220L
         private const val REOPEN_COOLDOWN_MS = 280L
-        private const val EXPANDED_HEIGHT_DP = 316f
+        private const val EXPANDED_HEIGHT_FRACTION = 0.86f
+        private const val EXPANDED_MAX_HEIGHT_DP = 740f
         private const val COLLAPSED_WIDTH_DP = 22f
         private const val COLLAPSED_HEIGHT_DP = 68f
         private const val EDGE_MARGIN_DP = 12f
@@ -645,8 +646,10 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         val isLeft = activeConfig.side == GameDeckSide.LEFT
         val margin = (EDGE_MARGIN_DP * density).roundToInt()
         val halfScreen = displayMetrics.heightPixels / 2f
+        val panelHeightPx = (displayMetrics.heightPixels * EXPANDED_HEIGHT_FRACTION)
+            .coerceAtMost(EXPANDED_MAX_HEIGHT_DP * density)
         val maxOffset = if (expandedWindow) {
-            (halfScreen - (EXPANDED_HEIGHT_DP * density / 2f) - margin)
+            (halfScreen - (panelHeightPx / 2f) - margin)
                 .roundToInt()
                 .coerceAtLeast(0)
         } else {

@@ -10,7 +10,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -299,7 +298,10 @@ private fun GameDeckWorkspace(
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val isLeft = state.side == GameDeckSide.LEFT
-    val deckHeight = 316.dp
+    val screenHeightPx = LocalContext.current.resources.displayMetrics.heightPixels
+    val deckHeight = with(LocalDensity.current) {
+        (screenHeightPx * 0.86f).toDp().coerceAtMost(740.dp)
+    }
     val closeThreshold = with(LocalDensity.current) { 24.dp.toPx() }
 
     Row(
@@ -391,7 +393,7 @@ private fun DockRail(
 
     Box(
         modifier = Modifier
-            .width(58.dp)
+            .width(78.dp)
             .fillMaxHeight()
             .shadow(10.dp, shape)
             .clip(shape)
@@ -403,7 +405,6 @@ private fun DockRail(
                     )
                 )
             )
-            .border(1.dp, scheme.outlineVariant.copy(alpha = 0.38f * deckOpacity), shape)
     ) {
         Column(
             modifier = Modifier
@@ -444,7 +445,7 @@ private fun DockRail(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp)
-                    .heightIn(max = 168.dp)
+                    .heightIn(max = 210.dp)
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -452,7 +453,7 @@ private fun DockRail(
                 if (quickApps.isEmpty()) {
                     Surface(
                         onClick = onOpenManager,
-                        modifier = Modifier.size(42.dp),
+                        modifier = Modifier.size(48.dp),
                         shape = MaterialShapes.Cookie4Sided.toShape(),
                         color = scheme.tertiaryContainer
                     ) {
@@ -506,17 +507,17 @@ private fun DockRailNavItem(
         label = "railLabelTint"
     )
     val corner by animateDpAsState(
-        targetValue = if (selected) 19.dp else 11.dp,
+        targetValue = if (selected) 20.dp else 12.dp,
         animationSpec = motion.defaultSpatialSpec(),
         label = "railPillCorner"
     )
     val indicatorWidth by animateDpAsState(
-        targetValue = if (selected) 42.dp else 36.dp,
+        targetValue = if (selected) 52.dp else 46.dp,
         animationSpec = motion.defaultSpatialSpec(),
         label = "railPillWidth"
     )
     val indicatorHeight by animateDpAsState(
-        targetValue = if (selected) 30.dp else 26.dp,
+        targetValue = if (selected) 36.dp else 32.dp,
         animationSpec = motion.defaultSpatialSpec(),
         label = "railPillHeight"
     )
@@ -542,12 +543,12 @@ private fun DockRailNavItem(
                 imageVector = icon,
                 contentDescription = label,
                 tint = iconTint,
-                modifier = Modifier.size(if (selected) 18.dp else 16.dp)
+                modifier = Modifier.size(if (selected) 22.dp else 20.dp)
             )
         }
         Text(
             text = label,
-            fontSize = 8.sp,
+            fontSize = 9.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
             color = labelTint,
             maxLines = 1,
@@ -565,7 +566,7 @@ private fun DockRailAppIcon(
     val icon = rememberAppIcon(app.packageName)
     Surface(
         onClick = onClick,
-        modifier = Modifier.size(42.dp),
+        modifier = Modifier.size(48.dp),
         shape = MaterialShapes.Cookie4Sided.toShape(),
         color = scheme.surfaceContainerHighest.copy(alpha = 0.9f)
     ) {
@@ -578,7 +579,7 @@ private fun DockRailAppIcon(
                     bitmap = icon,
                     contentDescription = app.label,
                     modifier = Modifier
-                        .size(27.dp)
+                        .size(31.dp)
                         .clip(CircleShape)
                 )
             } else {
@@ -609,7 +610,7 @@ private fun DeckCard(
 
     Box(
         modifier = Modifier
-            .width(312.dp)
+            .width(354.dp)
             .fillMaxHeight()
             .shadow(12.dp, shape)
             .clip(shape)
@@ -621,7 +622,6 @@ private fun DeckCard(
                     )
                 )
             )
-            .border(1.dp, scheme.outlineVariant.copy(alpha = 0.38f * deckOpacity), shape)
     ) {
         if (selectedTab == 0) {
             DashboardDeckContent(
