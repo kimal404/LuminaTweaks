@@ -1303,6 +1303,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             showProfileWidget = widgets.showProfile,
             showMusicWidget = widgets.showMusic,
             showRefreshRateWidget = widgets.showRefreshRate,
+            showKeepScreenOnWidget = widgets.showKeepScreenOn,
             showSlidersWidget = widgets.showSliders,
             widgetOrder = widgets.order
         )
