@@ -1259,11 +1259,12 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         }
         commitBlock()
 
+        val pkgForLabel = bestPkg
         val resolvedArtist = if (bestArtist.isNotBlank()) {
             bestArtist
-        } else if (!bestPkg.isNullOrBlank()) {
+        } else if (!pkgForLabel.isNullOrBlank()) {
             runCatching {
-                packageManager.getApplicationLabel(packageManager.getApplicationInfo(bestPkg, 0)).toString()
+                packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkgForLabel, 0)).toString()
             }.getOrDefault("")
         } else {
             ""

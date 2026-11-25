@@ -470,6 +470,10 @@ private fun GameDeckWorkspace(
                 onBrightnessChanged = onBrightnessChanged,
                 onVolumeChanged = onVolumeChanged,
                 onToggleMute = onToggleMute,
+                onMusicPlayPause = onMusicPlayPause,
+                onMusicNext = onMusicNext,
+                onMusicPrevious = onMusicPrevious,
+                onToggleDashboardWidget = onToggleDashboardWidget,
                 onToggleDnd = onToggleDnd,
                 onToggleAutoBrightnessLock = onToggleAutoBrightnessLock,
                 onToggleRotationLock = onToggleRotationLock,
@@ -483,6 +487,9 @@ private fun GameDeckWorkspace(
                 cardWidth = cardWidth,
                 pagerState = pagerState,
                 showAppPicker = showAppPicker,
+                showWidgetEditor = showWidgetEditor,
+                onOpenWidgetEditor = { showWidgetEditor = true },
+                onCloseWidgetEditor = { showWidgetEditor = false },
                 onCloseAppPicker = { showAppPicker = false },
                 onToggleQuickApp = onToggleQuickApp,
                 onProfileSelected = onProfileSelected,
@@ -491,6 +498,10 @@ private fun GameDeckWorkspace(
                 onBrightnessChanged = onBrightnessChanged,
                 onVolumeChanged = onVolumeChanged,
                 onToggleMute = onToggleMute,
+                onMusicPlayPause = onMusicPlayPause,
+                onMusicNext = onMusicNext,
+                onMusicPrevious = onMusicPrevious,
+                onToggleDashboardWidget = onToggleDashboardWidget,
                 onToggleDnd = onToggleDnd,
                 onToggleAutoBrightnessLock = onToggleAutoBrightnessLock,
                 onToggleRotationLock = onToggleRotationLock,
@@ -506,7 +517,10 @@ private fun GameDeckWorkspace(
                 quickApps = state.quickApps,
                 onSelectTab = handleTabSelect,
                 onQuickAppClick = onQuickAppClick,
-                onAddAppClick = { showAppPicker = !showAppPicker }
+                onAddAppClick = {
+                    showWidgetEditor = false
+                    showAppPicker = !showAppPicker
+                }
             )
         }
     }
