@@ -28,6 +28,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -1459,22 +1460,42 @@ private fun FullScreenWidgetEditorOverlay(
                             activeItems.forEach { item ->
                                 val isDragging = draggedKey == item.key
                                 val dragScale by animateFloatAsState(
-                                    targetValue = if (isDragging) 1.02f else 1f,
+                                    targetValue = if (isDragging) 0.99f else 1f,
                                     animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMedium),
                                     label = "fullEditorDragScale"
                                 )
                                 val dragElevation by animateDpAsState(
-                                    targetValue = if (isDragging) 12.dp else 0.dp,
+                                    targetValue = if (isDragging) 10.dp else 0.dp,
                                     animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMedium),
                                     label = "fullEditorDragElev"
                                 )
+                                val onReorderDelta: (Float) -> Unit = { deltaY ->
+                                    dragOffsetY += deltaY
+                                    val listVis = currentActiveItems
+                                    val listGlob = currentOrderedKeys
+                                    val curVisIdx = listVis.indexOfFirst { it.key == item.key }
+                                    val curGlobIdx = listGlob.indexOf(item.key)
+                                    if (dragOffsetY > stepThresholdPx && curVisIdx in 0 until listVis.lastIndex) {
+                                        val targetGlobIdx = listGlob.indexOf(listVis[curVisIdx + 1].key)
+                                        if (curGlobIdx >= 0 && targetGlobIdx >= 0) {
+                                            onMoveWidget(curGlobIdx, targetGlobIdx)
+                                            dragOffsetY -= stepThresholdPx
+                                        }
+                                    } else if (dragOffsetY < -stepThresholdPx && curVisIdx > 0) {
+                                        val targetGlobIdx = listGlob.indexOf(listVis[curVisIdx - 1].key)
+                                        if (curGlobIdx >= 0 && targetGlobIdx >= 0) {
+                                            onMoveWidget(curGlobIdx, targetGlobIdx)
+                                            dragOffsetY += stepThresholdPx
+                                        }
+                                    }
+                                }
 
                                 Surface(
                                     shape = RoundedCornerShape(20.dp),
-                                    color = scheme.surfaceContainerHigh,
+                                    color = if (isDragging) scheme.surfaceContainerHighest else scheme.surfaceContainerHigh,
                                     shadowElevation = dragElevation,
                                     border = BorderStroke(
-                                        width = 1.dp,
+                                        width = if (isDragging) 1.5.dp else 1.dp,
                                         color = if (isDragging) scheme.primary else scheme.outlineVariant.copy(alpha = 0.35f)
                                     ),
                                     modifier = Modifier
@@ -1486,7 +1507,7 @@ private fun FullScreenWidgetEditorOverlay(
                                             scaleY = dragScale
                                         }
                                         .pointerInput(item.key) {
-                                            detectVerticalDragGestures(
+                                            detectDragGesturesAfterLongPress(
                                                 onDragStart = {
                                                     draggedKey = item.key
                                                     dragOffsetY = 0f
@@ -1499,26 +1520,9 @@ private fun FullScreenWidgetEditorOverlay(
                                                     draggedKey = null
                                                     dragOffsetY = 0f
                                                 },
-                                                onVerticalDrag = { change, dragAmount ->
+                                                onDrag = { change, dragAmount ->
                                                     change.consume()
-                                                    dragOffsetY += dragAmount
-                                                    val listVis = currentActiveItems
-                                                    val listGlob = currentOrderedKeys
-                                                    val curVisIdx = listVis.indexOfFirst { it.key == item.key }
-                                                    val curGlobIdx = listGlob.indexOf(item.key)
-                                                    if (dragOffsetY > stepThresholdPx && curVisIdx in 0 until listVis.lastIndex) {
-                                                        val targetGlobIdx = listGlob.indexOf(listVis[curVisIdx + 1].key)
-                                                        if (curGlobIdx >= 0 && targetGlobIdx >= 0) {
-                                                            onMoveWidget(curGlobIdx, targetGlobIdx)
-                                                            dragOffsetY -= stepThresholdPx
-                                                        }
-                                                    } else if (dragOffsetY < -stepThresholdPx && curVisIdx > 0) {
-                                                        val targetGlobIdx = listGlob.indexOf(listVis[curVisIdx - 1].key)
-                                                        if (curGlobIdx >= 0 && targetGlobIdx >= 0) {
-                                                            onMoveWidget(curGlobIdx, targetGlobIdx)
-                                                            dragOffsetY += stepThresholdPx
-                                                        }
-                                                    }
+                                                    onReorderDelta(dragAmount.y)
                                                 }
                                             )
                                         }
@@ -1532,15 +1536,49 @@ private fun FullScreenWidgetEditorOverlay(
                                         ) {
                                             Row(
                                                 verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                                 modifier = Modifier.padding(end = 30.dp)
                                             ) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.DragHandle,
-                                                    contentDescription = "Geser urutan",
-                                                    tint = if (isDragging) scheme.primary else scheme.onSurfaceVariant,
-                                                    modifier = Modifier.size(16.dp)
-                                                )
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(28.dp)
+                                                        .clip(RoundedCornerShape(8.dp))
+                                                        .background(
+                                                            if (isDragging) {
+                                                                scheme.primary.copy(alpha = 0.2f)
+                                                            } else {
+                                                                scheme.surfaceContainer
+                                                            }
+                                                        )
+                                                        .pointerInput(item.key) {
+                                                            detectVerticalDragGestures(
+                                                                onDragStart = {
+                                                                    draggedKey = item.key
+                                                                    dragOffsetY = 0f
+                                                                },
+                                                                onDragEnd = {
+                                                                    draggedKey = null
+                                                                    dragOffsetY = 0f
+                                                                },
+                                                                onDragCancel = {
+                                                                    draggedKey = null
+                                                                    dragOffsetY = 0f
+                                                                },
+                                                                onVerticalDrag = { change, dragAmount ->
+                                                                    change.consume()
+                                                                    onReorderDelta(dragAmount)
+                                                                }
+                                                            )
+                                                        },
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Rounded.DragHandle,
+                                                        contentDescription = "Geser urutan",
+                                                        tint = if (isDragging) scheme.primary else scheme.onSurfaceVariant,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
                                                 Text(
                                                     text = item.title,
                                                     fontSize = 12.sp,
