@@ -11,7 +11,6 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -57,6 +56,7 @@ import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Thermostat
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
@@ -417,8 +417,7 @@ private fun DockRail(
             .fillMaxHeight()
             .shadow(14.dp, CircleShape),
         shape = CircleShape,
-        color = scheme.surfaceContainerLow.copy(alpha = deckOpacity),
-        border = BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.22f))
+        color = scheme.surfaceContainerLow.copy(alpha = deckOpacity)
     ) {
         Column(
             modifier = Modifier
@@ -630,8 +629,7 @@ private fun DeckCard(
             .fillMaxHeight()
             .shadow(14.dp, shape),
         shape = shape,
-        color = scheme.surfaceContainerLow.copy(alpha = deckOpacity),
-        border = BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.22f))
+        color = scheme.surfaceContainerLow.copy(alpha = deckOpacity)
     ) {
         if (selectedTab == 0) {
             DashboardDeckContent(
@@ -695,12 +693,12 @@ private fun DashboardDeckContent(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(9.dp),
-        verticalArrangement = Arrangement.spacedBy(7.dp)
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         // Card 1: Live Telemetry + Expandable Refresh Rate + Twin CPU/GPU Radial Gauges
         Surface(
-            shape = RoundedCornerShape(22.dp),
+            shape = RoundedCornerShape(24.dp),
             color = scheme.surfaceContainer,
             modifier = Modifier
                 .fillMaxWidth()
@@ -714,8 +712,8 @@ private fun DashboardDeckContent(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 11.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -725,34 +723,34 @@ private fun DashboardDeckContent(
                         imageVector = Icons.Rounded.Speed,
                         contentDescription = null,
                         tint = scheme.primary,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(20.dp)
                     )
-                    Spacer(modifier = Modifier.width(5.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = if (fps > 0) fps.toString() else "--",
-                        fontSize = 20.sp,
+                        fontSize = 24.sp,
                         fontWeight = FontWeight.Black,
                         color = fpsColor,
                         maxLines = 1,
                         softWrap = false
                     )
-                    Spacer(modifier = Modifier.width(3.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "FPS",
-                        fontSize = 9.5.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = scheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 3.dp),
+                        modifier = Modifier.padding(top = 4.dp),
                         maxLines = 1,
                         softWrap = false
                     )
                     if (fps > 0 && state.frametimeMs > 0f) {
                         Text(
                             text = String.format(Locale.US, " · %.1f ms", state.frametimeMs),
-                            fontSize = 9.sp,
+                            fontSize = 10.5.sp,
                             fontWeight = FontWeight.Medium,
                             color = scheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 3.dp),
+                            modifier = Modifier.padding(top = 4.dp),
                             maxLines = 1,
                             softWrap = false
                         )
@@ -764,12 +762,12 @@ private fun DashboardDeckContent(
                         icon = Icons.Rounded.Thermostat,
                         label = state.tempLabel
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     MetricChip(
                         icon = Icons.Rounded.BatteryFull,
                         label = "${state.batteryPercent}%"
                     )
-                    Spacer(modifier = Modifier.width(7.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     Surface(
                         onClick = { rrExpanded = !rrExpanded },
@@ -778,13 +776,13 @@ private fun DashboardDeckContent(
                         contentColor = scheme.onSecondaryContainer
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.5.dp),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
                             Text(
                                 text = if (state.selectedRrHz == null) "${state.targetHz} Hz" else "${state.selectedRrHz} Hz",
-                                fontSize = 9.sp,
+                                fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
                                 softWrap = false
@@ -793,7 +791,7 @@ private fun DashboardDeckContent(
                                 imageVector = Icons.Rounded.ExpandMore,
                                 contentDescription = "Refresh rate",
                                 modifier = Modifier
-                                    .size(12.dp)
+                                    .size(14.dp)
                                     .rotate(rrChevronRotation)
                             )
                         }
@@ -805,11 +803,11 @@ private fun DashboardDeckContent(
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
                             text = "Refresh rate",
-                            fontSize = 9.5.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = scheme.onSurfaceVariant,
                             maxLines = 1,
@@ -817,8 +815,8 @@ private fun DashboardDeckContent(
                         )
                         FlowRow(
                             modifier = Modifier.weight(1f),
-                            horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.End),
-                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             rrOptions.forEach { hz ->
                                 val isSelected = state.selectedRrHz == hz
@@ -843,8 +841,8 @@ private fun DashboardDeckContent(
                                 ) {
                                     Text(
                                         text = hz?.let { "${it}Hz" } ?: "Auto",
-                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                                        fontSize = 9.5.sp,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                        fontSize = 10.5.sp,
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                         maxLines = 1,
                                         softWrap = false
@@ -857,7 +855,7 @@ private fun DashboardDeckContent(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     ExpressiveRadialGauge(
                         percent = state.cpuPercent,
@@ -867,7 +865,7 @@ private fun DashboardDeckContent(
                         badgeContentColor = scheme.onPrimaryContainer,
                         modifier = Modifier
                             .weight(1f)
-                            .height(86.dp)
+                            .height(114.dp)
                     )
                     ExpressiveRadialGauge(
                         percent = state.gpuPercent,
@@ -877,17 +875,24 @@ private fun DashboardDeckContent(
                         badgeContentColor = scheme.onTertiaryContainer,
                         modifier = Modifier
                             .weight(1f)
-                            .height(86.dp)
+                            .height(114.dp)
                     )
                 }
             }
         }
 
-        // Card 2: [Auto][Manual] Tabbed Profile Selector + Brightness & Sound MD3E Sliders
-        ControlDeckCard(
+        // Card 2: Profile Selector with Single Auto/Manual Toggle Pill
+        ProfileSelectorCard(
             state = state,
             onProfileSelected = onProfileSelected,
-            onSetAutoMode = onSetAutoMode,
+            onToggleAutoMode = { onSetAutoMode(!state.profileAutoMode) }
+        )
+
+        // Card 3: Full-Width Brightness & Volume MD3E Sliders (Below Profile via Scroll)
+        BrightnessVolumeCard(
+            brightnessPercent = state.brightnessPercent,
+            volumePercent = state.volumePercent,
+            volumeMuted = state.volumeMuted,
             onBrightnessChanged = onBrightnessChanged,
             onVolumeChanged = onVolumeChanged,
             onToggleMute = onToggleMute
@@ -913,14 +918,14 @@ private fun ExpressiveRadialGauge(
     )
 
     Surface(
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(22.dp),
         color = scheme.surfaceContainerHigh,
         modifier = modifier
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(6.dp),
+                .padding(8.dp),
             contentAlignment = Alignment.Center
         ) {
             val inactiveStrokeColor = scheme.surfaceContainerHighest
@@ -932,9 +937,9 @@ private fun ExpressiveRadialGauge(
                 val s = min(scaleX, scaleY)
 
                 val cx = size.width / 2f
-                val cy = size.height * 0.55f
-                val radius = 53f * s
-                val strokeW = 11.5f * s
+                val cy = size.height * 0.54f
+                val radius = 52f * s
+                val strokeW = 12f * s
 
                 val totalSweepLen = 217.82f
                 val gapLength = 14f
@@ -980,53 +985,53 @@ private fun ExpressiveRadialGauge(
                 }
 
                 rotate(degrees = pillAngle, pivot = Offset(cx, cy)) {
-                    val pillW = 4.8f * s
-                    val pillH = 13.5f * s
+                    val pillW = 5f * s
+                    val pillH = 14f * s
                     drawRoundRect(
                         color = activeColor,
                         topLeft = Offset(cx - pillW / 2f, cy - radius - pillH / 2f),
                         size = Size(pillW, pillH),
-                        cornerRadius = CornerRadius(2.4f * s, 2.4f * s)
+                        cornerRadius = CornerRadius(2.5f * s, 2.5f * s)
                     )
                 }
             }
 
             Column(
-                modifier = Modifier.padding(top = 10.dp),
+                modifier = Modifier.padding(top = 14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
                         text = "$safePercent",
-                        fontSize = 16.sp,
+                        fontSize = 21.sp,
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = (-0.4).sp,
+                        letterSpacing = (-0.5).sp,
                         color = scheme.onSurface,
                         maxLines = 1,
                         softWrap = false
                     )
                     Text(
                         text = "%",
-                        fontSize = 9.sp,
+                        fontSize = 10.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = activeColor,
-                        modifier = Modifier.padding(start = 1.dp, bottom = 1.5.dp),
+                        modifier = Modifier.padding(start = 1.5.dp, bottom = 2.5.dp),
                         maxLines = 1,
                         softWrap = false
                     )
                 }
-                Spacer(modifier = Modifier.height(1.5.dp))
+                Spacer(modifier = Modifier.height(2.5.dp))
                 Surface(
                     shape = CircleShape,
                     color = badgeContainerColor
                 ) {
                     Text(
                         text = label,
-                        fontSize = 8.sp,
+                        fontSize = 9.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = badgeContentColor,
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 1.dp),
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 2.dp),
                         maxLines = 1,
                         softWrap = false
                     )
@@ -1037,50 +1042,45 @@ private fun ExpressiveRadialGauge(
 }
 
 @Composable
-private fun AutoManualModeTabs(
+private fun SingleAutoManualButton(
     autoMode: Boolean,
-    onSelectMode: (Boolean) -> Unit
+    onToggle: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
+    val pillBg by animateColorAsState(
+        targetValue = if (autoMode) scheme.primary else scheme.tertiaryContainer,
+        animationSpec = tween(durationMillis = 200),
+        label = "singleModePillBg"
+    )
+    val pillText by animateColorAsState(
+        targetValue = if (autoMode) scheme.onPrimary else scheme.onTertiaryContainer,
+        animationSpec = tween(durationMillis = 200),
+        label = "singleModePillText"
+    )
+
     Surface(
+        onClick = onToggle,
         shape = CircleShape,
-        color = scheme.surfaceContainerHigh
+        color = pillBg,
+        contentColor = pillText
     ) {
         Row(
-            modifier = Modifier.padding(2.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
         ) {
-            listOf(true to "Auto", false to "Manual").forEach { (isAutoTab, label) ->
-                val selected = autoMode == isAutoTab
-                val tabBg by animateColorAsState(
-                    targetValue = if (selected) scheme.primary else Color.Transparent,
-                    animationSpec = tween(durationMillis = 180),
-                    label = "modeTabBg"
-                )
-                val tabText by animateColorAsState(
-                    targetValue = if (selected) scheme.onPrimary else scheme.onSurfaceVariant,
-                    animationSpec = tween(durationMillis = 180),
-                    label = "modeTabText"
-                )
-                Box(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(tabBg)
-                        .clickable { onSelectMode(isAutoTab) }
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = label,
-                        fontSize = 9.5.sp,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                        color = tabText,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                }
-            }
+            Icon(
+                imageVector = Icons.Rounded.Tune,
+                contentDescription = null,
+                modifier = Modifier.size(14.dp)
+            )
+            Text(
+                text = if (autoMode) "Auto" else "Manual",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                softWrap = false
+            )
         }
     }
 }
@@ -1098,7 +1098,7 @@ private fun ExpressiveToggleTile(
     val isPressed by interactionSource.collectIsPressedAsState()
 
     val cornerRadius by animateDpAsState(
-        targetValue = if (active) 20.dp else 13.dp,
+        targetValue = if (active) 22.dp else 15.dp,
         animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow),
         label = "toggleTileCorner"
     )
@@ -1152,7 +1152,107 @@ private fun ExpressiveToggleTile(
 }
 
 @Composable
-private fun M3ExpressiveCompactSlider(
+private fun ProfileSelectorCard(
+    state: GameDeckUiState,
+    onProfileSelected: (String?) -> Unit,
+    onToggleAutoMode: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val autoMode = state.profileAutoMode
+
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = scheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Profile",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = scheme.onSurface,
+                    maxLines = 1,
+                    softWrap = false
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Surface(
+                    shape = CircleShape,
+                    color = scheme.surfaceContainerHigh
+                ) {
+                    Text(
+                        text = state.profile,
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = scheme.primary,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                SingleAutoManualButton(
+                    autoMode = autoMode,
+                    onToggle = onToggleAutoMode
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                deckProfileOptions.forEach { option ->
+                    val manualSelected = !autoMode && deckOverrideSelected(state.profileOverride, option)
+                    val autoActive = autoMode && state.profile.trim().equals(option.fullLabel, ignoreCase = true)
+                    val isHighlighted = manualSelected || autoActive
+
+                    ExpressiveToggleTile(
+                        active = isHighlighted,
+                        dimmed = autoMode,
+                        onClick = {
+                            if (!autoMode) {
+                                onProfileSelected(option.command)
+                            } else {
+                                onProfileSelected(null)
+                            }
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = option.shortLabel,
+                                fontSize = 11.5.sp,
+                                fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.SemiBold,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun M3ExpressiveFullSlider(
     value: Int,
     min: Int,
     max: Int,
@@ -1164,14 +1264,14 @@ private fun M3ExpressiveCompactSlider(
     var isDragging by remember { mutableStateOf(false) }
 
     val handleWidth by animateDpAsState(
-        targetValue = if (isDragging) 8.dp else 5.dp,
+        targetValue = if (isDragging) 10.dp else 6.dp,
         animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium),
-        label = "miniSliderHandleW"
+        label = "fullSliderHandleW"
     )
     val handleScaleY by animateFloatAsState(
-        targetValue = if (isDragging) 1.15f else 1f,
+        targetValue = if (isDragging) 1.18f else 1f,
         animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium),
-        label = "miniSliderHandleScaleY"
+        label = "fullSliderHandleScaleY"
     )
 
     val span = (max - min).coerceAtLeast(1)
@@ -1186,7 +1286,7 @@ private fun M3ExpressiveCompactSlider(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .height(26.dp)
+            .height(34.dp)
             .pointerInput(min, max) {
                 detectTapGestures(
                     onPress = { offset ->
@@ -1226,7 +1326,7 @@ private fun M3ExpressiveCompactSlider(
         contentAlignment = Alignment.CenterStart
     ) {
         val totalWidth = maxWidth
-        val reservedForHandle = handleWidth + 6.dp
+        val reservedForHandle = handleWidth + 8.dp
         val trackAvailable = (totalWidth - reservedForHandle).coerceAtLeast(0.dp)
         val activeWidth = trackAvailable * fraction
         val inactiveWidth = trackAvailable * (1f - fraction)
@@ -1238,13 +1338,13 @@ private fun M3ExpressiveCompactSlider(
             Box(
                 modifier = Modifier
                     .width(activeWidth)
-                    .height(14.dp)
+                    .height(18.dp)
                     .clip(
                         RoundedCornerShape(
-                            topStart = 9.dp,
-                            bottomStart = 9.dp,
-                            topEnd = 3.dp,
-                            bottomEnd = 3.dp
+                            topStart = 11.dp,
+                            bottomStart = 11.dp,
+                            topEnd = 4.dp,
+                            bottomEnd = 4.dp
                         )
                     )
                     .background(accentColor)
@@ -1252,9 +1352,9 @@ private fun M3ExpressiveCompactSlider(
 
             Box(
                 modifier = Modifier
-                    .padding(horizontal = 3.dp)
+                    .padding(horizontal = 4.dp)
                     .width(handleWidth)
-                    .height(22.dp)
+                    .height(30.dp)
                     .graphicsLayer { scaleY = handleScaleY }
                     .clip(CircleShape)
                     .background(accentColor)
@@ -1263,23 +1363,23 @@ private fun M3ExpressiveCompactSlider(
             Box(
                 modifier = Modifier
                     .width(inactiveWidth)
-                    .height(14.dp)
+                    .height(18.dp)
                     .clip(
                         RoundedCornerShape(
-                            topStart = 3.dp,
-                            bottomStart = 3.dp,
-                            topEnd = 9.dp,
-                            bottomEnd = 9.dp
+                            topStart = 4.dp,
+                            bottomStart = 4.dp,
+                            topEnd = 11.dp,
+                            bottomEnd = 11.dp
                         )
                     )
                     .background(scheme.surfaceContainerHighest),
                 contentAlignment = Alignment.CenterEnd
             ) {
-                if (inactiveWidth >= 9.dp) {
+                if (inactiveWidth >= 10.dp) {
                     Box(
                         modifier = Modifier
-                            .padding(end = 5.dp)
-                            .size(3.5.dp)
+                            .padding(end = 6.dp)
+                            .size(4.dp)
                             .clip(CircleShape)
                             .background(scheme.onSurfaceVariant.copy(alpha = 0.65f))
                     )
@@ -1290,205 +1390,112 @@ private fun M3ExpressiveCompactSlider(
 }
 
 @Composable
-private fun ControlDeckCard(
-    state: GameDeckUiState,
-    onProfileSelected: (String?) -> Unit,
-    onSetAutoMode: (Boolean) -> Unit,
+private fun BrightnessVolumeCard(
+    brightnessPercent: Int,
+    volumePercent: Int,
+    volumeMuted: Boolean,
     onBrightnessChanged: (Int, Boolean) -> Unit,
     onVolumeChanged: (Int) -> Unit,
     onToggleMute: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
-    val autoMode = state.profileAutoMode
+    val effectiveVol = if (volumeMuted) 0 else volumePercent
 
     Surface(
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(24.dp),
         color = scheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 11.dp, vertical = 9.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Row 1: Profile Header + [Auto][Manual] Segmented Tab
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Profile",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = scheme.onSurface,
-                    maxLines = 1,
-                    softWrap = false
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Surface(
-                    shape = CircleShape,
-                    color = scheme.surfaceContainerHigh
+            // Full-Width Brightness Slider
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Icon(
+                        imageVector = Icons.Rounded.BrightnessMedium,
+                        contentDescription = "Brightness",
+                        tint = scheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = state.profile,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                        fontSize = 9.sp,
+                        text = "Brightness",
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
+                        color = scheme.onSurface,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    Text(
+                        text = "$brightnessPercent%",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
                         color = scheme.primary,
                         maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Ellipsis
+                        softWrap = false
                     )
                 }
-                Spacer(modifier = Modifier.weight(1f))
-                AutoManualModeTabs(
-                    autoMode = autoMode,
-                    onSelectMode = onSetAutoMode
+                M3ExpressiveFullSlider(
+                    value = brightnessPercent,
+                    min = 5,
+                    max = 100,
+                    accentColor = scheme.primary,
+                    onValueChange = { pct, commit -> onBrightnessChanged(pct, commit) }
                 )
             }
 
-            // Row 2: 4 Compact Icon-Free Profile Tiles
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                deckProfileOptions.forEach { option ->
-                    val manualSelected = !autoMode && deckOverrideSelected(state.profileOverride, option)
-                    val autoActive = autoMode && state.profile.trim().equals(option.fullLabel, ignoreCase = true)
-                    val isHighlighted = manualSelected || autoActive
-
-                    ExpressiveToggleTile(
-                        active = isHighlighted,
-                        dimmed = autoMode,
-                        onClick = {
-                            if (!autoMode) {
-                                onProfileSelected(option.command)
-                            } else {
-                                onProfileSelected(null)
-                            }
+            // Full-Width Volume Slider
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = if (volumeMuted || effectiveVol == 0) {
+                            Icons.AutoMirrored.Rounded.VolumeOff
+                        } else {
+                            Icons.AutoMirrored.Rounded.VolumeUp
                         },
+                        contentDescription = "Suara",
+                        tint = if (volumeMuted || effectiveVol == 0) scheme.error else scheme.tertiary,
                         modifier = Modifier
-                            .weight(1f)
-                            .height(36.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 4.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = option.shortLabel,
-                                fontSize = 10.5.sp,
-                                fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.Medium,
-                                maxLines = 1,
-                                softWrap = false,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Row 3: Brightness + Sound MD3E Sliders
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Brightness Slider Column
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.BrightnessMedium,
-                            contentDescription = "Brightness",
-                            tint = scheme.primary,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Brightness",
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = scheme.onSurfaceVariant,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text(
-                            text = "${state.brightnessPercent}%",
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = scheme.primary,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
-                    M3ExpressiveCompactSlider(
-                        value = state.brightnessPercent,
-                        min = 5,
-                        max = 100,
-                        accentColor = scheme.primary,
-                        onValueChange = { pct, commit -> onBrightnessChanged(pct, commit) }
+                            .size(18.dp)
+                            .clickable(onClick = onToggleMute)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Suara",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = scheme.onSurface,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    Text(
+                        text = "$effectiveVol%",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (volumeMuted || effectiveVol == 0) scheme.error else scheme.tertiary,
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
-
-                // Sound / Media Volume Slider Column
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    val effectiveVol = if (state.volumeMuted) 0 else state.volumePercent
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = if (state.volumeMuted || effectiveVol == 0) {
-                                Icons.AutoMirrored.Rounded.VolumeOff
-                            } else {
-                                Icons.AutoMirrored.Rounded.VolumeUp
-                            },
-                            contentDescription = "Suara",
-                            tint = if (state.volumeMuted || effectiveVol == 0) scheme.error else scheme.tertiary,
-                            modifier = Modifier
-                                .size(13.dp)
-                                .clickable(onClick = onToggleMute)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Suara",
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = scheme.onSurfaceVariant,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text(
-                            text = "$effectiveVol%",
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (state.volumeMuted || effectiveVol == 0) scheme.error else scheme.tertiary,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
-                    M3ExpressiveCompactSlider(
-                        value = effectiveVol,
-                        min = 0,
-                        max = 100,
-                        accentColor = scheme.tertiary,
-                        onValueChange = { pct, _ -> onVolumeChanged(pct) }
-                    )
-                }
+                M3ExpressiveFullSlider(
+                    value = effectiveVol,
+                    min = 0,
+                    max = 100,
+                    accentColor = scheme.tertiary,
+                    onValueChange = { pct, _ -> onVolumeChanged(pct) }
+                )
             }
         }
     }
@@ -1507,7 +1514,7 @@ private fun ExpressiveSwitch(
         label = "expressiveSwitchTrack"
     )
     val thumbSize by animateDpAsState(
-        targetValue = if (checked) 20.dp else 14.dp,
+        targetValue = if (checked) 22.dp else 15.dp,
         animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow),
         label = "expressiveSwitchThumbSize"
     )
@@ -1524,7 +1531,7 @@ private fun ExpressiveSwitch(
 
     Box(
         modifier = modifier
-            .requiredSize(width = 44.dp, height = 26.dp)
+            .requiredSize(width = 48.dp, height = 28.dp)
             .clip(CircleShape)
             .background(trackColor)
             .clickable(
@@ -1548,7 +1555,7 @@ private fun ExpressiveSwitch(
                     imageVector = Icons.Rounded.Check,
                     contentDescription = null,
                     tint = scheme.primary,
-                    modifier = Modifier.size(12.dp)
+                    modifier = Modifier.size(13.dp)
                 )
             }
         }
@@ -1563,17 +1570,17 @@ private fun MetricChip(
     val scheme = MaterialTheme.colorScheme
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp)
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
             tint = scheme.primary,
-            modifier = Modifier.size(12.dp)
+            modifier = Modifier.size(14.dp)
         )
         Text(
             text = label,
-            fontSize = 9.5.sp,
+            fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
             color = scheme.onSurfaceVariant,
             maxLines = 1,
@@ -1594,23 +1601,23 @@ private fun ToolsDeckContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Surface(
-            shape = RoundedCornerShape(22.dp),
+            shape = RoundedCornerShape(24.dp),
             color = scheme.surfaceContainer,
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(12.dp),
+                    .padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
                     text = "Tools",
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = scheme.onSurface,
                     maxLines = 1
@@ -1625,7 +1632,7 @@ private fun ToolsDeckContent(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -1633,17 +1640,17 @@ private fun ToolsDeckContent(
                             contentDescription = null,
                             modifier = Modifier.size(20.dp)
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Jangan Ganggu",
-                                fontSize = 12.sp,
+                                fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1
                             )
                             Text(
                                 text = dndText,
-                                fontSize = 9.5.sp,
+                                fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Medium,
                                 maxLines = 1
                             )
@@ -1663,18 +1670,18 @@ private fun ToolsDeckContent(
             onClick = onOpenManager,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(44.dp),
+                .height(46.dp),
             shapes = ButtonDefaults.shapes()
         ) {
             Icon(
                 imageVector = Icons.Rounded.Apps,
                 contentDescription = null,
-                modifier = Modifier.size(17.dp)
+                modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "Buka Lumina Manager",
-                fontSize = 11.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
