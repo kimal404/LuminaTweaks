@@ -126,7 +126,6 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
-import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -559,7 +558,7 @@ private fun DockRail(
             .fillMaxHeight()
             .shadow(14.dp, CircleShape),
         shape = CircleShape,
-        color = scheme.surfaceContainerLow.copy(alpha = deckOpacity)
+        color = scheme.surfaceContainerLow
     ) {
         Column(
             modifier = Modifier
@@ -810,7 +809,7 @@ private fun DeckCard(
             .fillMaxHeight()
             .shadow(14.dp, shape),
         shape = shape,
-        color = scheme.surfaceContainerLow.copy(alpha = deckOpacity)
+        color = scheme.surfaceContainerLow
     ) {
         val modalMode = when {
             showAppPicker -> 1
@@ -1214,14 +1213,13 @@ private fun BatteryCapsulePill(
         animationSpec = tween(durationMillis = 220),
         label = "batteryPillColor"
     )
-    val textOnFill = if (isLow) Color.White else Color(0xFF101318)
     val textMeasurer = rememberTextMeasurer()
     val pillTextStyle = remember {
         TextStyle(
-            fontSize = 10.5.sp,
-            lineHeight = 10.5.sp,
+            fontSize = 8.5.sp,
+            lineHeight = 8.5.sp,
             fontWeight = FontWeight.Black,
-            letterSpacing = (-0.4).sp,
+            letterSpacing = (-0.3).sp,
             platformStyle = PlatformTextStyle(includeFontPadding = false)
         )
     }
@@ -1232,12 +1230,12 @@ private fun BatteryCapsulePill(
 
     Canvas(
         modifier = Modifier
-            .width(if (isCharging) 36.dp else 30.dp)
-            .height(15.dp)
+            .width(if (isCharging) 29.dp else 24.dp)
+            .height(12.dp)
     ) {
-        val capsuleW = 30.dp.toPx()
+        val capsuleW = 24.dp.toPx()
         val capsuleH = size.height
-        val radiusPx = 4.5.dp.toPx()
+        val radiusPx = 3.8.dp.toPx()
         val capsulePath = Path().apply {
             addRoundRect(
                 RoundRect(
@@ -1252,35 +1250,27 @@ private fun BatteryCapsulePill(
 
         clipPath(capsulePath) {
             drawRect(
-                color = Color(0xFF6B7078).copy(alpha = 0.72f),
+                color = Color(0xFF9CA3AF),
                 size = Size(capsuleW, capsuleH)
             )
-            val fillWidth = capsuleW * fillFraction
             drawRect(
                 color = fillColor,
-                size = Size(fillWidth, capsuleH)
+                size = Size(capsuleW * fillFraction, capsuleH)
             )
             val tx = (capsuleW - textLayout.size.width) / 2f
             val ty = (capsuleH - textLayout.size.height) / 2f
             drawText(
                 textLayoutResult = textLayout,
-                color = Color.White,
+                color = Color(0xFF101318),
                 topLeft = Offset(tx, ty)
             )
-            clipRect(right = fillWidth) {
-                drawText(
-                    textLayoutResult = textLayout,
-                    color = textOnFill,
-                    topLeft = Offset(tx, ty)
-                )
-            }
         }
 
         if (isCharging) {
-            val bx = capsuleW - 2.2.dp.toPx()
-            val by = 1.5.dp.toPx()
-            val bw = 7.5.dp.toPx()
-            val bh = 12.dp.toPx()
+            val bx = capsuleW - 1.6.dp.toPx()
+            val by = 1.2.dp.toPx()
+            val bw = 6.dp.toPx()
+            val bh = 9.6.dp.toPx()
             val boltPath = Path().apply {
                 moveTo(bx + bw * 0.62f, by)
                 lineTo(bx, by + bh * 0.56f)
@@ -1293,7 +1283,7 @@ private fun BatteryCapsulePill(
             drawPath(
                 path = boltPath,
                 color = Color(0xFF141218),
-                style = Stroke(width = 2.2.dp.toPx(), join = StrokeJoin.Round)
+                style = Stroke(width = 1.8.dp.toPx(), join = StrokeJoin.Round)
             )
             drawPath(
                 path = boltPath,
