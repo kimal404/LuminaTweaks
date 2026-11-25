@@ -1,5 +1,7 @@
 package com.luminatweaks.gamedeck
 
+val DEFAULT_DASHBOARD_WIDGET_ORDER = listOf("telemetry", "profile", "music", "refresh_rate", "sliders")
+
 import android.content.Context
 import android.graphics.Bitmap
 
@@ -58,6 +60,7 @@ data class GameDeckUiState(
     val showRefreshRateWidget: Boolean = true,
     val showKeepScreenOnWidget: Boolean = true,
     val showSlidersWidget: Boolean = true,
+    val widgetOrder: List<String> = DEFAULT_DASHBOARD_WIDGET_ORDER,
     val keepScreenOn: Boolean = false,
     val musicTitle: String = "",
     val musicArtist: String = "",
@@ -112,7 +115,8 @@ object GameDeckPrefs {
         val showMusic: Boolean = true,
         val showRefreshRate: Boolean = true,
         val showKeepScreenOn: Boolean = true,
-        val showSliders: Boolean = true
+        val showSliders: Boolean = true,
+        val order: List<String> = DEFAULT_DASHBOARD_WIDGET_ORDER
     )
 
     fun loadWidgets(context: Context): DashboardWidgets {
@@ -123,7 +127,8 @@ object GameDeckPrefs {
             showMusic = sp.getBoolean("widget_music", true),
             showRefreshRate = sp.getBoolean("widget_refresh_rate", true),
             showKeepScreenOn = sp.getBoolean("widget_keep_screen_on", true),
-            showSliders = sp.getBoolean("widget_sliders", true)
+            showSliders = sp.getBoolean("widget_sliders", true),
+            order = normalizeWidgetOrder(sp.getString("widget_order", null))
         )
     }
 
@@ -136,7 +141,17 @@ object GameDeckPrefs {
             .putBoolean("widget_refresh_rate", widgets.showRefreshRate)
             .putBoolean("widget_keep_screen_on", widgets.showKeepScreenOn)
             .putBoolean("widget_sliders", widgets.showSliders)
+            .putString("widget_order", normalizeWidgetOrder(widgets.order.joinToString(",")).joinToString(","))
             .apply()
+    }
+
+    fun normalizeWidgetOrder(raw: String?): List<String> {
+        val parsed = raw.orEmpty()
+            .split(",")
+            .map { it.trim() }
+            .filter { it in DEFAULT_DASHBOARD_WIDGET_ORDER }
+            .distinct()
+        return parsed + DEFAULT_DASHBOARD_WIDGET_ORDER.filterNot { it in parsed }
     }
 
     fun resetWidgets(context: Context): DashboardWidgets {

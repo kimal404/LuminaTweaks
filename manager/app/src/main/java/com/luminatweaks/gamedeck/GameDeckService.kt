@@ -394,6 +394,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         showRefreshRateWidget = dashboardWidgets.showRefreshRate,
                         showKeepScreenOnWidget = dashboardWidgets.showKeepScreenOn,
                         showSlidersWidget = dashboardWidgets.showSliders,
+                        widgetOrder = dashboardWidgets.order,
                         keepScreenOn = keepScreenOnEnabled,
                         musicTitle = snapshot.musicTitle,
                         musicArtist = snapshot.musicArtist,
@@ -669,6 +670,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         onOpenMusicApp = ::openMusicApp,
                         onToggleDashboardWidget = ::toggleDashboardWidget,
                         onResetDashboardWidgets = ::resetDashboardWidgets,
+                        onMoveDashboardWidget = ::moveDashboardWidget,
                         onToggleKeepScreenOn = ::toggleKeepScreenOn,
                         onToggleDnd = ::toggleDnd,
                         onToggleAutoBrightnessLock = ::toggleAutoBrightnessLock,
@@ -1293,17 +1295,31 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         updateWindowLayout()
     }
 
-    private fun resetDashboardWidgets() {
-        val defaults = GameDeckPrefs.resetWidgets(this)
-        dashboardWidgets = defaults
+    private fun applyDashboardWidgets(widgets: GameDeckPrefs.DashboardWidgets) {
+        dashboardWidgets = widgets
+        GameDeckPrefs.saveWidgets(this, widgets)
         uiState.value = uiState.value.copy(
-            showTelemetryWidget = defaults.showTelemetry,
-            showProfileWidget = defaults.showProfile,
-            showMusicWidget = defaults.showMusic,
-            showRefreshRateWidget = defaults.showRefreshRate,
-            showKeepScreenOnWidget = defaults.showKeepScreenOn,
-            showSlidersWidget = defaults.showSliders
+            showTelemetryWidget = widgets.showTelemetry,
+            showProfileWidget = widgets.showProfile,
+            showMusicWidget = widgets.showMusic,
+            showRefreshRateWidget = widgets.showRefreshRate,
+            showSlidersWidget = widgets.showSliders,
+            widgetOrder = widgets.order
         )
+    }
+
+    private fun resetDashboardWidgets() {
+        applyDashboardWidgets(GameDeckPrefs.resetWidgets(this))
+    }
+
+    private fun moveDashboardWidget(fromIndex: Int, toIndex: Int) {
+        val currentOrder = dashboardWidgets.order.toMutableList()
+        if (fromIndex !in currentOrder.indices || toIndex !in currentOrder.indices || fromIndex == toIndex) {
+            return
+        }
+        val moved = currentOrder.removeAt(fromIndex)
+        currentOrder.add(toIndex, moved)
+        applyDashboardWidgets(dashboardWidgets.copy(order = currentOrder))
     }
 
     private fun toggleDashboardWidget(widgetKey: String) {
@@ -1313,7 +1329,6 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             "profile" -> cur.copy(showProfile = !cur.showProfile)
             "music" -> cur.copy(showMusic = !cur.showMusic)
             "refresh_rate" -> cur.copy(showRefreshRate = !cur.showRefreshRate)
-            "keep_screen_on" -> cur.copy(showKeepScreenOn = !cur.showKeepScreenOn)
             "sliders" -> cur.copy(showSliders = !cur.showSliders)
             else -> cur
         }
@@ -1322,23 +1337,13 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             candidate.showProfile,
             candidate.showMusic,
             candidate.showRefreshRate,
-            candidate.showKeepScreenOn,
             candidate.showSliders
         ).count { it }
         if (activeCount == 0) {
             Toast.makeText(this, "Minimal 1 widget aktif", Toast.LENGTH_SHORT).show()
             return
         }
-        dashboardWidgets = candidate
-        GameDeckPrefs.saveWidgets(this, candidate)
-        uiState.value = uiState.value.copy(
-            showTelemetryWidget = candidate.showTelemetry,
-            showProfileWidget = candidate.showProfile,
-            showMusicWidget = candidate.showMusic,
-            showRefreshRateWidget = candidate.showRefreshRate,
-            showKeepScreenOnWidget = candidate.showKeepScreenOn,
-            showSlidersWidget = candidate.showSliders
-        )
+        applyDashboardWidgets(candidate)
     }
 
     private fun toggleAutoBrightnessLock() {

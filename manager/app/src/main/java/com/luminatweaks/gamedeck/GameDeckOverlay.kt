@@ -17,12 +17,14 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -65,12 +67,15 @@ import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.BrightnessAuto
 import androidx.compose.material.icons.rounded.BrightnessMedium
 import androidx.compose.material.icons.rounded.Build
+import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -102,6 +107,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -144,6 +150,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import com.luminatweaks.data.ConfigRepository
@@ -203,6 +210,7 @@ fun GameDeckRoot(
     onOpenMusicApp: () -> Unit = {},
     onToggleDashboardWidget: (String) -> Unit = {},
     onResetDashboardWidgets: () -> Unit = {},
+    onMoveDashboardWidget: (Int, Int) -> Unit = { _, _ -> },
     onToggleKeepScreenOn: () -> Unit = {},
     onToggleDnd: () -> Unit,
     onToggleAutoBrightnessLock: () -> Unit,
@@ -285,6 +293,7 @@ fun GameDeckRoot(
                 onOpenMusicApp = onOpenMusicApp,
                 onToggleDashboardWidget = onToggleDashboardWidget,
                 onResetDashboardWidgets = onResetDashboardWidgets,
+                onMoveDashboardWidget = onMoveDashboardWidget,
                 onToggleKeepScreenOn = onToggleKeepScreenOn,
                 onToggleDnd = onToggleDnd,
                 onToggleAutoBrightnessLock = onToggleAutoBrightnessLock,
@@ -386,6 +395,7 @@ private fun GameDeckWorkspace(
     onOpenMusicApp: () -> Unit,
     onToggleDashboardWidget: (String) -> Unit,
     onResetDashboardWidgets: () -> Unit,
+    onMoveDashboardWidget: (Int, Int) -> Unit,
     onToggleKeepScreenOn: () -> Unit,
     onToggleDnd: () -> Unit,
     onToggleAutoBrightnessLock: () -> Unit,
@@ -493,6 +503,7 @@ private fun GameDeckWorkspace(
                 onOpenMusicApp = onOpenMusicApp,
                 onToggleDashboardWidget = onToggleDashboardWidget,
                 onResetDashboardWidgets = onResetDashboardWidgets,
+                onMoveDashboardWidget = onMoveDashboardWidget,
                 onToggleKeepScreenOn = onToggleKeepScreenOn,
                 onToggleDnd = onToggleDnd,
                 onToggleAutoBrightnessLock = onToggleAutoBrightnessLock,
@@ -525,6 +536,7 @@ private fun GameDeckWorkspace(
                 onOpenMusicApp = onOpenMusicApp,
                 onToggleDashboardWidget = onToggleDashboardWidget,
                 onResetDashboardWidgets = onResetDashboardWidgets,
+                onMoveDashboardWidget = onMoveDashboardWidget,
                 onToggleKeepScreenOn = onToggleKeepScreenOn,
                 onToggleDnd = onToggleDnd,
                 onToggleAutoBrightnessLock = onToggleAutoBrightnessLock,
@@ -805,6 +817,7 @@ private fun DeckCard(
     onOpenMusicApp: () -> Unit,
     onToggleDashboardWidget: (String) -> Unit,
     onResetDashboardWidgets: () -> Unit,
+    onMoveDashboardWidget: (Int, Int) -> Unit,
     onToggleKeepScreenOn: () -> Unit,
     onToggleDnd: () -> Unit,
     onToggleAutoBrightnessLock: () -> Unit,
@@ -846,6 +859,7 @@ private fun DeckCard(
                 2 -> DashboardWidgetCustomizerContent(
                     state = state,
                     onToggleWidget = onToggleDashboardWidget,
+                    onMoveWidget = onMoveDashboardWidget,
                     onResetWidgets = onResetDashboardWidgets,
                     onBack = onCloseWidgetEditor
                 )
@@ -1313,26 +1327,42 @@ private fun BatteryCapsulePill(
 private fun DashboardWidgetCustomizerContent(
     state: GameDeckUiState,
     onToggleWidget: (String) -> Unit,
+    onMoveWidget: (Int, Int) -> Unit,
     onResetWidgets: () -> Unit,
     onBack: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
-    data class WidgetBentoMeta(
+    data class WidgetBlueprintMeta(
         val key: String,
         val title: String,
-        val icon: ImageVector,
         val enabled: Boolean
     )
 
-    val items = listOf(
-        WidgetBentoMeta("telemetry", "Telemetri", Icons.Rounded.Speed, state.showTelemetryWidget),
-        WidgetBentoMeta("profile", "Profil", Icons.Rounded.Tune, state.showProfileWidget),
-        WidgetBentoMeta("music", "Musik", Icons.Rounded.MusicNote, state.showMusicWidget),
-        WidgetBentoMeta("refresh_rate", "Refresh Rate", Icons.Rounded.Refresh, state.showRefreshRateWidget),
-        WidgetBentoMeta("keep_screen_on", "Layar Nyala", Icons.Rounded.Visibility, state.showKeepScreenOnWidget),
-        WidgetBentoMeta("sliders", "Cahaya & Suara", Icons.Rounded.BrightnessMedium, state.showSlidersWidget)
-    )
-    val allEnabled = items.all { it.enabled }
+    val orderedKeys = state.widgetOrder.ifEmpty { DEFAULT_DASHBOARD_WIDGET_ORDER }
+    val allItems = orderedKeys.mapNotNull { key ->
+        when (key) {
+            "telemetry" -> WidgetBlueprintMeta(key, "Telemetri & CPU/GPU", state.showTelemetryWidget)
+            "profile" -> WidgetBlueprintMeta(key, "Profil Performa", state.showProfileWidget)
+            "music" -> WidgetBlueprintMeta(key, "Pemutar Musik", state.showMusicWidget)
+            "refresh_rate" -> WidgetBlueprintMeta(key, "Refresh Rate", state.showRefreshRateWidget)
+            "sliders" -> WidgetBlueprintMeta(key, "Brightness & Suara", state.showSlidersWidget)
+            else -> null
+        }
+    }
+
+    var selectedFilter by remember { mutableIntStateOf(0) }
+    val activeCount = allItems.count { it.enabled }
+    val hiddenCount = allItems.size - activeCount
+    val visibleItems = when (selectedFilter) {
+        1 -> allItems.filter { it.enabled }
+        2 -> allItems.filter { !it.enabled }
+        else -> allItems
+    }
+    val isDefaultConfig = allItems.all { it.enabled } && orderedKeys == DEFAULT_DASHBOARD_WIDGET_ORDER
+
+    var draggedKey by remember { mutableStateOf<String?>(null) }
+    var dragOffsetY by remember { mutableFloatStateOf(0f) }
+    val stepThresholdPx = with(LocalDensity.current) { 82.dp.toPx() }
 
     Column(
         modifier = Modifier
@@ -1372,8 +1402,8 @@ private fun DashboardWidgetCustomizerContent(
             Surface(
                 onClick = onResetWidgets,
                 shape = CircleShape,
-                color = if (allEnabled) scheme.surfaceContainer else scheme.secondaryContainer,
-                contentColor = if (allEnabled) scheme.onSurfaceVariant else scheme.onSecondaryContainer
+                color = if (isDefaultConfig) scheme.surfaceContainer else scheme.secondaryContainer,
+                contentColor = if (isDefaultConfig) scheme.onSurfaceVariant else scheme.onSecondaryContainer
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -1396,6 +1426,43 @@ private fun DashboardWidgetCustomizerContent(
             }
         }
 
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            val filters = listOf(
+                Triple(0, "Semua", allItems.size),
+                Triple(1, "Aktif", activeCount),
+                Triple(2, "Nonaktif", hiddenCount)
+            )
+            filters.forEach { (idx, label, count) ->
+                val selected = selectedFilter == idx
+                Surface(
+                    onClick = { selectedFilter = idx },
+                    modifier = Modifier.weight(1f),
+                    shape = CircleShape,
+                    color = if (selected) scheme.primary else scheme.surfaceContainer,
+                    contentColor = if (selected) scheme.onPrimary else scheme.onSurfaceVariant
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp, horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "$label · $count",
+                            fontSize = 10.5.sp,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+            }
+        }
+
         Surface(
             modifier = Modifier
                 .weight(1f)
@@ -1403,28 +1470,427 @@ private fun DashboardWidgetCustomizerContent(
             shape = RoundedCornerShape(24.dp),
             color = scheme.surfaceContainer
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items.chunked(2).forEach { rowItems ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        rowItems.forEach { item ->
-                            CompactToolBentoTile(
-                                icon = item.icon,
-                                title = item.title,
-                                subtitle = if (item.enabled) "Tampil" else "Sembunyi",
-                                active = item.enabled,
-                                onClick = { onToggleWidget(item.key) },
-                                modifier = Modifier.weight(1f)
-                            )
+            if (visibleItems.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (selectedFilter == 2) "Semua widget sedang aktif" else "Tidak ada widget",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = scheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    visibleItems.forEachIndexed { visibleIdx, item ->
+                        val isDragging = draggedKey == item.key
+                        val globalIdx = orderedKeys.indexOf(item.key)
+                        val canMoveUp = visibleIdx > 0
+                        val canMoveDown = visibleIdx < visibleItems.lastIndex
+                        val cardAlpha by animateFloatAsState(
+                            targetValue = if (item.enabled) 1f else 0.56f,
+                            animationSpec = tween(durationMillis = 180),
+                            label = "blueprintAlpha"
+                        )
+
+                        Surface(
+                            shape = RoundedCornerShape(18.dp),
+                            color = if (item.enabled) {
+                                scheme.surfaceContainerHigh
+                            } else {
+                                scheme.surfaceContainerLow
+                            },
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = when {
+                                    isDragging -> scheme.primary
+                                    item.enabled -> scheme.outlineVariant.copy(alpha = 0.45f)
+                                    else -> scheme.outlineVariant.copy(alpha = 0.2f)
+                                }
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .zIndex(if (isDragging) 2f else 0f)
+                                .graphicsLayer {
+                                    translationY = if (isDragging) dragOffsetY else 0f
+                                    scaleX = if (isDragging) 1.02f else 1f
+                                    scaleY = if (isDragging) 1.02f else 1f
+                                    alpha = cardAlpha
+                                }
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(7.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(26.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(scheme.surfaceContainer)
+                                            .pointerInput(item.key, visibleIdx, visibleItems.size) {
+                                                detectVerticalDragGestures(
+                                                    onDragStart = {
+                                                        draggedKey = item.key
+                                                        dragOffsetY = 0f
+                                                    },
+                                                    onDragEnd = {
+                                                        draggedKey = null
+                                                        dragOffsetY = 0f
+                                                    },
+                                                    onDragCancel = {
+                                                        draggedKey = null
+                                                        dragOffsetY = 0f
+                                                    },
+                                                    onVerticalDrag = { change, dragAmount ->
+                                                        change.consume()
+                                                        dragOffsetY += dragAmount
+                                                        val curVisIdx = visibleItems.indexOfFirst { it.key == item.key }
+                                                        val curGlobIdx = orderedKeys.indexOf(item.key)
+                                                        if (dragOffsetY > stepThresholdPx && curVisIdx in 0 until visibleItems.lastIndex) {
+                                                            val targetGlobIdx = orderedKeys.indexOf(visibleItems[curVisIdx + 1].key)
+                                                            if (curGlobIdx >= 0 && targetGlobIdx >= 0) {
+                                                                onMoveWidget(curGlobIdx, targetGlobIdx)
+                                                                dragOffsetY -= stepThresholdPx
+                                                            }
+                                                        } else if (dragOffsetY < -stepThresholdPx && curVisIdx > 0) {
+                                                            val targetGlobIdx = orderedKeys.indexOf(visibleItems[curVisIdx - 1].key)
+                                                            if (curGlobIdx >= 0 && targetGlobIdx >= 0) {
+                                                                onMoveWidget(curGlobIdx, targetGlobIdx)
+                                                                dragOffsetY += stepThresholdPx
+                                                            }
+                                                        }
+                                                    }
+                                                )
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.DragHandle,
+                                            contentDescription = "Geser urutan",
+                                            tint = if (isDragging) scheme.primary else scheme.onSurfaceVariant,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.width(6.dp))
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = item.title,
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = scheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Surface(
+                                            onClick = {
+                                                if (canMoveUp && globalIdx >= 0) {
+                                                    val targetGlob = orderedKeys.indexOf(visibleItems[visibleIdx - 1].key)
+                                                    if (targetGlob >= 0) onMoveWidget(globalIdx, targetGlob)
+                                                }
+                                            },
+                                            enabled = canMoveUp,
+                                            modifier = Modifier.size(22.dp),
+                                            shape = CircleShape,
+                                            color = scheme.surfaceContainer
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.KeyboardArrowUp,
+                                                    contentDescription = "Naikkan",
+                                                    tint = if (canMoveUp) scheme.onSurface else scheme.onSurfaceVariant.copy(alpha = 0.3f),
+                                                    modifier = Modifier.size(15.dp)
+                                                )
+                                            }
+                                        }
+                                        Surface(
+                                            onClick = {
+                                                if (canMoveDown && globalIdx >= 0) {
+                                                    val targetGlob = orderedKeys.indexOf(visibleItems[visibleIdx + 1].key)
+                                                    if (targetGlob >= 0) onMoveWidget(globalIdx, targetGlob)
+                                                }
+                                            },
+                                            enabled = canMoveDown,
+                                            modifier = Modifier.size(22.dp),
+                                            shape = CircleShape,
+                                            color = scheme.surfaceContainer
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.KeyboardArrowDown,
+                                                    contentDescription = "Turunkan",
+                                                    tint = if (canMoveDown) scheme.onSurface else scheme.onSurfaceVariant.copy(alpha = 0.3f),
+                                                    modifier = Modifier.size(15.dp)
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        DashboardWidgetSwitch(
+                                            checked = item.enabled,
+                                            onCheckedChange = { onToggleWidget(item.key) }
+                                        )
+                                    }
+                                }
+
+                                WidgetBlueprintPreview(widgetKey = item.key)
+                            }
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WidgetBlueprintPreview(widgetKey: String) {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(scheme.surfaceContainer)
+            .padding(horizontal = 10.dp, vertical = 7.dp)
+    ) {
+        when (widgetKey) {
+            "telemetry" -> Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Speed,
+                        contentDescription = null,
+                        tint = scheme.primary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "120",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Black,
+                        color = scheme.primary
+                    )
+                    Text(
+                        text = "FPS",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = scheme.onSurfaceVariant
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(scheme.primaryContainer)
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "CPU",
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = scheme.onPrimaryContainer
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(scheme.tertiaryContainer)
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "GPU",
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = scheme.onTertiaryContainer
+                    )
+                }
+            }
+
+            "profile" -> Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                listOf("Eco", "Balanced", "Perf", "Lite").forEachIndexed { idx, label ->
+                    val active = idx == 2
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(CircleShape)
+                            .background(if (active) scheme.primaryContainer else scheme.surfaceContainerHigh)
+                            .padding(vertical = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = label,
+                            fontSize = 8.5.sp,
+                            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                            color = if (active) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+            }
+
+            "music" -> Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(RoundedCornerShape(7.dp))
+                        .background(scheme.surfaceContainerHigh),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.MusicNote,
+                        contentDescription = null,
+                        tint = scheme.primary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.68f)
+                            .height(5.dp)
+                            .clip(CircleShape)
+                            .background(scheme.onSurface.copy(alpha = 0.65f))
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .clip(CircleShape)
+                            .background(scheme.surfaceContainerHighest)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.45f)
+                                .fillMaxHeight()
+                                .clip(CircleShape)
+                                .background(scheme.primary)
+                        )
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.SkipPrevious, null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(13.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(scheme.primary),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Rounded.PlayArrow, null, tint = scheme.onPrimary, modifier = Modifier.size(13.dp))
+                    }
+                    Icon(Icons.Rounded.SkipNext, null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(13.dp))
+                }
+            }
+
+            "refresh_rate" -> Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IosRecentAppsIcon(tint = scheme.primary, containerColor = scheme.surfaceContainer, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Refresh Rate",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = scheme.onSurface
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(scheme.primaryContainer)
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "120 Hz",
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = scheme.onPrimaryContainer
+                    )
+                }
+            }
+
+            else -> Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(Icons.Rounded.BrightnessMedium, null, tint = scheme.primary, modifier = Modifier.size(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(6.dp)
+                            .clip(CircleShape)
+                            .background(scheme.surfaceContainerHighest)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.62f)
+                                .fillMaxHeight()
+                                .clip(CircleShape)
+                                .background(scheme.primary)
+                        )
+                    }
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(Icons.AutoMirrored.Rounded.VolumeUp, null, tint = scheme.tertiary, modifier = Modifier.size(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(6.dp)
+                            .clip(CircleShape)
+                            .background(scheme.surfaceContainerHighest)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.48f)
+                                .fillMaxHeight()
+                                .clip(CircleShape)
+                                .background(scheme.tertiary)
+                        )
                     }
                 }
             }
@@ -1776,164 +2242,170 @@ private fun DashboardDeckContent(
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        if (state.showTelemetryWidget) {
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = scheme.surfaceContainer,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+        val orderedKeys = state.widgetOrder.ifEmpty { DEFAULT_DASHBOARD_WIDGET_ORDER }
+        orderedKeys.forEach { widgetKey ->
+            when (widgetKey) {
+                "telemetry" -> {
+                if (state.showTelemetryWidget) {
+                    Surface(
+                        shape = RoundedCornerShape(24.dp),
+                        color = scheme.surfaceContainer,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Speed,
-                            contentDescription = null,
-                            tint = scheme.primary,
-                            modifier = Modifier.size(19.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (fps > 0) fps.toString() else "--",
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Black,
-                            color = fpsColor,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "FPS",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = scheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 4.dp),
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                        if (fps > 0 && state.frametimeMs > 0f) {
-                            Text(
-                                text = String.format(Locale.US, " · %.1f ms", state.frametimeMs),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = scheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 4.dp),
-                                maxLines = 1,
-                                softWrap = false
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Speed,
+                                    contentDescription = null,
+                                    tint = scheme.primary,
+                                    modifier = Modifier.size(19.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (fps > 0) fps.toString() else "--",
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = fpsColor,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "FPS",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = scheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 4.dp),
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                                if (fps > 0 && state.frametimeMs > 0f) {
+                                    Text(
+                                        text = String.format(Locale.US, " · %.1f ms", state.frametimeMs),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = scheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(top = 4.dp),
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.weight(1f))
+
+                                MetricChip(
+                                    icon = Icons.Rounded.Thermostat,
+                                    label = state.tempLabel
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                BatteryCapsulePill(
+                                    percent = state.batteryPercent,
+                                    isCharging = state.isCharging,
+                                    isBatterySaver = state.isBatterySaver,
+                                    isEcoProfile = state.profile.trim().equals("Eco", ignoreCase = true)
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                ExpressiveRadialGauge(
+                                    percent = state.cpuPercent,
+                                    label = "CPU",
+                                    activeColor = scheme.primary,
+                                    badgeContainerColor = scheme.primaryContainer,
+                                    badgeContentColor = scheme.onPrimaryContainer,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(114.dp)
+                                )
+                                ExpressiveRadialGauge(
+                                    percent = state.gpuPercent,
+                                    label = "GPU",
+                                    activeColor = scheme.tertiary,
+                                    badgeContainerColor = scheme.tertiaryContainer,
+                                    badgeContentColor = scheme.onTertiaryContainer,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(114.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+                }
+                "profile" -> {
+                if (state.showProfileWidget) {
+                    ProfileSelectorCard(
+                        state = state,
+                        onProfileSelected = onProfileSelected,
+                        onToggleAutoMode = { onSetAutoMode(!state.profileAutoMode) }
+                    )
+                }
+                }
+                "music" -> {
+                if (state.showMusicWidget) {
+                    MusicPlayerWidgetCard(
+                        title = state.musicTitle,
+                        artist = state.musicArtist,
+                        packageName = state.musicPackage,
+                        albumArt = state.musicArt,
+                        isPlaying = state.isMusicPlaying,
+                        positionMs = state.musicPositionMs,
+                        durationMs = state.musicDurationMs,
+                        onPrevious = onMusicPrevious,
+                        onPlayPause = onMusicPlayPause,
+                        onNext = onMusicNext,
+                        onSeek = onMusicSeek,
+                        onOpenApp = onOpenMusicApp
+                    )
+                }
+                }
+                "refresh_rate" -> {
+                if (state.showRefreshRateWidget) {
+                            RefreshRateBentoTile(
+                                modes = state.rrModes,
+                                selectedHz = state.selectedRrHz,
+                                liveHz = state.targetHz,
+                                onSelect = onRefreshRateSelected,
+                                modifier = Modifier.weight(1f)
                             )
                         }
-
-                        Spacer(modifier = Modifier.weight(1f))
-
-                        MetricChip(
-                            icon = Icons.Rounded.Thermostat,
-                            label = state.tempLabel
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        BatteryCapsulePill(
-                            percent = state.batteryPercent,
-                            isCharging = state.isCharging,
-                            isBatterySaver = state.isBatterySaver,
-                            isEcoProfile = state.profile.trim().equals("Eco", ignoreCase = true)
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        ExpressiveRadialGauge(
-                            percent = state.cpuPercent,
-                            label = "CPU",
-                            activeColor = scheme.primary,
-                            badgeContainerColor = scheme.primaryContainer,
-                            badgeContentColor = scheme.onPrimaryContainer,
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(114.dp)
-                        )
-                        ExpressiveRadialGauge(
-                            percent = state.gpuPercent,
-                            label = "GPU",
-                            activeColor = scheme.tertiary,
-                            badgeContainerColor = scheme.tertiaryContainer,
-                            badgeContentColor = scheme.onTertiaryContainer,
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(114.dp)
-                        )
+                        if (state.showKeepScreenOnWidget) {
+                            CompactToolBentoTile(
+                                icon = Icons.Rounded.Visibility,
+                                title = "Layar Nyala",
+                                subtitle = if (state.keepScreenOn) "Tetap menyala" else "Normal sistem",
+                                active = state.keepScreenOn,
+                                onClick = onToggleKeepScreenOn,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
                 }
-            }
-        }
-
-        if (state.showProfileWidget) {
-            ProfileSelectorCard(
-                state = state,
-                onProfileSelected = onProfileSelected,
-                onToggleAutoMode = { onSetAutoMode(!state.profileAutoMode) }
-            )
-        }
-
-        if (state.showMusicWidget) {
-            MusicPlayerWidgetCard(
-                title = state.musicTitle,
-                artist = state.musicArtist,
-                packageName = state.musicPackage,
-                albumArt = state.musicArt,
-                isPlaying = state.isMusicPlaying,
-                positionMs = state.musicPositionMs,
-                durationMs = state.musicDurationMs,
-                onPrevious = onMusicPrevious,
-                onPlayPause = onMusicPlayPause,
-                onNext = onMusicNext,
-                onSeek = onMusicSeek,
-                onOpenApp = onOpenMusicApp
-            )
-        }
-
-        if (state.showRefreshRateWidget || state.showKeepScreenOnWidget) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (state.showRefreshRateWidget) {
-                    RefreshRateBentoTile(
-                        modes = state.rrModes,
-                        selectedHz = state.selectedRrHz,
-                        liveHz = state.targetHz,
-                        onSelect = onRefreshRateSelected,
-                        modifier = Modifier.weight(1f)
+                }
+                "sliders" -> {
+                if (state.showSlidersWidget) {
+                    BrightnessVolumeCard(
+                        brightnessPercent = state.brightnessPercent,
+                        volumePercent = state.volumePercent,
+                        volumeMuted = state.volumeMuted,
+                        onBrightnessChanged = onBrightnessChanged,
+                        onVolumeChanged = onVolumeChanged,
+                        onToggleMute = onToggleMute
                     )
                 }
-                if (state.showKeepScreenOnWidget) {
-                    CompactToolBentoTile(
-                        icon = Icons.Rounded.Visibility,
-                        title = "Layar Nyala",
-                        subtitle = if (state.keepScreenOn) "Tetap menyala" else "Normal sistem",
-                        active = state.keepScreenOn,
-                        onClick = onToggleKeepScreenOn,
-                        modifier = Modifier.weight(1f)
-                    )
                 }
             }
-        }
-
-        if (state.showSlidersWidget) {
-            BrightnessVolumeCard(
-                brightnessPercent = state.brightnessPercent,
-                volumePercent = state.volumePercent,
-                volumeMuted = state.volumeMuted,
-                onBrightnessChanged = onBrightnessChanged,
-                onVolumeChanged = onVolumeChanged,
-                onToggleMute = onToggleMute
-            )
         }
 
         Row(
