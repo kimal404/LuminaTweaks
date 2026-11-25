@@ -42,8 +42,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -71,7 +72,6 @@ import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
@@ -116,6 +116,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -788,7 +789,7 @@ private fun QuickAppPickerDeckContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(12.dp),
+            .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(
@@ -797,9 +798,9 @@ private fun QuickAppPickerDeckContent(
         ) {
             Surface(
                 onClick = onBack,
-                modifier = Modifier.size(34.dp),
+                modifier = Modifier.size(36.dp),
                 shape = CircleShape,
-                color = scheme.surfaceContainerHigh
+                color = scheme.surfaceContainer
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
@@ -814,23 +815,23 @@ private fun QuickAppPickerDeckContent(
             Surface(
                 modifier = Modifier
                     .weight(1f)
-                    .height(34.dp),
+                    .height(36.dp),
                 shape = CircleShape,
-                color = scheme.surfaceContainerHigh
+                color = scheme.surfaceContainer
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 10.dp),
+                        .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Search,
                         contentDescription = null,
-                        tint = scheme.onSurfaceVariant,
-                        modifier = Modifier.size(15.dp)
+                        tint = scheme.primary,
+                        modifier = Modifier.size(16.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Box(
                         modifier = Modifier.weight(1f),
                         contentAlignment = Alignment.CenterStart
@@ -838,7 +839,7 @@ private fun QuickAppPickerDeckContent(
                         if (searchQuery.isEmpty()) {
                             Text(
                                 text = "Cari aplikasi...",
-                                fontSize = 11.sp,
+                                fontSize = 11.5.sp,
                                 color = scheme.onSurfaceVariant,
                                 maxLines = 1,
                                 softWrap = false,
@@ -850,7 +851,7 @@ private fun QuickAppPickerDeckContent(
                             onValueChange = { searchQuery = it },
                             singleLine = true,
                             textStyle = TextStyle(
-                                fontSize = 11.5.sp,
+                                fontSize = 12.sp,
                                 color = scheme.onSurface,
                                 fontWeight = FontWeight.Medium
                             ),
@@ -865,7 +866,7 @@ private fun QuickAppPickerDeckContent(
                             contentDescription = "Hapus",
                             tint = scheme.onSurfaceVariant,
                             modifier = Modifier
-                                .size(15.dp)
+                                .size(16.dp)
                                 .clip(CircleShape)
                                 .clickable { searchQuery = "" }
                         )
@@ -880,8 +881,8 @@ private fun QuickAppPickerDeckContent(
             ) {
                 Text(
                     text = "${selectedPackages.size}/$MAX_DECK_QUICK_APPS",
-                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                    fontSize = 10.sp,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    fontSize = 10.5.sp,
                     fontWeight = FontWeight.ExtraBold,
                     maxLines = 1,
                     softWrap = false
@@ -889,105 +890,163 @@ private fun QuickAppPickerDeckContent(
             }
         }
 
-        if (loading) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularWavyProgressIndicator(modifier = Modifier.size(34.dp))
+        Surface(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            color = scheme.surfaceContainer
+        ) {
+            if (loading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularWavyProgressIndicator(modifier = Modifier.size(34.dp))
+                }
+            } else if (filteredApps.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (searchQuery.isNotBlank()) "Aplikasi tidak ditemukan" else "Tidak ada aplikasi pengguna",
+                        fontSize = 12.sp,
+                        color = scheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(3),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(filteredApps, key = { it.packageName }) { app ->
+                        val checked = app.packageName in selectedPackages
+                        val enabled = checked || selectedPackages.size < MAX_DECK_QUICK_APPS
+                        QuickAppGridTile(
+                            app = app,
+                            checked = checked,
+                            enabled = enabled,
+                            onClick = { onTogglePackage(app.packageName) }
+                        )
+                    }
+                }
             }
-        } else if (filteredApps.isEmpty()) {
-            Box(
+        }
+    }
+}
+
+@Composable
+private fun QuickAppGridTile(
+    app: AppItem,
+    checked: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val icon = rememberAppIcon(app.packageName)
+
+    val cornerRadius by animateDpAsState(
+        targetValue = if (checked) 22.dp else 15.dp,
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow),
+        label = "appGridTileCorner"
+    )
+    val tileBg by animateColorAsState(
+        targetValue = if (checked) scheme.primaryContainer else scheme.surfaceContainerHigh,
+        animationSpec = tween(durationMillis = 180),
+        label = "appGridTileBg"
+    )
+    val tileText by animateColorAsState(
+        targetValue = if (checked) scheme.onPrimaryContainer else scheme.onSurface,
+        animationSpec = tween(durationMillis = 180),
+        label = "appGridTileText"
+    )
+    val badgeBg by animateColorAsState(
+        targetValue = if (checked) scheme.primary else scheme.surfaceContainerHighest.copy(alpha = 0.75f),
+        animationSpec = tween(durationMillis = 180),
+        label = "appGridBadgeBg"
+    )
+
+    Surface(
+        onClick = { if (enabled) onClick() },
+        shape = RoundedCornerShape(cornerRadius),
+        color = tileBg,
+        contentColor = tileText,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(82.dp)
+            .graphicsLayer { alpha = if (enabled) 1f else 0.42f }
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.Center
+                    .fillMaxSize()
+                    .padding(horizontal = 6.dp, vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(11.dp))
+                        .background(
+                            if (checked) {
+                                scheme.surfaceContainerLowest.copy(alpha = 0.35f)
+                            } else {
+                                scheme.surfaceContainerHighest
+                            }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (icon != null) {
+                        Image(
+                            bitmap = icon,
+                            contentDescription = app.name,
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                        )
+                    } else {
+                        Text(
+                            text = app.name.take(1).uppercase(Locale.ROOT),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = tileText
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(5.dp))
                 Text(
-                    text = if (searchQuery.isNotBlank()) "Aplikasi tidak ditemukan" else "Tidak ada aplikasi pengguna",
-                    fontSize = 11.5.sp,
-                    color = scheme.onSurfaceVariant
+                    text = app.name,
+                    fontSize = 10.5.sp,
+                    fontWeight = if (checked) FontWeight.Bold else FontWeight.Medium,
+                    color = tileText,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentPadding = PaddingValues(bottom = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                items(filteredApps, key = { it.packageName }) { app ->
-                    val checked = app.packageName in selectedPackages
-                    val enabled = checked || selectedPackages.size < MAX_DECK_QUICK_APPS
-                    val icon = rememberAppIcon(app.packageName)
-                    val rowBg by animateColorAsState(
-                        targetValue = if (checked) {
-                            scheme.secondaryContainer.copy(alpha = 0.65f)
-                        } else {
-                            scheme.surfaceContainer
-                        },
-                        animationSpec = tween(durationMillis = 160),
-                        label = "pickerRowBg"
-                    )
 
-                    Surface(
-                        onClick = { if (enabled) onTogglePackage(app.packageName) },
-                        shape = RoundedCornerShape(16.dp),
-                        color = rowBg,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .graphicsLayer { alpha = if (enabled) 1f else 0.45f }
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 10.dp, vertical = 7.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(scheme.surfaceContainerHigh),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (icon != null) {
-                                    Image(
-                                        bitmap = icon,
-                                        contentDescription = app.name,
-                                        modifier = Modifier
-                                            .size(24.dp)
-                                            .clip(CircleShape)
-                                    )
-                                } else {
-                                    Text(
-                                        text = app.name.take(1).uppercase(Locale.ROOT),
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = scheme.onSurface
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = app.name,
-                                fontSize = 12.sp,
-                                fontWeight = if (checked) FontWeight.Bold else FontWeight.Medium,
-                                color = scheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Checkbox(
-                                checked = checked,
-                                enabled = enabled,
-                                onCheckedChange = { if (enabled) onTogglePackage(app.packageName) }
-                            )
-                        }
-                    }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(6.dp)
+                    .size(17.dp)
+                    .clip(CircleShape)
+                    .background(badgeBg),
+                contentAlignment = Alignment.Center
+            ) {
+                if (checked) {
+                    Icon(
+                        imageVector = Icons.Rounded.Check,
+                        contentDescription = null,
+                        tint = scheme.onPrimary,
+                        modifier = Modifier.size(11.dp)
+                    )
                 }
             }
         }
