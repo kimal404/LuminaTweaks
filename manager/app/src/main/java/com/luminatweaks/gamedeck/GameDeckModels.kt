@@ -40,12 +40,17 @@ data class GameDeckUiState(
     val profile: String = "Balanced",
     val profileOverride: String = "Auto",
     val profileAutoMode: Boolean = true,
+    val isCharging: Boolean = false,
+    val isBatterySaver: Boolean = false,
     val rrModes: List<Int> = emptyList(),
     val selectedRrHz: Int? = null,
     val brightnessPercent: Int = 50,
     val volumePercent: Int = 50,
     val volumeMuted: Boolean = false,
     val dndEnabled: Boolean = false,
+    val autoBrightnessLocked: Boolean = false,
+    val rotationLocked: Boolean = false,
+    val ramStatusLabel: String = "Pangkas latar",
     val quickApps: List<GameDeckQuickApp> = emptyList()
 )
 

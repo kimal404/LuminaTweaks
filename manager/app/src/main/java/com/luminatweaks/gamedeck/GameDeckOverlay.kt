@@ -2,6 +2,7 @@
 
 package com.luminatweaks.gamedeck
 
+import android.content.pm.ApplicationInfo
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
@@ -37,9 +38,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -48,7 +47,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import android.content.pm.ApplicationInfo
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -57,24 +55,26 @@ import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Apps
-import androidx.compose.material.icons.rounded.BatteryFull
+import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.BrightnessAuto
 import androidx.compose.material.icons.rounded.BrightnessMedium
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.ScreenLockRotation
+import androidx.compose.material.icons.rounded.Screenshot
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -96,6 +96,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
@@ -108,6 +109,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -172,6 +174,10 @@ fun GameDeckRoot(
     onVolumeChanged: (Int) -> Unit,
     onToggleMute: () -> Unit,
     onToggleDnd: () -> Unit,
+    onToggleAutoBrightnessLock: () -> Unit,
+    onToggleRotationLock: () -> Unit,
+    onClearRam: () -> Unit,
+    onTakeScreenshot: () -> Unit,
     onQuickAppClick: (String) -> Unit,
     onToggleQuickApp: (String) -> Unit,
     onAppPickerVisibilityChanged: (Boolean) -> Unit = {},
@@ -242,6 +248,10 @@ fun GameDeckRoot(
                 onVolumeChanged = onVolumeChanged,
                 onToggleMute = onToggleMute,
                 onToggleDnd = onToggleDnd,
+                onToggleAutoBrightnessLock = onToggleAutoBrightnessLock,
+                onToggleRotationLock = onToggleRotationLock,
+                onClearRam = onClearRam,
+                onTakeScreenshot = onTakeScreenshot,
                 onQuickAppClick = onQuickAppClick,
                 onToggleQuickApp = onToggleQuickApp,
                 onAppPickerVisibilityChanged = onAppPickerVisibilityChanged,
@@ -331,6 +341,10 @@ private fun GameDeckWorkspace(
     onVolumeChanged: (Int) -> Unit,
     onToggleMute: () -> Unit,
     onToggleDnd: () -> Unit,
+    onToggleAutoBrightnessLock: () -> Unit,
+    onToggleRotationLock: () -> Unit,
+    onClearRam: () -> Unit,
+    onTakeScreenshot: () -> Unit,
     onQuickAppClick: (String) -> Unit,
     onToggleQuickApp: (String) -> Unit,
     onAppPickerVisibilityChanged: (Boolean) -> Unit,
@@ -341,6 +355,7 @@ private fun GameDeckWorkspace(
     LaunchedEffect(showAppPicker) {
         onAppPickerVisibilityChanged(showAppPicker)
     }
+
     val isLeft = state.side == GameDeckSide.LEFT
     val closeThreshold = with(LocalDensity.current) { 24.dp.toPx() }
     val screenWidthDp = with(LocalDensity.current) {
@@ -415,6 +430,10 @@ private fun GameDeckWorkspace(
                 onVolumeChanged = onVolumeChanged,
                 onToggleMute = onToggleMute,
                 onToggleDnd = onToggleDnd,
+                onToggleAutoBrightnessLock = onToggleAutoBrightnessLock,
+                onToggleRotationLock = onToggleRotationLock,
+                onClearRam = onClearRam,
+                onTakeScreenshot = onTakeScreenshot,
                 onOpenManager = onOpenManager
             )
         } else {
@@ -432,6 +451,10 @@ private fun GameDeckWorkspace(
                 onVolumeChanged = onVolumeChanged,
                 onToggleMute = onToggleMute,
                 onToggleDnd = onToggleDnd,
+                onToggleAutoBrightnessLock = onToggleAutoBrightnessLock,
+                onToggleRotationLock = onToggleRotationLock,
+                onClearRam = onClearRam,
+                onTakeScreenshot = onTakeScreenshot,
                 onOpenManager = onOpenManager
             )
             DockRail(
@@ -692,6 +715,10 @@ private fun DeckCard(
     onVolumeChanged: (Int) -> Unit,
     onToggleMute: () -> Unit,
     onToggleDnd: () -> Unit,
+    onToggleAutoBrightnessLock: () -> Unit,
+    onToggleRotationLock: () -> Unit,
+    onClearRam: () -> Unit,
+    onTakeScreenshot: () -> Unit,
     onOpenManager: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -732,6 +759,10 @@ private fun DeckCard(
                 else -> ToolsDeckContent(
                     state = state,
                     onToggleDnd = onToggleDnd,
+                    onToggleAutoBrightnessLock = onToggleAutoBrightnessLock,
+                    onToggleRotationLock = onToggleRotationLock,
+                    onClearRam = onClearRam,
+                    onTakeScreenshot = onTakeScreenshot,
                     onOpenManager = onOpenManager
                 )
             }
@@ -1054,6 +1085,94 @@ private fun QuickAppGridTile(
 }
 
 @Composable
+private fun BatteryCapsulePill(
+    percent: Int,
+    isCharging: Boolean,
+    isBatterySaver: Boolean,
+    isEcoProfile: Boolean
+) {
+    val safePercent = percent.coerceIn(0, 100)
+    val fillFraction by animateFloatAsState(
+        targetValue = (safePercent / 100f).coerceIn(0.06f, 1f),
+        animationSpec = tween(durationMillis = 260),
+        label = "batteryPillFill"
+    )
+    val isLow = !isCharging && safePercent <= 20
+    val isSaver = !isCharging && !isLow && (isBatterySaver || isEcoProfile)
+
+    val targetFillColor = when {
+        isCharging -> Color(0xFF22C55E)
+        isLow -> Color(0xFFEF4444)
+        isSaver -> Color(0xFFF97316)
+        else -> Color(0xFFFFFFFF)
+    }
+    val fillColor by animateColorAsState(
+        targetValue = targetFillColor,
+        animationSpec = tween(durationMillis = 220),
+        label = "batteryPillColor"
+    )
+    val textOnFill = if (isLow) Color.White else Color(0xFF101318)
+    val pillShape = RoundedCornerShape(6.dp)
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(1.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .width(34.dp)
+                .height(17.dp)
+                .clip(pillShape)
+                .background(Color(0xFF6B7078).copy(alpha = 0.72f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(fillFraction)
+                    .align(Alignment.CenterStart)
+                    .background(fillColor)
+            )
+            Text(
+                text = safePercent.toString(),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Black,
+                color = Color.White,
+                maxLines = 1,
+                softWrap = false
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .drawWithContent {
+                        clipRect(right = size.width * fillFraction) {
+                            this@drawWithContent.drawContent()
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = safePercent.toString(),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Black,
+                    color = textOnFill,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
+        }
+        if (isCharging) {
+            Icon(
+                imageVector = Icons.Rounded.Bolt,
+                contentDescription = "Mengisi daya",
+                tint = Color.White,
+                modifier = Modifier.size(14.dp)
+            )
+        }
+    }
+}
+
+@Composable
 private fun DashboardDeckContent(
     state: GameDeckUiState,
     onProfileSelected: (String?) -> Unit,
@@ -1144,10 +1263,12 @@ private fun DashboardDeckContent(
                         icon = Icons.Rounded.Thermostat,
                         label = state.tempLabel
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    MetricChip(
-                        icon = Icons.Rounded.BatteryFull,
-                        label = "${state.batteryPercent}%"
+                    Spacer(modifier = Modifier.width(8.dp))
+                    BatteryCapsulePill(
+                        percent = state.batteryPercent,
+                        isCharging = state.isCharging,
+                        isBatterySaver = state.isBatterySaver,
+                        isEcoProfile = state.profile.trim().equals("Eco", ignoreCase = true)
                     )
                 }
 
@@ -1937,67 +2058,6 @@ private fun BrightnessVolumeCard(
 }
 
 @Composable
-private fun ExpressiveSwitch(
-    checked: Boolean,
-    onCheckedChange: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val scheme = MaterialTheme.colorScheme
-    val trackColor by animateColorAsState(
-        targetValue = if (checked) scheme.primary else scheme.surfaceContainerHighest,
-        animationSpec = tween(durationMillis = 220),
-        label = "expressiveSwitchTrack"
-    )
-    val thumbSize by animateDpAsState(
-        targetValue = if (checked) 22.dp else 15.dp,
-        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow),
-        label = "expressiveSwitchThumbSize"
-    )
-    val thumbOffset by animateDpAsState(
-        targetValue = if (checked) 18.dp else 0.dp,
-        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow),
-        label = "expressiveSwitchThumbOffset"
-    )
-    val thumbColor by animateColorAsState(
-        targetValue = if (checked) scheme.onPrimary else scheme.onSurfaceVariant,
-        animationSpec = tween(durationMillis = 220),
-        label = "expressiveSwitchThumbColor"
-    )
-
-    Box(
-        modifier = modifier
-            .requiredSize(width = 48.dp, height = 28.dp)
-            .clip(CircleShape)
-            .background(trackColor)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onCheckedChange
-            )
-            .padding(3.dp),
-        contentAlignment = Alignment.CenterStart
-    ) {
-        Box(
-            modifier = Modifier
-                .offset(x = thumbOffset)
-                .size(thumbSize)
-                .clip(CircleShape)
-                .background(thumbColor),
-            contentAlignment = Alignment.Center
-        ) {
-            if (checked) {
-                Icon(
-                    imageVector = Icons.Rounded.Check,
-                    contentDescription = null,
-                    tint = scheme.primary,
-                    modifier = Modifier.size(13.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun MetricChip(
     icon: ImageVector,
     label: String
@@ -2025,18 +2085,106 @@ private fun MetricChip(
 }
 
 @Composable
+private fun CompactToolBentoTile(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    active: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    ExpressiveToggleTile(
+        active = active,
+        dimmed = false,
+        onClick = onClick,
+        modifier = modifier.height(74.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 11.dp, vertical = 9.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(
+                            if (active) {
+                                scheme.primary.copy(alpha = 0.22f)
+                            } else {
+                                scheme.surfaceContainerHighest
+                            }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (active) scheme.primary else scheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                if (active) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(scheme.primary)
+                    )
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text(
+                    text = title,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = subtitle,
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (active) {
+                        scheme.onPrimaryContainer.copy(alpha = 0.85f)
+                    } else {
+                        scheme.onSurfaceVariant
+                    },
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun ToolsDeckContent(
     state: GameDeckUiState,
     onToggleDnd: () -> Unit,
+    onToggleAutoBrightnessLock: () -> Unit,
+    onToggleRotationLock: () -> Unit,
+    onClearRam: () -> Unit,
+    onTakeScreenshot: () -> Unit,
     onOpenManager: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
-    val dndText = if (state.dndEnabled) "Notifikasi dibisukan" else "Nonaktif"
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(12.dp),
+            .verticalScroll(rememberScrollState())
+            .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Surface(
@@ -2047,80 +2195,84 @@ private fun ToolsDeckContent(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
                     text = "Tools",
-                    fontSize = 14.sp,
+                    fontSize = 13.5.sp,
                     fontWeight = FontWeight.Bold,
                     color = scheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 2.dp),
                     maxLines = 1
                 )
 
-                ExpressiveToggleTile(
-                    active = state.dndEnabled,
-                    dimmed = false,
-                    onClick = onToggleDnd,
-                    modifier = Modifier.fillMaxWidth()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.NotificationsOff,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Jangan Ganggu",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1
-                            )
-                            Text(
-                                text = dndText,
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1
-                            )
-                        }
-                        ExpressiveSwitch(
-                            checked = state.dndEnabled,
-                            onCheckedChange = onToggleDnd
-                        )
-                    }
+                    CompactToolBentoTile(
+                        icon = Icons.Rounded.NotificationsOff,
+                        title = "Jangan Ganggu",
+                        subtitle = if (state.dndEnabled) "Aktif" else "Nonaktif",
+                        active = state.dndEnabled,
+                        onClick = onToggleDnd,
+                        modifier = Modifier.weight(1f)
+                    )
+                    CompactToolBentoTile(
+                        icon = Icons.Rounded.BrightnessAuto,
+                        title = "Kunci Cahaya",
+                        subtitle = if (state.autoBrightnessLocked) "Terkunci" else "Otomatis",
+                        active = state.autoBrightnessLocked,
+                        onClick = onToggleAutoBrightnessLock,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    CompactToolBentoTile(
+                        icon = Icons.Rounded.ScreenLockRotation,
+                        title = "Kunci Rotasi",
+                        subtitle = if (state.rotationLocked) "Terkunci" else "Bebas",
+                        active = state.rotationLocked,
+                        onClick = onToggleRotationLock,
+                        modifier = Modifier.weight(1f)
+                    )
+                    CompactToolBentoTile(
+                        icon = Icons.Rounded.CleaningServices,
+                        title = "Bersihkan RAM",
+                        subtitle = state.ramStatusLabel,
+                        active = false,
+                        onClick = onClearRam,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    CompactToolBentoTile(
+                        icon = Icons.Rounded.Screenshot,
+                        title = "Screenshot",
+                        subtitle = "Tangkap layar",
+                        active = false,
+                        onClick = onTakeScreenshot,
+                        modifier = Modifier.weight(1f)
+                    )
+                    CompactToolBentoTile(
+                        icon = Icons.Rounded.Apps,
+                        title = "Lumina Manager",
+                        subtitle = "Buka aplikasi",
+                        active = false,
+                        onClick = onOpenManager,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
-        }
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        FilledTonalButton(
-            onClick = onOpenManager,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(46.dp),
-            shapes = ButtonDefaults.shapes()
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.Apps,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "Buka Lumina Manager",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
         }
     }
 }

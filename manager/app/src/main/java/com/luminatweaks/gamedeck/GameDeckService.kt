@@ -17,7 +17,17 @@ import android.content.pm.ServiceInfo
 import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.graphics.Rect
+import android.app.ActivityManager
+import android.content.IntentFilter
 import android.media.AudioManager
+import android.media.MediaScannerConnection
+import android.os.BatteryManager
+import android.os.Environment
+import android.os.PowerManager
+import android.view.View
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
 import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
@@ -159,6 +169,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     private var isExpanded = false
     private var isCollapsing = false
     private var isAppPickerOpen = false
+    private var lastRamStatusLabel = "Pangkas latar"
     private var edgeYOffsetPx = 0
     private var reopenBlockedUntilMs = 0L
     private var manualOverride: Boolean? = null
@@ -356,12 +367,17 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         profile = snapshot.profile,
                         profileOverride = pendingOverrideLabel ?: snapshot.profileOverride,
                         profileAutoMode = profileAutoMode,
+                        isCharging = snapshot.isCharging,
+                        isBatterySaver = snapshot.isBatterySaver,
                         rrModes = snapshot.rrModes,
                         selectedRrHz = snapshot.selectedRrHz,
                         brightnessPercent = if (now - lastSliderInteractionMs > 1_200L) snapshot.brightnessPercent else uiState.value.brightnessPercent,
                         volumePercent = if (now - lastSliderInteractionMs > 1_200L) snapshot.volumePercent else uiState.value.volumePercent,
                         volumeMuted = if (now - lastSliderInteractionMs > 1_200L) snapshot.volumeMuted else uiState.value.volumeMuted,
                         dndEnabled = snapshot.dndEnabled,
+                        autoBrightnessLocked = snapshot.autoBrightnessLocked,
+                        rotationLocked = snapshot.rotationLocked,
+                        ramStatusLabel = lastRamStatusLabel,
                         quickApps = snapshot.quickApps
                     )
                 }
@@ -380,12 +396,16 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         val batteryPercent: Int,
         val profile: String,
         val profileOverride: String,
+        val isCharging: Boolean,
+        val isBatterySaver: Boolean,
         val rrModes: List<Int>,
         val selectedRrHz: Int?,
         val brightnessPercent: Int,
         val volumePercent: Int,
         val volumeMuted: Boolean,
         val dndEnabled: Boolean,
+        val autoBrightnessLocked: Boolean,
+        val rotationLocked: Boolean,
         val quickApps: List<GameDeckQuickApp>
     )
 
@@ -432,6 +452,32 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             lastNonZeroVolumePct = volumePct
         }
 
+        val batteryIntent = runCatching {
+            registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        }.getOrNull()
+        val statusExtra = batteryIntent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+        val pluggedExtra = batteryIntent?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0
+        val isCharging = statusExtra == BatteryManager.BATTERY_STATUS_CHARGING ||
+            (statusExtra == BatteryManager.BATTERY_STATUS_FULL && pluggedExtra != 0) ||
+            pluggedExtra != 0
+        val isBatterySaver = getSystemService(PowerManager::class.java)?.isPowerSaveMode == true
+
+        val autoBrightnessLocked = runCatching {
+            Settings.System.getInt(
+                contentResolver,
+                Settings.System.SCREEN_BRIGHTNESS_MODE,
+                Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC
+            ) == Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL
+        }.getOrDefault(false)
+
+        val rotationLocked = runCatching {
+            Settings.System.getInt(
+                contentResolver,
+                Settings.System.ACCELEROMETER_ROTATION,
+                1
+            ) == 0
+        }.getOrDefault(false)
+
         return DeckSnapshot(
             fps = fps,
             frametimeMs = frametime,
@@ -440,6 +486,8 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             gpuPercent = gpu,
             tempLabel = DeviceUtil.getBatteryTemperature(this),
             batteryPercent = battery,
+            isCharging = isCharging,
+            isBatterySaver = isBatterySaver,
             profile = profileProp,
             profileOverride = overrideProp,
             rrModes = supportedRefreshRates(),
@@ -450,6 +498,8 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             dndEnabled = (getSystemService(NotificationManager::class.java)
                 ?.currentInterruptionFilter ?: NotificationManager.INTERRUPTION_FILTER_ALL) !=
                 NotificationManager.INTERRUPTION_FILTER_ALL,
+            autoBrightnessLocked = autoBrightnessLocked,
+            rotationLocked = rotationLocked,
             quickApps = quickApps
         )
     }
@@ -564,6 +614,10 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         onVolumeChanged = ::setVolumePercent,
                         onToggleMute = ::toggleVolumeMute,
                         onToggleDnd = ::toggleDnd,
+                        onToggleAutoBrightnessLock = ::toggleAutoBrightnessLock,
+                        onToggleRotationLock = ::toggleRotationLock,
+                        onClearRam = ::clearBackgroundRam,
+                        onTakeScreenshot = ::takeQuickScreenshot,
                         onQuickAppClick = ::launchFreeformApp,
                         onToggleQuickApp = ::toggleQuickApp,
                         onAppPickerVisibilityChanged = ::setAppPickerOpen,
@@ -1107,6 +1161,135 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
 
             if (!launched) {
                 runCatching { startActivity(launchIntent) }
+            }
+        }
+    }
+
+    private fun toggleAutoBrightnessLock() {
+        val nextLocked = !uiState.value.autoBrightnessLocked
+        val modeValue = if (nextLocked) {
+            Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL
+        } else {
+            Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC
+        }
+        uiState.value = uiState.value.copy(autoBrightnessLocked = nextLocked)
+        serviceScope.launch(Dispatchers.IO) {
+            val wroteDirect = runCatching {
+                if (Settings.System.canWrite(this@GameDeckService)) {
+                    Settings.System.putInt(
+                        contentResolver,
+                        Settings.System.SCREEN_BRIGHTNESS_MODE,
+                        modeValue
+                    )
+                } else {
+                    false
+                }
+            }.getOrDefault(false)
+            if (!wroteDirect) {
+                runCatching {
+                    RootUtil.runAsRoot("settings put system screen_brightness_mode $modeValue")
+                }
+            }
+        }
+    }
+
+    private fun toggleRotationLock() {
+        val nextLocked = !uiState.value.rotationLocked
+        val autoRotateVal = if (nextLocked) 0 else 1
+        val currentRot = runCatching {
+            windowManager?.defaultDisplay?.rotation ?: 1
+        }.getOrDefault(1)
+        uiState.value = uiState.value.copy(rotationLocked = nextLocked)
+        serviceScope.launch(Dispatchers.IO) {
+            val wroteDirect = runCatching {
+                if (Settings.System.canWrite(this@GameDeckService)) {
+                    if (nextLocked) {
+                        Settings.System.putInt(
+                            contentResolver,
+                            Settings.System.USER_ROTATION,
+                            currentRot
+                        )
+                    }
+                    Settings.System.putInt(
+                        contentResolver,
+                        Settings.System.ACCELEROMETER_ROTATION,
+                        autoRotateVal
+                    )
+                } else {
+                    false
+                }
+            }.getOrDefault(false)
+            if (!wroteDirect) {
+                val cmd = if (nextLocked) {
+                    "settings put system user_rotation $currentRot && settings put system accelerometer_rotation 0"
+                } else {
+                    "settings put system accelerometer_rotation 1"
+                }
+                runCatching { RootUtil.runAsRoot(cmd) }
+            }
+        }
+    }
+
+    private fun clearBackgroundRam() {
+        lastRamStatusLabel = "Membersihkan..."
+        uiState.value = uiState.value.copy(ramStatusLabel = lastRamStatusLabel)
+        serviceScope.launch {
+            val freedMb = withContext(Dispatchers.IO) {
+                val am = getSystemService(ActivityManager::class.java)
+                val beforeInfo = ActivityManager.MemoryInfo()
+                am?.getMemoryInfo(beforeInfo)
+                val beforeAvail = beforeInfo.availMem
+
+                runCatching {
+                    packageManager.getInstalledApplications(0).forEach { appInfo ->
+                        val pkg = appInfo.packageName
+                        if (pkg != packageName && (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0) {
+                            am?.killBackgroundProcesses(pkg)
+                        }
+                    }
+                }
+                runCatching { RootUtil.runAsRoot("am kill-all") }
+                delay(280L)
+
+                val afterInfo = ActivityManager.MemoryInfo()
+                am?.getMemoryInfo(afterInfo)
+                ((afterInfo.availMem - beforeAvail) / (1024L * 1024L)).toInt().coerceAtLeast(0)
+            }
+            lastRamStatusLabel = if (freedMb > 0) "+${freedMb} MB" else "Optimal"
+            uiState.value = uiState.value.copy(ramStatusLabel = lastRamStatusLabel)
+            Toast.makeText(
+                this@GameDeckService,
+                if (freedMb > 0) "RAM dibersihkan (+${freedMb} MB)" else "Memori sudah optimal",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    private fun takeQuickScreenshot() {
+        serviceScope.launch {
+            val view = overlayView
+            view?.visibility = View.INVISIBLE
+            delay(140L)
+            val savedPath = withContext(Dispatchers.IO) {
+                runCatching {
+                    val picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+                    val shotDir = File(picturesDir, "Screenshots").apply { mkdirs() }
+                    val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+                    val outFile = File(shotDir, "Lumina_$stamp.png")
+                    RootUtil.runAsRoot("screencap -p "${outFile.absolutePath}"")
+                    if (outFile.exists() && outFile.length() > 0L) {
+                        outFile.absolutePath
+                    } else {
+                        null
+                    }
+                }.getOrNull()
+            }
+            view?.visibility = View.VISIBLE
+            if (savedPath != null) {
+                MediaScannerConnection.scanFile(this@GameDeckService, arrayOf(savedPath), arrayOf("image/png"), null)
+                Toast.makeText(this@GameDeckService, "Screenshot tersimpan", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this@GameDeckService, "Gagal mengambil screenshot", Toast.LENGTH_SHORT).show()
             }
         }
     }
