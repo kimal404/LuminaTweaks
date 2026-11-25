@@ -794,7 +794,7 @@ private fun DashboardDeckContent(
             onSelect = onRefreshRateSelected
         )
 
-        // Card 4: Full-Width Brightness & Volume Sliders (AZenith Style)
+        // Card 4: Full-Width Brightness & Volume Sliders
         BrightnessVolumeCard(
             brightnessPercent = state.brightnessPercent,
             volumePercent = state.volumePercent,
@@ -1292,7 +1292,7 @@ private fun RefreshRateCard(
 }
 
 @Composable
-private fun AZenithStyleLinearSlider(
+private fun ExpressiveLinearSlider(
     value: Int,
     min: Int,
     max: Int,
@@ -1486,7 +1486,7 @@ private fun BrightnessVolumeCard(
                         softWrap = false
                     )
                 }
-                AZenithStyleLinearSlider(
+                ExpressiveLinearSlider(
                     value = brightnessPercent,
                     min = 5,
                     max = 100,
@@ -1532,7 +1532,7 @@ private fun BrightnessVolumeCard(
                         softWrap = false
                     )
                 }
-                AZenithStyleLinearSlider(
+                ExpressiveLinearSlider(
                     value = effectiveVol,
                     min = 0,
                     max = 100,
