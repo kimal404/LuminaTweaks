@@ -164,6 +164,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 
 internal const val DECK_RAIL_WIDTH_DP = 78f
 internal const val DECK_RAIL_GAP_DP = 10f
@@ -3020,121 +3022,104 @@ private fun RefreshRateCard(
     onSelect: (Int?) -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
-    var expanded by remember { mutableStateOf(false) }
-    val chevronRotation by animateFloatAsState(
-        targetValue = if (expanded) 180f else 0f,
-        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
-        label = "rrCardChevronRotation"
-    )
-    val options: List<Int?> = remember(modes) {
-        buildList {
-            add(null)
-            addAll(modes.distinct().sorted())
-        }
+    var menuExpanded by remember { mutableStateOf(false) }
+    val sortedModes = remember(modes) { modes.distinct().sorted() }
+    val displayLiveHz = if (liveHz > 0) liveHz else (selectedHz ?: 60)
+    val pillLabel = if (selectedHz == null) {
+        "Auto · $displayLiveHz Hz"
+    } else {
+        "$selectedHz Hz"
     }
 
     Surface(
         shape = RoundedCornerShape(24.dp),
         color = scheme.surfaceContainer,
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(
-                animationSpec = spring(
-                    dampingRatio = 0.84f,
-                    stiffness = 400f
-                )
-            )
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { expanded = !expanded }
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IosRecentAppsIcon(tint = scheme.primary, containerColor = scheme.surfaceContainer)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Refresh Rate",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = scheme.onSurface,
-                    maxLines = 1,
-                    softWrap = false
-                )
-                Spacer(modifier = Modifier.weight(1f))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IosRecentAppsIcon(
+                tint = scheme.primary,
+                containerColor = scheme.surfaceContainer
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Refresh Rate",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = scheme.onSurface,
+                maxLines = 1,
+                softWrap = false
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Box {
                 Surface(
+                    onClick = { menuExpanded = true },
                     shape = CircleShape,
-                    color = scheme.secondaryContainer,
-                    contentColor = scheme.onSecondaryContainer
+                    color = if (selectedHz != null) {
+                        scheme.primaryContainer
+                    } else {
+                        scheme.secondaryContainer
+                    },
+                    contentColor = if (selectedHz != null) {
+                        scheme.onPrimaryContainer
+                    } else {
+                        scheme.onSecondaryContainer
+                    }
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = if (selectedHz == null) "Auto · $liveHz Hz" else "$selectedHz Hz",
-                            fontSize = 10.5.sp,
+                            text = pillLabel,
+                            fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
                             softWrap = false
                         )
                         Icon(
-                            imageVector = Icons.Rounded.ExpandMore,
+                            imageVector = Icons.Rounded.KeyboardArrowDown,
                             contentDescription = null,
-                            modifier = Modifier
-                                .size(14.dp)
-                                .rotate(chevronRotation)
+                            modifier = Modifier.size(16.dp)
                         )
                     }
                 }
-            }
 
-            if (expanded) {
-                HorizontalDivider(
-                    color = scheme.outlineVariant.copy(alpha = 0.25f),
-                    modifier = Modifier.padding(horizontal = 14.dp)
-                )
-                FlowRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
                 ) {
-                    options.forEach { hz ->
-                        val isSelected = selectedHz == hz
-                        val pillBg by animateColorAsState(
-                            targetValue = if (isSelected) scheme.primary else scheme.surfaceContainerHigh,
-                            animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-                            label = "rrCardOptionBg"
-                        )
-                        val pillText by animateColorAsState(
-                            targetValue = if (isSelected) scheme.onPrimary else scheme.onSurface,
-                            animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-                            label = "rrCardOptionText"
-                        )
-
-                        Surface(
-                            onClick = {
-                                onSelect(hz)
-                                expanded = false
-                            },
-                            shape = CircleShape,
-                            color = pillBg,
-                            contentColor = pillText
-                        ) {
+                    DropdownMenuItem(
+                        text = {
                             Text(
-                                text = hz?.let { "$it Hz" } ?: "Auto",
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                fontSize = 11.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                maxLines = 1,
-                                softWrap = false
+                                text = "Auto ($displayLiveHz Hz)",
+                                fontWeight = if (selectedHz == null) FontWeight.Bold else FontWeight.Normal
                             )
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onSelect(null)
                         }
+                    )
+                    sortedModes.forEach { hz ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = "$hz Hz",
+                                    fontWeight = if (selectedHz == hz) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onSelect(hz)
+                            }
+                        )
                     }
                 }
             }
