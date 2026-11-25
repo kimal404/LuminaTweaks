@@ -20,6 +20,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -53,7 +55,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
@@ -146,7 +151,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -261,9 +268,9 @@ fun GameDeckRoot(
             if (openProgress.value > 0f) {
                 openProgress.animateTo(
                     targetValue = 0f,
-                    animationSpec = tween(
-                        durationMillis = 185,
-                        easing = FastOutSlowInEasing
+                    animationSpec = spring(
+                        dampingRatio = 0.88f,
+                        stiffness = 460f
                     )
                 )
             }
@@ -862,7 +869,10 @@ private fun DeckCard(
         AnimatedContent(
             targetState = modalMode,
             transitionSpec = {
-                fadeIn(tween(180)) togetherWith fadeOut(tween(140))
+                (fadeIn(tween(220)) + scaleIn(
+                    initialScale = 0.96f,
+                    animationSpec = spring(dampingRatio = 0.82f, stiffness = 380f)
+                )) togetherWith (fadeOut(tween(150)) + scaleOut(targetScale = 0.97f))
             },
             label = "deckCardModalMode"
         ) { mode ->
@@ -874,6 +884,7 @@ private fun DeckCard(
                 )
                 else -> HorizontalPager(
                     state = pagerState,
+                    beyondViewportPageCount = 1,
                     modifier = Modifier.fillMaxSize(),
                     key = { it }
                 ) { page ->
@@ -1341,6 +1352,10 @@ private fun FullScreenWidgetEditorOverlay(
     onDone: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
+    val haptic = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val coroutineScope = rememberCoroutineScope()
+
     data class WidgetEditorItem(
         val key: String,
         val title: String,
@@ -1365,50 +1380,97 @@ private fun FullScreenWidgetEditorOverlay(
 
     var draggedKey by remember { mutableStateOf<String?>(null) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
-    val stepThresholdPx = with(LocalDensity.current) { 78.dp.toPx() }
-    val autoScrollMarginPx = with(LocalDensity.current) { 54.dp.toPx() }
-    val listScrollState = rememberScrollState()
-    var listViewportHeightPx by remember { mutableFloatStateOf(0f) }
-    var draggedItemTopPx by remember { mutableFloatStateOf(0f) }
-    var draggedItemHeightPx by remember { mutableFloatStateOf(0f) }
+    var settlingKey by remember { mutableStateOf<String?>(null) }
+    val settlingOffset = remember { Animatable(0f) }
+
+    val defaultStepPx = with(density) { 82.dp.toPx() }
+    val itemSpacingPx = with(density) { 10.dp.toPx() }
+    val autoScrollMarginPx = with(density) { 54.dp.toPx() }
+    val activeListState = rememberLazyListState()
+    val libraryListState = rememberLazyListState()
+
     val currentActiveItems by rememberUpdatedState(activeItems)
     val currentOrderedKeys by rememberUpdatedState(orderedKeys)
     val currentDragOffsetY by rememberUpdatedState(dragOffsetY)
+
+    fun processReorderStep(activeKey: String) {
+        val listVis = currentActiveItems
+        val listGlob = currentOrderedKeys
+        val curVisIdx = listVis.indexOfFirst { it.key == activeKey }
+        val curGlobIdx = listGlob.indexOf(activeKey)
+        if (curVisIdx < 0 || curGlobIdx < 0) return
+
+        val visibleMap = activeListState.layoutInfo.visibleItemsInfo.associateBy { it.key }
+        val currentSize = visibleMap[activeKey]?.size?.toFloat() ?: defaultStepPx
+
+        if (dragOffsetY > 0f && curVisIdx < listVis.lastIndex) {
+            val nextItem = listVis[curVisIdx + 1]
+            val nextSize = visibleMap[nextItem.key]?.size?.toFloat() ?: currentSize
+            val threshold = (nextSize + itemSpacingPx) * 0.52f
+            if (dragOffsetY >= threshold) {
+                val targetGlobIdx = listGlob.indexOf(nextItem.key)
+                if (targetGlobIdx >= 0) {
+                    onMoveWidget(curGlobIdx, targetGlobIdx)
+                    dragOffsetY -= (nextSize + itemSpacingPx)
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                }
+            }
+        } else if (dragOffsetY < 0f && curVisIdx > 0) {
+            val prevItem = listVis[curVisIdx - 1]
+            val prevSize = visibleMap[prevItem.key]?.size?.toFloat() ?: currentSize
+            val threshold = (prevSize + itemSpacingPx) * 0.52f
+            if (dragOffsetY <= -threshold) {
+                val targetGlobIdx = listGlob.indexOf(prevItem.key)
+                if (targetGlobIdx >= 0) {
+                    onMoveWidget(curGlobIdx, targetGlobIdx)
+                    dragOffsetY += (prevSize + itemSpacingPx)
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                }
+            }
+        }
+    }
+
+    fun releaseDraggedCard(activeKey: String) {
+        if (draggedKey != activeKey) return
+        val releaseDelta = dragOffsetY
+        draggedKey = null
+        dragOffsetY = 0f
+        settlingKey = activeKey
+        coroutineScope.launch {
+            settlingOffset.snapTo(releaseDelta)
+            settlingOffset.animateTo(
+                targetValue = 0f,
+                animationSpec = spring(
+                    dampingRatio = 0.78f,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            )
+            if (settlingKey == activeKey) {
+                settlingKey = null
+            }
+        }
+    }
 
     LaunchedEffect(draggedKey) {
         val activeKey = draggedKey ?: return@LaunchedEffect
         while (draggedKey == activeKey) {
             delay(16L)
-            val vpH = listViewportHeightPx
-            if (vpH <= 0f || draggedItemHeightPx <= 0f) continue
-            val visualTop = draggedItemTopPx - listScrollState.value + currentDragOffsetY
-            val visualBottom = visualTop + draggedItemHeightPx
+            val layoutInfo = activeListState.layoutInfo
+            val vpH = layoutInfo.viewportSize.height.toFloat()
+            val visibleItem = layoutInfo.visibleItemsInfo.firstOrNull { it.key == activeKey }
+            if (vpH <= 0f || visibleItem == null) continue
+            val visualTop = visibleItem.offset.toFloat() + currentDragOffsetY
+            val visualBottom = visualTop + visibleItem.size.toFloat()
             val scrollDelta = when {
-                visualBottom > vpH - autoScrollMarginPx && listScrollState.canScrollForward -> 10f
-                visualTop < autoScrollMarginPx && listScrollState.canScrollBackward -> -10f
+                visualBottom > vpH - autoScrollMarginPx && activeListState.canScrollForward -> 10f
+                visualTop < autoScrollMarginPx && activeListState.canScrollBackward -> -10f
                 else -> 0f
             }
             if (scrollDelta != 0f) {
-                val consumed = listScrollState.scrollBy(scrollDelta)
+                val consumed = activeListState.scrollBy(scrollDelta)
                 if (consumed != 0f) {
                     dragOffsetY += consumed
-                    val listVis = currentActiveItems
-                    val listGlob = currentOrderedKeys
-                    val curVisIdx = listVis.indexOfFirst { it.key == activeKey }
-                    val curGlobIdx = listGlob.indexOf(activeKey)
-                    if (dragOffsetY > stepThresholdPx && curVisIdx in 0 until listVis.lastIndex) {
-                        val targetGlobIdx = listGlob.indexOf(listVis[curVisIdx + 1].key)
-                        if (curGlobIdx >= 0 && targetGlobIdx >= 0) {
-                            onMoveWidget(curGlobIdx, targetGlobIdx)
-                            dragOffsetY -= stepThresholdPx
-                        }
-                    } else if (dragOffsetY < -stepThresholdPx && curVisIdx > 0) {
-                        val targetGlobIdx = listGlob.indexOf(listVis[curVisIdx - 1].key)
-                        if (curGlobIdx >= 0 && targetGlobIdx >= 0) {
-                            onMoveWidget(curGlobIdx, targetGlobIdx)
-                            dragOffsetY += stepThresholdPx
-                        }
-                    }
+                    processReorderStep(activeKey)
                 }
             }
         }
@@ -1438,7 +1500,7 @@ private fun FullScreenWidgetEditorOverlay(
                         softWrap = false
                     )
                     Text(
-                        text = "Seret untuk ubah urutan atau tambah dari pustaka",
+                        text = "Tahan kartu atau tarik = untuk ubah urutan",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.White.copy(alpha = 0.72f),
@@ -1448,7 +1510,10 @@ private fun FullScreenWidgetEditorOverlay(
                 }
 
                 Surface(
-                    onClick = onDone,
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onDone()
+                    },
                     shape = CircleShape,
                     color = scheme.primary,
                     contentColor = scheme.onPrimary
@@ -1500,87 +1565,90 @@ private fun FullScreenWidgetEditorOverlay(
                             )
                         }
                     } else {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .onSizeChanged { listViewportHeightPx = it.height.toFloat() }
-                                .verticalScroll(listScrollState, enabled = draggedKey == null)
-                                .padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        LazyColumn(
+                            state = activeListState,
+                            userScrollEnabled = draggedKey == null,
+                            contentPadding = PaddingValues(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxSize()
                         ) {
-                            activeItems.forEach { item ->
-                                key(item.key) {
+                            items(
+                                items = activeItems,
+                                key = { it.key }
+                            ) { item ->
                                 val isDragging = draggedKey == item.key
-                                val dragScale by animateFloatAsState(
-                                    targetValue = if (isDragging) 0.99f else 1f,
-                                    animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMedium),
+                                val isSettling = settlingKey == item.key
+                                val isElevated = isDragging || isSettling
+
+                                val cardScale by animateFloatAsState(
+                                    targetValue = if (isDragging) 1.015f else 1f,
+                                    animationSpec = spring(
+                                        dampingRatio = 0.76f,
+                                        stiffness = Spring.StiffnessMediumLow
+                                    ),
                                     label = "fullEditorDragScale"
                                 )
-                                val dragElevation by animateDpAsState(
-                                    targetValue = if (isDragging) 10.dp else 0.dp,
-                                    animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMedium),
+                                val cardElevation by animateDpAsState(
+                                    targetValue = if (isDragging) 12.dp else if (isSettling) 4.dp else 0.dp,
+                                    animationSpec = spring(
+                                        dampingRatio = 0.78f,
+                                        stiffness = Spring.StiffnessMediumLow
+                                    ),
                                     label = "fullEditorDragElev"
                                 )
-                                val onReorderDelta: (Float) -> Unit = { deltaY ->
-                                    dragOffsetY += deltaY
-                                    val listVis = currentActiveItems
-                                    val listGlob = currentOrderedKeys
-                                    val curVisIdx = listVis.indexOfFirst { it.key == item.key }
-                                    val curGlobIdx = listGlob.indexOf(item.key)
-                                    if (dragOffsetY > stepThresholdPx && curVisIdx in 0 until listVis.lastIndex) {
-                                        val targetGlobIdx = listGlob.indexOf(listVis[curVisIdx + 1].key)
-                                        if (curGlobIdx >= 0 && targetGlobIdx >= 0) {
-                                            onMoveWidget(curGlobIdx, targetGlobIdx)
-                                            dragOffsetY -= stepThresholdPx
-                                        }
-                                    } else if (dragOffsetY < -stepThresholdPx && curVisIdx > 0) {
-                                        val targetGlobIdx = listGlob.indexOf(listVis[curVisIdx - 1].key)
-                                        if (curGlobIdx >= 0 && targetGlobIdx >= 0) {
-                                            onMoveWidget(curGlobIdx, targetGlobIdx)
-                                            dragOffsetY += stepThresholdPx
-                                        }
-                                    }
+                                val borderColor by animateColorAsState(
+                                    targetValue = if (isElevated) scheme.primary else scheme.outlineVariant.copy(alpha = 0.35f),
+                                    animationSpec = tween(durationMillis = 180),
+                                    label = "fullEditorBorderColor"
+                                )
+                                val activeTranslationY = when {
+                                    isDragging -> dragOffsetY
+                                    isSettling -> settlingOffset.value
+                                    else -> 0f
                                 }
 
                                 Surface(
                                     shape = RoundedCornerShape(20.dp),
-                                    color = if (isDragging) scheme.surfaceContainerHighest else scheme.surfaceContainerHigh,
-                                    shadowElevation = dragElevation,
+                                    color = if (isElevated) scheme.surfaceContainerHighest else scheme.surfaceContainerHigh,
+                                    shadowElevation = cardElevation,
                                     border = BorderStroke(
-                                        width = if (isDragging) 1.5.dp else 1.dp,
-                                        color = if (isDragging) scheme.primary else scheme.outlineVariant.copy(alpha = 0.35f)
+                                        width = if (isElevated) 1.5.dp else 1.dp,
+                                        color = borderColor
                                     ),
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .onGloballyPositioned { coords ->
-                                            if (draggedKey == item.key) {
-                                                draggedItemTopPx = coords.positionInParent().y
-                                                draggedItemHeightPx = coords.size.height.toFloat()
-                                            }
-                                        }
-                                        .zIndex(if (isDragging) 2f else 0f)
+                                        .animateItem(
+                                            fadeInSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                            placementSpec = spring(
+                                                dampingRatio = 0.78f,
+                                                stiffness = Spring.StiffnessMediumLow
+                                            ),
+                                            fadeOutSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                        )
+                                        .zIndex(if (isElevated) 2f else 0f)
                                         .graphicsLayer {
-                                            translationY = if (isDragging) dragOffsetY else 0f
-                                            scaleX = dragScale
-                                            scaleY = dragScale
+                                            translationY = activeTranslationY
+                                            scaleX = cardScale
+                                            scaleY = cardScale
                                         }
                                         .pointerInput(item.key) {
                                             detectDragGesturesAfterLongPress(
                                                 onDragStart = {
+                                                    settlingKey = null
                                                     draggedKey = item.key
                                                     dragOffsetY = 0f
+                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                 },
                                                 onDragEnd = {
-                                                    draggedKey = null
-                                                    dragOffsetY = 0f
+                                                    releaseDraggedCard(item.key)
                                                 },
                                                 onDragCancel = {
-                                                    draggedKey = null
-                                                    dragOffsetY = 0f
+                                                    releaseDraggedCard(item.key)
                                                 },
                                                 onDrag = { change, dragAmount ->
                                                     change.consume()
-                                                    onReorderDelta(dragAmount.y)
+                                                    dragOffsetY += dragAmount.y
+                                                    processReorderStep(item.key)
                                                 }
                                             )
                                         }
@@ -1602,7 +1670,7 @@ private fun FullScreenWidgetEditorOverlay(
                                                         .size(28.dp)
                                                         .clip(RoundedCornerShape(8.dp))
                                                         .background(
-                                                            if (isDragging) {
+                                                            if (isElevated) {
                                                                 scheme.primary.copy(alpha = 0.2f)
                                                             } else {
                                                                 scheme.surfaceContainer
@@ -1611,20 +1679,21 @@ private fun FullScreenWidgetEditorOverlay(
                                                         .pointerInput(item.key) {
                                                             detectVerticalDragGestures(
                                                                 onDragStart = {
+                                                                    settlingKey = null
                                                                     draggedKey = item.key
                                                                     dragOffsetY = 0f
+                                                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                                                 },
                                                                 onDragEnd = {
-                                                                    draggedKey = null
-                                                                    dragOffsetY = 0f
+                                                                    releaseDraggedCard(item.key)
                                                                 },
                                                                 onDragCancel = {
-                                                                    draggedKey = null
-                                                                    dragOffsetY = 0f
+                                                                    releaseDraggedCard(item.key)
                                                                 },
                                                                 onVerticalDrag = { change, dragAmount ->
                                                                     change.consume()
-                                                                    onReorderDelta(dragAmount)
+                                                                    dragOffsetY += dragAmount
+                                                                    processReorderStep(item.key)
                                                                 }
                                                             )
                                                         },
@@ -1633,7 +1702,7 @@ private fun FullScreenWidgetEditorOverlay(
                                                     Icon(
                                                         imageVector = Icons.Rounded.DragHandle,
                                                         contentDescription = "Geser urutan",
-                                                        tint = if (isDragging) scheme.primary else scheme.onSurfaceVariant,
+                                                        tint = if (isElevated) scheme.primary else scheme.onSurfaceVariant,
                                                         modifier = Modifier.size(16.dp)
                                                     )
                                                 }
@@ -1650,7 +1719,10 @@ private fun FullScreenWidgetEditorOverlay(
                                         }
 
                                         Surface(
-                                            onClick = { onToggleWidget(item.key) },
+                                            onClick = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                onToggleWidget(item.key)
+                                            },
                                             enabled = activeItems.size > 1,
                                             modifier = Modifier
                                                 .align(Alignment.TopEnd)
@@ -1677,7 +1749,6 @@ private fun FullScreenWidgetEditorOverlay(
                                             }
                                         }
                                     }
-                                }
                                 }
                             }
                         }
@@ -1712,7 +1783,10 @@ private fun FullScreenWidgetEditorOverlay(
                                 modifier = Modifier.weight(1f)
                             )
                             Surface(
-                                onClick = onResetWidgets,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onResetWidgets()
+                                },
                                 modifier = Modifier.size(30.dp),
                                 shape = CircleShape,
                                 color = if (isDefaultConfig) scheme.surfaceContainer else scheme.secondaryContainer,
@@ -1770,19 +1844,34 @@ private fun FullScreenWidgetEditorOverlay(
                                 }
                             }
                         } else {
-                            Column(
+                            LazyColumn(
+                                state = libraryListState,
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
                                 modifier = Modifier
                                     .weight(1f)
                                     .fillMaxWidth()
-                                    .verticalScroll(rememberScrollState()),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                libraryItems.forEach { item ->
+                                items(
+                                    items = libraryItems,
+                                    key = { it.key }
+                                ) { item ->
                                     Surface(
-                                        onClick = { onToggleWidget(item.key) },
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            onToggleWidget(item.key)
+                                        },
                                         shape = RoundedCornerShape(18.dp),
                                         color = scheme.surfaceContainerHigh,
-                                        modifier = Modifier.fillMaxWidth()
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .animateItem(
+                                                fadeInSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                                placementSpec = spring(
+                                                    dampingRatio = 0.78f,
+                                                    stiffness = Spring.StiffnessMediumLow
+                                                ),
+                                                fadeOutSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                            )
                                     ) {
                                         Row(
                                             modifier = Modifier
@@ -2515,6 +2604,12 @@ private fun DashboardDeckContent(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
+            .animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = 0.80f,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            )
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
