@@ -71,6 +71,12 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         private const val CHANNEL_ID = "lumina_game_deck_channel"
         private const val NOTIFICATION_ID = 4046
         private const val GAME_STALE_GRACE_MS = 10_000L
+        private const val COLLAPSE_ANIMATION_MS = 220L
+        private const val REOPEN_COOLDOWN_MS = 280L
+        private const val EXPANDED_HEIGHT_DP = 316f
+        private const val COLLAPSED_WIDTH_DP = 22f
+        private const val COLLAPSED_HEIGHT_DP = 68f
+        private const val EDGE_MARGIN_DP = 12f
 
         const val ACTION_SYNC = "com.luminatweaks.action.GAME_DECK_SYNC"
         const val ACTION_SHOW_NOW = "com.luminatweaks.action.GAME_DECK_SHOW_NOW"
@@ -140,6 +146,8 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     private var activeConfig = GameDeckConfig()
     private var isAttached = false
     private var isExpanded = false
+    private var edgeYOffsetPx = 0
+    private var reopenBlockedUntilMs = 0L
     private var manualOverride: Boolean? = null
     private var wasGameActive = false
     private var lastGameSeenMs = 0L
@@ -176,6 +184,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         activeConfig = GameDeckPrefs.load(this)
+        edgeYOffsetPx = activeConfig.edgeYOffsetPx
         when (intent?.action) {
             ACTION_SHOW_NOW -> {
                 manualOverride = true
@@ -194,7 +203,10 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                 return START_STICKY
             }
             ACTION_STOP -> {
-                GameDeckPrefs.save(this, activeConfig.copy(enabled = false))
+                GameDeckPrefs.save(
+                    this,
+                    activeConfig.copy(enabled = false, edgeYOffsetPx = edgeYOffsetPx)
+                )
                 manualOverride = false
                 stopSelf()
                 return START_NOT_STICKY
@@ -235,7 +247,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         telemetryJob = serviceScope.launch {
             while (isActive) {
                 val config = GameDeckPrefs.load(this@GameDeckService)
-                activeConfig = config
+                activeConfig = config.copy(edgeYOffsetPx = edgeYOffsetPx)
                 val now = System.currentTimeMillis()
                 val feed = withContext(Dispatchers.IO) { LiveSessionFeed.read(this@GameDeckService) }
                 val gameActive = (feed?.gameActive == true) ||
@@ -532,7 +544,10 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         onRefreshRateSelected = ::selectRefreshRate,
                         onToggleDnd = ::toggleDnd,
                         onQuickAppClick = ::launchFreeformApp,
-                        onOpenManager = ::openManager
+                        onOpenManager = ::openManager,
+                        onDragVertical = ::dragEdgeHandle,
+                        onDragVerticalEnd = ::commitEdgeHandlePosition,
+                        onCollapseSettled = ::handleCollapseSettled
                     )
                 }
             }
@@ -569,6 +584,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
 
     private fun setExpanded(expand: Boolean) {
         if (isExpanded == expand) return
+        if (expand && System.currentTimeMillis() < reopenBlockedUntilMs) return
         transitionJob?.cancel()
         isExpanded = expand
         if (expand) {
@@ -577,18 +593,36 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             lastMetricsMs = 0L
             transitionJob = serviceScope.launch {
                 delay(16L)
-                uiState.value = uiState.value.copy(expanded = true)
+                if (isExpanded) {
+                    uiState.value = uiState.value.copy(expanded = true)
+                }
             }
         } else {
+            reopenBlockedUntilMs = System.currentTimeMillis() + REOPEN_COOLDOWN_MS
+            val wasVisible = uiState.value.expanded
             uiState.value = uiState.value.copy(expanded = false)
+            if (!wasVisible || !isAttached || !isWindowExpandedState.value) {
+                finishCollapse()
+                return
+            }
             transitionJob = serviceScope.launch {
-                delay(185L)
+                delay(COLLAPSE_ANIMATION_MS + 60L)
                 if (!isExpanded) {
-                    isWindowExpandedState.value = false
-                    updateWindowLayout()
+                    finishCollapse()
                 }
             }
         }
+    }
+
+    private fun handleCollapseSettled() {
+        finishCollapse()
+    }
+
+    private fun finishCollapse() {
+        if (isExpanded || !isWindowExpandedState.value) return
+        isWindowExpandedState.value = false
+        uiState.value = uiState.value.copy(expanded = false)
+        updateWindowLayout()
     }
 
     private fun updateWindowLayout() {
@@ -606,22 +640,55 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         view: ComposeView,
         expandedWindow: Boolean
     ) {
-        val density = resources.displayMetrics.density
+        val displayMetrics = resources.displayMetrics
+        val density = displayMetrics.density
         val isLeft = activeConfig.side == GameDeckSide.LEFT
+        val margin = (EDGE_MARGIN_DP * density).roundToInt()
+        val halfScreen = displayMetrics.heightPixels / 2f
+        val maxOffset = if (expandedWindow) {
+            (halfScreen - (EXPANDED_HEIGHT_DP * density / 2f) - margin)
+                .roundToInt()
+                .coerceAtLeast(0)
+        } else {
+            (halfScreen - (COLLAPSED_HEIGHT_DP * density / 2f) - margin)
+                .roundToInt()
+                .coerceAtLeast(0)
+        }
+        params.gravity = Gravity.CENTER_VERTICAL or (if (isLeft) Gravity.LEFT else Gravity.RIGHT)
+        params.y = edgeYOffsetPx.coerceIn(-maxOffset, maxOffset)
         if (expandedWindow) {
-            params.gravity = Gravity.CENTER_VERTICAL or (if (isLeft) Gravity.LEFT else Gravity.RIGHT)
             params.x = (12f * density).roundToInt()
-            params.y = 0
             params.width = WindowManager.LayoutParams.WRAP_CONTENT
             params.height = WindowManager.LayoutParams.WRAP_CONTENT
         } else {
-            params.gravity = Gravity.CENTER_VERTICAL or (if (isLeft) Gravity.LEFT else Gravity.RIGHT)
             params.x = 0
-            params.y = 0
-            params.width = (22f * density).roundToInt()
-            params.height = (56f * density).roundToInt()
+            params.width = (COLLAPSED_WIDTH_DP * density).roundToInt()
+            params.height = (COLLAPSED_HEIGHT_DP * density).roundToInt()
         }
         view.requestLayout()
+    }
+
+    private fun dragEdgeHandle(dy: Float) {
+        if (!isAttached || isWindowExpandedState.value) return
+        val view = composeView ?: return
+        val params = layoutParams ?: return
+        val displayMetrics = resources.displayMetrics
+        val maxOffset = (
+            displayMetrics.heightPixels / 2f -
+                (COLLAPSED_HEIGHT_DP * displayMetrics.density / 2f) -
+                (EDGE_MARGIN_DP * displayMetrics.density)
+            )
+            .roundToInt()
+            .coerceAtLeast(0)
+        edgeYOffsetPx = (edgeYOffsetPx + dy.roundToInt()).coerceIn(-maxOffset, maxOffset)
+        activeConfig = activeConfig.copy(edgeYOffsetPx = edgeYOffsetPx)
+        params.y = edgeYOffsetPx
+        runCatching { windowManager.updateViewLayout(view, params) }
+    }
+
+    private fun commitEdgeHandlePosition() {
+        activeConfig = activeConfig.copy(edgeYOffsetPx = edgeYOffsetPx)
+        GameDeckPrefs.save(this, activeConfig)
     }
 
     private fun createLayoutParams(): WindowManager.LayoutParams {

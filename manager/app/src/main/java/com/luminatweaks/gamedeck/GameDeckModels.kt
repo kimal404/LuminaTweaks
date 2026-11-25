@@ -17,7 +17,8 @@ data class GameDeckConfig(
     val autoGame: Boolean = true,
     val side: GameDeckSide = GameDeckSide.LEFT,
     val opacity: Float = 0.94f,
-    val quickApps: Set<String> = emptySet()
+    val quickApps: Set<String> = emptySet(),
+    val edgeYOffsetPx: Int = 0
 )
 
 data class GameDeckQuickApp(
@@ -55,7 +56,8 @@ object GameDeckPrefs {
             autoGame = sp.getBoolean("auto_game", true),
             side = GameDeckSide.fromKey(sp.getString("side", GameDeckSide.LEFT.key)),
             opacity = sp.getFloat("opacity", 0.94f).coerceIn(0.45f, 1f),
-            quickApps = sp.getStringSet("quick_apps", emptySet()).orEmpty().toSet()
+            quickApps = sp.getStringSet("quick_apps", emptySet()).orEmpty().toSet(),
+            edgeYOffsetPx = sp.getInt("edge_y_offset_px", 0)
         )
     }
 
@@ -66,6 +68,7 @@ object GameDeckPrefs {
             .putString("side", config.side.key)
             .putFloat("opacity", config.opacity.coerceIn(0.45f, 1f))
             .putStringSet("quick_apps", config.quickApps)
+            .putInt("edge_y_offset_px", config.edgeYOffsetPx)
             .apply()
     }
 
