@@ -74,8 +74,8 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         private const val NOTIFICATION_ID = 4046
         private const val GAME_STALE_GRACE_MS = 10_000L
         private const val REOPEN_COOLDOWN_MS = 320L
-        private const val EXPANDED_HEIGHT_FRACTION = 0.76f
-        private const val EXPANDED_MAX_HEIGHT_DP = 336f
+        private const val EXPANDED_HEIGHT_FRACTION = 0.85f
+        private const val EXPANDED_MAX_HEIGHT_DP = 344f
         private const val COLLAPSED_WIDTH_DP = 24f
         private const val COLLAPSED_HEIGHT_DP = 72f
         private const val EDGE_MARGIN_DP = 12f
@@ -134,6 +134,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     private val uiState = mutableStateOf(GameDeckUiState())
     private val isWindowExpandedState = mutableStateOf(false)
     private val isHandlePressedState = mutableStateOf(false)
+    private val edgeYOffsetState = mutableStateOf(0)
     private val sysfs = SysfsTelemetry()
 
     private lateinit var windowManager: WindowManager
@@ -190,6 +191,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         activeConfig = GameDeckPrefs.load(this)
         edgeYOffsetPx = activeConfig.edgeYOffsetPx
+        edgeYOffsetState.value = edgeYOffsetPx
         when (intent?.action) {
             ACTION_SHOW_NOW -> {
                 manualOverride = true
@@ -539,6 +541,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         state = uiState,
                         isWindowExpanded = isWindowExpandedState.value,
                         isHandlePressed = isHandlePressedState.value,
+                        handleYOffsetPx = edgeYOffsetState.value,
                         onCollapse = { setExpanded(false) },
                         onProfileSelected = ::selectProfileOverride,
                         onAutoModeToggle = ::toggleProfileAutoMode,
@@ -601,6 +604,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                                 val nextY = (startEdgeY + dy.roundToInt()).coerceIn(-maxOffset, maxOffset)
                                 if (nextY != edgeYOffsetPx) {
                                     edgeYOffsetPx = nextY
+                                    edgeYOffsetState.value = nextY
                                     activeConfig = activeConfig.copy(edgeYOffsetPx = nextY)
                                     this@GameDeckService.layoutParams?.let { lp ->
                                         lp.y = nextY
@@ -748,25 +752,20 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         val margin = (EDGE_MARGIN_DP * density).roundToInt()
         val halfScreen = displayMetrics.heightPixels / 2f
         val panelHeightPx = (displayMetrics.heightPixels * EXPANDED_HEIGHT_FRACTION)
-            .coerceIn(288f * density, EXPANDED_MAX_HEIGHT_DP * density)
-            .coerceAtMost((displayMetrics.heightPixels - 28f * density).coerceAtLeast(260f * density))
+            .coerceIn(316f * density, EXPANDED_MAX_HEIGHT_DP * density)
+            .coerceAtMost((displayMetrics.heightPixels - 20f * density).coerceAtLeast(280f * density))
         val panelWidthPx = (DECK_TOTAL_WIDTH_DP * density)
             .coerceAtMost((displayMetrics.widthPixels - 24f * density).coerceAtLeast(320f * density))
-        val maxOffset = if (expandedWindow) {
-            (halfScreen - (panelHeightPx / 2f) - (8f * density))
-                .roundToInt()
-                .coerceAtLeast(0)
-        } else {
-            collapsedMaxOffsetPx()
-        }
+        val maxOffset = collapsedMaxOffsetPx()
         params.gravity = Gravity.CENTER_VERTICAL or (if (isLeft) Gravity.LEFT else Gravity.RIGHT)
-        params.y = edgeYOffsetPx.coerceIn(-maxOffset, maxOffset)
         if (expandedWindow) {
             params.x = (12f * density).roundToInt()
+            params.y = 0
             params.width = panelWidthPx.roundToInt()
             params.height = panelHeightPx.roundToInt()
         } else {
             params.x = 0
+            params.y = edgeYOffsetPx.coerceIn(-maxOffset, maxOffset)
             params.width = (COLLAPSED_WIDTH_DP * density).roundToInt()
             params.height = (COLLAPSED_HEIGHT_DP * density).roundToInt()
         }

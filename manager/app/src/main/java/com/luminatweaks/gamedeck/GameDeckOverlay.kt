@@ -116,6 +116,7 @@ fun GameDeckRoot(
     state: State<GameDeckUiState>,
     isWindowExpanded: Boolean,
     isHandlePressed: Boolean,
+    handleYOffsetPx: Int = 0,
     onCollapse: () -> Unit,
     onProfileSelected: (String?) -> Unit,
     onAutoModeToggle: () -> Unit,
@@ -160,7 +161,13 @@ fun GameDeckRoot(
             isPressed = isHandlePressed
         )
     } else {
-        val slideOffset = with(LocalDensity.current) { 24.dp.toPx() }
+        val density = LocalDensity.current
+        val slideOffset = with(density) { 24.dp.toPx() }
+        val screenHeightPx = LocalContext.current.resources.displayMetrics.heightPixels.toFloat().coerceAtLeast(1f)
+        val panelHeightPx = (screenHeightPx * 0.85f)
+            .coerceIn(with(density) { 316.dp.toPx() }, with(density) { 344.dp.toPx() })
+            .coerceAtLeast(1f)
+        val pivotY = (0.5f + (handleYOffsetPx.toFloat() / panelHeightPx)).coerceIn(0.08f, 0.92f)
         val p = openProgress.value.coerceIn(0f, 1f)
         Box(
             modifier = Modifier
@@ -170,7 +177,7 @@ fun GameDeckRoot(
                     scaleX = 0.90f + 0.10f * p
                     scaleY = 0.92f + 0.08f * p
                     translationX = if (isLeft) -(1f - p) * slideOffset else (1f - p) * slideOffset
-                    transformOrigin = TransformOrigin(if (isLeft) 0f else 1f, 0.5f)
+                    transformOrigin = TransformOrigin(if (isLeft) 0f else 1f, pivotY)
                 }
         ) {
             GameDeckWorkspace(
@@ -646,8 +653,8 @@ private fun DashboardDeckContent(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             DashboardTopRow(state)
             PerformanceHero(
