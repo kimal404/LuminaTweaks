@@ -36,13 +36,6 @@ const POWER_LIMITED_V2_PATHS: &[&str] = &[
     "/proc/gpufreqv2/power_limited",
     "/proc/gpufreqv2/gpufreq_power_limited",
 ];
-const TARGET_FPS_PATHS: &[&str] = &[
-    "/sys/kernel/fpsgo/fstb/fstb_target_fps_hi",
-    "/sys/kernel/fpsgo/fstb/fstb_target_fps_lo",
-    "/sys/kernel/fpsgo/fstb/gx_dfps",
-    "/sys/kernel/fpsgo/common/gx_dfps",
-    "/sys/kernel/ged/hal/gx_dfps",
-];
 const BATOC_PATH: &str = "/proc/mtk_batoc_throttling/battery_oc_protect_stop";
 const HELIO_FORCE_PATH: &str = "/sys/kernel/helio-dvfsrc/dvfsrc_force_vcore_dvfs_opp";
 const EARA_THERMAL_PATH: &str = "/sys/kernel/eara_thermal/enable";
@@ -269,15 +262,12 @@ fn gpu_eco_or_devfreq() -> usize {
 }
 
 fn performance_base_profile() -> usize {
-    let mut applied = ppm_policies(true);
-    if super::apply_node(FPSGO_PATH, "1") {
-        applied += 1;
-    }
+    let mut applied = ppm_policies(false);
     for (name, value) in [
         ("enable_ceiling", "0"),
         ("engine_cooler_enable", "1"),
-        ("boost_ta", "1"),
-        ("boost_VIP", "1"),
+        ("boost_ta", "0"),
+        ("boost_VIP", "0"),
     ] {
         if super::apply_node(&format!("{}/{}", FPSGO_FBT_DIR, name), value) {
             applied += 1;
@@ -294,12 +284,14 @@ fn performance_base_profile() -> usize {
             }
         }
     }
-    if let Some(hz) = crate::tweaks::display::saved_mode_hz().filter(|hz| *hz >= 30) {
-        let target = hz.to_string();
-        for path in TARGET_FPS_PATHS {
-            if super::apply_node(path, &target) {
-                applied += 1;
-            }
+    for (path, value) in [
+        (EAS_PATH, "0"),
+        (GED_KPI_PATH, "0"),
+        (BATOC_PATH, "stop 1"),
+        (EARA_THERMAL_PATH, "0"),
+    ] {
+        if super::apply_node(path, value) {
+            applied += 1;
         }
     }
     for path in POWER_LIMITED_V2_PATHS {
@@ -307,10 +299,7 @@ fn performance_base_profile() -> usize {
             applied += 1;
         }
     }
-    applied += power_limited("0");
-    if super::apply_node(EARA_THERMAL_PATH, "1") {
-        applied += 1;
-    }
+    applied += power_limited("1");
     applied += ddr_performance(false);
     applied
 }

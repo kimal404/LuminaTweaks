@@ -61,12 +61,18 @@ fn set_split_lock(enabled: bool) {
     write_node(SPLIT_LOCK_PATH, if enabled { "1" } else { "0" });
 }
 
-fn tune_top_app(boost: &str, prefer_idle: &str, uclamp: Option<(&str, &str, &str)>) {
+fn tune_top_app(
+    boost: &str,
+    prefer_idle: &str,
+    boost_enabled: &str,
+    uclamp: Option<(&str, &str, &str)>,
+) {
     write_first_available(
         STUNE_DIRS,
         &[
             ("schedtune.boost", boost),
             ("schedtune.prefer_idle", prefer_idle),
+            ("schedtune.sched_boost_enabled", boost_enabled),
         ],
     );
 
@@ -194,17 +200,24 @@ fn apply_cpuset_isolation() {
     write_node(&format!("{}/top-app/cpus", CPUSET_DIR), &active_list);
 }
 
+pub fn apply_performance() {
+    set_split_lock(false);
+    set_sched_features(&["NEXT_BUDDY", "NO_TTWU_QUEUE"]);
+    tune_top_app("1", "1", "1", Some(("1024", "max", "1")));
+    tune_touchpanel(true);
+}
+
 pub fn apply_balance() {
     set_split_lock(true);
     set_sched_features(&["NEXT_BUDDY", "TTWU_QUEUE"]);
-    tune_top_app("0", "0", None);
+    tune_top_app("0", "0", "0", None);
     tune_touchpanel(false);
 }
 
 pub fn apply_powersave() {
     set_split_lock(true);
     set_sched_features(&["NEXT_BUDDY", "TTWU_QUEUE"]);
-    tune_top_app("0", "1", None);
+    tune_top_app("0", "1", "0", None);
     tune_touchpanel(false);
 }
 

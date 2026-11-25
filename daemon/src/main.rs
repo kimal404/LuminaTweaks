@@ -64,6 +64,7 @@ const PROFILE_FILE_PATH: &str = "/data/adb/.config/lumina/current_profile";
 const LEGACY_PROFILE_FILE_PATH: &str = "/data/local/tmp/lumina.profile";
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 const CONFIG_FALLBACK_INTERVAL: Duration = Duration::from_secs(2);
+const PERFORMANCE_GUARD_RECOVER_AFTER: Duration = Duration::from_secs(10);
 const LEGACY_PROFILE_STATE_PATH: &str = "/data/adb/.config/lumina/profile.conf";
 
 extern "C" fn handle_signal(_: i32) {
@@ -649,6 +650,7 @@ fn main() {
     let mut fas_controller = fas::FasController::new(fps_monitor.tap());
     let mut thermal_monitor = thermal::ThermalMonitor::new();
     let mut performance_guard = false;
+    let mut performance_guard_recover_at: Option<Instant> = None;
     let mut last_heartbeat = Instant::now();
     let mut reload_pending_at: Option<Instant> = None;
     let mut reload_force = false;
@@ -1010,23 +1012,38 @@ fn main() {
             };
         if runtime.current_profile != Some(Profile::Performance) {
             performance_guard = false;
+            performance_guard_recover_at = None;
         } else if screen_awake {
             match thermal_pressure {
-                thermal::ThermalPressure::Critical if !performance_guard => {
-                    engine::performance_safety_relax();
-                    performance_guard = true;
-                    log!("[THERMAL] PERFORMANCE guard engaged | clocks relaxed");
+                thermal::ThermalPressure::Critical => {
+                    performance_guard_recover_at = None;
+                    if !performance_guard {
+                        engine::performance_safety_relax();
+                        performance_guard = true;
+                        log!("[THERMAL] PERFORMANCE guard engaged | clocks relaxed");
+                    }
                 }
-                thermal::ThermalPressure::Normal if performance_guard => {
-                    apply_profile(Profile::Performance, runtime.current_lite);
-                    performance_guard = false;
-                    log!("[THERMAL] PERFORMANCE guard released | peak restored");
+                thermal::ThermalPressure::Warm | thermal::ThermalPressure::Normal
+                    if performance_guard =>
+                {
+                    let now = Instant::now();
+                    let deadline = *performance_guard_recover_at
+                        .get_or_insert(now + PERFORMANCE_GUARD_RECOVER_AFTER);
+                    if now >= deadline {
+                        apply_profile(Profile::Performance, runtime.current_lite);
+                        performance_guard = false;
+                        performance_guard_recover_at = None;
+                        log!("[THERMAL] PERFORMANCE guard released | peak restored");
+                    }
                 }
                 _ => {}
             }
         }
+        let fas_profile_active = runtime.current_profile == Some(Profile::Performance)
+            && !runtime.current_lite
+            && !performance_guard;
         fas_controller.tick(
-            false,
+            fas_profile_active,
             screen_awake && current_target.is_some(),
             display::saved_mode_hz().filter(|hz| *hz >= 30),
             runtime.current_lite,

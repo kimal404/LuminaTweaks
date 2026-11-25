@@ -480,7 +480,11 @@ fn drop_caches() {
 
 pub fn performance_profile(lite: bool) {
     apply_battery_saver(false);
-    crate::tweaks::sched::apply_balance();
+    if lite {
+        crate::tweaks::sched::apply_balance();
+    } else {
+        crate::tweaks::sched::apply_performance();
+    }
     apply_vfs_cache_pressure("80");
     apply_performance_governor();
     cpufreq_performance(lite);
