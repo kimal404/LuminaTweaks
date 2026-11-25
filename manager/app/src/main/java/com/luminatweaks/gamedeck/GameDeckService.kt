@@ -602,7 +602,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                                 if (nextY != edgeYOffsetPx) {
                                     edgeYOffsetPx = nextY
                                     activeConfig = activeConfig.copy(edgeYOffsetPx = nextY)
-                                    layoutParams?.let { lp ->
+                                    this@GameDeckService.layoutParams?.let { lp ->
                                         lp.y = nextY
                                         runCatching { windowManager.updateViewLayout(this, lp) }
                                     }
