@@ -37,7 +37,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -68,6 +70,11 @@ import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.ScreenLockRotation
@@ -103,16 +110,20 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
@@ -181,6 +192,10 @@ fun GameDeckRoot(
     onBrightnessChanged: (Int, Boolean) -> Unit,
     onVolumeChanged: (Int) -> Unit,
     onToggleMute: () -> Unit,
+    onMusicPlayPause: () -> Unit = {},
+    onMusicNext: () -> Unit = {},
+    onMusicPrevious: () -> Unit = {},
+    onToggleDashboardWidget: (String) -> Unit = {},
     onToggleDnd: () -> Unit,
     onToggleAutoBrightnessLock: () -> Unit,
     onToggleRotationLock: () -> Unit,
@@ -255,6 +270,10 @@ fun GameDeckRoot(
                 onBrightnessChanged = onBrightnessChanged,
                 onVolumeChanged = onVolumeChanged,
                 onToggleMute = onToggleMute,
+                onMusicPlayPause = onMusicPlayPause,
+                onMusicNext = onMusicNext,
+                onMusicPrevious = onMusicPrevious,
+                onToggleDashboardWidget = onToggleDashboardWidget,
                 onToggleDnd = onToggleDnd,
                 onToggleAutoBrightnessLock = onToggleAutoBrightnessLock,
                 onToggleRotationLock = onToggleRotationLock,
@@ -348,6 +367,10 @@ private fun GameDeckWorkspace(
     onBrightnessChanged: (Int, Boolean) -> Unit,
     onVolumeChanged: (Int) -> Unit,
     onToggleMute: () -> Unit,
+    onMusicPlayPause: () -> Unit,
+    onMusicNext: () -> Unit,
+    onMusicPrevious: () -> Unit,
+    onToggleDashboardWidget: (String) -> Unit,
     onToggleDnd: () -> Unit,
     onToggleAutoBrightnessLock: () -> Unit,
     onToggleRotationLock: () -> Unit,
@@ -361,6 +384,7 @@ private fun GameDeckWorkspace(
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
     val coroutineScope = rememberCoroutineScope()
     var showAppPicker by remember { mutableStateOf(false) }
+    var showWidgetEditor by remember { mutableStateOf(false) }
     LaunchedEffect(showAppPicker) {
         onAppPickerVisibilityChanged(showAppPicker)
     }
@@ -375,8 +399,9 @@ private fun GameDeckWorkspace(
         .coerceIn(260.dp, DECK_CARD_WIDTH_DP.dp)
 
     val handleTabSelect: (Int) -> Unit = { tab ->
-        if (showAppPicker) {
+        if (showAppPicker || showWidgetEditor) {
             showAppPicker = false
+            showWidgetEditor = false
             coroutineScope.launch { pagerState.scrollToPage(tab) }
         } else if (pagerState.currentPage == tab) {
             onCollapse()
@@ -424,13 +449,19 @@ private fun GameDeckWorkspace(
                 quickApps = state.quickApps,
                 onSelectTab = handleTabSelect,
                 onQuickAppClick = onQuickAppClick,
-                onAddAppClick = { showAppPicker = !showAppPicker }
+                onAddAppClick = {
+                    showWidgetEditor = false
+                    showAppPicker = !showAppPicker
+                }
             )
             DeckCard(
                 state = state,
                 cardWidth = cardWidth,
                 pagerState = pagerState,
                 showAppPicker = showAppPicker,
+                showWidgetEditor = showWidgetEditor,
+                onOpenWidgetEditor = { showWidgetEditor = true },
+                onCloseWidgetEditor = { showWidgetEditor = false },
                 onCloseAppPicker = { showAppPicker = false },
                 onToggleQuickApp = onToggleQuickApp,
                 onProfileSelected = onProfileSelected,
@@ -718,6 +749,9 @@ private fun DeckCard(
     cardWidth: Dp,
     pagerState: PagerState,
     showAppPicker: Boolean,
+    showWidgetEditor: Boolean,
+    onOpenWidgetEditor: () -> Unit,
+    onCloseWidgetEditor: () -> Unit,
     onCloseAppPicker: () -> Unit,
     onToggleQuickApp: (String) -> Unit,
     onProfileSelected: (String?) -> Unit,
@@ -726,6 +760,10 @@ private fun DeckCard(
     onBrightnessChanged: (Int, Boolean) -> Unit,
     onVolumeChanged: (Int) -> Unit,
     onToggleMute: () -> Unit,
+    onMusicPlayPause: () -> Unit,
+    onMusicNext: () -> Unit,
+    onMusicPrevious: () -> Unit,
+    onToggleDashboardWidget: (String) -> Unit,
     onToggleDnd: () -> Unit,
     onToggleAutoBrightnessLock: () -> Unit,
     onToggleRotationLock: () -> Unit,
@@ -745,21 +783,30 @@ private fun DeckCard(
         shape = shape,
         color = scheme.surfaceContainerLow.copy(alpha = deckOpacity)
     ) {
+        val modalMode = when {
+            showAppPicker -> 1
+            showWidgetEditor -> 2
+            else -> 0
+        }
         AnimatedContent(
-            targetState = showAppPicker,
+            targetState = modalMode,
             transitionSpec = {
                 fadeIn(tween(180)) togetherWith fadeOut(tween(140))
             },
-            label = "deckCardPickerMode"
-        ) { pickerOpen ->
-            if (pickerOpen) {
-                QuickAppPickerDeckContent(
+            label = "deckCardModalMode"
+        ) { mode ->
+            when (mode) {
+                1 -> QuickAppPickerDeckContent(
                     selectedPackages = state.quickApps.map { it.packageName }.toSet(),
                     onTogglePackage = onToggleQuickApp,
                     onBack = onCloseAppPicker
                 )
-            } else {
-                HorizontalPager(
+                2 -> DashboardWidgetCustomizerContent(
+                    state = state,
+                    onToggleWidget = onToggleDashboardWidget,
+                    onBack = onCloseWidgetEditor
+                )
+                else -> HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize(),
                     key = { it }
@@ -772,7 +819,11 @@ private fun DeckCard(
                             onRefreshRateSelected = onRefreshRateSelected,
                             onBrightnessChanged = onBrightnessChanged,
                             onVolumeChanged = onVolumeChanged,
-                            onToggleMute = onToggleMute
+                            onToggleMute = onToggleMute,
+                            onMusicPlayPause = onMusicPlayPause,
+                            onMusicNext = onMusicNext,
+                            onMusicPrevious = onMusicPrevious,
+                            onOpenWidgetEditor = onOpenWidgetEditor
                         )
                     } else {
                         ToolsDeckContent(
@@ -1136,10 +1187,10 @@ private fun BatteryCapsulePill(
     val textMeasurer = rememberTextMeasurer()
     val pillTextStyle = remember {
         TextStyle(
-            fontSize = 8.5.sp,
-            lineHeight = 8.5.sp,
+            fontSize = 10.5.sp,
+            lineHeight = 10.5.sp,
             fontWeight = FontWeight.Black,
-            letterSpacing = (-0.3).sp,
+            letterSpacing = (-0.4).sp,
             platformStyle = PlatformTextStyle(includeFontPadding = false)
         )
     }
@@ -1148,24 +1199,38 @@ private fun BatteryCapsulePill(
         textMeasurer.measure(percentLabel, style = pillTextStyle)
     }
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(1.dp)
+    Canvas(
+        modifier = Modifier
+            .width(if (isCharging) 36.dp else 30.dp)
+            .height(15.dp)
     ) {
-        Canvas(
-            modifier = Modifier
-                .width(27.dp)
-                .height(13.5.dp)
-                .clip(RoundedCornerShape(4.dp))
-        ) {
-            drawRect(color = Color(0xFF6B7078).copy(alpha = 0.72f))
-            val fillWidth = size.width * fillFraction
+        val capsuleW = 30.dp.toPx()
+        val capsuleH = size.height
+        val radiusPx = 4.5.dp.toPx()
+        val capsulePath = Path().apply {
+            addRoundRect(
+                RoundRect(
+                    left = 0f,
+                    top = 0f,
+                    right = capsuleW,
+                    bottom = capsuleH,
+                    cornerRadius = CornerRadius(radiusPx, radiusPx)
+                )
+            )
+        }
+
+        clipPath(capsulePath) {
+            drawRect(
+                color = Color(0xFF6B7078).copy(alpha = 0.72f),
+                size = Size(capsuleW, capsuleH)
+            )
+            val fillWidth = capsuleW * fillFraction
             drawRect(
                 color = fillColor,
-                size = Size(fillWidth, size.height)
+                size = Size(fillWidth, capsuleH)
             )
-            val tx = (size.width - textLayout.size.width) / 2f
-            val ty = (size.height - textLayout.size.height) / 2f
+            val tx = (capsuleW - textLayout.size.width) / 2f
+            val ty = (capsuleH - textLayout.size.height) / 2f
             drawText(
                 textLayoutResult = textLayout,
                 color = Color.White,
@@ -1179,13 +1244,340 @@ private fun BatteryCapsulePill(
                 )
             }
         }
+
         if (isCharging) {
-            Icon(
-                imageVector = Icons.Rounded.Bolt,
-                contentDescription = "Mengisi daya",
-                tint = Color.White,
-                modifier = Modifier.size(11.dp)
+            val bx = capsuleW - 2.2.dp.toPx()
+            val by = 1.5.dp.toPx()
+            val bw = 7.5.dp.toPx()
+            val bh = 12.dp.toPx()
+            val boltPath = Path().apply {
+                moveTo(bx + bw * 0.62f, by)
+                lineTo(bx, by + bh * 0.56f)
+                lineTo(bx + bw * 0.44f, by + bh * 0.56f)
+                lineTo(bx + bw * 0.34f, by + bh)
+                lineTo(bx + bw, by + bh * 0.42f)
+                lineTo(bx + bw * 0.55f, by + bh * 0.42f)
+                close()
+            }
+            drawPath(
+                path = boltPath,
+                color = Color(0xFF141218),
+                style = Stroke(width = 2.2.dp.toPx(), join = StrokeJoin.Round)
             )
+            drawPath(
+                path = boltPath,
+                color = Color.White
+            )
+        }
+    }
+}
+
+@Composable
+private fun DashboardWidgetSwitch(
+    checked: Boolean,
+    onCheckedChange: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val trackColor by animateColorAsState(
+        targetValue = if (checked) scheme.primary else scheme.surfaceContainerHighest,
+        animationSpec = tween(durationMillis = 200),
+        label = "widgetSwitchTrack"
+    )
+    val thumbSize by animateDpAsState(
+        targetValue = if (checked) 20.dp else 14.dp,
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow),
+        label = "widgetSwitchThumbSize"
+    )
+    val thumbOffset by animateDpAsState(
+        targetValue = if (checked) 18.dp else 0.dp,
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow),
+        label = "widgetSwitchThumbOffset"
+    )
+    val thumbColor by animateColorAsState(
+        targetValue = if (checked) scheme.onPrimary else scheme.onSurfaceVariant,
+        animationSpec = tween(durationMillis = 200),
+        label = "widgetSwitchThumbColor"
+    )
+
+    Box(
+        modifier = Modifier
+            .requiredSize(width = 44.dp, height = 26.dp)
+            .clip(CircleShape)
+            .background(trackColor)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onCheckedChange
+            )
+            .padding(3.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Box(
+            modifier = Modifier
+                .offset(x = thumbOffset)
+                .size(thumbSize)
+                .clip(CircleShape)
+                .background(thumbColor),
+            contentAlignment = Alignment.Center
+        ) {
+            if (checked) {
+                Icon(
+                    imageVector = Icons.Rounded.Check,
+                    contentDescription = null,
+                    tint = scheme.primary,
+                    modifier = Modifier.size(12.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DashboardWidgetCustomizerContent(
+    state: GameDeckUiState,
+    onToggleWidget: (String) -> Unit,
+    onBack: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val items = listOf(
+        Triple("telemetry", "Telemetri & CPU/GPU", state.showTelemetryWidget),
+        Triple("profile", "Profil Performa", state.showProfileWidget),
+        Triple("music", "Pemutar Musik", state.showMusicWidget),
+        Triple("refresh_rate", "Refresh Rate", state.showRefreshRateWidget),
+        Triple("sliders", "Brightness & Suara", state.showSlidersWidget)
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                onClick = onBack,
+                modifier = Modifier.size(36.dp),
+                shape = CircleShape,
+                color = scheme.surfaceContainer
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                        contentDescription = "Kembali",
+                        tint = scheme.onSurface,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                text = "Widget Dashboard",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = scheme.onSurface,
+                maxLines = 1,
+                softWrap = false
+            )
+        }
+
+        Surface(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            color = scheme.surfaceContainer
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items.forEach { (key, title, enabled) ->
+                    Surface(
+                        onClick = { onToggleWidget(key) },
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (enabled) {
+                            scheme.secondaryContainer.copy(alpha = 0.55f)
+                        } else {
+                            scheme.surfaceContainerHigh
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = title,
+                                fontSize = 12.sp,
+                                fontWeight = if (enabled) FontWeight.Bold else FontWeight.Medium,
+                                color = scheme.onSurface,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            DashboardWidgetSwitch(
+                                checked = enabled,
+                                onCheckedChange = { onToggleWidget(key) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MusicPlayerWidgetCard(
+    title: String,
+    artist: String,
+    packageName: String?,
+    isPlaying: Boolean,
+    onPrevious: () -> Unit,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val appIcon = rememberAppIcon(packageName)
+    val displayTitle = title.ifBlank { "Tidak ada musik diputar" }
+    val displaySubtitle = when {
+        artist.isNotBlank() -> artist
+        title.isNotBlank() -> "Media aktif"
+        else -> "Putar musik di aplikasi pemutar"
+    }
+    val playBtnBg by animateColorAsState(
+        targetValue = if (isPlaying) scheme.primary else scheme.secondaryContainer,
+        animationSpec = tween(durationMillis = 180),
+        label = "musicPlayBtnBg"
+    )
+    val playBtnTint by animateColorAsState(
+        targetValue = if (isPlaying) scheme.onPrimary else scheme.onSecondaryContainer,
+        animationSpec = tween(durationMillis = 180),
+        label = "musicPlayBtnTint"
+    )
+
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = scheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(13.dp))
+                    .background(scheme.surfaceContainerHigh),
+                contentAlignment = Alignment.Center
+            ) {
+                if (appIcon != null) {
+                    Image(
+                        bitmap = appIcon,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Rounded.MusicNote,
+                        contentDescription = null,
+                        tint = if (isPlaying) scheme.primary else scheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = displayTitle,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = scheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = displaySubtitle,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isPlaying) scheme.primary else scheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    onClick = onPrevious,
+                    modifier = Modifier.size(30.dp),
+                    shape = CircleShape,
+                    color = scheme.surfaceContainerHigh,
+                    contentColor = scheme.onSurface
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Rounded.SkipPrevious,
+                            contentDescription = "Sebelumnya",
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+                }
+
+                Surface(
+                    onClick = onPlayPause,
+                    modifier = Modifier.size(36.dp),
+                    shape = RoundedCornerShape(13.dp),
+                    color = playBtnBg,
+                    contentColor = playBtnTint
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                            contentDescription = if (isPlaying) "Jeda" else "Putar",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                Surface(
+                    onClick = onNext,
+                    modifier = Modifier.size(30.dp),
+                    shape = CircleShape,
+                    color = scheme.surfaceContainerHigh,
+                    contentColor = scheme.onSurface
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Rounded.SkipNext,
+                            contentDescription = "Berikutnya",
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -1198,7 +1590,11 @@ private fun DashboardDeckContent(
     onRefreshRateSelected: (Int?) -> Unit,
     onBrightnessChanged: (Int, Boolean) -> Unit,
     onVolumeChanged: (Int) -> Unit,
-    onToggleMute: () -> Unit
+    onToggleMute: () -> Unit,
+    onMusicPlayPause: () -> Unit,
+    onMusicNext: () -> Unit,
+    onMusicPrevious: () -> Unit,
+    onOpenWidgetEditor: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
     val fps = state.fps.coerceAtLeast(0)
@@ -1223,122 +1619,174 @@ private fun DashboardDeckContent(
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = scheme.surfaceContainer,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+        if (state.showTelemetryWidget) {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = scheme.surfaceContainer,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Speed,
-                        contentDescription = null,
-                        tint = scheme.primary,
-                        modifier = Modifier.size(19.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = if (fps > 0) fps.toString() else "--",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Black,
-                        color = fpsColor,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "FPS",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = scheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp),
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                    if (fps > 0 && state.frametimeMs > 0f) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Speed,
+                            contentDescription = null,
+                            tint = scheme.primary,
+                            modifier = Modifier.size(19.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = String.format(Locale.US, " · %.1f ms", state.frametimeMs),
+                            text = if (fps > 0) fps.toString() else "--",
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Black,
+                            color = fpsColor,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "FPS",
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
+                            fontWeight = FontWeight.Bold,
                             color = scheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp),
                             maxLines = 1,
                             softWrap = false
                         )
+                        if (fps > 0 && state.frametimeMs > 0f) {
+                            Text(
+                                text = String.format(Locale.US, " · %.1f ms", state.frametimeMs),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = scheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 4.dp),
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.weight(1f))
+
+                        MetricChip(
+                            icon = Icons.Rounded.Thermostat,
+                            label = state.tempLabel
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        BatteryCapsulePill(
+                            percent = state.batteryPercent,
+                            isCharging = state.isCharging,
+                            isBatterySaver = state.isBatterySaver,
+                            isEcoProfile = state.profile.trim().equals("Eco", ignoreCase = true)
+                        )
                     }
 
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    MetricChip(
-                        icon = Icons.Rounded.Thermostat,
-                        label = state.tempLabel
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    BatteryCapsulePill(
-                        percent = state.batteryPercent,
-                        isCharging = state.isCharging,
-                        isBatterySaver = state.isBatterySaver,
-                        isEcoProfile = state.profile.trim().equals("Eco", ignoreCase = true)
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    ExpressiveRadialGauge(
-                        percent = state.cpuPercent,
-                        label = "CPU",
-                        activeColor = scheme.primary,
-                        badgeContainerColor = scheme.primaryContainer,
-                        badgeContentColor = scheme.onPrimaryContainer,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(114.dp)
-                    )
-                    ExpressiveRadialGauge(
-                        percent = state.gpuPercent,
-                        label = "GPU",
-                        activeColor = scheme.tertiary,
-                        badgeContainerColor = scheme.tertiaryContainer,
-                        badgeContentColor = scheme.onTertiaryContainer,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(114.dp)
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        ExpressiveRadialGauge(
+                            percent = state.cpuPercent,
+                            label = "CPU",
+                            activeColor = scheme.primary,
+                            badgeContainerColor = scheme.primaryContainer,
+                            badgeContentColor = scheme.onPrimaryContainer,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(114.dp)
+                        )
+                        ExpressiveRadialGauge(
+                            percent = state.gpuPercent,
+                            label = "GPU",
+                            activeColor = scheme.tertiary,
+                            badgeContainerColor = scheme.tertiaryContainer,
+                            badgeContentColor = scheme.onTertiaryContainer,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(114.dp)
+                        )
+                    }
                 }
             }
         }
 
-        ProfileSelectorCard(
-            state = state,
-            onProfileSelected = onProfileSelected,
-            onToggleAutoMode = { onSetAutoMode(!state.profileAutoMode) }
-        )
+        if (state.showProfileWidget) {
+            ProfileSelectorCard(
+                state = state,
+                onProfileSelected = onProfileSelected,
+                onToggleAutoMode = { onSetAutoMode(!state.profileAutoMode) }
+            )
+        }
 
-        RefreshRateCard(
-            modes = state.rrModes,
-            selectedHz = state.selectedRrHz,
-            liveHz = state.targetHz,
-            onSelect = onRefreshRateSelected
-        )
+        if (state.showMusicWidget) {
+            MusicPlayerWidgetCard(
+                title = state.musicTitle,
+                artist = state.musicArtist,
+                packageName = state.musicPackage,
+                isPlaying = state.isMusicPlaying,
+                onPrevious = onMusicPrevious,
+                onPlayPause = onMusicPlayPause,
+                onNext = onMusicNext
+            )
+        }
 
-        BrightnessVolumeCard(
-            brightnessPercent = state.brightnessPercent,
-            volumePercent = state.volumePercent,
-            volumeMuted = state.volumeMuted,
-            onBrightnessChanged = onBrightnessChanged,
-            onVolumeChanged = onVolumeChanged,
-            onToggleMute = onToggleMute
-        )
+        if (state.showRefreshRateWidget) {
+            RefreshRateCard(
+                modes = state.rrModes,
+                selectedHz = state.selectedRrHz,
+                liveHz = state.targetHz,
+                onSelect = onRefreshRateSelected
+            )
+        }
+
+        if (state.showSlidersWidget) {
+            BrightnessVolumeCard(
+                brightnessPercent = state.brightnessPercent,
+                volumePercent = state.volumePercent,
+                volumeMuted = state.volumeMuted,
+                onBrightnessChanged = onBrightnessChanged,
+                onVolumeChanged = onVolumeChanged,
+                onToggleMute = onToggleMute
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Surface(
+                onClick = onOpenWidgetEditor,
+                shape = CircleShape,
+                color = scheme.surfaceContainer,
+                contentColor = scheme.onSurfaceVariant
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Tune,
+                        contentDescription = null,
+                        tint = scheme.primary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "Atur Widget Dashboard",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+            }
+        }
     }
 }
 

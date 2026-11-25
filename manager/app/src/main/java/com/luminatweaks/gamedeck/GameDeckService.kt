@@ -22,10 +22,13 @@ import android.media.AudioManager
 import android.media.MediaScannerConnection
 import android.os.BatteryManager
 import android.os.Environment
+import android.os.SystemClock
 import android.os.PowerManager
+import android.view.KeyEvent
 import android.view.View
 import java.io.File
 import java.text.SimpleDateFormat
+import java.util.concurrent.TimeUnit
 import java.util.Date
 import android.os.Build
 import android.os.IBinder
@@ -167,6 +170,12 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     private var isCollapsing = false
     private var isAppPickerOpen = false
     private var lastRamStatusLabel = "Pangkas latar"
+    private var dashboardWidgets = GameDeckPrefs.DashboardWidgets()
+    private var lastMediaPollMs = 0L
+    private var cachedMusicTitle = ""
+    private var cachedMusicArtist = ""
+    private var cachedMusicPackage: String? = null
+    private var cachedMusicPlaying = false
     private var edgeYOffsetPx = 0
     private var reopenBlockedUntilMs = 0L
     private var manualOverride: Boolean? = null
@@ -211,6 +220,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         activeConfig = GameDeckPrefs.load(this)
+        dashboardWidgets = GameDeckPrefs.loadWidgets(this)
         edgeYOffsetPx = activeConfig.edgeYOffsetPx
         edgeYOffsetState.value = edgeYOffsetPx
         when (intent?.action) {
@@ -375,6 +385,15 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         autoBrightnessLocked = snapshot.autoBrightnessLocked,
                         rotationLocked = snapshot.rotationLocked,
                         ramStatusLabel = lastRamStatusLabel,
+                        showTelemetryWidget = dashboardWidgets.showTelemetry,
+                        showProfileWidget = dashboardWidgets.showProfile,
+                        showMusicWidget = dashboardWidgets.showMusic,
+                        showRefreshRateWidget = dashboardWidgets.showRefreshRate,
+                        showSlidersWidget = dashboardWidgets.showSliders,
+                        musicTitle = snapshot.musicTitle,
+                        musicArtist = snapshot.musicArtist,
+                        musicPackage = snapshot.musicPackage,
+                        isMusicPlaying = snapshot.isMusicPlaying,
                         quickApps = snapshot.quickApps
                     )
                 }
@@ -403,6 +422,10 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         val dndEnabled: Boolean,
         val autoBrightnessLocked: Boolean,
         val rotationLocked: Boolean,
+        val musicTitle: String,
+        val musicArtist: String,
+        val musicPackage: String?,
+        val isMusicPlaying: Boolean,
         val quickApps: List<GameDeckQuickApp>
     )
 
@@ -447,6 +470,12 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         val volumePct = ((curVol * 100f) / maxVol).roundToInt().coerceIn(0, 100)
         if (volumePct > 0) {
             lastNonZeroVolumePct = volumePct
+        }
+
+        val nowMs = System.currentTimeMillis()
+        if (isExpanded && dashboardWidgets.showMusic && nowMs - lastMediaPollMs >= 1_500L) {
+            lastMediaPollMs = nowMs
+            refreshActiveMediaSession()
         }
 
         val batteryIntent = runCatching {
@@ -497,6 +526,10 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                 NotificationManager.INTERRUPTION_FILTER_ALL,
             autoBrightnessLocked = autoBrightnessLocked,
             rotationLocked = rotationLocked,
+            musicTitle = cachedMusicTitle,
+            musicArtist = cachedMusicArtist,
+            musicPackage = cachedMusicPackage,
+            isMusicPlaying = cachedMusicPlaying,
             quickApps = quickApps
         )
     }
@@ -610,6 +643,10 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         onBrightnessChanged = ::setBrightnessPercent,
                         onVolumeChanged = ::setVolumePercent,
                         onToggleMute = ::toggleVolumeMute,
+                        onMusicPlayPause = ::toggleMusicPlayPause,
+                        onMusicNext = ::skipMusicNext,
+                        onMusicPrevious = ::skipMusicPrevious,
+                        onToggleDashboardWidget = ::toggleDashboardWidget,
                         onToggleDnd = ::toggleDnd,
                         onToggleAutoBrightnessLock = ::toggleAutoBrightnessLock,
                         onToggleRotationLock = ::toggleRotationLock,
@@ -1160,6 +1197,165 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                 runCatching { startActivity(launchIntent) }
             }
         }
+    }
+
+    private fun refreshActiveMediaSession() {
+        val dump = runCatching {
+            val proc = ProcessBuilder("su", "-c", "dumpsys media_session")
+                .redirectErrorStream(true)
+                .start()
+            if (!proc.waitFor(2, TimeUnit.SECONDS)) {
+                proc.destroyForcibly()
+                return@runCatching ""
+            }
+            proc.inputStream.bufferedReader().use { it.readText() }
+        }.getOrDefault("")
+        if (dump.isBlank()) return
+
+        var bestTitle = ""
+        var bestArtist = ""
+        var bestPkg: String? = null
+        var bestPlaying = false
+        var foundPlaying = false
+
+        var curPkg: String? = null
+        var curActive = false
+        var curPlaying = false
+        var curTitle = ""
+        var curArtist = ""
+
+        fun commitBlock() {
+            if (!curActive && curTitle.isBlank() && !curPlaying) return
+            if (!foundPlaying || curPlaying) {
+                bestTitle = curTitle
+                bestArtist = curArtist
+                bestPkg = curPkg
+                bestPlaying = curPlaying
+                if (curPlaying) foundPlaying = true
+            }
+        }
+
+        for (rawLine in dump.lineSequence()) {
+            val line = rawLine.trim()
+            if (line.startsWith("package=")) {
+                commitBlock()
+                curPkg = line.removePrefix("package=").trim().takeIf { it.isNotEmpty() }
+                curActive = false
+                curPlaying = false
+                curTitle = ""
+                curArtist = ""
+            } else if (line.startsWith("active=")) {
+                curActive = line.removePrefix("active=").trim().equals("true", ignoreCase = true)
+            } else if (line.startsWith("state=PlaybackState")) {
+                curPlaying = line.contains("state=3,") || line.contains("state=3 ")
+            } else if (line.startsWith("metadata:") && line.contains("description=")) {
+                val desc = line.substringAfter("description=").trim()
+                val parts = desc.split(", ")
+                val t = parts.getOrNull(0)?.trim().orEmpty()
+                val a = parts.getOrNull(1)?.trim().orEmpty()
+                curTitle = if (t.equals("null", ignoreCase = true)) "" else t
+                curArtist = if (a.equals("null", ignoreCase = true)) "" else a
+            }
+        }
+        commitBlock()
+
+        val resolvedArtist = if (bestArtist.isNotBlank()) {
+            bestArtist
+        } else if (!bestPkg.isNullOrBlank()) {
+            runCatching {
+                packageManager.getApplicationLabel(packageManager.getApplicationInfo(bestPkg, 0)).toString()
+            }.getOrDefault("")
+        } else {
+            ""
+        }
+
+        cachedMusicTitle = bestTitle
+        cachedMusicArtist = resolvedArtist
+        cachedMusicPackage = bestPkg
+        cachedMusicPlaying = bestPlaying
+    }
+
+    private fun dispatchMediaKey(keyCode: Int) {
+        val am = getSystemService(AudioManager::class.java) ?: return
+        val now = SystemClock.uptimeMillis()
+        am.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0))
+        am.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0))
+    }
+
+    private fun toggleMusicPlayPause() {
+        dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+        cachedMusicPlaying = !cachedMusicPlaying
+        uiState.value = uiState.value.copy(isMusicPlaying = cachedMusicPlaying)
+        serviceScope.launch {
+            delay(320L)
+            withContext(Dispatchers.IO) { refreshActiveMediaSession() }
+            uiState.value = uiState.value.copy(
+                musicTitle = cachedMusicTitle,
+                musicArtist = cachedMusicArtist,
+                musicPackage = cachedMusicPackage,
+                isMusicPlaying = cachedMusicPlaying
+            )
+        }
+    }
+
+    private fun skipMusicNext() {
+        dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT)
+        serviceScope.launch {
+            delay(380L)
+            withContext(Dispatchers.IO) { refreshActiveMediaSession() }
+            uiState.value = uiState.value.copy(
+                musicTitle = cachedMusicTitle,
+                musicArtist = cachedMusicArtist,
+                musicPackage = cachedMusicPackage,
+                isMusicPlaying = cachedMusicPlaying
+            )
+        }
+    }
+
+    private fun skipMusicPrevious() {
+        dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
+        serviceScope.launch {
+            delay(380L)
+            withContext(Dispatchers.IO) { refreshActiveMediaSession() }
+            uiState.value = uiState.value.copy(
+                musicTitle = cachedMusicTitle,
+                musicArtist = cachedMusicArtist,
+                musicPackage = cachedMusicPackage,
+                isMusicPlaying = cachedMusicPlaying
+            )
+        }
+    }
+
+    private fun toggleDashboardWidget(widgetKey: String) {
+        val cur = dashboardWidgets
+        val candidate = when (widgetKey) {
+            "telemetry" -> cur.copy(showTelemetry = !cur.showTelemetry)
+            "profile" -> cur.copy(showProfile = !cur.showProfile)
+            "music" -> cur.copy(showMusic = !cur.showMusic)
+            "refresh_rate" -> cur.copy(showRefreshRate = !cur.showRefreshRate)
+            "sliders" -> cur.copy(showSliders = !cur.showSliders)
+            else -> cur
+        }
+        val activeCount = listOf(
+            candidate.showTelemetry,
+            candidate.showProfile,
+            candidate.showMusic,
+            candidate.showRefreshRate,
+            candidate.showSliders
+        ).count { it }
+        if (activeCount == 0) {
+            Toast.makeText(this, "Minimal 1 widget aktif", Toast.LENGTH_SHORT).show()
+            return
+        }
+        dashboardWidgets = candidate
+        GameDeckPrefs.saveWidgets(this, candidate)
+        uiState.value = uiState.value.copy(
+            showTelemetryWidget = candidate.showTelemetry,
+            showProfileWidget = candidate.showProfile,
+            showMusicWidget = candidate.showMusic,
+            showRefreshRateWidget = candidate.showRefreshRate,
+            showSlidersWidget = candidate.showSliders
+        )
     }
 
     private fun toggleAutoBrightnessLock() {

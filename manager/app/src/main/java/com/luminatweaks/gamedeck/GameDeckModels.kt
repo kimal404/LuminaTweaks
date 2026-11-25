@@ -51,6 +51,15 @@ data class GameDeckUiState(
     val autoBrightnessLocked: Boolean = false,
     val rotationLocked: Boolean = false,
     val ramStatusLabel: String = "Pangkas latar",
+    val showTelemetryWidget: Boolean = true,
+    val showProfileWidget: Boolean = true,
+    val showMusicWidget: Boolean = true,
+    val showRefreshRateWidget: Boolean = true,
+    val showSlidersWidget: Boolean = true,
+    val musicTitle: String = "",
+    val musicArtist: String = "",
+    val musicPackage: String? = null,
+    val isMusicPlaying: Boolean = false,
     val quickApps: List<GameDeckQuickApp> = emptyList()
 )
 
@@ -89,5 +98,35 @@ object GameDeckPrefs {
     fun refreshRateHint(context: Context): Int? {
         val value = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).getInt("rr_hint", -1)
         return value.takeIf { it > 0 }
+    }
+
+    data class DashboardWidgets(
+        val showTelemetry: Boolean = true,
+        val showProfile: Boolean = true,
+        val showMusic: Boolean = true,
+        val showRefreshRate: Boolean = true,
+        val showSliders: Boolean = true
+    )
+
+    fun loadWidgets(context: Context): DashboardWidgets {
+        val sp = context.getSharedPreferences("lumina_game_deck", Context.MODE_PRIVATE)
+        return DashboardWidgets(
+            showTelemetry = sp.getBoolean("widget_telemetry", true),
+            showProfile = sp.getBoolean("widget_profile", true),
+            showMusic = sp.getBoolean("widget_music", true),
+            showRefreshRate = sp.getBoolean("widget_refresh_rate", true),
+            showSliders = sp.getBoolean("widget_sliders", true)
+        )
+    }
+
+    fun saveWidgets(context: Context, widgets: DashboardWidgets) {
+        context.getSharedPreferences("lumina_game_deck", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("widget_telemetry", widgets.showTelemetry)
+            .putBoolean("widget_profile", widgets.showProfile)
+            .putBoolean("widget_music", widgets.showMusic)
+            .putBoolean("widget_refresh_rate", widgets.showRefreshRate)
+            .putBoolean("widget_sliders", widgets.showSliders)
+            .apply()
     }
 }
