@@ -2,6 +2,7 @@
 
 package com.luminatweaks.gamedeck
 
+import android.graphics.Bitmap
 import android.content.pm.ApplicationInfo
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
@@ -100,6 +101,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
@@ -129,6 +131,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.PlatformTextStyle
@@ -195,6 +198,8 @@ fun GameDeckRoot(
     onMusicPlayPause: () -> Unit = {},
     onMusicNext: () -> Unit = {},
     onMusicPrevious: () -> Unit = {},
+    onMusicSeek: (Long) -> Unit = {},
+    onOpenMusicApp: () -> Unit = {},
     onToggleDashboardWidget: (String) -> Unit = {},
     onToggleDnd: () -> Unit,
     onToggleAutoBrightnessLock: () -> Unit,
@@ -273,6 +278,8 @@ fun GameDeckRoot(
                 onMusicPlayPause = onMusicPlayPause,
                 onMusicNext = onMusicNext,
                 onMusicPrevious = onMusicPrevious,
+                onMusicSeek = onMusicSeek,
+                onOpenMusicApp = onOpenMusicApp,
                 onToggleDashboardWidget = onToggleDashboardWidget,
                 onToggleDnd = onToggleDnd,
                 onToggleAutoBrightnessLock = onToggleAutoBrightnessLock,
@@ -370,6 +377,8 @@ private fun GameDeckWorkspace(
     onMusicPlayPause: () -> Unit,
     onMusicNext: () -> Unit,
     onMusicPrevious: () -> Unit,
+    onMusicSeek: (Long) -> Unit,
+    onOpenMusicApp: () -> Unit,
     onToggleDashboardWidget: (String) -> Unit,
     onToggleDnd: () -> Unit,
     onToggleAutoBrightnessLock: () -> Unit,
@@ -777,6 +786,8 @@ private fun DeckCard(
     onMusicPlayPause: () -> Unit,
     onMusicNext: () -> Unit,
     onMusicPrevious: () -> Unit,
+    onMusicSeek: (Long) -> Unit,
+    onOpenMusicApp: () -> Unit,
     onToggleDashboardWidget: (String) -> Unit,
     onToggleDnd: () -> Unit,
     onToggleAutoBrightnessLock: () -> Unit,
@@ -837,6 +848,8 @@ private fun DeckCard(
                             onMusicPlayPause = onMusicPlayPause,
                             onMusicNext = onMusicNext,
                             onMusicPrevious = onMusicPrevious,
+                            onMusicSeek = onMusicSeek,
+                            onOpenMusicApp = onOpenMusicApp,
                             onOpenWidgetEditor = onOpenWidgetEditor
                         )
                     } else {
@@ -1449,24 +1462,61 @@ private fun DashboardWidgetCustomizerContent(
     }
 }
 
+private fun formatTrackDuration(ms: Long): String {
+    val totalSec = (ms / 1000L).coerceAtLeast(0L)
+    val mins = totalSec / 60L
+    val secs = totalSec % 60L
+    return String.format(Locale.US, "%d:%02d", mins, secs)
+}
+
 @Composable
 private fun MusicPlayerWidgetCard(
     title: String,
     artist: String,
     packageName: String?,
+    albumArt: Bitmap?,
     isPlaying: Boolean,
+    positionMs: Long,
+    durationMs: Long,
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
-    onNext: () -> Unit
+    onNext: () -> Unit,
+    onSeek: (Long) -> Unit,
+    onOpenApp: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
     val appIcon = rememberAppIcon(packageName)
+    val artBitmap = remember(albumArt) {
+        albumArt?.takeIf { !it.isRecycled }?.asImageBitmap()
+    }
     val displayTitle = title.ifBlank { "Tidak ada musik diputar" }
     val displaySubtitle = when {
         artist.isNotBlank() -> artist
         title.isNotBlank() -> "Media aktif"
         else -> "Putar musik di aplikasi pemutar"
     }
+
+    var livePosMs by remember(positionMs, durationMs) { mutableLongStateOf(positionMs) }
+    var isSeeking by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isPlaying, positionMs, durationMs) {
+        livePosMs = positionMs
+        if (isPlaying && durationMs > 0L) {
+            while (true) {
+                delay(500L)
+                if (!isSeeking) {
+                    livePosMs = (livePosMs + 500L).coerceAtMost(durationMs)
+                }
+            }
+        }
+    }
+
+    val progressFraction = if (durationMs > 0L) {
+        (livePosMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+
     val playBtnBg by animateColorAsState(
         targetValue = if (isPlaying) scheme.primary else scheme.secondaryContainer,
         animationSpec = tween(durationMillis = 180),
@@ -1483,113 +1533,233 @@ private fun MusicPlayerWidgetCard(
         color = scheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(13.dp))
-                    .background(scheme.surfaceContainerHigh),
-                contentAlignment = Alignment.Center
-            ) {
-                if (appIcon != null) {
-                    Image(
-                        bitmap = appIcon,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Rounded.MusicNote,
-                        contentDescription = null,
-                        tint = if (isPlaying) scheme.primary else scheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(10.dp))
-
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Text(
-                    text = displayTitle,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = scheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = displaySubtitle,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (isPlaying) scheme.primary else scheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
             Row(
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
-                    onClick = onPrevious,
-                    modifier = Modifier.size(30.dp),
-                    shape = CircleShape,
-                    color = scheme.surfaceContainerHigh,
-                    contentColor = scheme.onSurface
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(scheme.surfaceContainerHigh)
+                        .clickable(enabled = !packageName.isNullOrBlank()) { onOpenApp() },
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
+                    if (artBitmap != null) {
+                        Image(
+                            bitmap = artBitmap,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        if (appIcon != null) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(2.dp)
+                                    .size(16.dp)
+                                    .clip(CircleShape)
+                                    .background(scheme.surfaceContainerLowest.copy(alpha = 0.9f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Image(
+                                    bitmap = appIcon,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .size(12.dp)
+                                        .clip(CircleShape)
+                                )
+                            }
+                        }
+                    } else if (appIcon != null) {
+                        Image(
+                            bitmap = appIcon,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(30.dp)
+                                .clip(RoundedCornerShape(9.dp))
+                        )
+                    } else {
                         Icon(
-                            imageVector = Icons.Rounded.SkipPrevious,
-                            contentDescription = "Sebelumnya",
-                            modifier = Modifier.size(17.dp)
+                            imageVector = Icons.Rounded.MusicNote,
+                            contentDescription = null,
+                            tint = if (isPlaying) scheme.primary else scheme.onSurfaceVariant,
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 }
 
-                Surface(
-                    onClick = onPlayPause,
-                    modifier = Modifier.size(36.dp),
-                    shape = RoundedCornerShape(13.dp),
-                    color = playBtnBg,
-                    contentColor = playBtnTint
+                Spacer(modifier = Modifier.width(10.dp))
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable(enabled = !packageName.isNullOrBlank()) { onOpenApp() },
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                            contentDescription = if (isPlaying) "Jeda" else "Putar",
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                    Text(
+                        text = displayTitle,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = scheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = displaySubtitle,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = if (isPlaying) scheme.primary else scheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
 
-                Surface(
-                    onClick = onNext,
-                    modifier = Modifier.size(30.dp),
-                    shape = CircleShape,
-                    color = scheme.surfaceContainerHigh,
-                    contentColor = scheme.onSurface
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Rounded.SkipNext,
-                            contentDescription = "Berikutnya",
-                            modifier = Modifier.size(17.dp)
+                    Surface(
+                        onClick = onPrevious,
+                        modifier = Modifier.size(30.dp),
+                        shape = CircleShape,
+                        color = scheme.surfaceContainerHigh,
+                        contentColor = scheme.onSurface
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Rounded.SkipPrevious,
+                                contentDescription = "Sebelumnya",
+                                modifier = Modifier.size(17.dp)
+                            )
+                        }
+                    }
+
+                    Surface(
+                        onClick = onPlayPause,
+                        modifier = Modifier.size(36.dp),
+                        shape = RoundedCornerShape(13.dp),
+                        color = playBtnBg,
+                        contentColor = playBtnTint
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                contentDescription = if (isPlaying) "Jeda" else "Putar",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    Surface(
+                        onClick = onNext,
+                        modifier = Modifier.size(30.dp),
+                        shape = CircleShape,
+                        color = scheme.surfaceContainerHigh,
+                        contentColor = scheme.onSurface
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Rounded.SkipNext,
+                                contentDescription = "Berikutnya",
+                                modifier = Modifier.size(17.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (durationMs > 0L) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = formatTrackDuration(livePosMs),
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = scheme.onSurfaceVariant,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                    BoxWithConstraints(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(16.dp)
+                            .pointerInput(durationMs) {
+                                detectTapGestures { offset ->
+                                    val frac = (offset.x / size.width.toFloat().coerceAtLeast(1f)).coerceIn(0f, 1f)
+                                    val target = (frac * durationMs).toLong()
+                                    livePosMs = target
+                                    onSeek(target)
+                                }
+                            }
+                            .pointerInput(durationMs) {
+                                var dragTarget = livePosMs
+                                detectHorizontalDragGestures(
+                                    onDragStart = { offset ->
+                                        isSeeking = true
+                                        val frac = (offset.x / size.width.toFloat().coerceAtLeast(1f)).coerceIn(0f, 1f)
+                                        dragTarget = (frac * durationMs).toLong()
+                                        livePosMs = dragTarget
+                                    },
+                                    onDragEnd = {
+                                        isSeeking = false
+                                        onSeek(dragTarget)
+                                    },
+                                    onDragCancel = {
+                                        isSeeking = false
+                                    },
+                                    onHorizontalDrag = { change, _ ->
+                                        change.consume()
+                                        val frac = (change.position.x / size.width.toFloat().coerceAtLeast(1f)).coerceIn(0f, 1f)
+                                        dragTarget = (frac * durationMs).toLong()
+                                        livePosMs = dragTarget
+                                    }
+                                )
+                            },
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        val activeW = maxWidth * progressFraction
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .clip(CircleShape)
+                                .background(scheme.surfaceContainerHighest)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .width(activeW)
+                                .height(4.dp)
+                                .clip(CircleShape)
+                                .background(scheme.primary)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .padding(start = (activeW - 5.dp).coerceIn(0.dp, (maxWidth - 10.dp).coerceAtLeast(0.dp)))
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(scheme.primary)
                         )
                     }
+                    Text(
+                        text = formatTrackDuration(durationMs),
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = scheme.onSurfaceVariant,
+                        maxLines = 1,
+                        softWrap = false
+                    )
                 }
             }
         }
@@ -1608,6 +1778,8 @@ private fun DashboardDeckContent(
     onMusicPlayPause: () -> Unit,
     onMusicNext: () -> Unit,
     onMusicPrevious: () -> Unit,
+    onMusicSeek: (Long) -> Unit,
+    onOpenMusicApp: () -> Unit,
     onOpenWidgetEditor: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -1743,10 +1915,15 @@ private fun DashboardDeckContent(
                 title = state.musicTitle,
                 artist = state.musicArtist,
                 packageName = state.musicPackage,
+                albumArt = state.musicArt,
                 isPlaying = state.isMusicPlaying,
+                positionMs = state.musicPositionMs,
+                durationMs = state.musicDurationMs,
                 onPrevious = onMusicPrevious,
                 onPlayPause = onMusicPlayPause,
-                onNext = onMusicNext
+                onNext = onMusicNext,
+                onSeek = onMusicSeek,
+                onOpenApp = onOpenMusicApp
             )
         }
 

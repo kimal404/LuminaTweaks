@@ -1,6 +1,7 @@
 package com.luminatweaks.gamedeck
 
 import android.content.Context
+import android.graphics.Bitmap
 
 enum class GameDeckSide(val key: String) {
     LEFT("left"),
@@ -59,7 +60,10 @@ data class GameDeckUiState(
     val musicTitle: String = "",
     val musicArtist: String = "",
     val musicPackage: String? = null,
+    val musicArt: Bitmap? = null,
     val isMusicPlaying: Boolean = false,
+    val musicPositionMs: Long = 0L,
+    val musicDurationMs: Long = 0L,
     val quickApps: List<GameDeckQuickApp> = emptyList()
 )
 

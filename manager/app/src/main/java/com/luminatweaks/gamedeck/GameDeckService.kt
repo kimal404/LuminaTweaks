@@ -12,6 +12,7 @@ import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Bitmap
 import android.content.pm.ApplicationInfo
 import android.content.pm.ServiceInfo
 import android.content.res.Configuration
@@ -171,11 +172,6 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     private var isAppPickerOpen = false
     private var lastRamStatusLabel = "Pangkas latar"
     private var dashboardWidgets = GameDeckPrefs.DashboardWidgets()
-    private var lastMediaPollMs = 0L
-    private var cachedMusicTitle = ""
-    private var cachedMusicArtist = ""
-    private var cachedMusicPackage: String? = null
-    private var cachedMusicPlaying = false
     private var edgeYOffsetPx = 0
     private var reopenBlockedUntilMs = 0L
     private var manualOverride: Boolean? = null
@@ -221,6 +217,12 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         activeConfig = GameDeckPrefs.load(this)
         dashboardWidgets = GameDeckPrefs.loadWidgets(this)
+        LuminaMediaListenerService.bind(this) { pushLiveMediaToUi() }
+        serviceScope.launch(Dispatchers.IO) {
+            val listenerComp = "${packageName}/${LuminaMediaListenerService::class.java.name}"
+            runCatching { RootUtil.runAsRoot("cmd notification allow_listener $listenerComp") }
+            LuminaMediaListenerService.syncSessions(this@GameDeckService)
+        }
         edgeYOffsetPx = activeConfig.edgeYOffsetPx
         edgeYOffsetState.value = edgeYOffsetPx
         when (intent?.action) {
@@ -393,7 +395,10 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         musicTitle = snapshot.musicTitle,
                         musicArtist = snapshot.musicArtist,
                         musicPackage = snapshot.musicPackage,
+                        musicArt = snapshot.musicArt,
                         isMusicPlaying = snapshot.isMusicPlaying,
+                        musicPositionMs = snapshot.musicPositionMs,
+                        musicDurationMs = snapshot.musicDurationMs,
                         quickApps = snapshot.quickApps
                     )
                 }
@@ -425,7 +430,10 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         val musicTitle: String,
         val musicArtist: String,
         val musicPackage: String?,
+        val musicArt: Bitmap?,
         val isMusicPlaying: Boolean,
+        val musicPositionMs: Long,
+        val musicDurationMs: Long,
         val quickApps: List<GameDeckQuickApp>
     )
 
@@ -471,11 +479,16 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         if (volumePct > 0) {
             lastNonZeroVolumePct = volumePct
         }
-
-        val nowMs = System.currentTimeMillis()
-        if (isExpanded && dashboardWidgets.showMusic && nowMs - lastMediaPollMs >= 1_500L) {
-            lastMediaPollMs = nowMs
-            refreshActiveMediaSession()
+        if (isExpanded && dashboardWidgets.showMusic) {
+            LuminaMediaListenerService.syncSessions(this)
+        }
+        val liveMedia = LuminaMediaListenerService.currentMedia
+        val resolvedMediaArtist = liveMedia.artist.ifBlank {
+            liveMedia.packageName?.let { pkg ->
+                runCatching {
+                    packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+                }.getOrDefault("")
+            }.orEmpty()
         }
 
         val batteryIntent = runCatching {
@@ -526,10 +539,13 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                 NotificationManager.INTERRUPTION_FILTER_ALL,
             autoBrightnessLocked = autoBrightnessLocked,
             rotationLocked = rotationLocked,
-            musicTitle = cachedMusicTitle,
-            musicArtist = cachedMusicArtist,
-            musicPackage = cachedMusicPackage,
-            isMusicPlaying = cachedMusicPlaying,
+            musicTitle = liveMedia.title,
+            musicArtist = resolvedMediaArtist,
+            musicPackage = liveMedia.packageName,
+            musicArt = liveMedia.albumArt,
+            isMusicPlaying = liveMedia.isPlaying,
+            musicPositionMs = liveMedia.positionMs,
+            musicDurationMs = liveMedia.durationMs,
             quickApps = quickApps
         )
     }
@@ -646,6 +662,8 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         onMusicPlayPause = ::toggleMusicPlayPause,
                         onMusicNext = ::skipMusicNext,
                         onMusicPrevious = ::skipMusicPrevious,
+                        onMusicSeek = ::seekMusicTo,
+                        onOpenMusicApp = ::openMusicApp,
                         onToggleDashboardWidget = ::toggleDashboardWidget,
                         onToggleDnd = ::toggleDnd,
                         onToggleAutoBrightnessLock = ::toggleAutoBrightnessLock,
@@ -1199,132 +1217,64 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         }
     }
 
-    private fun refreshActiveMediaSession() {
-        val dump = runCatching {
-            val proc = ProcessBuilder("su", "-c", "dumpsys media_session")
-                .redirectErrorStream(true)
-                .start()
-            if (!proc.waitFor(2, TimeUnit.SECONDS)) {
-                proc.destroyForcibly()
-                return@runCatching ""
-            }
-            proc.inputStream.bufferedReader().use { it.readText() }
-        }.getOrDefault("")
-        if (dump.isBlank()) return
-
-        var bestTitle = ""
-        var bestArtist = ""
-        var bestPkg: String? = null
-        var bestPlaying = false
-        var foundPlaying = false
-
-        var curPkg: String? = null
-        var curActive = false
-        var curPlaying = false
-        var curTitle = ""
-        var curArtist = ""
-
-        fun commitBlock() {
-            if (!curActive && curTitle.isBlank() && !curPlaying) return
-            if (!foundPlaying || curPlaying) {
-                bestTitle = curTitle
-                bestArtist = curArtist
-                bestPkg = curPkg
-                bestPlaying = curPlaying
-                if (curPlaying) foundPlaying = true
-            }
+    private fun pushLiveMediaToUi() {
+        val m = LuminaMediaListenerService.currentMedia
+        val artistLabel = m.artist.ifBlank {
+            m.packageName?.let { pkg ->
+                runCatching {
+                    packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+                }.getOrDefault("")
+            }.orEmpty()
         }
-
-        for (rawLine in dump.lineSequence()) {
-            val line = rawLine.trim()
-            if (line.startsWith("package=")) {
-                commitBlock()
-                curPkg = line.removePrefix("package=").trim().takeIf { it.isNotEmpty() }
-                curActive = false
-                curPlaying = false
-                curTitle = ""
-                curArtist = ""
-            } else if (line.startsWith("active=")) {
-                curActive = line.removePrefix("active=").trim().equals("true", ignoreCase = true)
-            } else if (line.startsWith("state=PlaybackState")) {
-                curPlaying = line.contains("state=3,") || line.contains("state=3 ")
-            } else if (line.startsWith("metadata:") && line.contains("description=")) {
-                val desc = line.substringAfter("description=").trim()
-                val parts = desc.split(", ")
-                val t = parts.getOrNull(0)?.trim().orEmpty()
-                val a = parts.getOrNull(1)?.trim().orEmpty()
-                curTitle = if (t.equals("null", ignoreCase = true)) "" else t
-                curArtist = if (a.equals("null", ignoreCase = true)) "" else a
-            }
-        }
-        commitBlock()
-
-        val pkgForLabel = bestPkg
-        val resolvedArtist = if (bestArtist.isNotBlank()) {
-            bestArtist
-        } else if (!pkgForLabel.isNullOrBlank()) {
-            runCatching {
-                packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkgForLabel, 0)).toString()
-            }.getOrDefault("")
-        } else {
-            ""
-        }
-
-        cachedMusicTitle = bestTitle
-        cachedMusicArtist = resolvedArtist
-        cachedMusicPackage = bestPkg
-        cachedMusicPlaying = bestPlaying
-    }
-
-    private fun dispatchMediaKey(keyCode: Int) {
-        val am = getSystemService(AudioManager::class.java) ?: return
-        val now = SystemClock.uptimeMillis()
-        am.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0))
-        am.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0))
+        uiState.value = uiState.value.copy(
+            musicTitle = m.title,
+            musicArtist = artistLabel,
+            musicPackage = m.packageName,
+            musicArt = m.albumArt,
+            isMusicPlaying = m.isPlaying,
+            musicPositionMs = m.positionMs,
+            musicDurationMs = m.durationMs
+        )
     }
 
     private fun toggleMusicPlayPause() {
-        dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
-        cachedMusicPlaying = !cachedMusicPlaying
-        uiState.value = uiState.value.copy(isMusicPlaying = cachedMusicPlaying)
+        LuminaMediaListenerService.playPause(this)
         serviceScope.launch {
-            delay(320L)
-            withContext(Dispatchers.IO) { refreshActiveMediaSession() }
-            uiState.value = uiState.value.copy(
-                musicTitle = cachedMusicTitle,
-                musicArtist = cachedMusicArtist,
-                musicPackage = cachedMusicPackage,
-                isMusicPlaying = cachedMusicPlaying
-            )
+            delay(180L)
+            withContext(Dispatchers.IO) { LuminaMediaListenerService.syncSessions(this@GameDeckService) }
+            pushLiveMediaToUi()
         }
     }
 
     private fun skipMusicNext() {
-        dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT)
+        LuminaMediaListenerService.next(this)
         serviceScope.launch {
-            delay(380L)
-            withContext(Dispatchers.IO) { refreshActiveMediaSession() }
-            uiState.value = uiState.value.copy(
-                musicTitle = cachedMusicTitle,
-                musicArtist = cachedMusicArtist,
-                musicPackage = cachedMusicPackage,
-                isMusicPlaying = cachedMusicPlaying
-            )
+            delay(260L)
+            withContext(Dispatchers.IO) { LuminaMediaListenerService.syncSessions(this@GameDeckService) }
+            pushLiveMediaToUi()
         }
     }
 
     private fun skipMusicPrevious() {
-        dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
+        LuminaMediaListenerService.previous(this)
         serviceScope.launch {
-            delay(380L)
-            withContext(Dispatchers.IO) { refreshActiveMediaSession() }
-            uiState.value = uiState.value.copy(
-                musicTitle = cachedMusicTitle,
-                musicArtist = cachedMusicArtist,
-                musicPackage = cachedMusicPackage,
-                isMusicPlaying = cachedMusicPlaying
-            )
+            delay(260L)
+            withContext(Dispatchers.IO) { LuminaMediaListenerService.syncSessions(this@GameDeckService) }
+            pushLiveMediaToUi()
         }
+    }
+
+    private fun seekMusicTo(positionMs: Long) {
+        LuminaMediaListenerService.seekTo(positionMs)
+    }
+
+    private fun openMusicApp() {
+        val pkg = uiState.value.musicPackage ?: return
+        val launchIntent = packageManager.getLaunchIntentForPackage(pkg)?.apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        } ?: return
+        collapseDeck()
+        runCatching { startActivity(launchIntent) }
     }
 
     private fun toggleDashboardWidget(widgetKey: String) {
