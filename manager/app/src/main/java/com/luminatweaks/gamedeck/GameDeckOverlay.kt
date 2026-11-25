@@ -177,6 +177,11 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.runtime.key
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInParent
 
 internal const val DECK_RAIL_WIDTH_DP = 78f
 internal const val DECK_RAIL_GAP_DP = 10f
@@ -1361,8 +1366,53 @@ private fun FullScreenWidgetEditorOverlay(
     var draggedKey by remember { mutableStateOf<String?>(null) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     val stepThresholdPx = with(LocalDensity.current) { 78.dp.toPx() }
+    val autoScrollMarginPx = with(LocalDensity.current) { 54.dp.toPx() }
+    val listScrollState = rememberScrollState()
+    var listViewportHeightPx by remember { mutableFloatStateOf(0f) }
+    var draggedItemTopPx by remember { mutableFloatStateOf(0f) }
+    var draggedItemHeightPx by remember { mutableFloatStateOf(0f) }
     val currentActiveItems by rememberUpdatedState(activeItems)
     val currentOrderedKeys by rememberUpdatedState(orderedKeys)
+    val currentDragOffsetY by rememberUpdatedState(dragOffsetY)
+
+    LaunchedEffect(draggedKey) {
+        val activeKey = draggedKey ?: return@LaunchedEffect
+        while (draggedKey == activeKey) {
+            delay(16L)
+            val vpH = listViewportHeightPx
+            if (vpH <= 0f || draggedItemHeightPx <= 0f) continue
+            val visualTop = draggedItemTopPx - listScrollState.value + currentDragOffsetY
+            val visualBottom = visualTop + draggedItemHeightPx
+            val scrollDelta = when {
+                visualBottom > vpH - autoScrollMarginPx && listScrollState.canScrollForward -> 10f
+                visualTop < autoScrollMarginPx && listScrollState.canScrollBackward -> -10f
+                else -> 0f
+            }
+            if (scrollDelta != 0f) {
+                val consumed = listScrollState.scrollBy(scrollDelta)
+                if (consumed != 0f) {
+                    dragOffsetY += consumed
+                    val listVis = currentActiveItems
+                    val listGlob = currentOrderedKeys
+                    val curVisIdx = listVis.indexOfFirst { it.key == activeKey }
+                    val curGlobIdx = listGlob.indexOf(activeKey)
+                    if (dragOffsetY > stepThresholdPx && curVisIdx in 0 until listVis.lastIndex) {
+                        val targetGlobIdx = listGlob.indexOf(listVis[curVisIdx + 1].key)
+                        if (curGlobIdx >= 0 && targetGlobIdx >= 0) {
+                            onMoveWidget(curGlobIdx, targetGlobIdx)
+                            dragOffsetY -= stepThresholdPx
+                        }
+                    } else if (dragOffsetY < -stepThresholdPx && curVisIdx > 0) {
+                        val targetGlobIdx = listGlob.indexOf(listVis[curVisIdx - 1].key)
+                        if (curGlobIdx >= 0 && targetGlobIdx >= 0) {
+                            onMoveWidget(curGlobIdx, targetGlobIdx)
+                            dragOffsetY += stepThresholdPx
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -1453,11 +1503,13 @@ private fun FullScreenWidgetEditorOverlay(
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .verticalScroll(rememberScrollState())
+                                .onSizeChanged { listViewportHeightPx = it.height.toFloat() }
+                                .verticalScroll(listScrollState, enabled = draggedKey == null)
                                 .padding(12.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             activeItems.forEach { item ->
+                                key(item.key) {
                                 val isDragging = draggedKey == item.key
                                 val dragScale by animateFloatAsState(
                                     targetValue = if (isDragging) 0.99f else 1f,
@@ -1500,6 +1552,12 @@ private fun FullScreenWidgetEditorOverlay(
                                     ),
                                     modifier = Modifier
                                         .fillMaxWidth()
+                                        .onGloballyPositioned { coords ->
+                                            if (draggedKey == item.key) {
+                                                draggedItemTopPx = coords.positionInParent().y
+                                                draggedItemHeightPx = coords.size.height.toFloat()
+                                            }
+                                        }
                                         .zIndex(if (isDragging) 2f else 0f)
                                         .graphicsLayer {
                                             translationY = if (isDragging) dragOffsetY else 0f
@@ -1619,6 +1677,7 @@ private fun FullScreenWidgetEditorOverlay(
                                             }
                                         }
                                     }
+                                }
                                 }
                             }
                         }
