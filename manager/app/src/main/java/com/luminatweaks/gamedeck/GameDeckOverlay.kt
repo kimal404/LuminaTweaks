@@ -2,6 +2,7 @@
 
 package com.luminatweaks.gamedeck
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
@@ -11,6 +12,9 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -26,6 +30,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -37,11 +42,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Add
@@ -59,6 +67,8 @@ import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -105,17 +115,22 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
+import com.luminatweaks.data.ConfigRepository
+import com.luminatweaks.model.AppItem
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 internal const val DECK_RAIL_WIDTH_DP = 78f
 internal const val DECK_RAIL_GAP_DP = 10f
 internal const val DECK_CARD_WIDTH_DP = 354f
 internal const val DECK_TOTAL_WIDTH_DP = DECK_RAIL_WIDTH_DP + DECK_RAIL_GAP_DP + DECK_CARD_WIDTH_DP
+internal const val MAX_DECK_QUICK_APPS = 8
 
 private data class DeckProfileOption(
     val shortLabel: String,
@@ -151,6 +166,7 @@ fun GameDeckRoot(
     onToggleMute: () -> Unit,
     onToggleDnd: () -> Unit,
     onQuickAppClick: (String) -> Unit,
+    onToggleQuickApp: (String) -> Unit,
     onOpenManager: () -> Unit,
     onCollapseSettled: () -> Unit
 ) {
@@ -219,6 +235,7 @@ fun GameDeckRoot(
                 onToggleMute = onToggleMute,
                 onToggleDnd = onToggleDnd,
                 onQuickAppClick = onQuickAppClick,
+                onToggleQuickApp = onToggleQuickApp,
                 onOpenManager = onOpenManager
             )
         }
@@ -306,9 +323,11 @@ private fun GameDeckWorkspace(
     onToggleMute: () -> Unit,
     onToggleDnd: () -> Unit,
     onQuickAppClick: (String) -> Unit,
+    onToggleQuickApp: (String) -> Unit,
     onOpenManager: () -> Unit
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
+    var showAppPicker by remember { mutableStateOf(false) }
     val isLeft = state.side == GameDeckSide.LEFT
     val closeThreshold = with(LocalDensity.current) { 24.dp.toPx() }
     val screenWidthDp = with(LocalDensity.current) {
@@ -317,6 +336,17 @@ private fun GameDeckWorkspace(
     val maxWorkspaceWidth = (screenWidthDp - 24.dp).coerceAtLeast(320.dp)
     val cardWidth: Dp = (maxWorkspaceWidth - DECK_RAIL_WIDTH_DP.dp - DECK_RAIL_GAP_DP.dp)
         .coerceIn(260.dp, DECK_CARD_WIDTH_DP.dp)
+
+    val handleTabSelect: (Int) -> Unit = { tab ->
+        if (showAppPicker) {
+            showAppPicker = false
+            selectedTab = tab
+        } else if (selectedTab == tab) {
+            onCollapse()
+        } else {
+            selectedTab = tab
+        }
+    }
 
     Row(
         modifier = Modifier
@@ -350,19 +380,21 @@ private fun GameDeckWorkspace(
     ) {
         if (isLeft) {
             DockRail(
-                selectedTab = selectedTab,
+                selectedTab = if (showAppPicker) -1 else selectedTab,
+                isAddActive = showAppPicker,
                 opacity = state.opacity,
                 quickApps = state.quickApps,
-                onSelectTab = { tab ->
-                    if (selectedTab == tab) onCollapse() else selectedTab = tab
-                },
+                onSelectTab = handleTabSelect,
                 onQuickAppClick = onQuickAppClick,
-                onOpenManager = onOpenManager
+                onAddAppClick = { showAppPicker = !showAppPicker }
             )
             DeckCard(
                 state = state,
                 cardWidth = cardWidth,
                 selectedTab = selectedTab,
+                showAppPicker = showAppPicker,
+                onCloseAppPicker = { showAppPicker = false },
+                onToggleQuickApp = onToggleQuickApp,
                 onProfileSelected = onProfileSelected,
                 onSetAutoMode = onSetAutoMode,
                 onRefreshRateSelected = onRefreshRateSelected,
@@ -377,6 +409,9 @@ private fun GameDeckWorkspace(
                 state = state,
                 cardWidth = cardWidth,
                 selectedTab = selectedTab,
+                showAppPicker = showAppPicker,
+                onCloseAppPicker = { showAppPicker = false },
+                onToggleQuickApp = onToggleQuickApp,
                 onProfileSelected = onProfileSelected,
                 onSetAutoMode = onSetAutoMode,
                 onRefreshRateSelected = onRefreshRateSelected,
@@ -387,14 +422,13 @@ private fun GameDeckWorkspace(
                 onOpenManager = onOpenManager
             )
             DockRail(
-                selectedTab = selectedTab,
+                selectedTab = if (showAppPicker) -1 else selectedTab,
+                isAddActive = showAppPicker,
                 opacity = state.opacity,
                 quickApps = state.quickApps,
-                onSelectTab = { tab ->
-                    if (selectedTab == tab) onCollapse() else selectedTab = tab
-                },
+                onSelectTab = handleTabSelect,
                 onQuickAppClick = onQuickAppClick,
-                onOpenManager = onOpenManager
+                onAddAppClick = { showAppPicker = !showAppPicker }
             )
         }
     }
@@ -403,11 +437,12 @@ private fun GameDeckWorkspace(
 @Composable
 private fun DockRail(
     selectedTab: Int,
+    isAddActive: Boolean,
     opacity: Float,
     quickApps: List<GameDeckQuickApp>,
     onSelectTab: (Int) -> Unit,
     onQuickAppClick: (String) -> Unit,
-    onOpenManager: () -> Unit
+    onAddAppClick: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
     val deckOpacity = opacity.coerceIn(0.45f, 1f)
@@ -462,34 +497,57 @@ private fun DockRail(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (quickApps.isEmpty()) {
-                    Surface(
-                        onClick = onOpenManager,
-                        modifier = Modifier.size(48.dp),
-                        shape = MaterialShapes.Cookie4Sided.toShape(),
-                        color = scheme.surfaceContainerHigh
-                    ) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Add,
-                                contentDescription = "Tambah aplikasi",
-                                tint = scheme.primary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                } else {
-                    quickApps.forEach { app ->
-                        DockRailAppIcon(
-                            app = app,
-                            onClick = { onQuickAppClick(app.packageName) }
-                        )
-                    }
+                quickApps.forEach { app ->
+                    DockRailAppIcon(
+                        app = app,
+                        onClick = { onQuickAppClick(app.packageName) }
+                    )
+                }
+
+                if (quickApps.size < MAX_DECK_QUICK_APPS || isAddActive) {
+                    DockRailAddButton(
+                        active = isAddActive,
+                        onClick = onAddAppClick
+                    )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun DockRailAddButton(
+    active: Boolean,
+    onClick: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val bg by animateColorAsState(
+        targetValue = if (active) scheme.primary else scheme.surfaceContainerHigh,
+        animationSpec = tween(durationMillis = 180),
+        label = "railAddBg"
+    )
+    val tint by animateColorAsState(
+        targetValue = if (active) scheme.onPrimary else scheme.primary,
+        animationSpec = tween(durationMillis = 180),
+        label = "railAddTint"
+    )
+
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.size(48.dp),
+        shape = MaterialShapes.Cookie4Sided.toShape(),
+        color = bg
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Add,
+                contentDescription = "Tambah aplikasi",
+                tint = tint,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }
@@ -611,6 +669,9 @@ private fun DeckCard(
     state: GameDeckUiState,
     cardWidth: Dp,
     selectedTab: Int,
+    showAppPicker: Boolean,
+    onCloseAppPicker: () -> Unit,
+    onToggleQuickApp: (String) -> Unit,
     onProfileSelected: (String?) -> Unit,
     onSetAutoMode: (Boolean) -> Unit,
     onRefreshRateSelected: (Int?) -> Unit,
@@ -632,22 +693,202 @@ private fun DeckCard(
         shape = shape,
         color = scheme.surfaceContainerLow.copy(alpha = deckOpacity)
     ) {
-        if (selectedTab == 0) {
-            DashboardDeckContent(
-                state = state,
-                onProfileSelected = onProfileSelected,
-                onSetAutoMode = onSetAutoMode,
-                onRefreshRateSelected = onRefreshRateSelected,
-                onBrightnessChanged = onBrightnessChanged,
-                onVolumeChanged = onVolumeChanged,
-                onToggleMute = onToggleMute
+        val pageKey = if (showAppPicker) -1 else selectedTab
+        AnimatedContent(
+            targetState = pageKey,
+            transitionSpec = {
+                fadeIn(tween(180)) togetherWith fadeOut(tween(140))
+            },
+            label = "deckCardPage"
+        ) { target ->
+            when (target) {
+                -1 -> QuickAppPickerDeckContent(
+                    selectedPackages = state.quickApps.map { it.packageName }.toSet(),
+                    onTogglePackage = onToggleQuickApp,
+                    onBack = onCloseAppPicker
+                )
+                0 -> DashboardDeckContent(
+                    state = state,
+                    onProfileSelected = onProfileSelected,
+                    onSetAutoMode = onSetAutoMode,
+                    onRefreshRateSelected = onRefreshRateSelected,
+                    onBrightnessChanged = onBrightnessChanged,
+                    onVolumeChanged = onVolumeChanged,
+                    onToggleMute = onToggleMute
+                )
+                else -> ToolsDeckContent(
+                    state = state,
+                    onToggleDnd = onToggleDnd,
+                    onOpenManager = onOpenManager
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickAppPickerDeckContent(
+    selectedPackages: Set<String>,
+    onTogglePackage: (String) -> Unit,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    val scheme = MaterialTheme.colorScheme
+    var apps by remember { mutableStateOf<List<AppItem>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        val loaded = withContext(Dispatchers.IO) {
+            ConfigRepository.loadInstalledApps(context.packageManager)
+                .filter { it.packageName != context.packageName }
+                .sortedWith(
+                    compareByDescending<AppItem> { it.packageName in selectedPackages }
+                        .thenBy { it.name.lowercase(Locale.ROOT) }
+                )
+        }
+        apps = loaded
+        loading = false
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                onClick = onBack,
+                modifier = Modifier.size(34.dp),
+                shape = CircleShape,
+                color = scheme.surfaceContainerHigh
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                        contentDescription = "Kembali",
+                        tint = scheme.onSurface,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                text = "Aplikasi Cepat",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = scheme.onSurface,
+                maxLines = 1,
+                softWrap = false
             )
+            Spacer(modifier = Modifier.weight(1f))
+            Surface(
+                shape = CircleShape,
+                color = scheme.secondaryContainer,
+                contentColor = scheme.onSecondaryContainer
+            ) {
+                Text(
+                    text = "${selectedPackages.size}/$MAX_DECK_QUICK_APPS",
+                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
+        }
+
+        if (loading) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularWavyProgressIndicator(modifier = Modifier.size(34.dp))
+            }
         } else {
-            ToolsDeckContent(
-                state = state,
-                onToggleDnd = onToggleDnd,
-                onOpenManager = onOpenManager
-            )
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentPadding = PaddingValues(bottom = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(apps, key = { it.packageName }) { app ->
+                    val checked = app.packageName in selectedPackages
+                    val enabled = checked || selectedPackages.size < MAX_DECK_QUICK_APPS
+                    val icon = rememberAppIcon(app.packageName)
+                    val rowBg by animateColorAsState(
+                        targetValue = if (checked) {
+                            scheme.secondaryContainer.copy(alpha = 0.65f)
+                        } else {
+                            scheme.surfaceContainer
+                        },
+                        animationSpec = tween(durationMillis = 160),
+                        label = "pickerRowBg"
+                    )
+
+                    Surface(
+                        onClick = { if (enabled) onTogglePackage(app.packageName) },
+                        shape = RoundedCornerShape(16.dp),
+                        color = rowBg,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .graphicsLayer { alpha = if (enabled) 1f else 0.45f }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(scheme.surfaceContainerHigh),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (icon != null) {
+                                    Image(
+                                        bitmap = icon,
+                                        contentDescription = app.name,
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .clip(CircleShape)
+                                    )
+                                } else {
+                                    Text(
+                                        text = app.name.take(1).uppercase(Locale.ROOT),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = scheme.onSurface
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = app.name,
+                                fontSize = 12.sp,
+                                fontWeight = if (checked) FontWeight.Bold else FontWeight.Medium,
+                                color = scheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Checkbox(
+                                checked = checked,
+                                enabled = enabled,
+                                onCheckedChange = { if (enabled) onTogglePackage(app.packageName) }
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -685,7 +926,6 @@ private fun DashboardDeckContent(
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // Card 1: Clean Telemetry Header + Twin CPU/GPU Radial Gauges
         Surface(
             shape = RoundedCornerShape(24.dp),
             color = scheme.surfaceContainer,
@@ -779,14 +1019,12 @@ private fun DashboardDeckContent(
             }
         }
 
-        // Card 2: Profile Selector with Single Auto/Manual Toggle Pill
         ProfileSelectorCard(
             state = state,
             onProfileSelected = onProfileSelected,
             onToggleAutoMode = { onSetAutoMode(!state.profileAutoMode) }
         )
 
-        // Card 3: Refresh Rate Card (Moved Below Profile)
         RefreshRateCard(
             modes = state.rrModes,
             selectedHz = state.selectedRrHz,
@@ -794,7 +1032,6 @@ private fun DashboardDeckContent(
             onSelect = onRefreshRateSelected
         )
 
-        // Card 4: Full-Width Brightness & Volume Sliders
         BrightnessVolumeCard(
             brightnessPercent = state.brightnessPercent,
             volumePercent = state.volumePercent,
@@ -1306,12 +1543,12 @@ private fun ExpressiveLinearSlider(
     val handleWidth by animateDpAsState(
         targetValue = if (isDragging) 10.dp else 6.dp,
         animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium),
-        label = "azSliderHandleWidth"
+        label = "md3eSliderHandleWidth"
     )
     val handleScaleY by animateFloatAsState(
         targetValue = if (isDragging) 1.2f else 1f,
         animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium),
-        label = "azSliderHandleScaleY"
+        label = "md3eSliderHandleScaleY"
     )
 
     val span = (max - min).coerceAtLeast(1)
@@ -1375,7 +1612,6 @@ private fun ExpressiveLinearSlider(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Active Track
             Box(
                 modifier = Modifier
                     .width(activeWidth)
@@ -1391,7 +1627,6 @@ private fun ExpressiveLinearSlider(
                     .background(accentColor)
             )
 
-            // Handle
             Box(
                 modifier = Modifier
                     .padding(horizontal = 4.dp)
@@ -1402,7 +1637,6 @@ private fun ExpressiveLinearSlider(
                     .background(accentColor)
             )
 
-            // Inactive Track with Stop Dot
             Box(
                 modifier = Modifier
                     .width(inactiveWidth)
@@ -1455,7 +1689,6 @@ private fun BrightnessVolumeCard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Brightness Slider
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1495,7 +1728,6 @@ private fun BrightnessVolumeCard(
                 )
             }
 
-            // Volume Slider
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),

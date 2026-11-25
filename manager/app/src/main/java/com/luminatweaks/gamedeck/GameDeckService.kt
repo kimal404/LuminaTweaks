@@ -577,6 +577,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         onToggleMute = ::toggleVolumeMute,
                         onToggleDnd = ::toggleDnd,
                         onQuickAppClick = ::launchFreeformApp,
+                        onToggleQuickApp = ::toggleQuickApp,
                         onOpenManager = ::openManager,
                         onCollapseSettled = ::handleCollapseSettled
                     )
@@ -1105,6 +1106,29 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                 runCatching { startActivity(launchIntent) }
             }
         }
+    }
+
+    private fun toggleQuickApp(pkg: String) {
+        val currentSet = activeConfig.quickApps
+        val nextSet = if (pkg in currentSet) {
+            currentSet - pkg
+        } else if (currentSet.size >= MAX_DECK_QUICK_APPS) {
+            currentSet
+        } else {
+            currentSet + pkg
+        }
+        if (nextSet == currentSet) return
+        val updated = activeConfig.copy(quickApps = nextSet, edgeYOffsetPx = edgeYOffsetPx)
+        activeConfig = updated
+        GameDeckPrefs.save(this, updated)
+        val nextQuickApps = nextSet.map { p ->
+            val label = runCatching {
+                packageManager.getApplicationLabel(packageManager.getApplicationInfo(p, 0)).toString()
+            }.getOrDefault(p)
+            GameDeckQuickApp(p, label)
+        }.sortedBy { it.label.lowercase(Locale.ROOT) }
+        uiState.value = uiState.value.copy(quickApps = nextQuickApps)
+        lastMetricsMs = System.currentTimeMillis()
     }
 
     private fun openManager() {
