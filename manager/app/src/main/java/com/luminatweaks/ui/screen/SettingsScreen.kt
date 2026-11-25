@@ -59,7 +59,6 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Security
-import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -275,22 +274,7 @@ fun SettingsScreen(
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 SettingsActionRow(
                                     index = 0,
-                                    count = 4,
-                                    icon = Icons.Rounded.Tune,
-                                    title = stringResource(R.string.settings_advanced_tweaks),
-                                    subtitle = stringResource(R.string.settings_advanced_tweaks_desc),
-                                    onClick = {
-                                        if (onNavigateToTweaks != null) {
-                                            onNavigateToTweaks()
-                                        } else {
-                                            showTweaksScreen = true
-                                        }
-                                    }
-                                )
-
-                                SettingsActionRow(
-                                    index = 1,
-                                    count = 4,
+                                    count = 3,
                                     icon = Icons.Rounded.Security,
                                     title = stringResource(R.string.settings_compatibility),
                                     subtitle = stringResource(R.string.settings_compatibility_desc),
@@ -304,8 +288,8 @@ fun SettingsScreen(
                                 )
 
                                 SettingsActionRow(
-                                    index = 2,
-                                    count = 4,
+                                    index = 1,
+                                    count = 3,
                                     icon = Icons.Rounded.AutoFixHigh,
                                     title = stringResource(R.string.settings_setup_wizard),
                                     subtitle = stringResource(R.string.settings_setup_wizard_desc),
@@ -313,8 +297,8 @@ fun SettingsScreen(
                                 )
 
                                 SettingsSwitchRow(
-                                    index = 3,
-                                    count = 4,
+                                    index = 2,
+                                    count = 3,
                                     icon = Icons.Rounded.Info,
                                     title = stringResource(R.string.settings_toast_notifications),
                                     subtitle = stringResource(R.string.settings_toast_notifications_desc),
