@@ -75,8 +75,8 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         private const val NOTIFICATION_ID = 4046
         private const val GAME_STALE_GRACE_MS = 10_000L
         private const val REOPEN_COOLDOWN_MS = 320L
-        private const val EXPANDED_HEIGHT_FRACTION = 0.85f
-        private const val EXPANDED_MAX_HEIGHT_DP = 344f
+        private const val EXPANDED_HEIGHT_FRACTION = 0.86f
+        private const val EXPANDED_MAX_HEIGHT_DP = 348f
         private const val COLLAPSED_WIDTH_DP = 24f
         private const val COLLAPSED_HEIGHT_DP = 72f
         private const val EDGE_MARGIN_DP = 12f

@@ -111,9 +111,9 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
-internal const val DECK_RAIL_WIDTH_DP = 66f
-internal const val DECK_RAIL_GAP_DP = 8f
-internal const val DECK_CARD_WIDTH_DP = 376f
+internal const val DECK_RAIL_WIDTH_DP = 78f
+internal const val DECK_RAIL_GAP_DP = 10f
+internal const val DECK_CARD_WIDTH_DP = 354f
 internal const val DECK_TOTAL_WIDTH_DP = DECK_RAIL_WIDTH_DP + DECK_RAIL_GAP_DP + DECK_CARD_WIDTH_DP
 
 private data class DeckProfileOption(
@@ -191,8 +191,8 @@ fun GameDeckRoot(
         val density = LocalDensity.current
         val slideOffset = with(density) { 24.dp.toPx() }
         val screenHeightPx = LocalContext.current.resources.displayMetrics.heightPixels.toFloat().coerceAtLeast(1f)
-        val panelHeightPx = (screenHeightPx * 0.85f)
-            .coerceIn(with(density) { 316.dp.toPx() }, with(density) { 344.dp.toPx() })
+        val panelHeightPx = (screenHeightPx * 0.86f)
+            .coerceIn(with(density) { 316.dp.toPx() }, with(density) { 348.dp.toPx() })
             .coerceAtLeast(1f)
         val pivotY = (0.5f + (handleYOffsetPx.toFloat() / panelHeightPx)).coerceIn(0.08f, 0.92f)
         val p = openProgress.value.coerceIn(0f, 1f)
@@ -464,7 +464,7 @@ private fun DockRail(
                 if (quickApps.isEmpty()) {
                     Surface(
                         onClick = onOpenManager,
-                        modifier = Modifier.size(44.dp),
+                        modifier = Modifier.size(48.dp),
                         shape = MaterialShapes.Cookie4Sided.toShape(),
                         color = scheme.surfaceContainerHigh
                     ) {
@@ -523,7 +523,7 @@ private fun DockRailNavItem(
         label = "railPillCorner"
     )
     val indicatorWidth by animateDpAsState(
-        targetValue = if (selected) 48.dp else 44.dp,
+        targetValue = if (selected) 52.dp else 46.dp,
         animationSpec = motion.defaultSpatialSpec(),
         label = "railPillWidth"
     )
@@ -577,7 +577,7 @@ private fun DockRailAppIcon(
     val icon = rememberAppIcon(app.packageName)
     Surface(
         onClick = onClick,
-        modifier = Modifier.size(44.dp),
+        modifier = Modifier.size(48.dp),
         shape = MaterialShapes.Cookie4Sided.toShape(),
         color = scheme.surfaceContainerHigh
     ) {
@@ -590,7 +590,7 @@ private fun DockRailAppIcon(
                     bitmap = icon,
                     contentDescription = app.label,
                     modifier = Modifier
-                        .size(28.dp)
+                        .size(31.dp)
                         .clip(CircleShape)
                 )
             } else {
@@ -762,12 +762,12 @@ private fun DashboardDeckContent(
                         icon = Icons.Rounded.Thermostat,
                         label = state.tempLabel
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     MetricChip(
                         icon = Icons.Rounded.BatteryFull,
                         label = "${state.batteryPercent}%"
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
 
                     Surface(
                         onClick = { rrExpanded = !rrExpanded },
@@ -1208,7 +1208,7 @@ private fun ProfileSelectorCard(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 deckProfileOptions.forEach { option ->
                     val manualSelected = !autoMode && deckOverrideSelected(state.profileOverride, option)
@@ -1237,7 +1237,7 @@ private fun ProfileSelectorCard(
                         ) {
                             Text(
                                 text = option.shortLabel,
-                                fontSize = 11.5.sp,
+                                fontSize = 11.sp,
                                 fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.SemiBold,
                                 maxLines = 1,
                                 softWrap = false,
