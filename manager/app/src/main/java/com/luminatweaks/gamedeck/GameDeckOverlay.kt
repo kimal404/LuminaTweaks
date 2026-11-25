@@ -172,6 +172,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.ui.graphics.Brush
 
 internal const val DECK_RAIL_WIDTH_DP = 78f
 internal const val DECK_RAIL_GAP_DP = 10f
@@ -2003,8 +2006,8 @@ private fun ExpressiveWavySeekbar(
             val step = 2.dp.toPx()
             var first = true
             while (x <= activeEnd) {
-                val angle = ((x - usableStart) / wavelengthPx) * (2.0 * PI).toFloat() - phaseRad
-                val y = centerY + sin(angle) * maxAmp
+                val angle: Float = ((x - usableStart) / wavelengthPx) * (2f * PI.toFloat()) - phaseRad
+                val y: Float = centerY + sin(angle).toFloat() * maxAmp
                 if (first) {
                     path.moveTo(x, y)
                     first = false
@@ -2013,8 +2016,8 @@ private fun ExpressiveWavySeekbar(
                 }
                 x += step
             }
-            val endAngle = ((activeEnd - usableStart) / wavelengthPx) * (2.0 * PI).toFloat() - phaseRad
-            path.lineTo(activeEnd, centerY + sin(endAngle) * maxAmp)
+            val endAngle: Float = ((activeEnd - usableStart) / wavelengthPx) * (2f * PI.toFloat()) - phaseRad
+            path.lineTo(activeEnd, centerY + sin(endAngle).toFloat() * maxAmp)
 
             drawPath(
                 path = path,
