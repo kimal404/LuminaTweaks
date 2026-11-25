@@ -11,11 +11,13 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,7 +30,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -39,31 +43,28 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.BatteryFull
+import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Build
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Eco
-import androidx.compose.material.icons.rounded.EnergySavingsLeaf
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.NotificationsOff
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Thermostat
-import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearWavyProgressIndicator
-import androidx.compose.material3.LocalMinimumInteractiveComponentSize
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.ToggleButton
-import androidx.compose.material3.ToggleButtonSize
+import androidx.compose.material3.ripple
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -79,11 +80,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -97,6 +104,8 @@ import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 import kotlinx.coroutines.delay
 
 internal const val DECK_RAIL_WIDTH_DP = 66f
@@ -115,7 +124,7 @@ private val deckProfileOptions = listOf(
     DeckProfileOption("Eco", "Eco", "eco", Icons.Rounded.Eco),
     DeckProfileOption("Balanced", "Balanced", "balanced", Icons.Rounded.Speed),
     DeckProfileOption("Performance", "Performance", "performance", Icons.Rounded.Bolt),
-    DeckProfileOption("Lite", "Performance Lite", "performance_lite", Icons.Rounded.EnergySavingsLeaf)
+    DeckProfileOption("Lite", "Performance Lite", "performance_lite", Icons.Rounded.BatterySaver)
 )
 
 private fun deckOverrideSelected(current: String, option: DeckProfileOption): Boolean {
@@ -599,22 +608,15 @@ private fun DeckCard(
 ) {
     val scheme = MaterialTheme.colorScheme
     val deckOpacity = state.opacity.coerceIn(0.45f, 1f)
-    val shape = RoundedCornerShape(26.dp)
+    val shape = RoundedCornerShape(28.dp)
 
     Box(
         modifier = Modifier
             .width(cardWidth)
             .fillMaxHeight()
-            .shadow(12.dp, shape)
+            .shadow(14.dp, shape)
             .clip(shape)
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        scheme.surfaceContainerLow.copy(alpha = deckOpacity),
-                        scheme.surfaceContainerLowest.copy(alpha = deckOpacity)
-                    )
-                )
-            )
+            .background(scheme.surfaceContainerLow.copy(alpha = deckOpacity))
     ) {
         if (selectedTab == 0) {
             DashboardDeckContent(
@@ -655,139 +657,598 @@ private fun DashboardDeckContent(
         animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
         label = "deckFpsColor"
     )
-    val frametimeText = if (fps > 0 && state.frametimeMs > 0f) {
-        String.format(Locale.US, "%.1f ms", state.frametimeMs)
-    } else {
-        "Menunggu frame"
+    var rrExpanded by remember { mutableStateOf(false) }
+    val rrChevronRotation by animateFloatAsState(
+        targetValue = if (rrExpanded) 180f else 0f,
+        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
+        label = "rrChevronRotation"
+    )
+    val rrOptions: List<Int?> = remember(state.rrModes) {
+        buildList {
+            add(null)
+            addAll(state.rrModes.distinct().sorted())
+        }
     }
 
-    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
-        Column(
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Card 1: Live Frame Rate + Expandable Refresh Rate + Twin Radial Arc Gauges
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = scheme.surfaceContainer,
             modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .fillMaxWidth()
+                .animateContentSize(
+                    animationSpec = spring(
+                        dampingRatio = 0.84f,
+                        stiffness = 400f
+                    )
+                )
         ) {
-            // Outer Card 1: Telemetry & Device Vitals (Bento 2-Column Nested Sub-Items)
-            Surface(
-                shape = RoundedCornerShape(22.dp),
-                color = scheme.surfaceContainer
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Nested Sub-Item Left: FPS & Frametime
+                    Icon(
+                        imageVector = Icons.Rounded.Speed,
+                        contentDescription = null,
+                        tint = scheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (fps > 0) fps.toString() else "--",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Black,
+                        color = fpsColor,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text(
+                        text = "FPS",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = scheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                    if (fps > 0 && state.frametimeMs > 0f) {
+                        Text(
+                            text = String.format(Locale.US, " · %.1f ms", state.frametimeMs),
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = scheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp),
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    MetricChip(
+                        icon = Icons.Rounded.Thermostat,
+                        label = state.tempLabel
+                    )
+                    Spacer(modifier = Modifier.width(7.dp))
+                    MetricChip(
+                        icon = Icons.Rounded.BatteryFull,
+                        label = "${state.batteryPercent}%"
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+
                     Surface(
-                        modifier = Modifier.weight(0.43f),
-                        shape = RoundedCornerShape(16.dp),
-                        color = scheme.surfaceContainerHigh
+                        onClick = { rrExpanded = !rrExpanded },
+                        shape = CircleShape,
+                        color = scheme.primaryContainer,
+                        contentColor = scheme.onPrimaryContainer
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                text = if (state.selectedRrHz == null) "${state.targetHz} Hz" else "${state.selectedRrHz} Hz",
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                            Icon(
+                                imageVector = Icons.Rounded.ExpandMore,
+                                contentDescription = "Refresh rate",
+                                modifier = Modifier
+                                    .size(13.dp)
+                                    .rotate(rrChevronRotation)
+                            )
+                        }
+                    }
+                }
+
+                if (rrExpanded) {
+                    HorizontalDivider(color = scheme.outlineVariant.copy(alpha = 0.25f))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "Refresh rate",
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = scheme.onSurfaceVariant,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                        FlowRow(
+                            modifier = Modifier.weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.End),
+                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            rrOptions.forEach { hz ->
+                                val isSelected = state.selectedRrHz == hz
+                                val pillBg by animateColorAsState(
+                                    targetValue = if (isSelected) scheme.primary else scheme.surfaceContainerHigh,
+                                    animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+                                    label = "rrPillBg"
+                                )
+                                val pillText by animateColorAsState(
+                                    targetValue = if (isSelected) scheme.onPrimary else scheme.onSurface,
+                                    animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+                                    label = "rrPillText"
+                                )
+                                Surface(
+                                    onClick = {
+                                        onRefreshRateSelected(hz)
+                                        rrExpanded = false
+                                    },
+                                    shape = CircleShape,
+                                    color = pillBg,
+                                    contentColor = pillText
+                                ) {
+                                    Text(
+                                        text = hz?.let { "${it}Hz" } ?: "Auto",
+                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                                        fontSize = 9.5.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    ExpressiveRadialGauge(
+                        percent = state.cpuPercent,
+                        label = "CPU",
+                        activeColor = scheme.primary,
+                        badgeContainerColor = scheme.primaryContainer,
+                        badgeContentColor = scheme.onPrimaryContainer,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(106.dp)
+                    )
+                    ExpressiveRadialGauge(
+                        percent = state.gpuPercent,
+                        label = "GPU",
+                        activeColor = scheme.tertiary,
+                        badgeContainerColor = scheme.tertiaryContainer,
+                        badgeContentColor = scheme.onTertiaryContainer,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(106.dp)
+                    )
+                }
+            }
+        }
+
+        // Card 2: Profile Control with M3 Expressive Switch & Morphing Toggle Tiles
+        ProfileControlCard(
+            state = state,
+            onProfileSelected = onProfileSelected,
+            onAutoModeToggle = onAutoModeToggle
+        )
+    }
+}
+
+@Composable
+private fun ExpressiveRadialGauge(
+    percent: Int,
+    label: String,
+    activeColor: Color,
+    badgeContainerColor: Color,
+    badgeContentColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    val safePercent = percent.coerceIn(0, 100)
+    val animatedPercent by animateFloatAsState(
+        targetValue = safePercent.toFloat(),
+        animationSpec = spring(dampingRatio = 0.68f, stiffness = 340f),
+        label = "gaugeSweepPercent"
+    )
+
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = scheme.surfaceContainerHigh,
+        modifier = modifier
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            val inactiveStrokeColor = scheme.surfaceContainerHighest
+            val stopDotColor = scheme.onSurfaceVariant.copy(alpha = 0.7f)
+
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val scaleX = size.width / 140f
+                val scaleY = size.height / 132f
+                val s = min(scaleX, scaleY)
+
+                val cx = size.width / 2f
+                val cy = size.height * 0.54f
+                val radius = 52f * s
+                val strokeW = 11.5f * s
+
+                val totalSweepLen = 217.82f
+                val gapLength = 14f
+                val clamped = animatedPercent.coerceIn(4f, 96f)
+                val activeLen = max(4f, (clamped / 100f) * totalSweepLen - gapLength / 2f)
+                val inactiveLen = max(4f, ((100f - clamped) / 100f) * totalSweepLen - gapLength / 2f)
+                val inactiveStartLen = activeLen + gapLength
+
+                val activeSweepDeg = (activeLen / totalSweepLen) * 240f
+                val inactiveSweepDeg = (inactiveLen / totalSweepLen) * 240f
+                val inactiveStartDeg = 150f + (inactiveStartLen / totalSweepLen) * 240f
+                val pillAngle = -120f + (clamped / 100f) * 240f
+
+                val arcTopLeft = Offset(cx - radius, cy - radius)
+                val arcSize = Size(radius * 2f, radius * 2f)
+
+                drawArc(
+                    color = inactiveStrokeColor,
+                    startAngle = inactiveStartDeg,
+                    sweepAngle = inactiveSweepDeg,
+                    useCenter = false,
+                    topLeft = arcTopLeft,
+                    size = arcSize,
+                    style = Stroke(width = strokeW, cap = StrokeCap.Round)
+                )
+
+                drawArc(
+                    color = activeColor,
+                    startAngle = 150f,
+                    sweepAngle = activeSweepDeg,
+                    useCenter = false,
+                    topLeft = arcTopLeft,
+                    size = arcSize,
+                    style = Stroke(width = strokeW, cap = StrokeCap.Round)
+                )
+
+                rotate(degrees = 120f, pivot = Offset(cx, cy)) {
+                    drawCircle(
+                        color = stopDotColor,
+                        radius = 2.2f * s,
+                        center = Offset(cx, cy - radius)
+                    )
+                }
+
+                rotate(degrees = pillAngle, pivot = Offset(cx, cy)) {
+                    val pillW = 4.8f * s
+                    val pillH = 13.5f * s
+                    drawRoundRect(
+                        color = activeColor,
+                        topLeft = Offset(cx - pillW / 2f, cy - radius - pillH / 2f),
+                        size = Size(pillW, pillH),
+                        cornerRadius = CornerRadius(2.4f * s, 2.4f * s)
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier.padding(top = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = "$safePercent",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = (-0.4).sp,
+                        color = scheme.onSurface,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                    Text(
+                        text = "%",
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = activeColor,
+                        modifier = Modifier.padding(start = 1.dp, bottom = 2.dp),
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Surface(
+                    shape = CircleShape,
+                    color = badgeContainerColor
+                ) {
+                    Text(
+                        text = label,
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = badgeContentColor,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 1.5.dp),
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExpressiveSwitch(
+    checked: Boolean,
+    onCheckedChange: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    val trackColor by animateColorAsState(
+        targetValue = if (checked) scheme.primary else scheme.surfaceContainerHighest,
+        animationSpec = tween(durationMillis = 220),
+        label = "expressiveSwitchTrack"
+    )
+    val thumbSize by animateDpAsState(
+        targetValue = if (checked) 20.dp else 14.dp,
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow),
+        label = "expressiveSwitchThumbSize"
+    )
+    val thumbOffset by animateDpAsState(
+        targetValue = if (checked) 18.dp else 0.dp,
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow),
+        label = "expressiveSwitchThumbOffset"
+    )
+    val thumbColor by animateColorAsState(
+        targetValue = if (checked) scheme.onPrimary else scheme.onSurfaceVariant,
+        animationSpec = tween(durationMillis = 220),
+        label = "expressiveSwitchThumbColor"
+    )
+
+    Box(
+        modifier = modifier
+            .requiredSize(width = 44.dp, height = 26.dp)
+            .clip(CircleShape)
+            .background(trackColor)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onCheckedChange
+            )
+            .padding(3.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Box(
+            modifier = Modifier
+                .offset(x = thumbOffset)
+                .size(thumbSize)
+                .clip(CircleShape)
+                .background(thumbColor),
+            contentAlignment = Alignment.Center
+        ) {
+            if (checked) {
+                Icon(
+                    imageVector = Icons.Rounded.Check,
+                    contentDescription = null,
+                    tint = scheme.primary,
+                    modifier = Modifier.size(12.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExpressiveToggleTile(
+    active: Boolean,
+    dimmed: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    val cornerRadius by animateDpAsState(
+        targetValue = if (active) 24.dp else 15.dp,
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow),
+        label = "toggleTileCorner"
+    )
+    val containerColor by animateColorAsState(
+        targetValue = when {
+            active && !dimmed -> scheme.primaryContainer
+            active && dimmed -> scheme.secondaryContainer.copy(alpha = 0.80f)
+            else -> scheme.surfaceContainerHigh
+        },
+        animationSpec = tween(durationMillis = 220),
+        label = "toggleTileContainer"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = when {
+            active && !dimmed -> scheme.onPrimaryContainer
+            active && dimmed -> scheme.onSecondaryContainer
+            dimmed -> scheme.onSurfaceVariant.copy(alpha = 0.65f)
+            else -> scheme.onSurface
+        },
+        animationSpec = tween(durationMillis = 220),
+        label = "toggleTileContent"
+    )
+    val pressScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.95f else 1f,
+        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMedium),
+        label = "toggleTilePressScale"
+    )
+
+    val shape = RoundedCornerShape(cornerRadius)
+
+    Surface(
+        shape = shape,
+        color = containerColor,
+        contentColor = contentColor,
+        modifier = modifier
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
+            .clip(shape)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = ripple(),
+                onClick = onClick
+            )
+    ) {
+        CompositionLocalProvider(LocalContentColor provides contentColor) {
+            content()
+        }
+    }
+}
+
+@Composable
+private fun ProfileControlCard(
+    state: GameDeckUiState,
+    onProfileSelected: (String?) -> Unit,
+    onAutoModeToggle: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val autoMode = state.profileAutoMode
+
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = scheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Profile",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = scheme.onSurface,
+                    maxLines = 1,
+                    softWrap = false
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Surface(
+                    shape = CircleShape,
+                    color = scheme.surfaceContainerHigh
+                ) {
+                    Text(
+                        text = state.profile,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = scheme.primary,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = "Auto",
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (autoMode) scheme.primary else scheme.onSurfaceVariant,
+                    maxLines = 1,
+                    softWrap = false
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                ExpressiveSwitch(
+                    checked = autoMode,
+                    onCheckedChange = onAutoModeToggle
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                deckProfileOptions.forEach { option ->
+                    val manualSelected = !autoMode && deckOverrideSelected(state.profileOverride, option)
+                    val autoActive = autoMode && state.profile.trim().equals(option.fullLabel, ignoreCase = true)
+                    val isHighlighted = manualSelected || autoActive
+
+                    ExpressiveToggleTile(
+                        active = isHighlighted,
+                        dimmed = autoMode,
+                        onClick = {
+                            if (!autoMode) {
+                                onProfileSelected(option.command)
+                            } else {
+                                onProfileSelected(null)
+                            }
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(54.dp)
                     ) {
                         Column(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 4.dp, vertical = 6.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
                         ) {
-                            Row(verticalAlignment = Alignment.Bottom) {
-                                Text(
-                                    text = if (fps > 0) fps.toString() else "--",
-                                    style = MaterialTheme.typography.headlineMedium.copy(
-                                        fontSize = 28.sp,
-                                        lineHeight = 30.sp,
-                                        fontWeight = FontWeight.Black
-                                    ),
-                                    color = fpsColor,
-                                    maxLines = 1,
-                                    softWrap = false
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "FPS",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = scheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(bottom = 3.dp),
-                                    maxLines = 1,
-                                    softWrap = false
-                                )
-                            }
+                            Icon(
+                                imageVector = option.icon,
+                                contentDescription = option.fullLabel,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.height(3.dp))
                             Text(
-                                text = if (fps > 0) "$frametimeText · ${state.targetHz} Hz" else frametimeText,
+                                text = option.shortLabel,
                                 fontSize = 9.5.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = scheme.onSurfaceVariant,
+                                fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.Medium,
                                 maxLines = 1,
                                 softWrap = false,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
-
-                    // Nested Sub-Item Right: Thermal, Battery, CPU & GPU
-                    Surface(
-                        modifier = Modifier.weight(0.57f),
-                        shape = RoundedCornerShape(16.dp),
-                        color = scheme.surfaceContainerHigh
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                MetricChip(
-                                    icon = Icons.Rounded.Thermostat,
-                                    label = state.tempLabel
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                MetricChip(
-                                    icon = Icons.Rounded.BatteryFull,
-                                    label = "${state.batteryPercent}%"
-                                )
-                            }
-                            MiniMetric(
-                                label = "CPU",
-                                percent = state.cpuPercent,
-                                accent = scheme.primary
-                            )
-                            MiniMetric(
-                                label = "GPU",
-                                percent = state.gpuPercent,
-                                accent = scheme.tertiary
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Outer Card 2: Controls (Nested Profile & Expandable Refresh Rate Sub-Items)
-            Surface(
-                shape = RoundedCornerShape(22.dp),
-                color = scheme.surfaceContainer
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    ProfileNestedCard(
-                        state = state,
-                        onProfileSelected = onProfileSelected,
-                        onAutoModeToggle = onAutoModeToggle
-                    )
-                    RefreshRateExpandableCard(
-                        modes = state.rrModes,
-                        selectedHz = state.selectedRrHz,
-                        liveHz = state.targetHz,
-                        onSelect = onRefreshRateSelected
-                    )
                 }
             }
         }
@@ -822,350 +1283,6 @@ private fun MetricChip(
 }
 
 @Composable
-private fun MiniMetric(
-    label: String,
-    percent: Int,
-    accent: Color
-) {
-    val scheme = MaterialTheme.colorScheme
-    val safePercent = percent.coerceIn(0, 100)
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = label,
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                color = scheme.onSurfaceVariant,
-                maxLines = 1,
-                softWrap = false
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            Text(
-                text = "$safePercent%",
-                fontSize = 9.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = accent,
-                maxLines = 1,
-                softWrap = false
-            )
-        }
-        LinearWavyProgressIndicator(
-            progress = { safePercent / 100f },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(6.dp),
-            color = accent,
-            trackColor = accent.copy(alpha = 0.16f)
-        )
-    }
-}
-
-@Composable
-private fun ProfileNestedCard(
-    state: GameDeckUiState,
-    onProfileSelected: (String?) -> Unit,
-    onAutoModeToggle: () -> Unit
-) {
-    val scheme = MaterialTheme.colorScheme
-    val autoMode = state.profileAutoMode
-
-    val autoChipBg by animateColorAsState(
-        targetValue = if (autoMode) scheme.primary else scheme.surfaceContainerHighest,
-        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-        label = "autoChipBg"
-    )
-    val autoChipContent by animateColorAsState(
-        targetValue = if (autoMode) scheme.onPrimary else scheme.onSurfaceVariant,
-        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-        label = "autoChipContent"
-    )
-
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = scheme.surfaceContainerHigh
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Profile",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = scheme.onSurface,
-                    maxLines = 1,
-                    softWrap = false
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Surface(
-                    shape = CircleShape,
-                    color = scheme.surfaceContainerHighest
-                ) {
-                    Text(
-                        text = state.profile,
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = scheme.primary,
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                Surface(
-                    onClick = onAutoModeToggle,
-                    shape = CircleShape,
-                    color = autoChipBg,
-                    contentColor = autoChipContent
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Tune,
-                            contentDescription = null,
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Text(
-                            text = if (autoMode) "Auto ON" else "Auto OFF",
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                deckProfileOptions.forEach { option ->
-                    val selected = !autoMode && deckOverrideSelected(state.profileOverride, option)
-                    val isCurrentActive = state.profile.trim().equals(option.fullLabel, ignoreCase = true)
-                    val tileBg by animateColorAsState(
-                        targetValue = when {
-                            selected -> scheme.primary
-                            autoMode && isCurrentActive -> scheme.secondaryContainer.copy(alpha = 0.72f)
-                            else -> scheme.surfaceContainerHighest.copy(alpha = if (autoMode) 0.55f else 0.92f)
-                        },
-                        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-                        label = "profileTileBg"
-                    )
-                    val tileContent by animateColorAsState(
-                        targetValue = when {
-                            selected -> scheme.onPrimary
-                            autoMode && isCurrentActive -> scheme.onSecondaryContainer
-                            autoMode -> scheme.onSurfaceVariant.copy(alpha = 0.65f)
-                            else -> scheme.onSurface
-                        },
-                        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-                        label = "profileTileContent"
-                    )
-                    val tileCorner by animateDpAsState(
-                        targetValue = if (selected || (autoMode && isCurrentActive)) 18.dp else 13.dp,
-                        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
-                        label = "profileTileCorner"
-                    )
-
-                    Surface(
-                        onClick = {
-                            if (!autoMode) {
-                                onProfileSelected(option.command)
-                            } else {
-                                onProfileSelected(null)
-                            }
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp),
-                        shape = RoundedCornerShape(tileCorner),
-                        color = tileBg,
-                        contentColor = tileContent,
-                        border = if (autoMode && isCurrentActive) {
-                            BorderStroke(1.dp, scheme.primary.copy(alpha = 0.55f))
-                        } else {
-                            null
-                        }
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 4.dp, vertical = 5.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = option.icon,
-                                contentDescription = option.fullLabel,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = option.shortLabel,
-                                fontSize = 9.5.sp,
-                                fontWeight = if (selected || isCurrentActive) FontWeight.Bold else FontWeight.Medium,
-                                maxLines = 1,
-                                softWrap = false,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun RefreshRateExpandableCard(
-    modes: List<Int>,
-    selectedHz: Int?,
-    liveHz: Int,
-    onSelect: (Int?) -> Unit
-) {
-    val scheme = MaterialTheme.colorScheme
-    var expanded by remember { mutableStateOf(false) }
-    val chevronRotation by animateFloatAsState(
-        targetValue = if (expanded) 180f else 0f,
-        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
-        label = "rrChevronRotation"
-    )
-    val options: List<Int?> = remember(modes) {
-        buildList {
-            add(null)
-            addAll(modes.distinct().sorted())
-        }
-    }
-
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = scheme.surfaceContainerHigh,
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(
-                animationSpec = spring(
-                    dampingRatio = 0.85f,
-                    stiffness = 420f
-                )
-            )
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { expanded = !expanded }
-                    .padding(horizontal = 12.dp, vertical = 9.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Refresh,
-                    contentDescription = null,
-                    tint = scheme.primary,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Refresh Rate",
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = scheme.onSurface,
-                    maxLines = 1,
-                    softWrap = false
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                Surface(
-                    shape = CircleShape,
-                    color = scheme.primaryContainer,
-                    contentColor = scheme.onPrimaryContainer
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        Text(
-                            text = if (selectedHz == null) "Auto · $liveHz Hz" else "$selectedHz Hz",
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                        Icon(
-                            imageVector = Icons.Rounded.ExpandMore,
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(14.dp)
-                                .rotate(chevronRotation)
-                        )
-                    }
-                }
-            }
-
-            if (expanded) {
-                HorizontalDivider(
-                    color = scheme.outlineVariant.copy(alpha = 0.28f),
-                    modifier = Modifier.padding(horizontal = 12.dp)
-                )
-                FlowRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    options.forEach { hz ->
-                        val isSelected = selectedHz == hz
-                        val pillBg by animateColorAsState(
-                            targetValue = if (isSelected) scheme.primary else scheme.surfaceContainerHighest,
-                            animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-                            label = "rrOptionBg"
-                        )
-                        val pillText by animateColorAsState(
-                            targetValue = if (isSelected) scheme.onPrimary else scheme.onSurface,
-                            animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-                            label = "rrOptionText"
-                        )
-
-                        Surface(
-                            onClick = {
-                                onSelect(hz)
-                                expanded = false
-                            },
-                            shape = CircleShape,
-                            color = pillBg,
-                            contentColor = pillText
-                        ) {
-                            Text(
-                                text = hz?.let { "$it Hz" } ?: "Auto",
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                fontSize = 10.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun ToolsDeckContent(
     state: GameDeckUiState,
     onToggleDnd: () -> Unit,
@@ -1177,50 +1294,50 @@ private fun ToolsDeckContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Surface(
-            shape = RoundedCornerShape(22.dp),
-            color = scheme.surfaceContainer
+            shape = RoundedCornerShape(24.dp),
+            color = scheme.surfaceContainer,
+            modifier = Modifier.fillMaxWidth()
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
                     text = "Tools",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = scheme.onSurface,
-                    modifier = Modifier.padding(horizontal = 4.dp),
                     maxLines = 1
                 )
 
-                ToggleButton(
-                    checked = state.dndEnabled,
-                    onCheckedChange = { onToggleDnd() },
-                    buttonSize = ToggleButtonSize.ExtraSmall,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(54.dp)
+                ExpressiveToggleTile(
+                    active = state.dndEnabled,
+                    dimmed = false,
+                    onClick = onToggleDnd,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.NotificationsOff,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Jangan Ganggu",
-                                fontSize = 11.5.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1
                             )
@@ -1231,11 +1348,9 @@ private fun ToolsDeckContent(
                                 maxLines = 1
                             )
                         }
-                        Text(
-                            text = if (state.dndEnabled) "ON" else "OFF",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            maxLines = 1
+                        ExpressiveSwitch(
+                            checked = state.dndEnabled,
+                            onCheckedChange = onToggleDnd
                         )
                     }
                 }
