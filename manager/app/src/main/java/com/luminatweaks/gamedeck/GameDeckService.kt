@@ -1273,7 +1273,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         val launchIntent = packageManager.getLaunchIntentForPackage(pkg)?.apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         } ?: return
-        collapseDeck()
+        setExpanded(false)
         runCatching { startActivity(launchIntent) }
     }
 
