@@ -1381,6 +1381,7 @@ private fun FullScreenWidgetEditorOverlay(
     var draggedKey by remember { mutableStateOf<String?>(null) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     var settlingKey by remember { mutableStateOf<String?>(null) }
+    var lastSwapMs by remember { mutableLongStateOf(0L) }
     val settlingOffset = remember { Animatable(0f) }
 
     val defaultStepPx = with(density) { 82.dp.toPx() }
@@ -1394,6 +1395,9 @@ private fun FullScreenWidgetEditorOverlay(
     val currentDragOffsetY by rememberUpdatedState(dragOffsetY)
 
     fun processReorderStep(activeKey: String) {
+        val nowMs = System.currentTimeMillis()
+        if (nowMs - lastSwapMs < 110L) return
+
         val listVis = currentActiveItems
         val listGlob = currentOrderedKeys
         val curVisIdx = listVis.indexOfFirst { it.key == activeKey }
@@ -1402,15 +1406,23 @@ private fun FullScreenWidgetEditorOverlay(
 
         val visibleMap = activeListState.layoutInfo.visibleItemsInfo.associateBy { it.key }
         val currentSize = visibleMap[activeKey]?.size?.toFloat() ?: defaultStepPx
+        val anchorIdx = activeListState.firstVisibleItemIndex
+        val anchorOffset = activeListState.firstVisibleItemScrollOffset
 
         if (dragOffsetY > 0f && curVisIdx < listVis.lastIndex) {
             val nextItem = listVis[curVisIdx + 1]
             val nextSize = visibleMap[nextItem.key]?.size?.toFloat() ?: currentSize
-            val threshold = (nextSize + itemSpacingPx) * 0.52f
+            val threshold = (nextSize + itemSpacingPx) * 0.56f
             if (dragOffsetY >= threshold) {
                 val targetGlobIdx = listGlob.indexOf(nextItem.key)
                 if (targetGlobIdx >= 0) {
+                    lastSwapMs = nowMs
                     onMoveWidget(curGlobIdx, targetGlobIdx)
+                    if (curVisIdx == anchorIdx) {
+                        coroutineScope.launch {
+                            activeListState.scrollToItem(anchorIdx, anchorOffset)
+                        }
+                    }
                     dragOffsetY -= (nextSize + itemSpacingPx)
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 }
@@ -1418,11 +1430,17 @@ private fun FullScreenWidgetEditorOverlay(
         } else if (dragOffsetY < 0f && curVisIdx > 0) {
             val prevItem = listVis[curVisIdx - 1]
             val prevSize = visibleMap[prevItem.key]?.size?.toFloat() ?: currentSize
-            val threshold = (prevSize + itemSpacingPx) * 0.52f
+            val threshold = (prevSize + itemSpacingPx) * 0.56f
             if (dragOffsetY <= -threshold) {
                 val targetGlobIdx = listGlob.indexOf(prevItem.key)
                 if (targetGlobIdx >= 0) {
+                    lastSwapMs = nowMs
                     onMoveWidget(curGlobIdx, targetGlobIdx)
+                    if (curVisIdx - 1 == anchorIdx) {
+                        coroutineScope.launch {
+                            activeListState.scrollToItem(anchorIdx, anchorOffset)
+                        }
+                    }
                     dragOffsetY += (prevSize + itemSpacingPx)
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 }
@@ -1441,7 +1459,7 @@ private fun FullScreenWidgetEditorOverlay(
             settlingOffset.animateTo(
                 targetValue = 0f,
                 animationSpec = spring(
-                    dampingRatio = 0.78f,
+                    dampingRatio = 0.80f,
                     stiffness = Spring.StiffnessMediumLow
                 )
             )
@@ -1462,8 +1480,8 @@ private fun FullScreenWidgetEditorOverlay(
             val visualTop = visibleItem.offset.toFloat() + currentDragOffsetY
             val visualBottom = visualTop + visibleItem.size.toFloat()
             val scrollDelta = when {
-                visualBottom > vpH - autoScrollMarginPx && activeListState.canScrollForward -> 10f
-                visualTop < autoScrollMarginPx && activeListState.canScrollBackward -> -10f
+                currentDragOffsetY > 16f && visualBottom > vpH - autoScrollMarginPx && activeListState.canScrollForward -> 9f
+                currentDragOffsetY < -16f && visualTop < autoScrollMarginPx && activeListState.canScrollBackward -> -9f
                 else -> 0f
             }
             if (scrollDelta != 0f) {
@@ -1617,15 +1635,27 @@ private fun FullScreenWidgetEditorOverlay(
                                     ),
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .animateItem(
-                                            fadeInSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                                            placementSpec = spring(
-                                                dampingRatio = 0.78f,
-                                                stiffness = Spring.StiffnessMediumLow
-                                            ),
-                                            fadeOutSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                        .then(
+                                            if (!isDragging) {
+                                                Modifier.animateItem(
+                                                    fadeInSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                                    placementSpec = spring(
+                                                        dampingRatio = 0.82f,
+                                                        stiffness = Spring.StiffnessMediumLow
+                                                    ),
+                                                    fadeOutSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                                )
+                                            } else {
+                                                Modifier
+                                            }
                                         )
-                                        .zIndex(if (isElevated) 2f else 0f)
+                                        .zIndex(
+                                            when {
+                                                isDragging -> 10f
+                                                isSettling -> 5f
+                                                else -> 0f
+                                            }
+                                        )
                                         .graphicsLayer {
                                             translationY = activeTranslationY
                                             scaleX = cardScale
