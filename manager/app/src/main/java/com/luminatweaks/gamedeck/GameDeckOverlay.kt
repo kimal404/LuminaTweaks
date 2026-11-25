@@ -54,6 +54,7 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.NotificationsOff
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material.icons.rounded.Tune
@@ -676,18 +677,6 @@ private fun DashboardDeckContent(
         animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
         label = "deckFpsColor"
     )
-    var rrExpanded by remember { mutableStateOf(false) }
-    val rrChevronRotation by animateFloatAsState(
-        targetValue = if (rrExpanded) 180f else 0f,
-        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
-        label = "rrChevronRotation"
-    )
-    val rrOptions: List<Int?> = remember(state.rrModes) {
-        buildList {
-            add(null)
-            addAll(state.rrModes.distinct().sorted())
-        }
-    }
 
     Column(
         modifier = Modifier
@@ -696,18 +685,11 @@ private fun DashboardDeckContent(
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // Card 1: Live Telemetry + Expandable Refresh Rate + Twin CPU/GPU Radial Gauges
+        // Card 1: Clean Telemetry Header + Twin CPU/GPU Radial Gauges
         Surface(
             shape = RoundedCornerShape(24.dp),
             color = scheme.surfaceContainer,
-            modifier = Modifier
-                .fillMaxWidth()
-                .animateContentSize(
-                    animationSpec = spring(
-                        dampingRatio = 0.84f,
-                        stiffness = 400f
-                    )
-                )
+            modifier = Modifier.fillMaxWidth()
         ) {
             Column(
                 modifier = Modifier
@@ -747,7 +729,7 @@ private fun DashboardDeckContent(
                     if (fps > 0 && state.frametimeMs > 0f) {
                         Text(
                             text = String.format(Locale.US, " · %.1f ms", state.frametimeMs),
-                            fontSize = 10.5.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
                             color = scheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp),
@@ -762,95 +744,11 @@ private fun DashboardDeckContent(
                         icon = Icons.Rounded.Thermostat,
                         label = state.tempLabel
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                     MetricChip(
                         icon = Icons.Rounded.BatteryFull,
                         label = "${state.batteryPercent}%"
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-
-                    Surface(
-                        onClick = { rrExpanded = !rrExpanded },
-                        shape = CircleShape,
-                        color = scheme.secondaryContainer,
-                        contentColor = scheme.onSecondaryContainer
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            Text(
-                                text = if (state.selectedRrHz == null) "${state.targetHz} Hz" else "${state.selectedRrHz} Hz",
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                            Icon(
-                                imageVector = Icons.Rounded.ExpandMore,
-                                contentDescription = "Refresh rate",
-                                modifier = Modifier
-                                    .size(14.dp)
-                                    .rotate(rrChevronRotation)
-                            )
-                        }
-                    }
-                }
-
-                if (rrExpanded) {
-                    HorizontalDivider(color = scheme.outlineVariant.copy(alpha = 0.25f))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "Refresh rate",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = scheme.onSurfaceVariant,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                        FlowRow(
-                            modifier = Modifier.weight(1f),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            rrOptions.forEach { hz ->
-                                val isSelected = state.selectedRrHz == hz
-                                val pillBg by animateColorAsState(
-                                    targetValue = if (isSelected) scheme.primary else scheme.surfaceContainerHigh,
-                                    animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-                                    label = "rrPillBg"
-                                )
-                                val pillText by animateColorAsState(
-                                    targetValue = if (isSelected) scheme.onPrimary else scheme.onSurface,
-                                    animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-                                    label = "rrPillText"
-                                )
-                                Surface(
-                                    onClick = {
-                                        onRefreshRateSelected(hz)
-                                        rrExpanded = false
-                                    },
-                                    shape = CircleShape,
-                                    color = pillBg,
-                                    contentColor = pillText
-                                ) {
-                                    Text(
-                                        text = hz?.let { "${it}Hz" } ?: "Auto",
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                        fontSize = 10.5.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        maxLines = 1,
-                                        softWrap = false
-                                    )
-                                }
-                            }
-                        }
-                    }
                 }
 
                 Row(
@@ -888,7 +786,15 @@ private fun DashboardDeckContent(
             onToggleAutoMode = { onSetAutoMode(!state.profileAutoMode) }
         )
 
-        // Card 3: Full-Width Brightness & Volume MD3E Sliders (Below Profile via Scroll)
+        // Card 3: Refresh Rate Card (Moved Below Profile)
+        RefreshRateCard(
+            modes = state.rrModes,
+            selectedHz = state.selectedRrHz,
+            liveHz = state.targetHz,
+            onSelect = onRefreshRateSelected
+        )
+
+        // Card 4: Full-Width Brightness & Volume Sliders (AZenith Style)
         BrightnessVolumeCard(
             brightnessPercent = state.brightnessPercent,
             volumePercent = state.volumePercent,
@@ -1232,16 +1138,15 @@ private fun ProfileSelectorCard(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(horizontal = 6.dp),
+                                .padding(horizontal = 3.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = option.shortLabel,
-                                fontSize = 11.sp,
+                                fontSize = 10.sp,
                                 fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.SemiBold,
                                 maxLines = 1,
-                                softWrap = false,
-                                overflow = TextOverflow.Ellipsis
+                                softWrap = false
                             )
                         }
                     }
@@ -1252,7 +1157,142 @@ private fun ProfileSelectorCard(
 }
 
 @Composable
-private fun M3ExpressiveFullSlider(
+private fun RefreshRateCard(
+    modes: List<Int>,
+    selectedHz: Int?,
+    liveHz: Int,
+    onSelect: (Int?) -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    var expanded by remember { mutableStateOf(false) }
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
+        label = "rrCardChevronRotation"
+    )
+    val options: List<Int?> = remember(modes) {
+        buildList {
+            add(null)
+            addAll(modes.distinct().sorted())
+        }
+    }
+
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = scheme.surfaceContainer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = 0.84f,
+                    stiffness = 400f
+                )
+            )
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Refresh,
+                    contentDescription = null,
+                    tint = scheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Refresh Rate",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = scheme.onSurface,
+                    maxLines = 1,
+                    softWrap = false
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Surface(
+                    shape = CircleShape,
+                    color = scheme.secondaryContainer,
+                    contentColor = scheme.onSecondaryContainer
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Text(
+                            text = if (selectedHz == null) "Auto · $liveHz Hz" else "$selectedHz Hz",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                        Icon(
+                            imageVector = Icons.Rounded.ExpandMore,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(14.dp)
+                                .rotate(chevronRotation)
+                        )
+                    }
+                }
+            }
+
+            if (expanded) {
+                HorizontalDivider(
+                    color = scheme.outlineVariant.copy(alpha = 0.25f),
+                    modifier = Modifier.padding(horizontal = 14.dp)
+                )
+                FlowRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    options.forEach { hz ->
+                        val isSelected = selectedHz == hz
+                        val pillBg by animateColorAsState(
+                            targetValue = if (isSelected) scheme.primary else scheme.surfaceContainerHigh,
+                            animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+                            label = "rrCardOptionBg"
+                        )
+                        val pillText by animateColorAsState(
+                            targetValue = if (isSelected) scheme.onPrimary else scheme.onSurface,
+                            animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+                            label = "rrCardOptionText"
+                        )
+
+                        Surface(
+                            onClick = {
+                                onSelect(hz)
+                                expanded = false
+                            },
+                            shape = CircleShape,
+                            color = pillBg,
+                            contentColor = pillText
+                        ) {
+                            Text(
+                                text = hz?.let { "$it Hz" } ?: "Auto",
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AZenithStyleLinearSlider(
     value: Int,
     min: Int,
     max: Int,
@@ -1266,12 +1306,12 @@ private fun M3ExpressiveFullSlider(
     val handleWidth by animateDpAsState(
         targetValue = if (isDragging) 10.dp else 6.dp,
         animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium),
-        label = "fullSliderHandleW"
+        label = "azSliderHandleWidth"
     )
     val handleScaleY by animateFloatAsState(
-        targetValue = if (isDragging) 1.18f else 1f,
+        targetValue = if (isDragging) 1.2f else 1f,
         animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium),
-        label = "fullSliderHandleScaleY"
+        label = "azSliderHandleScaleY"
     )
 
     val span = (max - min).coerceAtLeast(1)
@@ -1286,7 +1326,7 @@ private fun M3ExpressiveFullSlider(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .height(34.dp)
+            .height(36.dp)
             .pointerInput(min, max) {
                 detectTapGestures(
                     onPress = { offset ->
@@ -1335,14 +1375,15 @@ private fun M3ExpressiveFullSlider(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Active Track
             Box(
                 modifier = Modifier
                     .width(activeWidth)
-                    .height(18.dp)
+                    .height(20.dp)
                     .clip(
                         RoundedCornerShape(
-                            topStart = 11.dp,
-                            bottomStart = 11.dp,
+                            topStart = 12.dp,
+                            bottomStart = 12.dp,
                             topEnd = 4.dp,
                             bottomEnd = 4.dp
                         )
@@ -1350,26 +1391,28 @@ private fun M3ExpressiveFullSlider(
                     .background(accentColor)
             )
 
+            // Handle
             Box(
                 modifier = Modifier
                     .padding(horizontal = 4.dp)
                     .width(handleWidth)
-                    .height(30.dp)
+                    .height(32.dp)
                     .graphicsLayer { scaleY = handleScaleY }
                     .clip(CircleShape)
                     .background(accentColor)
             )
 
+            // Inactive Track with Stop Dot
             Box(
                 modifier = Modifier
                     .width(inactiveWidth)
-                    .height(18.dp)
+                    .height(20.dp)
                     .clip(
                         RoundedCornerShape(
                             topStart = 4.dp,
                             bottomStart = 4.dp,
-                            topEnd = 11.dp,
-                            bottomEnd = 11.dp
+                            topEnd = 12.dp,
+                            bottomEnd = 12.dp
                         )
                     )
                     .background(scheme.surfaceContainerHighest),
@@ -1409,11 +1452,11 @@ private fun BrightnessVolumeCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Full-Width Brightness Slider
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            // Brightness Slider
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -1422,12 +1465,12 @@ private fun BrightnessVolumeCard(
                         imageVector = Icons.Rounded.BrightnessMedium,
                         contentDescription = "Brightness",
                         tint = scheme.primary,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(20.dp)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = "Brightness",
-                        fontSize = 13.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = scheme.onSurface,
                         maxLines = 1,
@@ -1436,14 +1479,14 @@ private fun BrightnessVolumeCard(
                     Spacer(modifier = Modifier.weight(1f))
                     Text(
                         text = "$brightnessPercent%",
-                        fontSize = 13.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = scheme.primary,
                         maxLines = 1,
                         softWrap = false
                     )
                 }
-                M3ExpressiveFullSlider(
+                AZenithStyleLinearSlider(
                     value = brightnessPercent,
                     min = 5,
                     max = 100,
@@ -1452,8 +1495,8 @@ private fun BrightnessVolumeCard(
                 )
             }
 
-            // Full-Width Volume Slider
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            // Volume Slider
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -1467,13 +1510,13 @@ private fun BrightnessVolumeCard(
                         contentDescription = "Suara",
                         tint = if (volumeMuted || effectiveVol == 0) scheme.error else scheme.tertiary,
                         modifier = Modifier
-                            .size(18.dp)
+                            .size(20.dp)
                             .clickable(onClick = onToggleMute)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = "Suara",
-                        fontSize = 13.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = scheme.onSurface,
                         maxLines = 1,
@@ -1482,14 +1525,14 @@ private fun BrightnessVolumeCard(
                     Spacer(modifier = Modifier.weight(1f))
                     Text(
                         text = "$effectiveVol%",
-                        fontSize = 13.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (volumeMuted || effectiveVol == 0) scheme.error else scheme.tertiary,
                         maxLines = 1,
                         softWrap = false
                     )
                 }
-                M3ExpressiveFullSlider(
+                AZenithStyleLinearSlider(
                     value = effectiveVol,
                     min = 0,
                     max = 100,
