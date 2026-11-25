@@ -44,6 +44,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -91,6 +94,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -116,7 +120,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -132,6 +139,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
@@ -350,7 +358,8 @@ private fun GameDeckWorkspace(
     onAppPickerVisibilityChanged: (Boolean) -> Unit,
     onOpenManager: () -> Unit
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) }
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
+    val coroutineScope = rememberCoroutineScope()
     var showAppPicker by remember { mutableStateOf(false) }
     LaunchedEffect(showAppPicker) {
         onAppPickerVisibilityChanged(showAppPicker)
@@ -368,47 +377,48 @@ private fun GameDeckWorkspace(
     val handleTabSelect: (Int) -> Unit = { tab ->
         if (showAppPicker) {
             showAppPicker = false
-            selectedTab = tab
-        } else if (selectedTab == tab) {
+            coroutineScope.launch { pagerState.scrollToPage(tab) }
+        } else if (pagerState.currentPage == tab) {
             onCollapse()
         } else {
-            selectedTab = tab
+            coroutineScope.launch { pagerState.animateScrollToPage(tab) }
+        }
+    }
+
+    val railSwipeModifier = Modifier.pointerInput(isLeft, closeThreshold) {
+        var dx = 0f
+        var dy = 0f
+        detectDragGestures(
+            onDragStart = {
+                dx = 0f
+                dy = 0f
+            },
+            onDragEnd = {
+                val outward = if (isLeft) -dx else dx
+                if (abs(dx) > abs(dy) && outward > closeThreshold) {
+                    onCollapse()
+                }
+            },
+            onDragCancel = {
+                dx = 0f
+                dy = 0f
+            }
+        ) { change, dragAmount ->
+            change.consume()
+            dx += dragAmount.x
+            dy += dragAmount.y
         }
     }
 
     Row(
-        modifier = Modifier
-            .fillMaxSize()
-            .pointerInput(isLeft, closeThreshold) {
-                var dx = 0f
-                var dy = 0f
-                detectDragGestures(
-                    onDragStart = {
-                        dx = 0f
-                        dy = 0f
-                    },
-                    onDragEnd = {
-                        val outward = if (isLeft) -dx else dx
-                        if (abs(dx) > abs(dy) && outward > closeThreshold) {
-                            onCollapse()
-                        }
-                    },
-                    onDragCancel = {
-                        dx = 0f
-                        dy = 0f
-                    }
-                ) { change, dragAmount ->
-                    change.consume()
-                    dx += dragAmount.x
-                    dy += dragAmount.y
-                }
-            },
+        modifier = Modifier.fillMaxSize(),
         horizontalArrangement = Arrangement.spacedBy(DECK_RAIL_GAP_DP.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (isLeft) {
             DockRail(
-                selectedTab = if (showAppPicker) -1 else selectedTab,
+                modifier = railSwipeModifier,
+                selectedTab = if (showAppPicker) -1 else pagerState.targetPage,
                 isAddActive = showAppPicker,
                 opacity = state.opacity,
                 quickApps = state.quickApps,
@@ -419,7 +429,7 @@ private fun GameDeckWorkspace(
             DeckCard(
                 state = state,
                 cardWidth = cardWidth,
-                selectedTab = selectedTab,
+                pagerState = pagerState,
                 showAppPicker = showAppPicker,
                 onCloseAppPicker = { showAppPicker = false },
                 onToggleQuickApp = onToggleQuickApp,
@@ -440,7 +450,7 @@ private fun GameDeckWorkspace(
             DeckCard(
                 state = state,
                 cardWidth = cardWidth,
-                selectedTab = selectedTab,
+                pagerState = pagerState,
                 showAppPicker = showAppPicker,
                 onCloseAppPicker = { showAppPicker = false },
                 onToggleQuickApp = onToggleQuickApp,
@@ -458,7 +468,8 @@ private fun GameDeckWorkspace(
                 onOpenManager = onOpenManager
             )
             DockRail(
-                selectedTab = if (showAppPicker) -1 else selectedTab,
+                modifier = railSwipeModifier,
+                selectedTab = if (showAppPicker) -1 else pagerState.targetPage,
                 isAddActive = showAppPicker,
                 opacity = state.opacity,
                 quickApps = state.quickApps,
@@ -478,13 +489,14 @@ private fun DockRail(
     quickApps: List<GameDeckQuickApp>,
     onSelectTab: (Int) -> Unit,
     onQuickAppClick: (String) -> Unit,
-    onAddAppClick: () -> Unit
+    onAddAppClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val scheme = MaterialTheme.colorScheme
     val deckOpacity = opacity.coerceIn(0.45f, 1f)
 
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .width(DECK_RAIL_WIDTH_DP.dp)
             .fillMaxHeight()
             .shadow(14.dp, CircleShape),
@@ -704,7 +716,7 @@ private fun DockRailAppIcon(
 private fun DeckCard(
     state: GameDeckUiState,
     cardWidth: Dp,
-    selectedTab: Int,
+    pagerState: PagerState,
     showAppPicker: Boolean,
     onCloseAppPicker: () -> Unit,
     onToggleQuickApp: (String) -> Unit,
@@ -733,38 +745,47 @@ private fun DeckCard(
         shape = shape,
         color = scheme.surfaceContainerLow.copy(alpha = deckOpacity)
     ) {
-        val pageKey = if (showAppPicker) -1 else selectedTab
         AnimatedContent(
-            targetState = pageKey,
+            targetState = showAppPicker,
             transitionSpec = {
                 fadeIn(tween(180)) togetherWith fadeOut(tween(140))
             },
-            label = "deckCardPage"
-        ) { target ->
-            when (target) {
-                -1 -> QuickAppPickerDeckContent(
+            label = "deckCardPickerMode"
+        ) { pickerOpen ->
+            if (pickerOpen) {
+                QuickAppPickerDeckContent(
                     selectedPackages = state.quickApps.map { it.packageName }.toSet(),
                     onTogglePackage = onToggleQuickApp,
                     onBack = onCloseAppPicker
                 )
-                0 -> DashboardDeckContent(
-                    state = state,
-                    onProfileSelected = onProfileSelected,
-                    onSetAutoMode = onSetAutoMode,
-                    onRefreshRateSelected = onRefreshRateSelected,
-                    onBrightnessChanged = onBrightnessChanged,
-                    onVolumeChanged = onVolumeChanged,
-                    onToggleMute = onToggleMute
-                )
-                else -> ToolsDeckContent(
-                    state = state,
-                    onToggleDnd = onToggleDnd,
-                    onToggleAutoBrightnessLock = onToggleAutoBrightnessLock,
-                    onToggleRotationLock = onToggleRotationLock,
-                    onClearRam = onClearRam,
-                    onTakeScreenshot = onTakeScreenshot,
-                    onOpenManager = onOpenManager
-                )
+            } else {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                    key = { it }
+                ) { page ->
+                    if (page == 0) {
+                        DashboardDeckContent(
+                            state = state,
+                            onProfileSelected = onProfileSelected,
+                            onSetAutoMode = onSetAutoMode,
+                            onRefreshRateSelected = onRefreshRateSelected,
+                            onBrightnessChanged = onBrightnessChanged,
+                            onVolumeChanged = onVolumeChanged,
+                            onToggleMute = onToggleMute
+                        )
+                    } else {
+                        ToolsDeckContent(
+                            state = state,
+                            onToggleDnd = onToggleDnd,
+                            onToggleAutoBrightnessLock = onToggleAutoBrightnessLock,
+                            onToggleRotationLock = onToggleRotationLock,
+                            onClearRam = onClearRam,
+                            onTakeScreenshot = onTakeScreenshot,
+                            onOpenManager = onOpenManager
+                        )
+                    }
+                }
             }
         }
     }
@@ -1093,7 +1114,7 @@ private fun BatteryCapsulePill(
 ) {
     val safePercent = percent.coerceIn(0, 100)
     val fillFraction by animateFloatAsState(
-        targetValue = (safePercent / 100f).coerceIn(0.06f, 1f),
+        targetValue = (safePercent / 100f).coerceIn(0.08f, 1f),
         animationSpec = tween(durationMillis = 260),
         label = "batteryPillFill"
     )
@@ -1112,52 +1133,49 @@ private fun BatteryCapsulePill(
         label = "batteryPillColor"
     )
     val textOnFill = if (isLow) Color.White else Color(0xFF101318)
-    val pillShape = RoundedCornerShape(6.dp)
+    val textMeasurer = rememberTextMeasurer()
+    val pillTextStyle = remember {
+        TextStyle(
+            fontSize = 8.5.sp,
+            lineHeight = 8.5.sp,
+            fontWeight = FontWeight.Black,
+            letterSpacing = (-0.3).sp,
+            platformStyle = PlatformTextStyle(includeFontPadding = false)
+        )
+    }
+    val percentLabel = safePercent.toString()
+    val textLayout = remember(percentLabel) {
+        textMeasurer.measure(percentLabel, style = pillTextStyle)
+    }
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(1.dp)
     ) {
-        Box(
+        Canvas(
             modifier = Modifier
-                .width(34.dp)
-                .height(17.dp)
-                .clip(pillShape)
-                .background(Color(0xFF6B7078).copy(alpha = 0.72f)),
-            contentAlignment = Alignment.Center
+                .width(27.dp)
+                .height(13.5.dp)
+                .clip(RoundedCornerShape(4.dp))
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(fillFraction)
-                    .align(Alignment.CenterStart)
-                    .background(fillColor)
+            drawRect(color = Color(0xFF6B7078).copy(alpha = 0.72f))
+            val fillWidth = size.width * fillFraction
+            drawRect(
+                color = fillColor,
+                size = Size(fillWidth, size.height)
             )
-            Text(
-                text = safePercent.toString(),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Black,
+            val tx = (size.width - textLayout.size.width) / 2f
+            val ty = (size.height - textLayout.size.height) / 2f
+            drawText(
+                textLayoutResult = textLayout,
                 color = Color.White,
-                maxLines = 1,
-                softWrap = false
+                topLeft = Offset(tx, ty)
             )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .drawWithContent {
-                        clipRect(right = size.width * fillFraction) {
-                            this@drawWithContent.drawContent()
-                        }
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = safePercent.toString(),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Black,
+            clipRect(right = fillWidth) {
+                drawText(
+                    textLayoutResult = textLayout,
                     color = textOnFill,
-                    maxLines = 1,
-                    softWrap = false
+                    topLeft = Offset(tx, ty)
                 )
             }
         }
@@ -1166,7 +1184,7 @@ private fun BatteryCapsulePill(
                 imageVector = Icons.Rounded.Bolt,
                 contentDescription = "Mengisi daya",
                 tint = Color.White,
-                modifier = Modifier.size(14.dp)
+                modifier = Modifier.size(11.dp)
             )
         }
     }
@@ -1224,7 +1242,7 @@ private fun DashboardDeckContent(
                         imageVector = Icons.Rounded.Speed,
                         contentDescription = null,
                         tint = scheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(19.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
@@ -2098,7 +2116,7 @@ private fun CompactToolBentoTile(
         active = active,
         dimmed = false,
         onClick = onClick,
-        modifier = modifier.height(74.dp)
+        modifier = modifier.height(76.dp)
     ) {
         Column(
             modifier = Modifier
@@ -2112,8 +2130,8 @@ private fun CompactToolBentoTile(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(28.dp)
-                        .clip(RoundedCornerShape(9.dp))
+                        .size(26.dp)
+                        .clip(RoundedCornerShape(8.dp))
                         .background(
                             if (active) {
                                 scheme.primary.copy(alpha = 0.22f)
@@ -2127,7 +2145,7 @@ private fun CompactToolBentoTile(
                         imageVector = icon,
                         contentDescription = null,
                         tint = if (active) scheme.primary else scheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(15.dp)
                     )
                 }
                 Spacer(modifier = Modifier.weight(1f))
@@ -2141,19 +2159,27 @@ private fun CompactToolBentoTile(
                 }
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     text = title,
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = TextStyle(
+                        fontSize = 11.5.sp,
+                        lineHeight = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                    ),
                     maxLines = 1,
                     softWrap = false,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = subtitle,
-                    fontSize = 9.5.sp,
-                    fontWeight = FontWeight.Medium,
+                    style = TextStyle(
+                        fontSize = 9.5.sp,
+                        lineHeight = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                    ),
                     color = if (active) {
                         scheme.onPrimaryContainer.copy(alpha = 0.85f)
                     } else {
