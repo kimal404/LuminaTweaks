@@ -1,8 +1,9 @@
-@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalLayoutApi::class)
 
 package com.luminatweaks.gamedeck
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
@@ -10,26 +11,26 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,16 +39,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.BatteryFull
+import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Eco
+import androidx.compose.material.icons.rounded.EnergySavingsLeaf
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.NotificationsOff
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
@@ -70,6 +77,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -97,19 +105,24 @@ internal const val DECK_CARD_WIDTH_DP = 376f
 internal const val DECK_TOTAL_WIDTH_DP = DECK_RAIL_WIDTH_DP + DECK_RAIL_GAP_DP + DECK_CARD_WIDTH_DP
 
 private data class DeckProfileOption(
-    val label: String,
-    val command: String
+    val shortLabel: String,
+    val fullLabel: String,
+    val command: String,
+    val icon: ImageVector
 )
 
 private val deckProfileOptions = listOf(
-    DeckProfileOption("Eco", "eco"),
-    DeckProfileOption("Balanced", "balanced"),
-    DeckProfileOption("Performance", "performance"),
-    DeckProfileOption("Performance Lite", "performance_lite")
+    DeckProfileOption("Eco", "Eco", "eco", Icons.Rounded.Eco),
+    DeckProfileOption("Balanced", "Balanced", "balanced", Icons.Rounded.Speed),
+    DeckProfileOption("Performance", "Performance", "performance", Icons.Rounded.Bolt),
+    DeckProfileOption("Lite", "Performance Lite", "performance_lite", Icons.Rounded.EnergySavingsLeaf)
 )
 
-private fun deckOverrideSelected(current: String, label: String): Boolean =
-    current.trim().equals(label, ignoreCase = true)
+private fun deckOverrideSelected(current: String, option: DeckProfileOption): Boolean {
+    val trimmed = current.trim()
+    return trimmed.equals(option.fullLabel, ignoreCase = true) ||
+        trimmed.equals(option.shortLabel, ignoreCase = true)
+}
 
 @Composable
 fun GameDeckRoot(
@@ -597,8 +610,8 @@ private fun DeckCard(
             .background(
                 Brush.verticalGradient(
                     listOf(
-                        scheme.surfaceContainerHighest.copy(alpha = deckOpacity),
-                        scheme.surfaceContainerHigh.copy(alpha = deckOpacity)
+                        scheme.surfaceContainerLow.copy(alpha = deckOpacity),
+                        scheme.surfaceContainerLowest.copy(alpha = deckOpacity)
                     )
                 )
             )
@@ -653,100 +666,130 @@ private fun DashboardDeckContent(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            DashboardTopRow(state)
-            PerformanceHero(
-                state = state,
-                fpsColor = fpsColor,
-                frametimeText = frametimeText
-            )
-            ProfileSection(
-                state = state,
-                onProfileSelected = onProfileSelected,
-                onAutoModeToggle = onAutoModeToggle
-            )
-            RefreshRateSection(
-                modes = state.rrModes,
-                selectedHz = state.selectedRrHz,
-                liveHz = state.targetHz,
-                onSelect = onRefreshRateSelected
-            )
-        }
-    }
-}
+            // Outer Card 1: Telemetry & Device Vitals (Bento 2-Column Nested Sub-Items)
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = scheme.surfaceContainer
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Nested Sub-Item Left: FPS & Frametime
+                    Surface(
+                        modifier = Modifier.weight(0.43f),
+                        shape = RoundedCornerShape(16.dp),
+                        color = scheme.surfaceContainerHigh
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                Text(
+                                    text = if (fps > 0) fps.toString() else "--",
+                                    style = MaterialTheme.typography.headlineMedium.copy(
+                                        fontSize = 28.sp,
+                                        lineHeight = 30.sp,
+                                        fontWeight = FontWeight.Black
+                                    ),
+                                    color = fpsColor,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "FPS",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = scheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(bottom = 3.dp),
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
+                            Text(
+                                text = if (fps > 0) "$frametimeText · ${state.targetHz} Hz" else frametimeText,
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = scheme.onSurfaceVariant,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
 
-@Composable
-private fun DashboardTopRow(state: GameDeckUiState) {
-    val scheme = MaterialTheme.colorScheme
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        LiveBadge(active = state.fps > 0)
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = "GAME DECK",
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            color = scheme.onSurfaceVariant,
-            maxLines = 1,
-            softWrap = false
-        )
-        Spacer(modifier = Modifier.weight(1f))
-        MetricChip(
-            icon = Icons.Rounded.Thermostat,
-            label = state.tempLabel
-        )
-        Spacer(modifier = Modifier.width(10.dp))
-        MetricChip(
-            icon = Icons.Rounded.BatteryFull,
-            label = "${state.batteryPercent}%"
-        )
-    }
-}
+                    // Nested Sub-Item Right: Thermal, Battery, CPU & GPU
+                    Surface(
+                        modifier = Modifier.weight(0.57f),
+                        shape = RoundedCornerShape(16.dp),
+                        color = scheme.surfaceContainerHigh
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                MetricChip(
+                                    icon = Icons.Rounded.Thermostat,
+                                    label = state.tempLabel
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                MetricChip(
+                                    icon = Icons.Rounded.BatteryFull,
+                                    label = "${state.batteryPercent}%"
+                                )
+                            }
+                            MiniMetric(
+                                label = "CPU",
+                                percent = state.cpuPercent,
+                                accent = scheme.primary
+                            )
+                            MiniMetric(
+                                label = "GPU",
+                                percent = state.gpuPercent,
+                                accent = scheme.tertiary
+                            )
+                        }
+                    }
+                }
+            }
 
-@Composable
-private fun LiveBadge(active: Boolean) {
-    val scheme = MaterialTheme.colorScheme
-    val container by animateColorAsState(
-        targetValue = if (active) scheme.primaryContainer else scheme.surfaceContainerHigh,
-        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-        label = "liveBadgeContainer"
-    )
-    val content by animateColorAsState(
-        targetValue = if (active) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
-        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-        label = "liveBadgeContent"
-    )
-
-    Surface(
-        shape = CircleShape,
-        color = container,
-        contentColor = content
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(7.dp)
-                    .background(
-                        if (active) scheme.primary else scheme.outline,
-                        MaterialShapes.Sunny.toShape()
+            // Outer Card 2: Controls (Nested Profile & Expandable Refresh Rate Sub-Items)
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = scheme.surfaceContainer
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ProfileNestedCard(
+                        state = state,
+                        onProfileSelected = onProfileSelected,
+                        onAutoModeToggle = onAutoModeToggle
                     )
-            )
-            Text(
-                text = if (active) "LIVE" else "IDLE",
-                fontSize = 9.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = content,
-                maxLines = 1,
-                softWrap = false
-            )
+                    RefreshRateExpandableCard(
+                        modes = state.rrModes,
+                        selectedHz = state.selectedRrHz,
+                        liveHz = state.targetHz,
+                        onSelect = onRefreshRateSelected
+                    )
+                }
+            }
         }
     }
 }
@@ -759,102 +802,22 @@ private fun MetricChip(
     val scheme = MaterialTheme.colorScheme
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(3.dp)
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
             tint = scheme.primary,
-            modifier = Modifier.size(13.dp)
+            modifier = Modifier.size(12.dp)
         )
         Text(
             text = label,
-            fontSize = 10.sp,
+            fontSize = 9.5.sp,
             fontWeight = FontWeight.SemiBold,
             color = scheme.onSurfaceVariant,
             maxLines = 1,
             softWrap = false
         )
-    }
-}
-
-@Composable
-private fun PerformanceHero(
-    state: GameDeckUiState,
-    fpsColor: Color,
-    frametimeText: String
-) {
-    val scheme = MaterialTheme.colorScheme
-    val fps = state.fps.coerceAtLeast(0)
-
-    Surface(
-        shape = RoundedCornerShape(22.dp),
-        color = scheme.surfaceContainerHighest.copy(alpha = 0.86f)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "FRAME RATE",
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = scheme.onSurfaceVariant,
-                    maxLines = 1,
-                    softWrap = false
-                )
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
-                        text = if (fps > 0) fps.toString() else "--",
-                        style = MaterialTheme.typography.displaySmall.copy(
-                            fontSize = 28.sp,
-                            lineHeight = 30.sp,
-                            fontWeight = FontWeight.Black
-                        ),
-                        color = fpsColor,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                    Spacer(modifier = Modifier.width(5.dp))
-                    Text(
-                        text = "FPS",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = scheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 3.dp),
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                }
-                Text(
-                    text = if (fps > 0) "$frametimeText · ${state.targetHz} Hz" else frametimeText,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = scheme.onSurfaceVariant,
-                    maxLines = 1,
-                    softWrap = false
-                )
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(
-                modifier = Modifier.width(136.dp),
-                verticalArrangement = Arrangement.spacedBy(5.dp)
-            ) {
-                MiniMetric(
-                    label = "CPU",
-                    percent = state.cpuPercent,
-                    accent = scheme.primary
-                )
-                MiniMetric(
-                    label = "GPU",
-                    percent = state.gpuPercent,
-                    accent = scheme.tertiary
-                )
-            }
-        }
     }
 }
 
@@ -901,7 +864,7 @@ private fun MiniMetric(
 }
 
 @Composable
-private fun ProfileSection(
+private fun ProfileNestedCard(
     state: GameDeckUiState,
     onProfileSelected: (String?) -> Unit,
     onAutoModeToggle: () -> Unit
@@ -909,142 +872,178 @@ private fun ProfileSection(
     val scheme = MaterialTheme.colorScheme
     val autoMode = state.profileAutoMode
 
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Profile",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = scheme.onSurface,
-                maxLines = 1,
-                softWrap = false
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            ProfileModeBadge(
-                autoMode = autoMode,
-                activeProfile = state.profile
-            )
-        }
+    val autoChipBg by animateColorAsState(
+        targetValue = if (autoMode) scheme.primary else scheme.surfaceContainerHighest,
+        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+        label = "autoChipBg"
+    )
+    val autoChipContent by animateColorAsState(
+        targetValue = if (autoMode) scheme.onPrimary else scheme.onSurfaceVariant,
+        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+        label = "autoChipContent"
+    )
 
-        deckProfileOptions.chunked(2).forEach { rowOptions ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                rowOptions.forEach { option ->
-                    val selected = !autoMode &&
-                        deckOverrideSelected(state.profileOverride, option.label)
-                    ToggleButton(
-                        checked = selected,
-                        onCheckedChange = { checked ->
-                            if (checked && !autoMode) {
-                                onProfileSelected(option.command)
-                            }
-                        },
-                        enabled = !autoMode,
-                        buttonSize = ToggleButtonSize.ExtraSmall,
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(32.dp)
-                    ) {
-                        Text(
-                            text = option.label,
-                            fontSize = 11.sp,
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-        }
-
-        ToggleButton(
-            checked = autoMode,
-            onCheckedChange = { onAutoModeToggle() },
-            buttonSize = ToggleButtonSize.ExtraSmall,
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = scheme.surfaceContainerHigh
+    ) {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(34.dp)
+                .padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.Tune,
-                    contentDescription = null,
-                    modifier = Modifier.size(15.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Auto mode",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    text = "Profile",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = scheme.onSurface,
                     maxLines = 1,
                     softWrap = false
                 )
+                Spacer(modifier = Modifier.width(6.dp))
+                Surface(
+                    shape = CircleShape,
+                    color = scheme.surfaceContainerHighest
+                ) {
+                    Text(
+                        text = state.profile,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = scheme.primary,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
                 Spacer(modifier = Modifier.weight(1f))
-                Text(
-                    text = if (autoMode) "ON" else "OFF",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    maxLines = 1,
-                    softWrap = false
-                )
+                Surface(
+                    onClick = onAutoModeToggle,
+                    shape = CircleShape,
+                    color = autoChipBg,
+                    contentColor = autoChipContent
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Tune,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Text(
+                            text = if (autoMode) "Auto ON" else "Auto OFF",
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                deckProfileOptions.forEach { option ->
+                    val selected = !autoMode && deckOverrideSelected(state.profileOverride, option)
+                    val isCurrentActive = state.profile.trim().equals(option.fullLabel, ignoreCase = true)
+                    val tileBg by animateColorAsState(
+                        targetValue = when {
+                            selected -> scheme.primary
+                            autoMode && isCurrentActive -> scheme.secondaryContainer.copy(alpha = 0.72f)
+                            else -> scheme.surfaceContainerHighest.copy(alpha = if (autoMode) 0.55f else 0.92f)
+                        },
+                        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+                        label = "profileTileBg"
+                    )
+                    val tileContent by animateColorAsState(
+                        targetValue = when {
+                            selected -> scheme.onPrimary
+                            autoMode && isCurrentActive -> scheme.onSecondaryContainer
+                            autoMode -> scheme.onSurfaceVariant.copy(alpha = 0.65f)
+                            else -> scheme.onSurface
+                        },
+                        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+                        label = "profileTileContent"
+                    )
+                    val tileCorner by animateDpAsState(
+                        targetValue = if (selected || (autoMode && isCurrentActive)) 18.dp else 13.dp,
+                        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
+                        label = "profileTileCorner"
+                    )
+
+                    Surface(
+                        onClick = {
+                            if (!autoMode) {
+                                onProfileSelected(option.command)
+                            } else {
+                                onProfileSelected(null)
+                            }
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(tileCorner),
+                        color = tileBg,
+                        contentColor = tileContent,
+                        border = if (autoMode && isCurrentActive) {
+                            BorderStroke(1.dp, scheme.primary.copy(alpha = 0.55f))
+                        } else {
+                            null
+                        }
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 4.dp, vertical = 5.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = option.icon,
+                                contentDescription = option.fullLabel,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = option.shortLabel,
+                                fontSize = 9.5.sp,
+                                fontWeight = if (selected || isCurrentActive) FontWeight.Bold else FontWeight.Medium,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ProfileModeBadge(
-    autoMode: Boolean,
-    activeProfile: String
-) {
-    val scheme = MaterialTheme.colorScheme
-    val container by animateColorAsState(
-        targetValue = if (autoMode) scheme.primaryContainer else scheme.tertiaryContainer,
-        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-        label = "profileModeContainer"
-    )
-    val content by animateColorAsState(
-        targetValue = if (autoMode) scheme.onPrimaryContainer else scheme.onTertiaryContainer,
-        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-        label = "profileModeContent"
-    )
-
-    Surface(
-        shape = CircleShape,
-        color = container,
-        contentColor = content
-    ) {
-        Text(
-            text = if (autoMode) "AUTO · $activeProfile" else "MANUAL",
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-            fontSize = 9.sp,
-            fontWeight = FontWeight.ExtraBold,
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
-private fun RefreshRateSection(
+private fun RefreshRateExpandableCard(
     modes: List<Int>,
     selectedHz: Int?,
     liveHz: Int,
     onSelect: (Int?) -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
+    var expanded by remember { mutableStateOf(false) }
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
+        label = "rrChevronRotation"
+    )
     val options: List<Int?> = remember(modes) {
         buildList {
             add(null)
@@ -1052,102 +1051,117 @@ private fun RefreshRateSection(
         }
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Refresh rate",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = scheme.onSurface,
-                maxLines = 1,
-                softWrap = false
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = scheme.surfaceContainerHigh,
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = 0.85f,
+                    stiffness = 420f
+                )
             )
-            Spacer(modifier = Modifier.weight(1f))
-            Text(
-                text = if (selectedHz == null) "Auto · $liveHz Hz" else "$liveHz Hz",
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = scheme.primary,
-                maxLines = 1,
-                softWrap = false
-            )
-        }
-
-        if (options.size <= 4) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)
-            ) {
-                options.forEachIndexed { index, hz ->
-                    RrToggle(
-                        label = hz?.let { "${it}Hz" } ?: "Auto",
-                        selected = selectedHz == hz,
-                        index = index,
-                        lastIndex = options.lastIndex,
-                        modifier = Modifier.weight(1f),
-                        onClick = { onSelect(hz) }
-                    )
-                }
-            }
-        } else {
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)
+                    .clickable { expanded = !expanded }
+                    .padding(horizontal = 12.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                options.forEachIndexed { index, hz ->
-                    RrToggle(
-                        label = hz?.let { "${it}Hz" } ?: "Auto",
-                        selected = selectedHz == hz,
-                        index = index,
-                        lastIndex = options.lastIndex,
-                        modifier = Modifier.widthIn(min = 58.dp),
-                        onClick = { onSelect(hz) }
-                    )
+                Icon(
+                    imageVector = Icons.Rounded.Refresh,
+                    contentDescription = null,
+                    tint = scheme.primary,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Refresh Rate",
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = scheme.onSurface,
+                    maxLines = 1,
+                    softWrap = false
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Surface(
+                    shape = CircleShape,
+                    color = scheme.primaryContainer,
+                    contentColor = scheme.onPrimaryContainer
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = if (selectedHz == null) "Auto · $liveHz Hz" else "$selectedHz Hz",
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                        Icon(
+                            imageVector = Icons.Rounded.ExpandMore,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(14.dp)
+                                .rotate(chevronRotation)
+                        )
+                    }
+                }
+            }
+
+            if (expanded) {
+                HorizontalDivider(
+                    color = scheme.outlineVariant.copy(alpha = 0.28f),
+                    modifier = Modifier.padding(horizontal = 12.dp)
+                )
+                FlowRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    options.forEach { hz ->
+                        val isSelected = selectedHz == hz
+                        val pillBg by animateColorAsState(
+                            targetValue = if (isSelected) scheme.primary else scheme.surfaceContainerHighest,
+                            animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+                            label = "rrOptionBg"
+                        )
+                        val pillText by animateColorAsState(
+                            targetValue = if (isSelected) scheme.onPrimary else scheme.onSurface,
+                            animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+                            label = "rrOptionText"
+                        )
+
+                        Surface(
+                            onClick = {
+                                onSelect(hz)
+                                expanded = false
+                            },
+                            shape = CircleShape,
+                            color = pillBg,
+                            contentColor = pillText
+                        ) {
+                            Text(
+                                text = hz?.let { "$it Hz" } ?: "Auto",
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                fontSize = 10.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun connectedShapes(index: Int, lastIndex: Int) = when (index) {
-    0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
-    lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
-    else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
-}
-
-@Composable
-private fun RrToggle(
-    label: String,
-    selected: Boolean,
-    index: Int,
-    lastIndex: Int,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    ToggleButton(
-        checked = selected,
-        onCheckedChange = { checked ->
-            if (checked) onClick()
-        },
-        buttonSize = ToggleButtonSize.ExtraSmall,
-        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-        shapes = connectedShapes(index, lastIndex),
-        modifier = modifier.height(30.dp)
-    ) {
-        Text(
-            text = label,
-            fontSize = 10.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Ellipsis
-        )
     }
 }
 
@@ -1163,63 +1177,68 @@ private fun ToolsDeckContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = "Tools",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Black,
-                color = scheme.onSurface,
-                maxLines = 1
-            )
-            Text(
-                text = "Kontrol cepat khusus sesi game",
-                style = MaterialTheme.typography.bodySmall,
-                color = scheme.onSurfaceVariant,
-                maxLines = 1
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        ToggleButton(
-            checked = state.dndEnabled,
-            onCheckedChange = { onToggleDnd() },
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 60.dp)
+        Surface(
+            shape = RoundedCornerShape(22.dp),
+            color = scheme.surfaceContainer
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.NotificationsOff,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Jangan Ganggu",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1
-                    )
-                    Text(
-                        text = dndText,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1
-                    )
-                }
                 Text(
-                    text = if (state.dndEnabled) "ON" else "OFF",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.ExtraBold,
+                    text = "Tools",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = scheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 4.dp),
                     maxLines = 1
                 )
+
+                ToggleButton(
+                    checked = state.dndEnabled,
+                    onCheckedChange = { onToggleDnd() },
+                    buttonSize = ToggleButtonSize.ExtraSmall,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.NotificationsOff,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Jangan Ganggu",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                            )
+                            Text(
+                                text = dndText,
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1
+                            )
+                        }
+                        Text(
+                            text = if (state.dndEnabled) "ON" else "OFF",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            maxLines = 1
+                        )
+                    }
+                }
             }
         }
 
@@ -1229,13 +1248,13 @@ private fun ToolsDeckContent(
             onClick = onOpenManager,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp),
+                .height(44.dp),
             shapes = ButtonDefaults.shapes()
         ) {
             Icon(
                 imageVector = Icons.Rounded.Apps,
                 contentDescription = null,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(17.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
