@@ -1324,6 +1324,66 @@ private fun BatteryCapsulePill(
 }
 
 @Composable
+private fun DashboardWidgetSwitch(
+    checked: Boolean,
+    onCheckedChange: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val trackColor by animateColorAsState(
+        targetValue = if (checked) scheme.primary else scheme.surfaceContainerHighest,
+        animationSpec = tween(durationMillis = 200),
+        label = "widgetSwitchTrack"
+    )
+    val thumbSize by animateDpAsState(
+        targetValue = if (checked) 20.dp else 14.dp,
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow),
+        label = "widgetSwitchThumbSize"
+    )
+    val thumbOffset by animateDpAsState(
+        targetValue = if (checked) 18.dp else 0.dp,
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow),
+        label = "widgetSwitchThumbOffset"
+    )
+    val thumbColor by animateColorAsState(
+        targetValue = if (checked) scheme.onPrimary else scheme.onSurfaceVariant,
+        animationSpec = tween(durationMillis = 200),
+        label = "widgetSwitchThumbColor"
+    )
+
+    Box(
+        modifier = Modifier
+            .requiredSize(width = 44.dp, height = 26.dp)
+            .clip(CircleShape)
+            .background(trackColor)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onCheckedChange
+            )
+            .padding(3.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Box(
+            modifier = Modifier
+                .offset(x = thumbOffset)
+                .size(thumbSize)
+                .clip(CircleShape)
+                .background(thumbColor),
+            contentAlignment = Alignment.Center
+        ) {
+            if (checked) {
+                Icon(
+                    imageVector = Icons.Rounded.Check,
+                    contentDescription = null,
+                    tint = scheme.primary,
+                    modifier = Modifier.size(12.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun DashboardWidgetCustomizerContent(
     state: GameDeckUiState,
     onToggleWidget: (String) -> Unit,
@@ -2915,6 +2975,168 @@ private fun RefreshRateBentoTile(
                     softWrap = false,
                     overflow = TextOverflow.Ellipsis
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun IosRecentAppsIcon(
+    tint: Color,
+    containerColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier.size(18.dp)) {
+        val w = size.width
+        val h = size.height
+        val strokePx = 1.55.dp.toPx()
+
+        fun drawCard(leftF: Float, topF: Float, rightF: Float, bottomF: Float, radiusDp: Float, alpha: Float) {
+            val tl = Offset(w * leftF, h * topF)
+            val sz = Size(w * (rightF - leftF), h * (bottomF - topF))
+            val cr = CornerRadius(radiusDp.dp.toPx(), radiusDp.dp.toPx())
+            drawRoundRect(color = containerColor, topLeft = tl, size = sz, cornerRadius = cr)
+            drawRoundRect(color = tint.copy(alpha = alpha * 0.22f), topLeft = tl, size = sz, cornerRadius = cr)
+            drawRoundRect(
+                color = tint.copy(alpha = alpha),
+                topLeft = tl,
+                size = sz,
+                cornerRadius = cr,
+                style = Stroke(width = strokePx)
+            )
+        }
+
+        drawCard(0.06f, 0.25f, 0.46f, 0.75f, 2.4f, 0.50f)
+        drawCard(0.27f, 0.18f, 0.69f, 0.82f, 2.6f, 0.75f)
+        drawCard(0.48f, 0.11f, 0.94f, 0.89f, 3.0f, 1.00f)
+    }
+}
+
+@Composable
+private fun RefreshRateCard(
+    modes: List<Int>,
+    selectedHz: Int?,
+    liveHz: Int,
+    onSelect: (Int?) -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    var expanded by remember { mutableStateOf(false) }
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
+        label = "rrCardChevronRotation"
+    )
+    val options: List<Int?> = remember(modes) {
+        buildList {
+            add(null)
+            addAll(modes.distinct().sorted())
+        }
+    }
+
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = scheme.surfaceContainer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = 0.84f,
+                    stiffness = 400f
+                )
+            )
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IosRecentAppsIcon(tint = scheme.primary, containerColor = scheme.surfaceContainer)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Refresh Rate",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = scheme.onSurface,
+                    maxLines = 1,
+                    softWrap = false
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Surface(
+                    shape = CircleShape,
+                    color = scheme.secondaryContainer,
+                    contentColor = scheme.onSecondaryContainer
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Text(
+                            text = if (selectedHz == null) "Auto · $liveHz Hz" else "$selectedHz Hz",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                        Icon(
+                            imageVector = Icons.Rounded.ExpandMore,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(14.dp)
+                                .rotate(chevronRotation)
+                        )
+                    }
+                }
+            }
+
+            if (expanded) {
+                HorizontalDivider(
+                    color = scheme.outlineVariant.copy(alpha = 0.25f),
+                    modifier = Modifier.padding(horizontal = 14.dp)
+                )
+                FlowRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    options.forEach { hz ->
+                        val isSelected = selectedHz == hz
+                        val pillBg by animateColorAsState(
+                            targetValue = if (isSelected) scheme.primary else scheme.surfaceContainerHigh,
+                            animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+                            label = "rrCardOptionBg"
+                        )
+                        val pillText by animateColorAsState(
+                            targetValue = if (isSelected) scheme.onPrimary else scheme.onSurface,
+                            animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+                            label = "rrCardOptionText"
+                        )
+
+                        Surface(
+                            onClick = {
+                                onSelect(hz)
+                                expanded = false
+                            },
+                            shape = CircleShape,
+                            color = pillBg,
+                            contentColor = pillText
+                        ) {
+                            Text(
+                                text = hz?.let { "$it Hz" } ?: "Auto",
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    }
+                }
             }
         }
     }
