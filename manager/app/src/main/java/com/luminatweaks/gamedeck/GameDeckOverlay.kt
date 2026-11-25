@@ -408,7 +408,7 @@ private fun DockRail(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = 10.dp, bottom = 10.dp, horizontal = 4.dp)
+                .padding(horizontal = 4.dp, vertical = 10.dp)
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth(),
