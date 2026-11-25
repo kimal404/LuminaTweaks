@@ -2406,7 +2406,6 @@ private fun DashboardDeckContent(
                 }
                 }
             }
-        }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -2438,7 +2437,6 @@ private fun DashboardDeckContent(
                     )
                 }
             }
-        }
     }
 }
 
