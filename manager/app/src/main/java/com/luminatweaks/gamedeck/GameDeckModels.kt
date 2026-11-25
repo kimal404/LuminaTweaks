@@ -56,7 +56,9 @@ data class GameDeckUiState(
     val showProfileWidget: Boolean = true,
     val showMusicWidget: Boolean = true,
     val showRefreshRateWidget: Boolean = true,
+    val showKeepScreenOnWidget: Boolean = true,
     val showSlidersWidget: Boolean = true,
+    val keepScreenOn: Boolean = false,
     val musicTitle: String = "",
     val musicArtist: String = "",
     val musicPackage: String? = null,
@@ -109,6 +111,7 @@ object GameDeckPrefs {
         val showProfile: Boolean = true,
         val showMusic: Boolean = true,
         val showRefreshRate: Boolean = true,
+        val showKeepScreenOn: Boolean = true,
         val showSliders: Boolean = true
     )
 
@@ -119,6 +122,7 @@ object GameDeckPrefs {
             showProfile = sp.getBoolean("widget_profile", true),
             showMusic = sp.getBoolean("widget_music", true),
             showRefreshRate = sp.getBoolean("widget_refresh_rate", true),
+            showKeepScreenOn = sp.getBoolean("widget_keep_screen_on", true),
             showSliders = sp.getBoolean("widget_sliders", true)
         )
     }
@@ -130,7 +134,14 @@ object GameDeckPrefs {
             .putBoolean("widget_profile", widgets.showProfile)
             .putBoolean("widget_music", widgets.showMusic)
             .putBoolean("widget_refresh_rate", widgets.showRefreshRate)
+            .putBoolean("widget_keep_screen_on", widgets.showKeepScreenOn)
             .putBoolean("widget_sliders", widgets.showSliders)
             .apply()
+    }
+
+    fun resetWidgets(context: Context): DashboardWidgets {
+        val defaults = DashboardWidgets()
+        saveWidgets(context, defaults)
+        return defaults
     }
 }

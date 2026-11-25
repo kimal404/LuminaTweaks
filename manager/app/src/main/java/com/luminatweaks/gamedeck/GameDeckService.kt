@@ -172,6 +172,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     private var isAppPickerOpen = false
     private var lastRamStatusLabel = "Pangkas latar"
     private var dashboardWidgets = GameDeckPrefs.DashboardWidgets()
+    private var keepScreenOnEnabled = false
     private var edgeYOffsetPx = 0
     private var reopenBlockedUntilMs = 0L
     private var manualOverride: Boolean? = null
@@ -391,7 +392,9 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         showProfileWidget = dashboardWidgets.showProfile,
                         showMusicWidget = dashboardWidgets.showMusic,
                         showRefreshRateWidget = dashboardWidgets.showRefreshRate,
+                        showKeepScreenOnWidget = dashboardWidgets.showKeepScreenOn,
                         showSlidersWidget = dashboardWidgets.showSliders,
+                        keepScreenOn = keepScreenOnEnabled,
                         musicTitle = snapshot.musicTitle,
                         musicArtist = snapshot.musicArtist,
                         musicPackage = snapshot.musicPackage,
@@ -665,6 +668,8 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         onMusicSeek = ::seekMusicTo,
                         onOpenMusicApp = ::openMusicApp,
                         onToggleDashboardWidget = ::toggleDashboardWidget,
+                        onResetDashboardWidgets = ::resetDashboardWidgets,
+                        onToggleKeepScreenOn = ::toggleKeepScreenOn,
                         onToggleDnd = ::toggleDnd,
                         onToggleAutoBrightnessLock = ::toggleAutoBrightnessLock,
                         onToggleRotationLock = ::toggleRotationLock,
@@ -887,10 +892,15 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         val baseFlags = WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
             WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
-        params.flags = if (expandedWindow && isAppPickerOpen) {
+        val focusFlags = if (expandedWindow && isAppPickerOpen) {
             baseFlags
         } else {
             baseFlags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        }
+        params.flags = if (keepScreenOnEnabled) {
+            focusFlags or WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        } else {
+            focusFlags
         }
         params.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
         params.gravity = Gravity.CENTER_VERTICAL or (if (isLeft) Gravity.LEFT else Gravity.RIGHT)
@@ -1277,6 +1287,25 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         runCatching { startActivity(launchIntent) }
     }
 
+    private fun toggleKeepScreenOn() {
+        keepScreenOnEnabled = !keepScreenOnEnabled
+        uiState.value = uiState.value.copy(keepScreenOn = keepScreenOnEnabled)
+        updateWindowLayout()
+    }
+
+    private fun resetDashboardWidgets() {
+        val defaults = GameDeckPrefs.resetWidgets(this)
+        dashboardWidgets = defaults
+        uiState.value = uiState.value.copy(
+            showTelemetryWidget = defaults.showTelemetry,
+            showProfileWidget = defaults.showProfile,
+            showMusicWidget = defaults.showMusic,
+            showRefreshRateWidget = defaults.showRefreshRate,
+            showKeepScreenOnWidget = defaults.showKeepScreenOn,
+            showSlidersWidget = defaults.showSliders
+        )
+    }
+
     private fun toggleDashboardWidget(widgetKey: String) {
         val cur = dashboardWidgets
         val candidate = when (widgetKey) {
@@ -1284,6 +1313,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             "profile" -> cur.copy(showProfile = !cur.showProfile)
             "music" -> cur.copy(showMusic = !cur.showMusic)
             "refresh_rate" -> cur.copy(showRefreshRate = !cur.showRefreshRate)
+            "keep_screen_on" -> cur.copy(showKeepScreenOn = !cur.showKeepScreenOn)
             "sliders" -> cur.copy(showSliders = !cur.showSliders)
             else -> cur
         }
@@ -1292,6 +1322,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             candidate.showProfile,
             candidate.showMusic,
             candidate.showRefreshRate,
+            candidate.showKeepScreenOn,
             candidate.showSliders
         ).count { it }
         if (activeCount == 0) {
@@ -1305,6 +1336,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             showProfileWidget = candidate.showProfile,
             showMusicWidget = candidate.showMusic,
             showRefreshRateWidget = candidate.showRefreshRate,
+            showKeepScreenOnWidget = candidate.showKeepScreenOn,
             showSlidersWidget = candidate.showSliders
         )
     }

@@ -77,12 +77,14 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.NotificationsOff
+import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.ScreenLockRotation
 import androidx.compose.material.icons.rounded.Screenshot
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Thermostat
+import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -200,6 +202,8 @@ fun GameDeckRoot(
     onMusicSeek: (Long) -> Unit = {},
     onOpenMusicApp: () -> Unit = {},
     onToggleDashboardWidget: (String) -> Unit = {},
+    onResetDashboardWidgets: () -> Unit = {},
+    onToggleKeepScreenOn: () -> Unit = {},
     onToggleDnd: () -> Unit,
     onToggleAutoBrightnessLock: () -> Unit,
     onToggleRotationLock: () -> Unit,
@@ -280,6 +284,8 @@ fun GameDeckRoot(
                 onMusicSeek = onMusicSeek,
                 onOpenMusicApp = onOpenMusicApp,
                 onToggleDashboardWidget = onToggleDashboardWidget,
+                onResetDashboardWidgets = onResetDashboardWidgets,
+                onToggleKeepScreenOn = onToggleKeepScreenOn,
                 onToggleDnd = onToggleDnd,
                 onToggleAutoBrightnessLock = onToggleAutoBrightnessLock,
                 onToggleRotationLock = onToggleRotationLock,
@@ -379,6 +385,8 @@ private fun GameDeckWorkspace(
     onMusicSeek: (Long) -> Unit,
     onOpenMusicApp: () -> Unit,
     onToggleDashboardWidget: (String) -> Unit,
+    onResetDashboardWidgets: () -> Unit,
+    onToggleKeepScreenOn: () -> Unit,
     onToggleDnd: () -> Unit,
     onToggleAutoBrightnessLock: () -> Unit,
     onToggleRotationLock: () -> Unit,
@@ -484,6 +492,8 @@ private fun GameDeckWorkspace(
                 onMusicSeek = onMusicSeek,
                 onOpenMusicApp = onOpenMusicApp,
                 onToggleDashboardWidget = onToggleDashboardWidget,
+                onResetDashboardWidgets = onResetDashboardWidgets,
+                onToggleKeepScreenOn = onToggleKeepScreenOn,
                 onToggleDnd = onToggleDnd,
                 onToggleAutoBrightnessLock = onToggleAutoBrightnessLock,
                 onToggleRotationLock = onToggleRotationLock,
@@ -514,6 +524,8 @@ private fun GameDeckWorkspace(
                 onMusicSeek = onMusicSeek,
                 onOpenMusicApp = onOpenMusicApp,
                 onToggleDashboardWidget = onToggleDashboardWidget,
+                onResetDashboardWidgets = onResetDashboardWidgets,
+                onToggleKeepScreenOn = onToggleKeepScreenOn,
                 onToggleDnd = onToggleDnd,
                 onToggleAutoBrightnessLock = onToggleAutoBrightnessLock,
                 onToggleRotationLock = onToggleRotationLock,
@@ -792,6 +804,8 @@ private fun DeckCard(
     onMusicSeek: (Long) -> Unit,
     onOpenMusicApp: () -> Unit,
     onToggleDashboardWidget: (String) -> Unit,
+    onResetDashboardWidgets: () -> Unit,
+    onToggleKeepScreenOn: () -> Unit,
     onToggleDnd: () -> Unit,
     onToggleAutoBrightnessLock: () -> Unit,
     onToggleRotationLock: () -> Unit,
@@ -832,6 +846,7 @@ private fun DeckCard(
                 2 -> DashboardWidgetCustomizerContent(
                     state = state,
                     onToggleWidget = onToggleDashboardWidget,
+                    onResetWidgets = onResetDashboardWidgets,
                     onBack = onCloseWidgetEditor
                 )
                 else -> HorizontalPager(
@@ -853,6 +868,7 @@ private fun DeckCard(
                             onMusicPrevious = onMusicPrevious,
                             onMusicSeek = onMusicSeek,
                             onOpenMusicApp = onOpenMusicApp,
+                            onToggleKeepScreenOn = onToggleKeepScreenOn,
                             onOpenWidgetEditor = onOpenWidgetEditor
                         )
                     } else {
@@ -1294,79 +1310,29 @@ private fun BatteryCapsulePill(
 }
 
 @Composable
-private fun DashboardWidgetSwitch(
-    checked: Boolean,
-    onCheckedChange: () -> Unit
-) {
-    val scheme = MaterialTheme.colorScheme
-    val trackColor by animateColorAsState(
-        targetValue = if (checked) scheme.primary else scheme.surfaceContainerHighest,
-        animationSpec = tween(durationMillis = 200),
-        label = "widgetSwitchTrack"
-    )
-    val thumbSize by animateDpAsState(
-        targetValue = if (checked) 20.dp else 14.dp,
-        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow),
-        label = "widgetSwitchThumbSize"
-    )
-    val thumbOffset by animateDpAsState(
-        targetValue = if (checked) 18.dp else 0.dp,
-        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow),
-        label = "widgetSwitchThumbOffset"
-    )
-    val thumbColor by animateColorAsState(
-        targetValue = if (checked) scheme.onPrimary else scheme.onSurfaceVariant,
-        animationSpec = tween(durationMillis = 200),
-        label = "widgetSwitchThumbColor"
-    )
-
-    Box(
-        modifier = Modifier
-            .requiredSize(width = 44.dp, height = 26.dp)
-            .clip(CircleShape)
-            .background(trackColor)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onCheckedChange
-            )
-            .padding(3.dp),
-        contentAlignment = Alignment.CenterStart
-    ) {
-        Box(
-            modifier = Modifier
-                .offset(x = thumbOffset)
-                .size(thumbSize)
-                .clip(CircleShape)
-                .background(thumbColor),
-            contentAlignment = Alignment.Center
-        ) {
-            if (checked) {
-                Icon(
-                    imageVector = Icons.Rounded.Check,
-                    contentDescription = null,
-                    tint = scheme.primary,
-                    modifier = Modifier.size(12.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun DashboardWidgetCustomizerContent(
     state: GameDeckUiState,
     onToggleWidget: (String) -> Unit,
+    onResetWidgets: () -> Unit,
     onBack: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
-    val items = listOf(
-        Triple("telemetry", "Telemetri & CPU/GPU", state.showTelemetryWidget),
-        Triple("profile", "Profil Performa", state.showProfileWidget),
-        Triple("music", "Pemutar Musik", state.showMusicWidget),
-        Triple("refresh_rate", "Refresh Rate", state.showRefreshRateWidget),
-        Triple("sliders", "Brightness & Suara", state.showSlidersWidget)
+    data class WidgetBentoMeta(
+        val key: String,
+        val title: String,
+        val icon: ImageVector,
+        val enabled: Boolean
     )
+
+    val items = listOf(
+        WidgetBentoMeta("telemetry", "Telemetri", Icons.Rounded.Speed, state.showTelemetryWidget),
+        WidgetBentoMeta("profile", "Profil", Icons.Rounded.Tune, state.showProfileWidget),
+        WidgetBentoMeta("music", "Musik", Icons.Rounded.MusicNote, state.showMusicWidget),
+        WidgetBentoMeta("refresh_rate", "Refresh Rate", Icons.Rounded.Refresh, state.showRefreshRateWidget),
+        WidgetBentoMeta("keep_screen_on", "Layar Nyala", Icons.Rounded.Visibility, state.showKeepScreenOnWidget),
+        WidgetBentoMeta("sliders", "Cahaya & Suara", Icons.Rounded.BrightnessMedium, state.showSlidersWidget)
+    )
+    val allEnabled = items.all { it.enabled }
 
     Column(
         modifier = Modifier
@@ -1402,6 +1368,32 @@ private fun DashboardWidgetCustomizerContent(
                 maxLines = 1,
                 softWrap = false
             )
+            Spacer(modifier = Modifier.weight(1f))
+            Surface(
+                onClick = onResetWidgets,
+                shape = CircleShape,
+                color = if (allEnabled) scheme.surfaceContainer else scheme.secondaryContainer,
+                contentColor = if (allEnabled) scheme.onSurfaceVariant else scheme.onSecondaryContainer
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.RestartAlt,
+                        contentDescription = null,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Text(
+                        text = "Reset",
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+            }
         }
 
         Surface(
@@ -1416,37 +1408,21 @@ private fun DashboardWidgetCustomizerContent(
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
                     .padding(10.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items.forEach { (key, title, enabled) ->
-                    Surface(
-                        onClick = { onToggleWidget(key) },
-                        shape = RoundedCornerShape(16.dp),
-                        color = if (enabled) {
-                            scheme.secondaryContainer.copy(alpha = 0.55f)
-                        } else {
-                            scheme.surfaceContainerHigh
-                        },
-                        modifier = Modifier.fillMaxWidth()
+                items.chunked(2).forEach { rowItems ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = title,
-                                fontSize = 12.sp,
-                                fontWeight = if (enabled) FontWeight.Bold else FontWeight.Medium,
-                                color = scheme.onSurface,
-                                modifier = Modifier.weight(1f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            DashboardWidgetSwitch(
-                                checked = enabled,
-                                onCheckedChange = { onToggleWidget(key) }
+                        rowItems.forEach { item ->
+                            CompactToolBentoTile(
+                                icon = item.icon,
+                                title = item.title,
+                                subtitle = if (item.enabled) "Tampil" else "Sembunyi",
+                                active = item.enabled,
+                                onClick = { onToggleWidget(item.key) },
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
@@ -1774,6 +1750,7 @@ private fun DashboardDeckContent(
     onMusicPrevious: () -> Unit,
     onMusicSeek: (Long) -> Unit,
     onOpenMusicApp: () -> Unit,
+    onToggleKeepScreenOn: () -> Unit,
     onOpenWidgetEditor: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -1921,13 +1898,31 @@ private fun DashboardDeckContent(
             )
         }
 
-        if (state.showRefreshRateWidget) {
-            RefreshRateCard(
-                modes = state.rrModes,
-                selectedHz = state.selectedRrHz,
-                liveHz = state.targetHz,
-                onSelect = onRefreshRateSelected
-            )
+        if (state.showRefreshRateWidget || state.showKeepScreenOnWidget) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (state.showRefreshRateWidget) {
+                    RefreshRateBentoTile(
+                        modes = state.rrModes,
+                        selectedHz = state.selectedRrHz,
+                        liveHz = state.targetHz,
+                        onSelect = onRefreshRateSelected,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                if (state.showKeepScreenOnWidget) {
+                    CompactToolBentoTile(
+                        icon = Icons.Rounded.Visibility,
+                        title = "Layar Nyala",
+                        subtitle = if (state.keepScreenOn) "Tetap menyala" else "Normal sistem",
+                        active = state.keepScreenOn,
+                        onClick = onToggleKeepScreenOn,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
         }
 
         if (state.showSlidersWidget) {
@@ -2326,135 +2321,130 @@ private fun ProfileSelectorCard(
 }
 
 @Composable
-private fun RefreshRateCard(
+private fun RefreshRateBentoTile(
     modes: List<Int>,
     selectedHz: Int?,
     liveHz: Int,
-    onSelect: (Int?) -> Unit
+    onSelect: (Int?) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val scheme = MaterialTheme.colorScheme
-    var expanded by remember { mutableStateOf(false) }
-    val chevronRotation by animateFloatAsState(
-        targetValue = if (expanded) 180f else 0f,
-        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
-        label = "rrCardChevronRotation"
-    )
     val options: List<Int?> = remember(modes) {
         buildList {
             add(null)
             addAll(modes.distinct().sorted())
         }
     }
+    val currentIndex = options.indexOf(selectedHz).let { if (it >= 0) it else 0 }
+    var tapSpinCount by remember { mutableIntStateOf(0) }
+    val iconRotation by animateFloatAsState(
+        targetValue = tapSpinCount * 180f,
+        animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMedium),
+        label = "rrTileSpin"
+    )
+    val isLocked = selectedHz != null
 
-    Surface(
-        shape = RoundedCornerShape(24.dp),
-        color = scheme.surfaceContainer,
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(
-                animationSpec = spring(
-                    dampingRatio = 0.84f,
-                    stiffness = 400f
-                )
-            )
+    ExpressiveToggleTile(
+        active = isLocked,
+        dimmed = false,
+        onClick = {
+            tapSpinCount += 1
+            val nextIdx = (currentIndex + 1) % options.size
+            onSelect(options[nextIdx])
+        },
+        modifier = modifier.height(76.dp)
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 11.dp, vertical = 9.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { expanded = !expanded }
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.Refresh,
-                    contentDescription = null,
-                    tint = scheme.primary,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Refresh Rate",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = scheme.onSurface,
-                    maxLines = 1,
-                    softWrap = false
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                Surface(
-                    shape = CircleShape,
-                    color = scheme.secondaryContainer,
-                    contentColor = scheme.onSecondaryContainer
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(
+                            if (isLocked) {
+                                scheme.primary.copy(alpha = 0.22f)
+                            } else {
+                                scheme.surfaceContainerHighest
+                            }
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Text(
-                            text = if (selectedHz == null) "Auto · $liveHz Hz" else "$selectedHz Hz",
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            softWrap = false
+                    Icon(
+                        imageVector = Icons.Rounded.Refresh,
+                        contentDescription = null,
+                        tint = if (isLocked) scheme.primary else scheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .size(15.dp)
+                            .rotate(iconRotation)
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    options.forEachIndexed { idx, _ ->
+                        val activeDot = idx == currentIndex
+                        val dotW by animateDpAsState(
+                            targetValue = if (activeDot) 12.dp else 5.dp,
+                            animationSpec = spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMedium),
+                            label = "rrStepDotW"
                         )
-                        Icon(
-                            imageVector = Icons.Rounded.ExpandMore,
-                            contentDescription = null,
+                        Box(
                             modifier = Modifier
-                                .size(14.dp)
-                                .rotate(chevronRotation)
+                                .width(dotW)
+                                .height(5.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (activeDot) {
+                                        scheme.primary
+                                    } else {
+                                        scheme.onSurfaceVariant.copy(alpha = 0.35f)
+                                    }
+                                )
                         )
                     }
                 }
             }
 
-            if (expanded) {
-                HorizontalDivider(
-                    color = scheme.outlineVariant.copy(alpha = 0.25f),
-                    modifier = Modifier.padding(horizontal = 14.dp)
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = "Refresh Rate",
+                    style = TextStyle(
+                        fontSize = 11.5.sp,
+                        lineHeight = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                    ),
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
                 )
-                FlowRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    options.forEach { hz ->
-                        val isSelected = selectedHz == hz
-                        val pillBg by animateColorAsState(
-                            targetValue = if (isSelected) scheme.primary else scheme.surfaceContainerHigh,
-                            animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-                            label = "rrCardOptionBg"
-                        )
-                        val pillText by animateColorAsState(
-                            targetValue = if (isSelected) scheme.onPrimary else scheme.onSurface,
-                            animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-                            label = "rrCardOptionText"
-                        )
-
-                        Surface(
-                            onClick = {
-                                onSelect(hz)
-                                expanded = false
-                            },
-                            shape = CircleShape,
-                            color = pillBg,
-                            contentColor = pillText
-                        ) {
-                            Text(
-                                text = hz?.let { "$it Hz" } ?: "Auto",
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                fontSize = 11.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
-                    }
-                }
+                Text(
+                    text = if (selectedHz == null) "Auto · $liveHz Hz" else "$selectedHz Hz",
+                    style = TextStyle(
+                        fontSize = 9.5.sp,
+                        lineHeight = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                    ),
+                    color = if (isLocked) {
+                        scheme.onPrimaryContainer.copy(alpha = 0.85f)
+                    } else {
+                        scheme.primary
+                    },
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
