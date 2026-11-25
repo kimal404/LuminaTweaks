@@ -1,5 +1,6 @@
 package com.luminatweaks.gamedeck
 
+import android.content.pm.ApplicationInfo
 import android.graphics.drawable.Drawable
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Image
@@ -39,6 +40,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -621,13 +623,32 @@ private fun DeckAppsPickerDialog(
     var apps by remember { mutableStateOf(emptyApps) }
     var loading by remember { mutableStateOf(true) }
     var icons by remember { mutableStateOf(emptyIcons) }
+    var searchQuery by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
+        val pm = context.packageManager
+        val selfPkg = context.packageName
+        val systemMask = ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP
         apps = withContext(Dispatchers.IO) {
-            ConfigRepository.loadInstalledApps(context.packageManager)
+            ConfigRepository.loadInstalledApps(pm)
+                .filter { item ->
+                    if (item.packageName == selfPkg) return@filter false
+                    if (item.packageName in selected) return@filter true
+                    if (pm.getLaunchIntentForPackage(item.packageName) == null) return@filter false
+                    val info = runCatching { pm.getApplicationInfo(item.packageName, 0) }.getOrNull()
+                        ?: return@filter false
+                    (info.flags and systemMask) == 0
+                }
                 .sortedBy { it.name.lowercase() }
         }
         loading = false
+    }
+
+    val filteredApps = remember(apps, searchQuery) {
+        val q = searchQuery.trim()
+        if (q.isEmpty()) apps else apps.filter {
+            it.name.contains(q, ignoreCase = true) || it.packageName.contains(q, ignoreCase = true)
+        }
     }
 
     LaunchedEffect(apps) {
@@ -660,11 +681,19 @@ private fun DeckAppsPickerDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    singleLine = true,
+                    placeholder = { Text("Cari aplikasi...") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
                 if (loading) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 } else {
-                    LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
-                        items(apps, key = { it.packageName }) { app ->
+                    LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
+                        items(filteredApps, key = { it.packageName }) { app ->
                             val icon = icons[app.packageName]
                             val checked = app.packageName in selected
                             val enabled = checked || selected.size < 8

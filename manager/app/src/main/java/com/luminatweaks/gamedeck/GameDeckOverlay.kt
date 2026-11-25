@@ -47,6 +47,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import android.content.pm.ApplicationInfo
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -59,10 +61,12 @@ import androidx.compose.material.icons.rounded.BrightnessMedium
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material.icons.rounded.Tune
@@ -99,6 +103,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
@@ -109,6 +114,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -167,6 +173,7 @@ fun GameDeckRoot(
     onToggleDnd: () -> Unit,
     onQuickAppClick: (String) -> Unit,
     onToggleQuickApp: (String) -> Unit,
+    onAppPickerVisibilityChanged: (Boolean) -> Unit = {},
     onOpenManager: () -> Unit,
     onCollapseSettled: () -> Unit
 ) {
@@ -236,6 +243,7 @@ fun GameDeckRoot(
                 onToggleDnd = onToggleDnd,
                 onQuickAppClick = onQuickAppClick,
                 onToggleQuickApp = onToggleQuickApp,
+                onAppPickerVisibilityChanged = onAppPickerVisibilityChanged,
                 onOpenManager = onOpenManager
             )
         }
@@ -324,10 +332,14 @@ private fun GameDeckWorkspace(
     onToggleDnd: () -> Unit,
     onQuickAppClick: (String) -> Unit,
     onToggleQuickApp: (String) -> Unit,
+    onAppPickerVisibilityChanged: (Boolean) -> Unit,
     onOpenManager: () -> Unit
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     var showAppPicker by remember { mutableStateOf(false) }
+    LaunchedEffect(showAppPicker) {
+        onAppPickerVisibilityChanged(showAppPicker)
+    }
     val isLeft = state.side == GameDeckSide.LEFT
     val closeThreshold = with(LocalDensity.current) { 24.dp.toPx() }
     val screenWidthDp = with(LocalDensity.current) {
@@ -736,11 +748,22 @@ private fun QuickAppPickerDeckContent(
     val scheme = MaterialTheme.colorScheme
     var apps by remember { mutableStateOf<List<AppItem>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
+    var searchQuery by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
+        val pm = context.packageManager
+        val selfPkg = context.packageName
+        val systemMask = ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP
         val loaded = withContext(Dispatchers.IO) {
-            ConfigRepository.loadInstalledApps(context.packageManager)
-                .filter { it.packageName != context.packageName }
+            ConfigRepository.loadInstalledApps(pm)
+                .filter { item ->
+                    if (item.packageName == selfPkg) return@filter false
+                    if (item.packageName in selectedPackages) return@filter true
+                    if (pm.getLaunchIntentForPackage(item.packageName) == null) return@filter false
+                    val info = runCatching { pm.getApplicationInfo(item.packageName, 0) }.getOrNull()
+                        ?: return@filter false
+                    (info.flags and systemMask) == 0
+                }
                 .sortedWith(
                     compareByDescending<AppItem> { it.packageName in selectedPackages }
                         .thenBy { it.name.lowercase(Locale.ROOT) }
@@ -748,6 +771,18 @@ private fun QuickAppPickerDeckContent(
         }
         apps = loaded
         loading = false
+    }
+
+    val filteredApps = remember(apps, searchQuery) {
+        val q = searchQuery.trim()
+        if (q.isEmpty()) {
+            apps
+        } else {
+            apps.filter {
+                it.name.contains(q, ignoreCase = true) ||
+                    it.packageName.contains(q, ignoreCase = true)
+            }
+        }
     }
 
     Column(
@@ -775,16 +810,69 @@ private fun QuickAppPickerDeckContent(
                     )
                 }
             }
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = "Aplikasi Cepat",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = scheme.onSurface,
-                maxLines = 1,
-                softWrap = false
-            )
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.width(8.dp))
+            Surface(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(34.dp),
+                shape = CircleShape,
+                color = scheme.surfaceContainerHigh
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Search,
+                        contentDescription = null,
+                        tint = scheme.onSurfaceVariant,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        if (searchQuery.isEmpty()) {
+                            Text(
+                                text = "Cari aplikasi...",
+                                fontSize = 11.sp,
+                                color = scheme.onSurfaceVariant,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        BasicTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            singleLine = true,
+                            textStyle = TextStyle(
+                                fontSize = 11.5.sp,
+                                color = scheme.onSurface,
+                                fontWeight = FontWeight.Medium
+                            ),
+                            cursorBrush = SolidColor(scheme.primary),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    if (searchQuery.isNotEmpty()) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Rounded.Close,
+                            contentDescription = "Hapus",
+                            tint = scheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .size(15.dp)
+                                .clip(CircleShape)
+                                .clickable { searchQuery = "" }
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.width(8.dp))
             Surface(
                 shape = CircleShape,
                 color = scheme.secondaryContainer,
@@ -810,6 +898,19 @@ private fun QuickAppPickerDeckContent(
             ) {
                 CircularWavyProgressIndicator(modifier = Modifier.size(34.dp))
             }
+        } else if (filteredApps.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (searchQuery.isNotBlank()) "Aplikasi tidak ditemukan" else "Tidak ada aplikasi pengguna",
+                    fontSize = 11.5.sp,
+                    color = scheme.onSurfaceVariant
+                )
+            }
         } else {
             LazyColumn(
                 modifier = Modifier
@@ -818,7 +919,7 @@ private fun QuickAppPickerDeckContent(
                 contentPadding = PaddingValues(bottom = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                items(apps, key = { it.packageName }) { app ->
+                items(filteredApps, key = { it.packageName }) { app ->
                     val checked = app.packageName in selectedPackages
                     val enabled = checked || selectedPackages.size < MAX_DECK_QUICK_APPS
                     val icon = rememberAppIcon(app.packageName)

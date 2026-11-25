@@ -153,6 +153,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     private var isAttached = false
     private var isExpanded = false
     private var isCollapsing = false
+    private var isAppPickerOpen = false
     private var edgeYOffsetPx = 0
     private var reopenBlockedUntilMs = 0L
     private var manualOverride: Boolean? = null
@@ -578,6 +579,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         onToggleDnd = ::toggleDnd,
                         onQuickAppClick = ::launchFreeformApp,
                         onToggleQuickApp = ::toggleQuickApp,
+                        onAppPickerVisibilityChanged = ::setAppPickerOpen,
                         onOpenManager = ::openManager,
                         onCollapseSettled = ::handleCollapseSettled
                     )
@@ -705,6 +707,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         isAttached = false
         isExpanded = false
         isCollapsing = false
+        isAppPickerOpen = false
         isWindowExpandedState.value = false
         isHandlePressedState.value = false
         uiState.value = uiState.value.copy(expanded = false)
@@ -727,6 +730,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                 }
             }
         } else {
+            isAppPickerOpen = false
             isCollapsing = true
             reopenBlockedUntilMs = System.currentTimeMillis() + REOPEN_COOLDOWN_MS
             val wasVisible = uiState.value.expanded
@@ -787,6 +791,15 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         val panelWidthPx = (DECK_TOTAL_WIDTH_DP * density)
             .coerceAtMost((displayMetrics.widthPixels - 24f * density).coerceAtLeast(320f * density))
         val maxOffset = collapsedMaxOffsetPx()
+        val baseFlags = WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+        params.flags = if (expandedWindow && isAppPickerOpen) {
+            baseFlags
+        } else {
+            baseFlags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        }
+        params.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
         params.gravity = Gravity.CENTER_VERTICAL or (if (isLeft) Gravity.LEFT else Gravity.RIGHT)
         if (expandedWindow) {
             params.x = (12f * density).roundToInt()
@@ -1106,6 +1119,12 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                 runCatching { startActivity(launchIntent) }
             }
         }
+    }
+
+    private fun setAppPickerOpen(open: Boolean) {
+        if (isAppPickerOpen == open) return
+        isAppPickerOpen = open
+        updateWindowLayout()
     }
 
     private fun toggleQuickApp(pkg: String) {
