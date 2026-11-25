@@ -1745,7 +1745,7 @@ private fun FullScreenWidgetEditorOverlay(
                                                     overflow = TextOverflow.Ellipsis
                                                 )
                                             }
-                                            WidgetBlueprintPreview(widgetKey = item.key)
+                                            LiveDashboardWidgetPreview(widgetKey = item.key, state = state)
                                         }
 
                                         Surface(
@@ -1903,58 +1903,56 @@ private fun FullScreenWidgetEditorOverlay(
                                                 fadeOutSpec = spring(stiffness = Spring.StiffnessMediumLow)
                                             )
                                     ) {
-                                        Row(
+                                        Column(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(horizontal = 10.dp, vertical = 10.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(9.dp)
+                                                .padding(10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(34.dp)
-                                                    .clip(RoundedCornerShape(10.dp))
-                                                    .background(scheme.primaryContainer),
-                                                contentAlignment = Alignment.Center
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                                             ) {
-                                                Icon(
-                                                    imageVector = item.icon,
-                                                    contentDescription = null,
-                                                    tint = scheme.onPrimaryContainer,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                            }
-                                            Column(modifier = Modifier.weight(1f)) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(28.dp)
+                                                        .clip(RoundedCornerShape(9.dp))
+                                                        .background(scheme.primaryContainer),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        imageVector = item.icon,
+                                                        contentDescription = null,
+                                                        tint = scheme.onPrimaryContainer,
+                                                        modifier = Modifier.size(15.dp)
+                                                    )
+                                                }
                                                 Text(
                                                     text = item.title,
                                                     fontSize = 11.5.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     color = scheme.onSurface,
                                                     maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier.weight(1f)
                                                 )
-                                                Text(
-                                                    text = "Ketuk + untuk pasang",
-                                                    fontSize = 9.5.sp,
-                                                    color = scheme.onSurfaceVariant,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(26.dp)
+                                                        .clip(CircleShape)
+                                                        .background(scheme.primary),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Rounded.Add,
+                                                        contentDescription = "Pasang ${item.title}",
+                                                        tint = scheme.onPrimary,
+                                                        modifier = Modifier.size(15.dp)
+                                                    )
+                                                }
                                             }
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(28.dp)
-                                                    .clip(CircleShape)
-                                                    .background(scheme.primary),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.Add,
-                                                    contentDescription = "Pasang ${item.title}",
-                                                    tint = scheme.onPrimary,
-                                                    modifier = Modifier.size(16.dp)
-                                                )
-                                            }
+                                            LiveDashboardWidgetPreview(widgetKey = item.key, state = state)
                                         }
                                     }
                                 }
@@ -1968,238 +1966,49 @@ private fun FullScreenWidgetEditorOverlay(
 }
 
 @Composable
-private fun WidgetBlueprintPreview(widgetKey: String) {
-    val scheme = MaterialTheme.colorScheme
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(scheme.surfaceContainer)
-            .padding(horizontal = 10.dp, vertical = 7.dp)
-    ) {
-        when (widgetKey) {
-            "telemetry" -> Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Speed,
-                        contentDescription = null,
-                        tint = scheme.primary,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(
-                        text = "120",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Black,
-                        color = scheme.primary
-                    )
-                    Text(
-                        text = "FPS",
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = scheme.onSurfaceVariant
-                    )
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                Box(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(scheme.primaryContainer)
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = "CPU",
-                        fontSize = 8.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = scheme.onPrimaryContainer
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(scheme.tertiaryContainer)
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = "GPU",
-                        fontSize = 8.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = scheme.onTertiaryContainer
-                    )
-                }
-            }
-
-            "profile" -> Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                listOf("Eco", "Balanced", "Perf", "Lite").forEachIndexed { idx, label ->
-                    val active = idx == 2
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(CircleShape)
-                            .background(if (active) scheme.primaryContainer else scheme.surfaceContainerHigh)
-                            .padding(vertical = 4.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = label,
-                            fontSize = 8.5.sp,
-                            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
-                            color = if (active) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
-                }
-            }
-
-            "music" -> Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(5.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.55f)
-                                .height(5.dp)
-                                .clip(CircleShape)
-                                .background(scheme.onSurface.copy(alpha = 0.72f))
-                        )
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.36f)
-                                .height(4.dp)
-                                .clip(CircleShape)
-                                .background(scheme.onSurfaceVariant.copy(alpha = 0.5f))
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .size(20.dp)
-                            .clip(RoundedCornerShape(7.dp))
-                            .background(scheme.primaryContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Rounded.Pause, null, tint = scheme.onPrimaryContainer, modifier = Modifier.size(12.dp))
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(Icons.Rounded.SkipPrevious, null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(12.dp))
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(3.dp)
-                            .clip(CircleShape)
-                            .background(scheme.surfaceContainerHighest)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.45f)
-                                .fillMaxHeight()
-                                .clip(CircleShape)
-                                .background(scheme.primary)
-                        )
-                    }
-                    Icon(Icons.Rounded.SkipNext, null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(12.dp))
-                }
-            }
-
-            "refresh_rate" -> Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IosRecentAppsIcon(tint = scheme.primary, containerColor = scheme.surfaceContainer, modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "Refresh Rate",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = scheme.onSurface
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                Box(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(scheme.primaryContainer)
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = "120 Hz",
-                        fontSize = 8.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = scheme.onPrimaryContainer
-                    )
-                }
-            }
-
-            else -> Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(5.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(Icons.Rounded.BrightnessMedium, null, tint = scheme.primary, modifier = Modifier.size(12.dp))
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(6.dp)
-                            .clip(CircleShape)
-                            .background(scheme.surfaceContainerHighest)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.62f)
-                                .fillMaxHeight()
-                                .clip(CircleShape)
-                                .background(scheme.primary)
-                        )
-                    }
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(Icons.AutoMirrored.Rounded.VolumeUp, null, tint = scheme.tertiary, modifier = Modifier.size(12.dp))
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(6.dp)
-                            .clip(CircleShape)
-                            .background(scheme.surfaceContainerHighest)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.48f)
-                                .fillMaxHeight()
-                                .clip(CircleShape)
-                                .background(scheme.tertiary)
-                        )
-                    }
-                }
-            }
-        }
+private fun LiveDashboardWidgetPreview(
+    widgetKey: String,
+    state: GameDeckUiState
+) {
+    when (widgetKey) {
+        "telemetry" -> TelemetryWidgetCard(state = state)
+        "profile" -> ProfileSelectorCard(
+            state = state,
+            onProfileSelected = {},
+            onToggleAutoMode = {},
+            interactive = false
+        )
+        "music" -> MusicPlayerWidgetCard(
+            title = state.musicTitle,
+            artist = state.musicArtist,
+            packageName = state.musicPackage,
+            albumArt = state.musicArt,
+            isPlaying = state.isMusicPlaying,
+            positionMs = state.musicPositionMs,
+            durationMs = state.musicDurationMs,
+            onPrevious = {},
+            onPlayPause = {},
+            onNext = {},
+            onSeek = {},
+            onOpenApp = {},
+            interactive = false
+        )
+        "refresh_rate" -> RefreshRateCard(
+            modes = state.rrModes,
+            selectedHz = state.selectedRrHz,
+            liveHz = state.targetHz,
+            onSelect = {},
+            interactive = false
+        )
+        "sliders" -> BrightnessVolumeCard(
+            brightnessPercent = state.brightnessPercent,
+            volumePercent = state.volumePercent,
+            volumeMuted = state.volumeMuted,
+            onBrightnessChanged = { _, _ -> },
+            onVolumeChanged = {},
+            onToggleMute = {},
+            interactive = false
+        )
     }
 }
 
@@ -2344,7 +2153,8 @@ private fun MusicPlayerWidgetCard(
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onSeek: (Long) -> Unit,
-    onOpenApp: () -> Unit
+    onOpenApp: () -> Unit,
+    interactive: Boolean = true
 ) {
     val scheme = MaterialTheme.colorScheme
     val appIcon = rememberAppIcon(packageName)
@@ -2410,7 +2220,7 @@ private fun MusicPlayerWidgetCard(
                         .size(44.dp)
                         .clip(RoundedCornerShape(14.dp))
                         .background(scheme.surfaceContainerHigh)
-                        .clickable(enabled = !packageName.isNullOrBlank()) { onOpenApp() },
+                        .clickable(enabled = interactive && !packageName.isNullOrBlank()) { onOpenApp() },
                     contentAlignment = Alignment.Center
                 ) {
                     Crossfade(
@@ -2479,7 +2289,7 @@ private fun MusicPlayerWidgetCard(
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .clickable(enabled = !packageName.isNullOrBlank()) { onOpenApp() },
+                        .clickable(enabled = interactive && !packageName.isNullOrBlank()) { onOpenApp() },
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
@@ -2506,51 +2316,98 @@ private fun MusicPlayerWidgetCard(
                     horizontalArrangement = Arrangement.spacedBy(5.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Surface(
-                        onClick = onPrevious,
-                        modifier = Modifier.size(30.dp),
-                        shape = CircleShape,
-                        color = scheme.surfaceContainerHigh,
-                        contentColor = scheme.onSurface
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Rounded.SkipPrevious,
-                                contentDescription = "Sebelumnya",
-                                modifier = Modifier.size(17.dp)
-                            )
+                    if (interactive) {
+                        Surface(
+                            onClick = onPrevious,
+                            modifier = Modifier.size(30.dp),
+                            shape = CircleShape,
+                            color = scheme.surfaceContainerHigh,
+                            contentColor = scheme.onSurface
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Rounded.SkipPrevious,
+                                    contentDescription = "Sebelumnya",
+                                    modifier = Modifier.size(17.dp)
+                                )
+                            }
                         }
-                    }
 
-                    Surface(
-                        onClick = onPlayPause,
-                        modifier = Modifier.size(36.dp),
-                        shape = RoundedCornerShape(13.dp),
-                        color = playBtnBg,
-                        contentColor = playBtnTint
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                                contentDescription = if (isPlaying) "Jeda" else "Putar",
-                                modifier = Modifier.size(20.dp)
-                            )
+                        Surface(
+                            onClick = onPlayPause,
+                            modifier = Modifier.size(36.dp),
+                            shape = RoundedCornerShape(13.dp),
+                            color = playBtnBg,
+                            contentColor = playBtnTint
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                    contentDescription = if (isPlaying) "Jeda" else "Putar",
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
-                    }
 
-                    Surface(
-                        onClick = onNext,
-                        modifier = Modifier.size(30.dp),
-                        shape = CircleShape,
-                        color = scheme.surfaceContainerHigh,
-                        contentColor = scheme.onSurface
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Rounded.SkipNext,
-                                contentDescription = "Berikutnya",
-                                modifier = Modifier.size(17.dp)
-                            )
+                        Surface(
+                            onClick = onNext,
+                            modifier = Modifier.size(30.dp),
+                            shape = CircleShape,
+                            color = scheme.surfaceContainerHigh,
+                            contentColor = scheme.onSurface
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Rounded.SkipNext,
+                                    contentDescription = "Berikutnya",
+                                    modifier = Modifier.size(17.dp)
+                                )
+                            }
+                        }
+                    } else {
+                        Surface(
+                            modifier = Modifier.size(30.dp),
+                            shape = CircleShape,
+                            color = scheme.surfaceContainerHigh,
+                            contentColor = scheme.onSurface
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Rounded.SkipPrevious,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(17.dp)
+                                )
+                            }
+                        }
+
+                        Surface(
+                            modifier = Modifier.size(36.dp),
+                            shape = RoundedCornerShape(13.dp),
+                            color = playBtnBg,
+                            contentColor = playBtnTint
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        Surface(
+                            modifier = Modifier.size(30.dp),
+                            shape = CircleShape,
+                            color = scheme.surfaceContainerHigh,
+                            contentColor = scheme.onSurface
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Rounded.SkipNext,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(17.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -2573,7 +2430,7 @@ private fun MusicPlayerWidgetCard(
                     ExpressiveWavySeekbar(
                         progress = progressFraction,
                         isPlaying = isPlaying,
-                        enabled = durationMs > 0L,
+                        enabled = interactive && durationMs > 0L,
                         activeColor = scheme.primary,
                         inactiveColor = scheme.surfaceContainerHighest,
                         onSeekFraction = { frac ->
@@ -2598,6 +2455,120 @@ private fun MusicPlayerWidgetCard(
 }
 
 @Composable
+private fun TelemetryWidgetCard(state: GameDeckUiState) {
+    val scheme = MaterialTheme.colorScheme
+    val fps = state.fps.coerceAtLeast(0)
+    val targetHz = state.targetHz.coerceAtLeast(1)
+    val fpsRatio = fps.toFloat() / targetHz.toFloat()
+    val rawFpsColor = when {
+        fps <= 0 -> scheme.onSurfaceVariant
+        fpsRatio >= 0.90f -> scheme.primary
+        fpsRatio >= 0.65f -> scheme.tertiary
+        else -> scheme.error
+    }
+    val fpsColor by animateColorAsState(
+        targetValue = rawFpsColor,
+        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+        label = "deckFpsColor"
+    )
+
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = scheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Speed,
+                    contentDescription = null,
+                    tint = scheme.primary,
+                    modifier = Modifier.size(19.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (fps > 0) fps.toString() else "--",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Black,
+                    color = fpsColor,
+                    maxLines = 1,
+                    softWrap = false
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "FPS",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = scheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                    maxLines = 1,
+                    softWrap = false
+                )
+                if (fps > 0 && state.frametimeMs > 0f) {
+                    Text(
+                        text = String.format(Locale.US, " · %.1f ms", state.frametimeMs),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = scheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                MetricChip(
+                    icon = Icons.Rounded.Thermostat,
+                    label = state.tempLabel
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                BatteryCapsulePill(
+                    percent = state.batteryPercent,
+                    isCharging = state.isCharging,
+                    isBatterySaver = state.isBatterySaver,
+                    isEcoProfile = state.profile.trim().equals("Eco", ignoreCase = true)
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ExpressiveRadialGauge(
+                    percent = state.cpuPercent,
+                    label = "CPU",
+                    activeColor = scheme.primary,
+                    badgeContainerColor = scheme.primaryContainer,
+                    badgeContentColor = scheme.onPrimaryContainer,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(114.dp)
+                )
+                ExpressiveRadialGauge(
+                    percent = state.gpuPercent,
+                    label = "GPU",
+                    activeColor = scheme.tertiary,
+                    badgeContainerColor = scheme.tertiaryContainer,
+                    badgeContentColor = scheme.onTertiaryContainer,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(114.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun DashboardDeckContent(
     state: GameDeckUiState,
     onProfileSelected: (String?) -> Unit,
@@ -2615,20 +2586,6 @@ private fun DashboardDeckContent(
     onOpenWidgetEditor: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
-    val fps = state.fps.coerceAtLeast(0)
-    val targetHz = state.targetHz.coerceAtLeast(1)
-    val fpsRatio = fps.toFloat() / targetHz.toFloat()
-    val rawFpsColor = when {
-        fps <= 0 -> scheme.onSurfaceVariant
-        fpsRatio >= 0.90f -> scheme.primary
-        fpsRatio >= 0.65f -> scheme.tertiary
-        else -> scheme.error
-    }
-    val fpsColor by animateColorAsState(
-        targetValue = rawFpsColor,
-        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-        label = "deckFpsColor"
-    )
 
     Column(
         modifier = Modifier
@@ -2647,102 +2604,9 @@ private fun DashboardDeckContent(
         orderedKeys.forEach { widgetKey ->
             when (widgetKey) {
                 "telemetry" -> {
-                if (state.showTelemetryWidget) {
-                    Surface(
-                        shape = RoundedCornerShape(24.dp),
-                        color = scheme.surfaceContainer,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Speed,
-                                    contentDescription = null,
-                                    tint = scheme.primary,
-                                    modifier = Modifier.size(19.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = if (fps > 0) fps.toString() else "--",
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Black,
-                                    color = fpsColor,
-                                    maxLines = 1,
-                                    softWrap = false
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "FPS",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = scheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(top = 4.dp),
-                                    maxLines = 1,
-                                    softWrap = false
-                                )
-                                if (fps > 0 && state.frametimeMs > 0f) {
-                                    Text(
-                                        text = String.format(Locale.US, " · %.1f ms", state.frametimeMs),
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = scheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(top = 4.dp),
-                                        maxLines = 1,
-                                        softWrap = false
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.weight(1f))
-
-                                MetricChip(
-                                    icon = Icons.Rounded.Thermostat,
-                                    label = state.tempLabel
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                BatteryCapsulePill(
-                                    percent = state.batteryPercent,
-                                    isCharging = state.isCharging,
-                                    isBatterySaver = state.isBatterySaver,
-                                    isEcoProfile = state.profile.trim().equals("Eco", ignoreCase = true)
-                                )
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                ExpressiveRadialGauge(
-                                    percent = state.cpuPercent,
-                                    label = "CPU",
-                                    activeColor = scheme.primary,
-                                    badgeContainerColor = scheme.primaryContainer,
-                                    badgeContentColor = scheme.onPrimaryContainer,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(114.dp)
-                                )
-                                ExpressiveRadialGauge(
-                                    percent = state.gpuPercent,
-                                    label = "GPU",
-                                    activeColor = scheme.tertiary,
-                                    badgeContainerColor = scheme.tertiaryContainer,
-                                    badgeContentColor = scheme.onTertiaryContainer,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(114.dp)
-                                )
-                            }
-                        }
+                    if (state.showTelemetryWidget) {
+                        TelemetryWidgetCard(state = state)
                     }
-                }
                 }
                 "profile" -> {
                 if (state.showProfileWidget) {
@@ -2974,7 +2838,8 @@ private fun ExpressiveRadialGauge(
 @Composable
 private fun SingleAutoManualButton(
     autoMode: Boolean,
-    onToggle: () -> Unit
+    onToggle: () -> Unit,
+    interactive: Boolean = true
 ) {
     val scheme = MaterialTheme.colorScheme
     val pillBg by animateColorAsState(
@@ -2987,13 +2852,7 @@ private fun SingleAutoManualButton(
         animationSpec = tween(durationMillis = 200),
         label = "singleModePillText"
     )
-
-    Surface(
-        onClick = onToggle,
-        shape = CircleShape,
-        color = pillBg,
-        contentColor = pillText
-    ) {
+    val pillContent: @Composable () -> Unit = {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -3013,6 +2872,23 @@ private fun SingleAutoManualButton(
             )
         }
     }
+
+    if (interactive) {
+        Surface(
+            onClick = onToggle,
+            shape = CircleShape,
+            color = pillBg,
+            contentColor = pillText,
+            content = pillContent
+        )
+    } else {
+        Surface(
+            shape = CircleShape,
+            color = pillBg,
+            contentColor = pillText,
+            content = pillContent
+        )
+    }
 }
 
 @Composable
@@ -3021,6 +2897,7 @@ private fun ExpressiveToggleTile(
     dimmed: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    interactive: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -3069,10 +2946,16 @@ private fun ExpressiveToggleTile(
                 scaleY = pressScale
             }
             .clip(shape)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = ripple(),
-                onClick = onClick
+            .then(
+                if (interactive) {
+                    Modifier.clickable(
+                        interactionSource = interactionSource,
+                        indication = ripple(),
+                        onClick = onClick
+                    )
+                } else {
+                    Modifier
+                }
             )
     ) {
         CompositionLocalProvider(LocalContentColor provides contentColor) {
@@ -3085,7 +2968,8 @@ private fun ExpressiveToggleTile(
 private fun ProfileSelectorCard(
     state: GameDeckUiState,
     onProfileSelected: (String?) -> Unit,
-    onToggleAutoMode: () -> Unit
+    onToggleAutoMode: () -> Unit,
+    interactive: Boolean = true
 ) {
     val scheme = MaterialTheme.colorScheme
     val autoMode = state.profileAutoMode
@@ -3132,7 +3016,8 @@ private fun ProfileSelectorCard(
                 Spacer(modifier = Modifier.weight(1f))
                 SingleAutoManualButton(
                     autoMode = autoMode,
-                    onToggle = onToggleAutoMode
+                    onToggle = onToggleAutoMode,
+                    interactive = interactive
                 )
             }
 
@@ -3155,6 +3040,7 @@ private fun ProfileSelectorCard(
                                 onProfileSelected(null)
                             }
                         },
+                        interactive = interactive,
                         modifier = Modifier
                             .weight(1f)
                             .height(44.dp)
@@ -3217,7 +3103,8 @@ private fun RefreshRateCard(
     modes: List<Int>,
     selectedHz: Int?,
     liveHz: Int,
-    onSelect: (Int?) -> Unit
+    onSelect: (Int?) -> Unit,
+    interactive: Boolean = true
 ) {
     val scheme = MaterialTheme.colorScheme
     var menuExpanded by remember { mutableStateOf(false) }
@@ -3227,6 +3114,36 @@ private fun RefreshRateCard(
         "Auto · $displayLiveHz Hz"
     } else {
         "$selectedHz Hz"
+    }
+    val pillContainer = if (selectedHz != null) {
+        scheme.primaryContainer
+    } else {
+        scheme.secondaryContainer
+    }
+    val pillContentColor = if (selectedHz != null) {
+        scheme.onPrimaryContainer
+    } else {
+        scheme.onSecondaryContainer
+    }
+    val pillInner: @Composable () -> Unit = {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = pillLabel,
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                softWrap = false
+            )
+            Icon(
+                imageVector = Icons.Rounded.KeyboardArrowDown,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp)
+            )
+        }
     }
 
     Surface(
@@ -3255,70 +3172,53 @@ private fun RefreshRateCard(
             )
             Spacer(modifier = Modifier.weight(1f))
             Box {
-                Surface(
-                    onClick = { menuExpanded = true },
-                    shape = CircleShape,
-                    color = if (selectedHz != null) {
-                        scheme.primaryContainer
-                    } else {
-                        scheme.secondaryContainer
-                    },
-                    contentColor = if (selectedHz != null) {
-                        scheme.onPrimaryContainer
-                    } else {
-                        scheme.onSecondaryContainer
-                    }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = pillLabel,
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                        Icon(
-                            imageVector = Icons.Rounded.KeyboardArrowDown,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-
-                DropdownMenu(
-                    expanded = menuExpanded,
-                    onDismissRequest = { menuExpanded = false }
-                ) {
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = "Auto ($displayLiveHz Hz)",
-                                fontWeight = if (selectedHz == null) FontWeight.Bold else FontWeight.Normal
-                            )
-                        },
-                        onClick = {
-                            menuExpanded = false
-                            onSelect(null)
-                        }
+                if (interactive) {
+                    Surface(
+                        onClick = { menuExpanded = true },
+                        shape = CircleShape,
+                        color = pillContainer,
+                        contentColor = pillContentColor,
+                        content = pillInner
                     )
-                    sortedModes.forEach { hz ->
+
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
                         DropdownMenuItem(
                             text = {
                                 Text(
-                                    text = "$hz Hz",
-                                    fontWeight = if (selectedHz == hz) FontWeight.Bold else FontWeight.Normal
+                                    text = "Auto ($displayLiveHz Hz)",
+                                    fontWeight = if (selectedHz == null) FontWeight.Bold else FontWeight.Normal
                                 )
                             },
                             onClick = {
                                 menuExpanded = false
-                                onSelect(hz)
+                                onSelect(null)
                             }
                         )
+                        sortedModes.forEach { hz ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = "$hz Hz",
+                                        fontWeight = if (selectedHz == hz) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onSelect(hz)
+                                }
+                            )
+                        }
                     }
+                } else {
+                    Surface(
+                        shape = CircleShape,
+                        color = pillContainer,
+                        contentColor = pillContentColor,
+                        content = pillInner
+                    )
                 }
             }
         }
@@ -3332,7 +3232,8 @@ private fun ExpressiveLinearSlider(
     max: Int,
     accentColor: Color,
     onValueChange: (Int, Boolean) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
 ) {
     val scheme = MaterialTheme.colorScheme
     var isDragging by remember { mutableStateOf(false) }
@@ -3357,10 +3258,8 @@ private fun ExpressiveLinearSlider(
         onValueChange(mapped, commit)
     }
 
-    BoxWithConstraints(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(36.dp)
+    val gestureModifier = if (enabled) {
+        Modifier
             .pointerInput(min, max) {
                 detectTapGestures(
                     onPress = { offset ->
@@ -3396,7 +3295,16 @@ private fun ExpressiveLinearSlider(
                         emitFraction(lastFraction, false)
                     }
                 )
-            },
+            }
+    } else {
+        Modifier
+    }
+
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(36.dp)
+            .then(gestureModifier),
         contentAlignment = Alignment.CenterStart
     ) {
         val totalWidth = maxWidth
@@ -3470,7 +3378,8 @@ private fun BrightnessVolumeCard(
     volumeMuted: Boolean,
     onBrightnessChanged: (Int, Boolean) -> Unit,
     onVolumeChanged: (Int) -> Unit,
-    onToggleMute: () -> Unit
+    onToggleMute: () -> Unit,
+    interactive: Boolean = true
 ) {
     val scheme = MaterialTheme.colorScheme
     val effectiveVol = if (volumeMuted) 0 else volumePercent
@@ -3521,6 +3430,7 @@ private fun BrightnessVolumeCard(
                     min = 5,
                     max = 100,
                     accentColor = scheme.primary,
+                    enabled = interactive,
                     onValueChange = { pct, commit -> onBrightnessChanged(pct, commit) }
                 )
             }
@@ -3540,7 +3450,7 @@ private fun BrightnessVolumeCard(
                         tint = if (volumeMuted || effectiveVol == 0) scheme.error else scheme.tertiary,
                         modifier = Modifier
                             .size(20.dp)
-                            .clickable(onClick = onToggleMute)
+                            .then(if (interactive) Modifier.clickable(onClick = onToggleMute) else Modifier)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
@@ -3566,6 +3476,7 @@ private fun BrightnessVolumeCard(
                     min = 0,
                     max = 100,
                     accentColor = scheme.tertiary,
+                    enabled = interactive,
                     onValueChange = { pct, _ -> onVolumeChanged(pct) }
                 )
             }
