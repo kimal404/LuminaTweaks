@@ -60,8 +60,10 @@ const PID_FILE_PATH: &str = "/data/adb/.config/lumina/luminad.pid";
 const HEARTBEAT_FILE_PATH: &str = "/data/adb/.config/lumina/luminad.alive";
 const LEGACY_PID_FILE_PATH: &str = "/data/local/tmp/lumina.pid";
 const LEGACY_HEARTBEAT_FILE_PATH: &str = "/data/local/tmp/lumina.alive";
+const PROFILE_FILE_PATH: &str = "/data/adb/.config/lumina/current_profile";
+const LEGACY_PROFILE_FILE_PATH: &str = "/data/local/tmp/lumina.profile";
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
-const CONFIG_FALLBACK_INTERVAL: Duration = Duration::from_secs(5);
+const CONFIG_FALLBACK_INTERVAL: Duration = Duration::from_secs(2);
 const LEGACY_PROFILE_STATE_PATH: &str = "/data/adb/.config/lumina/profile.conf";
 
 extern "C" fn handle_signal(_: i32) {
@@ -157,6 +159,8 @@ fn kernel_release() -> String {
 }
 
 fn set_system_profile_prop(name: &str) {
+    let _ = write_runtime_file(PROFILE_FILE_PATH, name);
+    let _ = write_runtime_file(LEGACY_PROFILE_FILE_PATH, name);
     let _ = core::sysprop::set("sys.lumina.profile", name);
 }
 
@@ -247,6 +251,8 @@ fn cleanup_runtime_files() {
         HEARTBEAT_FILE_PATH,
         LEGACY_PID_FILE_PATH,
         LEGACY_HEARTBEAT_FILE_PATH,
+        PROFILE_FILE_PATH,
+        LEGACY_PROFILE_FILE_PATH,
         "/data/adb/.config/lumina/fps.txt",
         "/data/local/tmp/lumina.fps",
         "/data/data/com.luminatweaks/files/lumina.fps",
@@ -707,7 +713,7 @@ fn main() {
         let reload_requested = shared_state.reload_flag.swap(false, Ordering::Relaxed);
         let files_changed = config_watcher.poll_changed();
         if reload_requested || files_changed {
-            reload_pending_at = Some(Instant::now() + Duration::from_millis(300));
+            reload_pending_at = Some(Instant::now() + Duration::from_millis(80));
             reload_force |= reload_requested;
         }
 

@@ -234,12 +234,7 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
     var isModuleInstalled by remember { mutableStateOf(true) }
     var isRebootRequired by remember { mutableStateOf(false) }
     var currentProfile by remember {
-        val initial = DeviceUtil.readSystemProperty("sys.lumina.profile")
-        mutableStateOf(
-            initial?.takeIf { it.isNotBlank() }
-                ?.let { DaemonManager.normalizeProfileLabel(it) }
-                ?: unknownLabel
-        )
+        mutableStateOf(DaemonManager.readCurrentProfile() ?: unknownLabel)
     }
     var isRootGranted by remember { mutableStateOf(false) }
     var selinuxStatus by remember { mutableStateOf("Unknown") }
@@ -290,7 +285,9 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
             withContext(Dispatchers.Main) {
                 batteryTemp = initialTemp
                 daemonPid = initialStatus.pid
-                currentProfile = initialStatus.profile
+                if (initialStatus.pid != null) {
+                    currentProfile = initialStatus.profile
+                }
                 isRootGranted = initialRoot
                 selinuxStatus = initialSelinux
                 isChecking = false
@@ -298,25 +295,20 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
         }
     }
 
-    LaunchedEffect(isScreenResumed, currentSubscreen) {
-        if (!isScreenResumed || currentSubscreen != null) {
+    LaunchedEffect(pagerState.currentPage, isScreenResumed, currentSubscreen, resumeToken) {
+        if (pagerState.currentPage != 0 || !isScreenResumed || currentSubscreen != null) {
             return@LaunchedEffect
         }
 
         withContext(Dispatchers.IO) {
             while (isActive) {
-                val rawProfile = DeviceUtil.readSystemProperty("sys.lumina.profile")
-                val resolved = if (rawProfile.isNullOrBlank()) {
-                    unknownLabel
-                } else {
-                    DaemonManager.normalizeProfileLabel(rawProfile)
-                }
+                val resolved = DaemonManager.readCurrentProfile() ?: unknownLabel
                 withContext(Dispatchers.Main) {
                     if (resolved != currentProfile) {
                         currentProfile = resolved
                     }
                 }
-                delay(250L)
+                delay(200L)
             }
         }
     }
@@ -1200,14 +1192,22 @@ private fun HomeHardwareTile(
             }
             Spacer(modifier = Modifier.height(12.dp))
             Column(modifier = Modifier.padding(horizontal = 4.dp)) {
-                Text(
-                    text = value,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                AnimatedContent(
+                    targetState = value,
+                    transitionSpec = {
+                        fadeIn(animationSpec = tween(180)) togetherWith fadeOut(animationSpec = tween(140))
+                    },
+                    label = "homeTileValue"
+                ) { animatedValue ->
+                    Text(
+                        text = animatedValue,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = label,

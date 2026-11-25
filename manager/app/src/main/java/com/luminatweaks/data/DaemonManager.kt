@@ -33,6 +33,8 @@ object DaemonManager {
     private const val HEARTBEAT_FILE_PATH = "$CONFIG_DIR/luminad.alive"
     private const val LEGACY_PID_FILE_PATH = "/data/local/tmp/lumina.pid"
     private const val LEGACY_HEARTBEAT_FILE_PATH = "/data/local/tmp/lumina.alive"
+    private const val PROFILE_FILE_PATH = "$CONFIG_DIR/current_profile"
+    private const val LEGACY_PROFILE_FILE_PATH = "/data/local/tmp/lumina.profile"
     private const val HEARTBEAT_MAX_AGE_MS = 30_000L
     private const val WATCHDOG_PID_FILE = "/data/local/tmp/lumina_watchdog.pid"
     private const val STOP_FLAG_PATH = "$CONFIG_DIR/daemon.disabled"
@@ -85,6 +87,26 @@ object DaemonManager {
             "balanced", "balance", "seimbang" -> "Balanced"
             else -> "Balanced"
         }
+    }
+
+    fun readCurrentProfile(): String? {
+        var latestRaw: String? = null
+        var latestMtime = -1L
+        for (path in listOf(PROFILE_FILE_PATH, LEGACY_PROFILE_FILE_PATH)) {
+            try {
+                val file = File(path)
+                if (!file.exists() || !file.canRead()) continue
+                val content = file.readText().trim()
+                if (content.isEmpty()) continue
+                val mtime = file.lastModified()
+                if (mtime >= latestMtime) {
+                    latestMtime = mtime
+                    latestRaw = content
+                }
+            } catch (_: Exception) {}
+        }
+        val raw = latestRaw ?: readSystemProperty("sys.lumina.profile") ?: return null
+        return normalizeProfileLabel(raw)
     }
 
     private fun readHeartbeatAgeMs(): Long? {
@@ -317,7 +339,7 @@ object DaemonManager {
         val pid = getDaemonPid()
             ?: return@withContext DaemonStatus(null, "-", "-")
 
-        val profile = normalizeProfileLabel(readSystemProperty("sys.lumina.profile"))
+        val profile = readCurrentProfile() ?: "Balanced"
         DaemonStatus(
             pid = pid,
             profile = profile,
