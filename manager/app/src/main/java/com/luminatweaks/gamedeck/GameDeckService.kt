@@ -18,7 +18,6 @@ import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.app.ActivityManager
-import android.content.IntentFilter
 import android.media.AudioManager
 import android.media.MediaScannerConnection
 import android.os.BatteryManager
@@ -28,10 +27,8 @@ import android.view.View
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
-import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
-import android.os.PowerManager
 import android.provider.Settings
 import android.view.Display
 import android.view.Gravity
@@ -1267,7 +1264,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
 
     private fun takeQuickScreenshot() {
         serviceScope.launch {
-            val view = overlayView
+            val view = composeView
             view?.visibility = View.INVISIBLE
             delay(140L)
             val savedPath = withContext(Dispatchers.IO) {
@@ -1276,7 +1273,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                     val shotDir = File(picturesDir, "Screenshots").apply { mkdirs() }
                     val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
                     val outFile = File(shotDir, "Lumina_$stamp.png")
-                    RootUtil.runAsRoot("screencap -p "${outFile.absolutePath}"")
+                    RootUtil.runAsRoot("screencap -p '${outFile.absolutePath}'")
                     if (outFile.exists() && outFile.length() > 0L) {
                         outFile.absolutePath
                     } else {
