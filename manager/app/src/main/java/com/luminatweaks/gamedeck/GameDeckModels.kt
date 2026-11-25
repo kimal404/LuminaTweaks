@@ -1,9 +1,10 @@
 package com.luminatweaks.gamedeck
 
-val DEFAULT_DASHBOARD_WIDGET_ORDER = listOf("telemetry", "profile", "music", "refresh_rate", "sliders")
 
 import android.content.Context
 import android.graphics.Bitmap
+
+val DEFAULT_DASHBOARD_WIDGET_ORDER = listOf("telemetry", "profile", "music", "refresh_rate", "sliders")
 
 enum class GameDeckSide(val key: String) {
     LEFT("left"),
