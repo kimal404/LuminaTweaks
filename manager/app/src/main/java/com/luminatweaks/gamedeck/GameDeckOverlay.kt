@@ -514,9 +514,7 @@ private fun GameDeckWorkspace(
                 cardWidth = cardWidth,
                 pagerState = pagerState,
                 showAppPicker = showAppPicker,
-                showWidgetEditor = showWidgetEditor,
                 onOpenWidgetEditor = { showWidgetEditor = true },
-                onCloseWidgetEditor = { showWidgetEditor = false },
                 onCloseAppPicker = { showAppPicker = false },
                 onToggleQuickApp = onToggleQuickApp,
                 onProfileSelected = onProfileSelected,
@@ -530,9 +528,6 @@ private fun GameDeckWorkspace(
                 onMusicPrevious = onMusicPrevious,
                 onMusicSeek = onMusicSeek,
                 onOpenMusicApp = onOpenMusicApp,
-                onToggleDashboardWidget = onToggleDashboardWidget,
-                onResetDashboardWidgets = onResetDashboardWidgets,
-                onMoveDashboardWidget = onMoveDashboardWidget,
                 onToggleKeepScreenOn = onToggleKeepScreenOn,
                 onToggleDnd = onToggleDnd,
                 onToggleAutoBrightnessLock = onToggleAutoBrightnessLock,
@@ -547,9 +542,7 @@ private fun GameDeckWorkspace(
                 cardWidth = cardWidth,
                 pagerState = pagerState,
                 showAppPicker = showAppPicker,
-                showWidgetEditor = showWidgetEditor,
                 onOpenWidgetEditor = { showWidgetEditor = true },
-                onCloseWidgetEditor = { showWidgetEditor = false },
                 onCloseAppPicker = { showAppPicker = false },
                 onToggleQuickApp = onToggleQuickApp,
                 onProfileSelected = onProfileSelected,
@@ -563,9 +556,6 @@ private fun GameDeckWorkspace(
                 onMusicPrevious = onMusicPrevious,
                 onMusicSeek = onMusicSeek,
                 onOpenMusicApp = onOpenMusicApp,
-                onToggleDashboardWidget = onToggleDashboardWidget,
-                onResetDashboardWidgets = onResetDashboardWidgets,
-                onMoveDashboardWidget = onMoveDashboardWidget,
                 onToggleKeepScreenOn = onToggleKeepScreenOn,
                 onToggleDnd = onToggleDnd,
                 onToggleAutoBrightnessLock = onToggleAutoBrightnessLock,
@@ -828,9 +818,7 @@ private fun DeckCard(
     cardWidth: Dp,
     pagerState: PagerState,
     showAppPicker: Boolean,
-    showWidgetEditor: Boolean,
     onOpenWidgetEditor: () -> Unit,
-    onCloseWidgetEditor: () -> Unit,
     onCloseAppPicker: () -> Unit,
     onToggleQuickApp: (String) -> Unit,
     onProfileSelected: (String?) -> Unit,
@@ -844,9 +832,6 @@ private fun DeckCard(
     onMusicPrevious: () -> Unit,
     onMusicSeek: (Long) -> Unit,
     onOpenMusicApp: () -> Unit,
-    onToggleDashboardWidget: (String) -> Unit,
-    onResetDashboardWidgets: () -> Unit,
-    onMoveDashboardWidget: (Int, Int) -> Unit,
     onToggleKeepScreenOn: () -> Unit,
     onToggleDnd: () -> Unit,
     onToggleAutoBrightnessLock: () -> Unit,
@@ -867,11 +852,7 @@ private fun DeckCard(
         shape = shape,
         color = scheme.surfaceContainerLow
     ) {
-        val modalMode = when {
-            showAppPicker -> 1
-            showWidgetEditor -> 2
-            else -> 0
-        }
+        val modalMode = if (showAppPicker) 1 else 0
         AnimatedContent(
             targetState = modalMode,
             transitionSpec = {
@@ -884,13 +865,6 @@ private fun DeckCard(
                     selectedPackages = state.quickApps.map { it.packageName }.toSet(),
                     onTogglePackage = onToggleQuickApp,
                     onBack = onCloseAppPicker
-                )
-                2 -> DashboardWidgetCustomizerContent(
-                    state = state,
-                    onToggleWidget = onToggleDashboardWidget,
-                    onMoveWidget = onMoveDashboardWidget,
-                    onResetWidgets = onResetDashboardWidgets,
-                    onBack = onCloseWidgetEditor
                 )
                 else -> HorizontalPager(
                     state = pagerState,
@@ -1770,6 +1744,242 @@ private fun FullScreenWidgetEditorOverlay(
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WidgetBlueprintPreview(widgetKey: String) {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(scheme.surfaceContainer)
+            .padding(horizontal = 10.dp, vertical = 7.dp)
+    ) {
+        when (widgetKey) {
+            "telemetry" -> Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Speed,
+                        contentDescription = null,
+                        tint = scheme.primary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "120",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Black,
+                        color = scheme.primary
+                    )
+                    Text(
+                        text = "FPS",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = scheme.onSurfaceVariant
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(scheme.primaryContainer)
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "CPU",
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = scheme.onPrimaryContainer
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(scheme.tertiaryContainer)
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "GPU",
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = scheme.onTertiaryContainer
+                    )
+                }
+            }
+
+            "profile" -> Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                listOf("Eco", "Balanced", "Perf", "Lite").forEachIndexed { idx, label ->
+                    val active = idx == 2
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(CircleShape)
+                            .background(if (active) scheme.primaryContainer else scheme.surfaceContainerHigh)
+                            .padding(vertical = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = label,
+                            fontSize = 8.5.sp,
+                            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                            color = if (active) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+            }
+
+            "music" -> Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.55f)
+                                .height(5.dp)
+                                .clip(CircleShape)
+                                .background(scheme.onSurface.copy(alpha = 0.72f))
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.36f)
+                                .height(4.dp)
+                                .clip(CircleShape)
+                                .background(scheme.onSurfaceVariant.copy(alpha = 0.5f))
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(scheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Rounded.Pause, null, tint = scheme.onPrimaryContainer, modifier = Modifier.size(12.dp))
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(Icons.Rounded.SkipPrevious, null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(3.dp)
+                            .clip(CircleShape)
+                            .background(scheme.surfaceContainerHighest)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.45f)
+                                .fillMaxHeight()
+                                .clip(CircleShape)
+                                .background(scheme.primary)
+                        )
+                    }
+                    Icon(Icons.Rounded.SkipNext, null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(12.dp))
+                }
+            }
+
+            "refresh_rate" -> Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IosRecentAppsIcon(tint = scheme.primary, containerColor = scheme.surfaceContainer, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Refresh Rate",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = scheme.onSurface
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(scheme.primaryContainer)
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "120 Hz",
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = scheme.onPrimaryContainer
+                    )
+                }
+            }
+
+            else -> Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(Icons.Rounded.BrightnessMedium, null, tint = scheme.primary, modifier = Modifier.size(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(6.dp)
+                            .clip(CircleShape)
+                            .background(scheme.surfaceContainerHighest)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.62f)
+                                .fillMaxHeight()
+                                .clip(CircleShape)
+                                .background(scheme.primary)
+                        )
+                    }
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(Icons.AutoMirrored.Rounded.VolumeUp, null, tint = scheme.tertiary, modifier = Modifier.size(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(6.dp)
+                            .clip(CircleShape)
+                            .background(scheme.surfaceContainerHighest)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.48f)
+                                .fillMaxHeight()
+                                .clip(CircleShape)
+                                .background(scheme.tertiary)
+                        )
                     }
                 }
             }
