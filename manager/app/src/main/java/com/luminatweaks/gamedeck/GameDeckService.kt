@@ -25,6 +25,7 @@ import android.view.Display
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.WindowManager
+import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.compose.runtime.Recomposer
 import androidx.compose.runtime.mutableStateOf
@@ -54,6 +55,7 @@ import com.luminatweaks.ui.theme.LuminaTheme
 import com.luminatweaks.util.DeviceUtil
 import com.luminatweaks.util.RootUtil
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -71,12 +73,11 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         private const val CHANNEL_ID = "lumina_game_deck_channel"
         private const val NOTIFICATION_ID = 4046
         private const val GAME_STALE_GRACE_MS = 10_000L
-        private const val COLLAPSE_ANIMATION_MS = 220L
-        private const val REOPEN_COOLDOWN_MS = 280L
+        private const val REOPEN_COOLDOWN_MS = 320L
         private const val EXPANDED_HEIGHT_FRACTION = 0.86f
-        private const val EXPANDED_MAX_HEIGHT_DP = 740f
-        private const val COLLAPSED_WIDTH_DP = 22f
-        private const val COLLAPSED_HEIGHT_DP = 68f
+        private const val EXPANDED_MAX_HEIGHT_DP = 720f
+        private const val COLLAPSED_WIDTH_DP = 24f
+        private const val COLLAPSED_HEIGHT_DP = 72f
         private const val EDGE_MARGIN_DP = 12f
 
         const val ACTION_SYNC = "com.luminatweaks.action.GAME_DECK_SYNC"
@@ -132,9 +133,11 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
 
     private val uiState = mutableStateOf(GameDeckUiState())
     private val isWindowExpandedState = mutableStateOf(false)
+    private val isHandlePressedState = mutableStateOf(false)
     private val sysfs = SysfsTelemetry()
 
     private lateinit var windowManager: WindowManager
+    private var hostView: FrameLayout? = null
     private var composeView: ComposeView? = null
     private var layoutParams: WindowManager.LayoutParams? = null
     private var telemetryJob: Job? = null
@@ -147,6 +150,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     private var activeConfig = GameDeckConfig()
     private var isAttached = false
     private var isExpanded = false
+    private var isCollapsing = false
     private var edgeYOffsetPx = 0
     private var reopenBlockedUntilMs = 0L
     private var manualOverride: Boolean? = null
@@ -258,6 +262,10 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                 }
                 if (gameActive && !wasGameActive) {
                     manualOverride = null
+                }
+                if (!gameActive && wasGameActive && manualOverride != true && !profileAutoMode) {
+                    profileAutoMode = true
+                    withContext(Dispatchers.IO) { DaemonManager.clearProfileOverride() }
                 }
                 wasGameActive = gameActive
 
@@ -525,20 +533,12 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             setViewTreeLifecycleOwner(this@GameDeckService)
             setViewTreeViewModelStoreOwner(this@GameDeckService)
             setViewTreeSavedStateRegistryOwner(this@GameDeckService)
-            setOnTouchListener { _, event ->
-                if (isExpanded && event.action == MotionEvent.ACTION_OUTSIDE) {
-                    setExpanded(false)
-                    true
-                } else {
-                    false
-                }
-            }
             setContent {
                 LuminaTheme {
                     GameDeckRoot(
                         state = uiState,
                         isWindowExpanded = isWindowExpandedState.value,
-                        onExpand = { setExpanded(true) },
+                        isHandlePressed = isHandlePressedState.value,
                         onCollapse = { setExpanded(false) },
                         onProfileSelected = ::selectProfileOverride,
                         onAutoModeToggle = ::toggleProfileAutoMode,
@@ -546,22 +546,112 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         onToggleDnd = ::toggleDnd,
                         onQuickAppClick = ::launchFreeformApp,
                         onOpenManager = ::openManager,
-                        onDragVertical = ::dragEdgeHandle,
-                        onDragVerticalEnd = ::commitEdgeHandlePosition,
                         onCollapseSettled = ::handleCollapseSettled
                     )
                 }
             }
         }
+
+        val container = object : FrameLayout(this) {
+            private var downRawX = 0f
+            private var downRawY = 0f
+            private var startEdgeY = 0
+            private var gestureMode = 0 // 0 = undecided, 1 = expand, 2 = vertical drag
+
+            override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+                if (ev.actionMasked == MotionEvent.ACTION_OUTSIDE) {
+                    if (isExpanded && !isCollapsing) {
+                        setExpanded(false)
+                    }
+                    return true
+                }
+
+                if (!isWindowExpandedState.value && !isCollapsing) {
+                    val density = resources.displayMetrics.density
+                    val touchSlopPx = 8f * density
+                    val swipeThresholdPx = 12f * density
+
+                    when (ev.actionMasked) {
+                        MotionEvent.ACTION_DOWN -> {
+                            downRawX = ev.rawX
+                            downRawY = ev.rawY
+                            startEdgeY = edgeYOffsetPx
+                            gestureMode = 0
+                            isHandlePressedState.value = true
+                            return true
+                        }
+                        MotionEvent.ACTION_MOVE -> {
+                            val dx = ev.rawX - downRawX
+                            val dy = ev.rawY - downRawY
+                            val inwardDx = if (activeConfig.side == GameDeckSide.LEFT) dx else -dx
+
+                            if (gestureMode == 0) {
+                                if (inwardDx >= swipeThresholdPx && inwardDx >= abs(dy) * 0.55f) {
+                                    gestureMode = 1
+                                    isHandlePressedState.value = false
+                                    setExpanded(true)
+                                    return true
+                                } else if (abs(dy) >= touchSlopPx && abs(dy) > abs(dx) * 1.15f) {
+                                    gestureMode = 2
+                                }
+                            }
+
+                            if (gestureMode == 2) {
+                                val maxOffset = collapsedMaxOffsetPx()
+                                val nextY = (startEdgeY + dy.roundToInt()).coerceIn(-maxOffset, maxOffset)
+                                if (nextY != edgeYOffsetPx) {
+                                    edgeYOffsetPx = nextY
+                                    activeConfig = activeConfig.copy(edgeYOffsetPx = nextY)
+                                    layoutParams?.let { lp ->
+                                        lp.y = nextY
+                                        runCatching { windowManager.updateViewLayout(this, lp) }
+                                    }
+                                }
+                            }
+                            return true
+                        }
+                        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                            isHandlePressedState.value = false
+                            if (gestureMode == 2) {
+                                commitEdgeHandlePosition()
+                            } else if (gestureMode == 0 && ev.actionMasked == MotionEvent.ACTION_UP) {
+                                if (abs(ev.rawX - downRawX) < touchSlopPx &&
+                                    abs(ev.rawY - downRawY) < touchSlopPx
+                                ) {
+                                    setExpanded(true)
+                                }
+                            }
+                            gestureMode = 0
+                            return true
+                        }
+                    }
+                }
+                return super.dispatchTouchEvent(ev)
+            }
+        }.apply {
+            setViewTreeLifecycleOwner(this@GameDeckService)
+            setViewTreeViewModelStoreOwner(this@GameDeckService)
+            setViewTreeSavedStateRegistryOwner(this@GameDeckService)
+            addView(
+                view,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
+
         val params = createLayoutParams()
-        configureLayoutParams(params, view, expandedWindow = false)
+        configureLayoutParams(params, container, expandedWindow = false)
         runCatching {
-            windowManager.addView(view, params)
+            windowManager.addView(container, params)
+            hostView = container
             composeView = view
             layoutParams = params
             isAttached = true
+            isCollapsing = false
             windowKey = "${activeConfig.side.key}|false"
-            view.post { updateGestureExclusion() }
+            container.post { updateGestureExclusion() }
         }
     }
 
@@ -571,24 +661,28 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         recomposerJob?.cancel()
         runCatching { recomposer?.cancel() }
         recomposer = null
-        val view = composeView
-        if (view != null) {
-            runCatching { windowManager.removeViewImmediate(view) }
+        val host = hostView
+        if (host != null) {
+            runCatching { windowManager.removeViewImmediate(host) }
         }
+        hostView = null
         composeView = null
         layoutParams = null
         isAttached = false
         isExpanded = false
+        isCollapsing = false
         isWindowExpandedState.value = false
+        isHandlePressedState.value = false
         uiState.value = uiState.value.copy(expanded = false)
     }
 
     private fun setExpanded(expand: Boolean) {
         if (isExpanded == expand) return
-        if (expand && System.currentTimeMillis() < reopenBlockedUntilMs) return
+        if (expand && (isCollapsing || System.currentTimeMillis() < reopenBlockedUntilMs)) return
         transitionJob?.cancel()
         isExpanded = expand
         if (expand) {
+            isCollapsing = false
             isWindowExpandedState.value = true
             updateWindowLayout()
             lastMetricsMs = 0L
@@ -599,18 +693,12 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                 }
             }
         } else {
+            isCollapsing = true
             reopenBlockedUntilMs = System.currentTimeMillis() + REOPEN_COOLDOWN_MS
             val wasVisible = uiState.value.expanded
             uiState.value = uiState.value.copy(expanded = false)
             if (!wasVisible || !isAttached || !isWindowExpandedState.value) {
                 finishCollapse()
-                return
-            }
-            transitionJob = serviceScope.launch {
-                delay(COLLAPSE_ANIMATION_MS + 60L)
-                if (!isExpanded) {
-                    finishCollapse()
-                }
             }
         }
     }
@@ -620,25 +708,38 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     }
 
     private fun finishCollapse() {
-        if (isExpanded || !isWindowExpandedState.value) return
-        isWindowExpandedState.value = false
-        uiState.value = uiState.value.copy(expanded = false)
-        updateWindowLayout()
+        isCollapsing = false
+        if (isExpanded) return
+        if (isWindowExpandedState.value) {
+            isWindowExpandedState.value = false
+            uiState.value = uiState.value.copy(expanded = false)
+            updateWindowLayout()
+        }
     }
 
     private fun updateWindowLayout() {
         if (!isAttached) return
-        val view = composeView ?: return
+        val host = hostView ?: return
         val params = layoutParams ?: return
-        configureLayoutParams(params, view, isWindowExpandedState.value)
+        configureLayoutParams(params, host, isWindowExpandedState.value)
         windowKey = "${activeConfig.side.key}|${isWindowExpandedState.value}"
-        runCatching { windowManager.updateViewLayout(view, params) }
-        view.post { updateGestureExclusion() }
+        runCatching { windowManager.updateViewLayout(host, params) }
+        host.post { updateGestureExclusion() }
+    }
+
+    private fun collapsedMaxOffsetPx(): Int {
+        val displayMetrics = resources.displayMetrics
+        val density = displayMetrics.density
+        val margin = (EDGE_MARGIN_DP * density).roundToInt()
+        val halfScreen = displayMetrics.heightPixels / 2f
+        return (halfScreen - (COLLAPSED_HEIGHT_DP * density / 2f) - margin)
+            .roundToInt()
+            .coerceAtLeast(0)
     }
 
     private fun configureLayoutParams(
         params: WindowManager.LayoutParams,
-        view: ComposeView,
+        host: FrameLayout,
         expandedWindow: Boolean
     ) {
         val displayMetrics = resources.displayMetrics
@@ -647,15 +748,13 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         val margin = (EDGE_MARGIN_DP * density).roundToInt()
         val halfScreen = displayMetrics.heightPixels / 2f
         val panelHeightPx = (displayMetrics.heightPixels * EXPANDED_HEIGHT_FRACTION)
-            .coerceAtMost(EXPANDED_MAX_HEIGHT_DP * density)
+            .coerceIn(318f * density, EXPANDED_MAX_HEIGHT_DP * density)
         val maxOffset = if (expandedWindow) {
             (halfScreen - (panelHeightPx / 2f) - margin)
                 .roundToInt()
                 .coerceAtLeast(0)
         } else {
-            (halfScreen - (COLLAPSED_HEIGHT_DP * density / 2f) - margin)
-                .roundToInt()
-                .coerceAtLeast(0)
+            collapsedMaxOffsetPx()
         }
         params.gravity = Gravity.CENTER_VERTICAL or (if (isLeft) Gravity.LEFT else Gravity.RIGHT)
         params.y = edgeYOffsetPx.coerceIn(-maxOffset, maxOffset)
@@ -668,25 +767,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             params.width = (COLLAPSED_WIDTH_DP * density).roundToInt()
             params.height = (COLLAPSED_HEIGHT_DP * density).roundToInt()
         }
-        view.requestLayout()
-    }
-
-    private fun dragEdgeHandle(dy: Float) {
-        if (!isAttached || isWindowExpandedState.value) return
-        val view = composeView ?: return
-        val params = layoutParams ?: return
-        val displayMetrics = resources.displayMetrics
-        val maxOffset = (
-            displayMetrics.heightPixels / 2f -
-                (COLLAPSED_HEIGHT_DP * displayMetrics.density / 2f) -
-                (EDGE_MARGIN_DP * displayMetrics.density)
-            )
-            .roundToInt()
-            .coerceAtLeast(0)
-        edgeYOffsetPx = (edgeYOffsetPx + dy.roundToInt()).coerceIn(-maxOffset, maxOffset)
-        activeConfig = activeConfig.copy(edgeYOffsetPx = edgeYOffsetPx)
-        params.y = edgeYOffsetPx
-        runCatching { windowManager.updateViewLayout(view, params) }
+        host.requestLayout()
     }
 
     private fun commitEdgeHandlePosition() {
@@ -721,12 +802,12 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
 
     private fun updateGestureExclusion() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
-        val view = composeView ?: return
-        if (view.width <= 0 || view.height <= 0) return
-        view.systemGestureExclusionRects = if (isWindowExpandedState.value) {
+        val host = hostView ?: return
+        if (host.width <= 0 || host.height <= 0) return
+        host.systemGestureExclusionRects = if (isWindowExpandedState.value) {
             mutableListOf()
         } else {
-            mutableListOf(Rect(0, 0, view.width, view.height))
+            mutableListOf(Rect(0, 0, host.width, host.height))
         }
     }
 
