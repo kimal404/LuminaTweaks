@@ -170,6 +170,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     private var isExpanded = false
     private var isCollapsing = false
     private var isAppPickerOpen = false
+    private var isWidgetEditorOpen = false
     private var lastRamStatusLabel = "Pangkas latar"
     private var dashboardWidgets = GameDeckPrefs.DashboardWidgets()
     private var keepScreenOnEnabled = false
@@ -680,6 +681,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         onQuickAppClick = ::launchFreeformApp,
                         onToggleQuickApp = ::toggleQuickApp,
                         onAppPickerVisibilityChanged = ::setAppPickerOpen,
+                        onWidgetEditorVisibilityChanged = ::setWidgetEditorOpen,
                         onOpenManager = ::openManager,
                         onCollapseSettled = ::handleCollapseSettled
                     )
@@ -808,6 +810,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         isExpanded = false
         isCollapsing = false
         isAppPickerOpen = false
+        isWidgetEditorOpen = false
         isWindowExpandedState.value = false
         isHandlePressedState.value = false
         uiState.value = uiState.value.copy(expanded = false)
@@ -831,6 +834,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             }
         } else {
             isAppPickerOpen = false
+            isWidgetEditorOpen = false
             isCollapsing = true
             reopenBlockedUntilMs = System.currentTimeMillis() + REOPEN_COOLDOWN_MS
             val wasVisible = uiState.value.expanded
@@ -906,7 +910,13 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         }
         params.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
         params.gravity = Gravity.CENTER_VERTICAL or (if (isLeft) Gravity.LEFT else Gravity.RIGHT)
-        if (expandedWindow) {
+        if (expandedWindow && isWidgetEditorOpen) {
+            params.gravity = Gravity.FILL
+            params.x = 0
+            params.y = 0
+            params.width = WindowManager.LayoutParams.MATCH_PARENT
+            params.height = WindowManager.LayoutParams.MATCH_PARENT
+        } else if (expandedWindow) {
             params.x = (12f * density).roundToInt()
             params.y = 0
             params.width = panelWidthPx.roundToInt()
@@ -1479,6 +1489,12 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     private fun setAppPickerOpen(open: Boolean) {
         if (isAppPickerOpen == open) return
         isAppPickerOpen = open
+        updateWindowLayout()
+    }
+
+    private fun setWidgetEditorOpen(open: Boolean) {
+        if (isWidgetEditorOpen == open) return
+        isWidgetEditorOpen = open
         updateWindowLayout()
     }
 

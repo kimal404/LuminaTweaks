@@ -232,6 +232,7 @@ fun GameDeckRoot(
     onQuickAppClick: (String) -> Unit,
     onToggleQuickApp: (String) -> Unit,
     onAppPickerVisibilityChanged: (Boolean) -> Unit = {},
+    onWidgetEditorVisibilityChanged: (Boolean) -> Unit = {},
     onOpenManager: () -> Unit,
     onCollapseSettled: () -> Unit
 ) {
@@ -315,6 +316,7 @@ fun GameDeckRoot(
                 onQuickAppClick = onQuickAppClick,
                 onToggleQuickApp = onToggleQuickApp,
                 onAppPickerVisibilityChanged = onAppPickerVisibilityChanged,
+                onWidgetEditorVisibilityChanged = onWidgetEditorVisibilityChanged,
                 onOpenManager = onOpenManager
             )
         }
@@ -417,6 +419,7 @@ private fun GameDeckWorkspace(
     onQuickAppClick: (String) -> Unit,
     onToggleQuickApp: (String) -> Unit,
     onAppPickerVisibilityChanged: (Boolean) -> Unit,
+    onWidgetEditorVisibilityChanged: (Boolean) -> Unit,
     onOpenManager: () -> Unit
 ) {
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
@@ -425,6 +428,9 @@ private fun GameDeckWorkspace(
     var showWidgetEditor by remember { mutableStateOf(false) }
     LaunchedEffect(showAppPicker) {
         onAppPickerVisibilityChanged(showAppPicker)
+    }
+    LaunchedEffect(showWidgetEditor) {
+        onWidgetEditorVisibilityChanged(showWidgetEditor)
     }
 
     val isLeft = state.side == GameDeckSide.LEFT
@@ -471,6 +477,17 @@ private fun GameDeckWorkspace(
             dx += dragAmount.x
             dy += dragAmount.y
         }
+    }
+
+    if (showWidgetEditor) {
+        FullScreenWidgetEditorOverlay(
+            state = state,
+            onToggleWidget = onToggleDashboardWidget,
+            onMoveWidget = onMoveDashboardWidget,
+            onResetWidgets = onResetDashboardWidgets,
+            onDone = { showWidgetEditor = false }
+        )
+        return
     }
 
     Row(
@@ -1336,15 +1353,15 @@ private fun BatteryCapsulePill(
 }
 
 @Composable
-private fun DashboardWidgetCustomizerContent(
+private fun FullScreenWidgetEditorOverlay(
     state: GameDeckUiState,
     onToggleWidget: (String) -> Unit,
     onMoveWidget: (Int, Int) -> Unit,
     onResetWidgets: () -> Unit,
-    onBack: () -> Unit
+    onDone: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
-    data class WidgetBlueprintMeta(
+    data class WidgetEditorItem(
         val key: String,
         val title: String,
         val icon: ImageVector,
@@ -1354,415 +1371,77 @@ private fun DashboardWidgetCustomizerContent(
     val orderedKeys = state.widgetOrder.ifEmpty { DEFAULT_DASHBOARD_WIDGET_ORDER }
     val allItems = orderedKeys.mapNotNull { key ->
         when (key) {
-            "telemetry" -> WidgetBlueprintMeta(key, "Telemetri & CPU/GPU", Icons.Rounded.Speed, state.showTelemetryWidget)
-            "profile" -> WidgetBlueprintMeta(key, "Profil Performa", Icons.Rounded.Tune, state.showProfileWidget)
-            "music" -> WidgetBlueprintMeta(key, "Pemutar Musik", Icons.Rounded.MusicNote, state.showMusicWidget)
-            "refresh_rate" -> WidgetBlueprintMeta(key, "Refresh Rate", Icons.Rounded.Refresh, state.showRefreshRateWidget)
-            "sliders" -> WidgetBlueprintMeta(key, "Brightness & Suara", Icons.Rounded.BrightnessMedium, state.showSlidersWidget)
+            "telemetry" -> WidgetEditorItem(key, "Telemetri & CPU/GPU", Icons.Rounded.Speed, state.showTelemetryWidget)
+            "profile" -> WidgetEditorItem(key, "Profil Performa", Icons.Rounded.Tune, state.showProfileWidget)
+            "music" -> WidgetEditorItem(key, "Pemutar Musik", Icons.Rounded.MusicNote, state.showMusicWidget)
+            "refresh_rate" -> WidgetEditorItem(key, "Refresh Rate", Icons.Rounded.Refresh, state.showRefreshRateWidget)
+            "sliders" -> WidgetEditorItem(key, "Brightness & Suara", Icons.Rounded.BrightnessMedium, state.showSlidersWidget)
             else -> null
         }
     }
     val activeItems = allItems.filter { it.enabled }
-    val availableItems = allItems.filter { !it.enabled }
-    val isDefaultConfig = availableItems.isEmpty() && orderedKeys == DEFAULT_DASHBOARD_WIDGET_ORDER
+    val libraryItems = allItems.filter { !it.enabled }
+    val isDefaultConfig = libraryItems.isEmpty() && orderedKeys == DEFAULT_DASHBOARD_WIDGET_ORDER
 
     var draggedKey by remember { mutableStateOf<String?>(null) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
-    val stepThresholdPx = with(LocalDensity.current) { 82.dp.toPx() }
+    val stepThresholdPx = with(LocalDensity.current) { 78.dp.toPx() }
     val currentActiveItems by rememberUpdatedState(activeItems)
     val currentOrderedKeys by rememberUpdatedState(orderedKeys)
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .background(Color.Black.copy(alpha = 0.78f))
+            .padding(horizontal = 20.dp, vertical = 14.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Surface(
-                onClick = onBack,
-                modifier = Modifier.size(36.dp),
-                shape = CircleShape,
-                color = scheme.surfaceContainer
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                        contentDescription = "Kembali",
-                        tint = scheme.onSurface,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = "Widget Dashboard",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = scheme.onSurface,
-                maxLines = 1,
-                softWrap = false
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            Surface(
-                onClick = onResetWidgets,
-                shape = CircleShape,
-                color = if (isDefaultConfig) scheme.surfaceContainer else scheme.secondaryContainer,
-                contentColor = if (isDefaultConfig) scheme.onSurfaceVariant else scheme.onSecondaryContainer
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.RestartAlt,
-                        contentDescription = null,
-                        modifier = Modifier.size(13.dp)
-                    )
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Reset",
-                        fontSize = 10.5.sp,
+                        text = "Atur Widget",
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
+                        color = Color.White,
                         maxLines = 1,
                         softWrap = false
                     )
-                }
-            }
-        }
-
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = "Widget Aktif · ${activeItems.size}",
-                fontSize = 10.5.sp,
-                fontWeight = FontWeight.Bold,
-                color = scheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 4.dp)
-            )
-
-            if (activeItems.isEmpty()) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    color = scheme.surfaceContainer
-                ) {
                     Text(
-                        text = "Minimal 1 widget aktif",
-                        fontSize = 11.5.sp,
+                        text = "Seret untuk ubah urutan atau tambah dari pustaka",
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
-                        color = scheme.onSurfaceVariant,
-                        modifier = Modifier.padding(16.dp)
+                        color = Color.White.copy(alpha = 0.72f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
-            } else {
-                activeItems.forEach { item ->
-                    val isDragging = draggedKey == item.key
-                    val dragScale by animateFloatAsState(
-                        targetValue = if (isDragging) 1.025f else 1f,
-                        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMedium),
-                        label = "activeWidgetDragScale"
-                    )
-                    val dragElevation by animateDpAsState(
-                        targetValue = if (isDragging) 12.dp else 0.dp,
-                        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMedium),
-                        label = "activeWidgetDragElevation"
-                    )
 
-                    Surface(
-                        shape = RoundedCornerShape(18.dp),
-                        color = scheme.surfaceContainerHigh,
-                        shadowElevation = dragElevation,
-                        border = BorderStroke(
-                            width = 1.dp,
-                            color = if (isDragging) scheme.primary else scheme.outlineVariant.copy(alpha = 0.45f)
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .zIndex(if (isDragging) 2f else 0f)
-                            .graphicsLayer {
-                                translationY = if (isDragging) dragOffsetY else 0f
-                                scaleX = dragScale
-                                scaleY = dragScale
-                            }
-                            .pointerInput(item.key, activeItems.size) {
-                                detectVerticalDragGestures(
-                                    onDragStart = {
-                                        draggedKey = item.key
-                                        dragOffsetY = 0f
-                                    },
-                                    onDragEnd = {
-                                        draggedKey = null
-                                        dragOffsetY = 0f
-                                    },
-                                    onDragCancel = {
-                                        draggedKey = null
-                                        dragOffsetY = 0f
-                                    },
-                                    onVerticalDrag = { change, dragAmount ->
-                                        change.consume()
-                                        dragOffsetY += dragAmount
-                                        val listVis = currentActiveItems
-                                        val listGlob = currentOrderedKeys
-                                        val curVisIdx = listVis.indexOfFirst { it.key == item.key }
-                                        val curGlobIdx = listGlob.indexOf(item.key)
-                                        if (dragOffsetY > stepThresholdPx && curVisIdx in 0 until listVis.lastIndex) {
-                                            val targetGlobIdx = listGlob.indexOf(listVis[curVisIdx + 1].key)
-                                            if (curGlobIdx >= 0 && targetGlobIdx >= 0) {
-                                                onMoveWidget(curGlobIdx, targetGlobIdx)
-                                                dragOffsetY -= stepThresholdPx
-                                            }
-                                        } else if (dragOffsetY < -stepThresholdPx && curVisIdx > 0) {
-                                            val targetGlobIdx = listGlob.indexOf(listVis[curVisIdx - 1].key)
-                                            if (curGlobIdx >= 0 && targetGlobIdx >= 0) {
-                                                onMoveWidget(curGlobIdx, targetGlobIdx)
-                                                dragOffsetY += stepThresholdPx
-                                            }
-                                        }
-                                    }
-                                )
-                            }
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 10.dp, vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(7.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.DragHandle,
-                                    contentDescription = "Geser urutan",
-                                    tint = if (isDragging) scheme.primary else scheme.onSurfaceVariant,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = item.title,
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = scheme.onSurface,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Surface(
-                                    onClick = { onToggleWidget(item.key) },
-                                    enabled = activeItems.size > 1,
-                                    modifier = Modifier.size(24.dp),
-                                    shape = CircleShape,
-                                    color = scheme.surfaceContainer
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Remove,
-                                            contentDescription = "Nonaktifkan ${item.title}",
-                                            tint = if (activeItems.size > 1) scheme.onSurface else scheme.onSurfaceVariant.copy(alpha = 0.35f),
-                                            modifier = Modifier.size(15.dp)
-                                        )
-                                    }
-                                }
-                            }
-
-                            WidgetBlueprintPreview(widgetKey = item.key)
-                        }
-                    }
-                }
-            }
-
-            if (availableItems.isNotEmpty()) {
-                Text(
-                    text = "Widget Tersedia",
-                    fontSize = 10.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = scheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                )
-                availableItems.chunked(2).forEach { rowItems ->
+                Surface(
+                    onClick = onDone,
+                    shape = CircleShape,
+                    color = scheme.primary,
+                    contentColor = scheme.onPrimary
+                ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        rowItems.forEach { item ->
-                            DashboardAvailableWidgetCard(
-                                icon = item.icon,
-                                title = item.title,
-                                modifier = Modifier.weight(1f),
-                                onClick = { onToggleWidget(item.key) }
-                            )
-                        }
-                        if (rowItems.size == 1) {
-                            Spacer(modifier = Modifier.weight(1f))
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DashboardAvailableWidgetCard(
-    icon: ImageVector,
-    title: String,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    val scheme = MaterialTheme.colorScheme
-    Surface(
-        onClick = onClick,
-        modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        color = scheme.surfaceContainer
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 9.dp, vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(RoundedCornerShape(9.dp))
-                    .background(scheme.surfaceContainerHigh),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = scheme.primary,
-                    modifier = Modifier.size(15.dp)
-                )
-            }
-            Text(
-                text = title,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = scheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-            Box(
-                modifier = Modifier
-                    .size(22.dp)
-                    .clip(CircleShape)
-                    .background(scheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Add,
-                    contentDescription = "Aktifkan $title",
-                    tint = scheme.onPrimaryContainer,
-                    modifier = Modifier.size(14.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun WidgetBlueprintPreview(widgetKey: String) {
-    val scheme = MaterialTheme.colorScheme
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(scheme.surfaceContainer)
-            .padding(horizontal = 10.dp, vertical = 7.dp)
-    ) {
-        when (widgetKey) {
-            "telemetry" -> Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Speed,
-                        contentDescription = null,
-                        tint = scheme.primary,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(
-                        text = "120",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Black,
-                        color = scheme.primary
-                    )
-                    Text(
-                        text = "FPS",
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = scheme.onSurfaceVariant
-                    )
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                Box(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(scheme.primaryContainer)
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = "CPU",
-                        fontSize = 8.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = scheme.onPrimaryContainer
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(scheme.tertiaryContainer)
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = "GPU",
-                        fontSize = 8.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = scheme.onTertiaryContainer
-                    )
-                }
-            }
-
-            "profile" -> Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                listOf("Eco", "Balanced", "Perf", "Lite").forEachIndexed { idx, label ->
-                    val active = idx == 2
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(CircleShape)
-                            .background(if (active) scheme.primaryContainer else scheme.surfaceContainerHigh)
-                            .padding(vertical = 4.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
                         Text(
-                            text = label,
-                            fontSize = 8.5.sp,
-                            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
-                            color = if (active) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
+                            text = "Selesai",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
                             maxLines = 1,
                             softWrap = false
                         )
@@ -1770,140 +1449,327 @@ private fun WidgetBlueprintPreview(widgetKey: String) {
                 }
             }
 
-            "music" -> Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(5.dp)
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                Surface(
+                    modifier = Modifier
+                        .weight(0.57f)
+                        .fillMaxHeight(),
+                    shape = RoundedCornerShape(24.dp),
+                    color = scheme.surfaceContainerLow,
+                    border = BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.25f))
+                ) {
+                    if (activeItems.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Minimal 1 widget aktif",
+                                fontSize = 12.sp,
+                                color = scheme.onSurfaceVariant
+                            )
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            activeItems.forEach { item ->
+                                val isDragging = draggedKey == item.key
+                                val dragScale by animateFloatAsState(
+                                    targetValue = if (isDragging) 1.02f else 1f,
+                                    animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMedium),
+                                    label = "fullEditorDragScale"
+                                )
+                                val dragElevation by animateDpAsState(
+                                    targetValue = if (isDragging) 12.dp else 0.dp,
+                                    animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMedium),
+                                    label = "fullEditorDragElev"
+                                )
+
+                                Surface(
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = scheme.surfaceContainerHigh,
+                                    shadowElevation = dragElevation,
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color = if (isDragging) scheme.primary else scheme.outlineVariant.copy(alpha = 0.35f)
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .zIndex(if (isDragging) 2f else 0f)
+                                        .graphicsLayer {
+                                            translationY = if (isDragging) dragOffsetY else 0f
+                                            scaleX = dragScale
+                                            scaleY = dragScale
+                                        }
+                                        .pointerInput(item.key) {
+                                            detectVerticalDragGestures(
+                                                onDragStart = {
+                                                    draggedKey = item.key
+                                                    dragOffsetY = 0f
+                                                },
+                                                onDragEnd = {
+                                                    draggedKey = null
+                                                    dragOffsetY = 0f
+                                                },
+                                                onDragCancel = {
+                                                    draggedKey = null
+                                                    dragOffsetY = 0f
+                                                },
+                                                onVerticalDrag = { change, dragAmount ->
+                                                    change.consume()
+                                                    dragOffsetY += dragAmount
+                                                    val listVis = currentActiveItems
+                                                    val listGlob = currentOrderedKeys
+                                                    val curVisIdx = listVis.indexOfFirst { it.key == item.key }
+                                                    val curGlobIdx = listGlob.indexOf(item.key)
+                                                    if (dragOffsetY > stepThresholdPx && curVisIdx in 0 until listVis.lastIndex) {
+                                                        val targetGlobIdx = listGlob.indexOf(listVis[curVisIdx + 1].key)
+                                                        if (curGlobIdx >= 0 && targetGlobIdx >= 0) {
+                                                            onMoveWidget(curGlobIdx, targetGlobIdx)
+                                                            dragOffsetY -= stepThresholdPx
+                                                        }
+                                                    } else if (dragOffsetY < -stepThresholdPx && curVisIdx > 0) {
+                                                        val targetGlobIdx = listGlob.indexOf(listVis[curVisIdx - 1].key)
+                                                        if (curGlobIdx >= 0 && targetGlobIdx >= 0) {
+                                                            onMoveWidget(curGlobIdx, targetGlobIdx)
+                                                            dragOffsetY += stepThresholdPx
+                                                        }
+                                                    }
+                                                }
+                                            )
+                                        }
+                                ) {
+                                    Box(modifier = Modifier.fillMaxWidth()) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(11.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                modifier = Modifier.padding(end = 30.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.DragHandle,
+                                                    contentDescription = "Geser urutan",
+                                                    tint = if (isDragging) scheme.primary else scheme.onSurfaceVariant,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Text(
+                                                    text = item.title,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = scheme.onSurface,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                            WidgetBlueprintPreview(widgetKey = item.key)
+                                        }
+
+                                        Surface(
+                                            onClick = { onToggleWidget(item.key) },
+                                            enabled = activeItems.size > 1,
+                                            modifier = Modifier
+                                                .align(Alignment.TopEnd)
+                                                .padding(8.dp)
+                                                .size(26.dp),
+                                            shape = CircleShape,
+                                            color = if (activeItems.size > 1) {
+                                                scheme.errorContainer
+                                            } else {
+                                                scheme.surfaceContainer
+                                            },
+                                            contentColor = if (activeItems.size > 1) {
+                                                scheme.onErrorContainer
+                                            } else {
+                                                scheme.onSurfaceVariant.copy(alpha = 0.35f)
+                                            }
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Remove,
+                                                    contentDescription = "Sembunyikan ${item.title}",
+                                                    modifier = Modifier.size(15.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Surface(
+                    modifier = Modifier
+                        .weight(0.43f)
+                        .fillMaxHeight(),
+                    shape = RoundedCornerShape(24.dp),
+                    color = scheme.surfaceContainerLow,
+                    border = BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.25f))
                 ) {
                     Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.55f)
-                                .height(5.dp)
-                                .clip(CircleShape)
-                                .background(scheme.onSurface.copy(alpha = 0.72f))
-                        )
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.36f)
-                                .height(4.dp)
-                                .clip(CircleShape)
-                                .background(scheme.onSurfaceVariant.copy(alpha = 0.5f))
-                        )
-                    }
-                    Box(
                         modifier = Modifier
-                            .size(20.dp)
-                            .clip(RoundedCornerShape(7.dp))
-                            .background(scheme.primaryContainer),
-                        contentAlignment = Alignment.Center
+                            .fillMaxSize()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Icon(Icons.Rounded.Pause, null, tint = scheme.onPrimaryContainer, modifier = Modifier.size(12.dp))
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(Icons.Rounded.SkipPrevious, null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(12.dp))
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(3.dp)
-                            .clip(CircleShape)
-                            .background(scheme.surfaceContainerHighest)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.45f)
-                                .fillMaxHeight()
-                                .clip(CircleShape)
-                                .background(scheme.primary)
-                        )
-                    }
-                    Icon(Icons.Rounded.SkipNext, null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(12.dp))
-                }
-            }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Pustaka Widget",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = scheme.onSurface,
+                                maxLines = 1,
+                                softWrap = false,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Surface(
+                                onClick = onResetWidgets,
+                                modifier = Modifier.size(30.dp),
+                                shape = CircleShape,
+                                color = if (isDefaultConfig) scheme.surfaceContainer else scheme.secondaryContainer,
+                                contentColor = if (isDefaultConfig) scheme.onSurfaceVariant else scheme.onSecondaryContainer
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.RestartAlt,
+                                        contentDescription = "Reset susunan widget",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
 
-            "refresh_rate" -> Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IosRecentAppsIcon(tint = scheme.primary, containerColor = scheme.surfaceContainer, modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "Refresh Rate",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = scheme.onSurface
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                Box(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(scheme.primaryContainer)
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = "120 Hz",
-                        fontSize = 8.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = scheme.onPrimaryContainer
-                    )
-                }
-            }
-
-            else -> Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(5.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(Icons.Rounded.BrightnessMedium, null, tint = scheme.primary, modifier = Modifier.size(12.dp))
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(6.dp)
-                            .clip(CircleShape)
-                            .background(scheme.surfaceContainerHighest)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.62f)
-                                .fillMaxHeight()
-                                .clip(CircleShape)
-                                .background(scheme.primary)
-                        )
-                    }
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(Icons.AutoMirrored.Rounded.VolumeUp, null, tint = scheme.tertiary, modifier = Modifier.size(12.dp))
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(6.dp)
-                            .clip(CircleShape)
-                            .background(scheme.surfaceContainerHighest)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.48f)
-                                .fillMaxHeight()
-                                .clip(CircleShape)
-                                .background(scheme.tertiary)
-                        )
+                        if (libraryItems.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.padding(horizontal = 12.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(34.dp)
+                                            .clip(CircleShape)
+                                            .background(scheme.primaryContainer),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            tint = scheme.onPrimaryContainer,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = "Semua widget aktif",
+                                        fontSize = 12.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = scheme.onSurface,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Text(
+                                        text = "Ketuk tombol - pada widget aktif untuk menyimpannya di sini.",
+                                        fontSize = 10.sp,
+                                        color = scheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        } else {
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                                    .verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                libraryItems.forEach { item ->
+                                    Surface(
+                                        onClick = { onToggleWidget(item.key) },
+                                        shape = RoundedCornerShape(18.dp),
+                                        color = scheme.surfaceContainerHigh,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 10.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(9.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(34.dp)
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .background(scheme.primaryContainer),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = item.icon,
+                                                    contentDescription = null,
+                                                    tint = scheme.onPrimaryContainer,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = item.title,
+                                                    fontSize = 11.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = scheme.onSurface,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                Text(
+                                                    text = "Ketuk + untuk pasang",
+                                                    fontSize = 9.5.sp,
+                                                    color = scheme.onSurfaceVariant,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(28.dp)
+                                                    .clip(CircleShape)
+                                                    .background(scheme.primary),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Add,
+                                                    contentDescription = "Pasang ${item.title}",
+                                                    tint = scheme.onPrimary,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1937,7 +1803,7 @@ private fun ExpressiveWavySeekbar(
     val infiniteTransition = rememberInfiniteTransition(label = "wavySeekPhase")
     val phaseRad by infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = (2.0 * PI).toFloat(),
+        targetValue = (2f * PI.toFloat()),
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 1_100, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
@@ -1948,7 +1814,7 @@ private fun ExpressiveWavySeekbar(
 
     Canvas(
         modifier = modifier
-            .height(24.dp)
+            .height(20.dp)
             .then(
                 if (enabled) {
                     Modifier
@@ -1980,14 +1846,14 @@ private fun ExpressiveWavySeekbar(
     ) {
         val w = size.width
         val centerY = size.height / 2f
-        val thumbRadius = 5.5.dp.toPx()
-        val strokeW = 3.dp.toPx()
+        val thumbRadius = 4.8.dp.toPx()
+        val strokeW = 2.8.dp.toPx()
         val usableStart = thumbRadius
         val usableEnd = (w - thumbRadius).coerceAtLeast(usableStart + 1f)
         val usableSpan = usableEnd - usableStart
         val thumbX = usableStart + usableSpan * clampedProgress
 
-        val inactiveStart = (thumbX + thumbRadius + 3.dp.toPx()).coerceAtMost(usableEnd)
+        val inactiveStart = (thumbX + thumbRadius + 2.5.dp.toPx()).coerceAtMost(usableEnd)
         if (inactiveStart < usableEnd) {
             drawLine(
                 color = inactiveColor,
@@ -1998,13 +1864,13 @@ private fun ExpressiveWavySeekbar(
             )
         }
 
-        val activeEnd = (thumbX - thumbRadius - 2.dp.toPx()).coerceAtLeast(usableStart)
+        val activeEnd = (thumbX - thumbRadius - 1.5.dp.toPx()).coerceAtLeast(usableStart)
         if (activeEnd > usableStart) {
-            val maxAmp = 2.6.dp.toPx() * waveAmplitude
-            val wavelengthPx = 18.dp.toPx()
+            val maxAmp = 2.3.dp.toPx() * waveAmplitude
+            val wavelengthPx = 15.dp.toPx()
             val path = Path()
             var x = usableStart
-            val step = 2.dp.toPx()
+            val step = 1.8.dp.toPx()
             var first = true
             while (x <= activeEnd) {
                 val angle: Float = ((x - usableStart) / wavelengthPx) * (2f * PI.toFloat()) - phaseRad
@@ -2059,7 +1925,6 @@ private fun MusicPlayerWidgetCard(
     val artBitmap = remember(albumArt) {
         albumArt?.takeIf { !it.isRecycled }?.asImageBitmap()
     }
-    val hasArt = artBitmap != null
     val displayTitle = title.ifBlank { "Tidak ada musik diputar" }
     val displaySubtitle = when {
         artist.isNotBlank() -> artist
@@ -2088,168 +1953,203 @@ private fun MusicPlayerWidgetCard(
         0f
     }
 
-    val playCorner by animateDpAsState(
-        targetValue = if (isPlaying) 14.dp else 22.dp,
-        animationSpec = spring(dampingRatio = 0.68f, stiffness = Spring.StiffnessMedium),
-        label = "md3eMediaPlayCorner"
+    val playBtnBg by animateColorAsState(
+        targetValue = if (isPlaying) scheme.primary else scheme.secondaryContainer,
+        animationSpec = tween(durationMillis = 180),
+        label = "musicPlayBtnBg"
     )
-    val primaryTextColor = if (hasArt) Color.White else scheme.onSurface
-    val secondaryTextColor = if (hasArt) Color.White.copy(alpha = 0.82f) else scheme.onSurfaceVariant
+    val playBtnTint by animateColorAsState(
+        targetValue = if (isPlaying) scheme.onPrimary else scheme.onSecondaryContainer,
+        animationSpec = tween(durationMillis = 180),
+        label = "musicPlayBtnTint"
+    )
 
     Surface(
         shape = RoundedCornerShape(24.dp),
         color = scheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
-            Crossfade(
-                targetState = artBitmap,
-                animationSpec = tween(durationMillis = 300),
-                label = "musicArtCrossfade",
-                modifier = Modifier.matchParentSize()
-            ) { bmp ->
-                if (bmp != null) {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        Image(
-                            bitmap = bmp,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    Brush.horizontalGradient(
-                                        colors = listOf(
-                                            Color.Black.copy(alpha = 0.74f),
-                                            Color.Black.copy(alpha = 0.46f)
-                                        )
-                                    )
-                                )
-                        )
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(scheme.surfaceContainer)
-                    )
-                }
-            }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(scheme.surfaceContainerHigh)
+                        .clickable(enabled = !packageName.isNullOrBlank()) { onOpenApp() },
+                    contentAlignment = Alignment.Center
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable(enabled = !packageName.isNullOrBlank()) { onOpenApp() },
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(22.dp)
-                                .clip(RoundedCornerShape(7.dp))
-                                .background(
-                                    if (hasArt) {
-                                        Color.Black.copy(alpha = 0.35f)
-                                    } else {
-                                        scheme.surfaceContainerHigh
-                                    }
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (appIcon != null) {
+                    Crossfade(
+                        targetState = artBitmap,
+                        animationSpec = tween(durationMillis = 240),
+                        label = "compactAlbumArtFade"
+                    ) { bmp ->
+                        if (bmp != null) {
+                            Image(
+                                bitmap = bmp,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else if (appIcon != null) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 Image(
                                     bitmap = appIcon,
                                     contentDescription = null,
                                     modifier = Modifier
-                                        .size(16.dp)
-                                        .clip(RoundedCornerShape(5.dp))
+                                        .size(30.dp)
+                                        .clip(RoundedCornerShape(9.dp))
                                 )
-                            } else {
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 Icon(
                                     imageVector = Icons.Rounded.MusicNote,
                                     contentDescription = null,
-                                    tint = if (hasArt) Color.White else scheme.primary,
-                                    modifier = Modifier.size(14.dp)
+                                    tint = if (isPlaying) scheme.primary else scheme.onSurfaceVariant,
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
                         }
-
-                        Spacer(modifier = Modifier.height(1.dp))
-
-                        Text(
-                            text = displayTitle,
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = primaryTextColor,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = displaySubtitle,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = secondaryTextColor,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
                     }
 
-                    Spacer(modifier = Modifier.width(10.dp))
-
-                    Surface(
-                        onClick = onPlayPause,
-                        modifier = Modifier.size(44.dp),
-                        shape = RoundedCornerShape(playCorner),
-                        color = scheme.primaryContainer,
-                        contentColor = scheme.onPrimaryContainer
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                                contentDescription = if (isPlaying) "Jeda" else "Putar",
-                                modifier = Modifier.size(22.dp)
+                    if (artBitmap != null && appIcon != null) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(2.dp)
+                                .size(16.dp)
+                                .clip(CircleShape)
+                                .background(scheme.surfaceContainerLowest.copy(alpha = 0.9f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(
+                                bitmap = appIcon,
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(12.dp)
+                                    .clip(CircleShape)
                             )
                         }
                     }
                 }
 
+                Spacer(modifier = Modifier.width(10.dp))
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable(enabled = !packageName.isNullOrBlank()) { onOpenApp() },
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = displayTitle,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = scheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = displaySubtitle,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = if (isPlaying) scheme.primary else scheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        onClick = onPrevious,
+                        modifier = Modifier.size(30.dp),
+                        shape = CircleShape,
+                        color = scheme.surfaceContainerHigh,
+                        contentColor = scheme.onSurface
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Rounded.SkipPrevious,
+                                contentDescription = "Sebelumnya",
+                                modifier = Modifier.size(17.dp)
+                            )
+                        }
+                    }
+
+                    Surface(
+                        onClick = onPlayPause,
+                        modifier = Modifier.size(36.dp),
+                        shape = RoundedCornerShape(13.dp),
+                        color = playBtnBg,
+                        contentColor = playBtnTint
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                contentDescription = if (isPlaying) "Jeda" else "Putar",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    Surface(
+                        onClick = onNext,
+                        modifier = Modifier.size(30.dp),
+                        shape = CircleShape,
+                        color = scheme.surfaceContainerHigh,
+                        contentColor = scheme.onSurface
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Rounded.SkipNext,
+                                contentDescription = "Berikutnya",
+                                modifier = Modifier.size(17.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (durationMs > 0L) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(CircleShape)
-                            .clickable(onClick = onPrevious),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.SkipPrevious,
-                            contentDescription = "Sebelumnya",
-                            tint = primaryTextColor,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
+                    Text(
+                        text = formatTrackDuration(livePosMs),
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = scheme.onSurfaceVariant,
+                        maxLines = 1,
+                        softWrap = false
+                    )
                     ExpressiveWavySeekbar(
                         progress = progressFraction,
                         isPlaying = isPlaying,
                         enabled = durationMs > 0L,
-                        activeColor = if (hasArt) Color.White else scheme.primary,
-                        inactiveColor = if (hasArt) Color.White.copy(alpha = 0.30f) else scheme.surfaceContainerHighest,
+                        activeColor = scheme.primary,
+                        inactiveColor = scheme.surfaceContainerHighest,
                         onSeekFraction = { frac ->
                             val target = (frac * durationMs).toLong()
                             livePosMs = target
@@ -2257,21 +2157,14 @@ private fun MusicPlayerWidgetCard(
                         },
                         modifier = Modifier.weight(1f)
                     )
-
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(CircleShape)
-                            .clickable(onClick = onNext),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.SkipNext,
-                            contentDescription = "Berikutnya",
-                            tint = primaryTextColor,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                    Text(
+                        text = formatTrackDuration(durationMs),
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = scheme.onSurfaceVariant,
+                        maxLines = 1,
+                        softWrap = false
+                    )
                 }
             }
         }
