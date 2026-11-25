@@ -12,7 +12,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
@@ -39,6 +38,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.BatteryFull
 import androidx.compose.material.icons.rounded.Build
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.Thermostat
@@ -80,12 +80,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import java.util.Locale
 import kotlin.math.abs
 import kotlinx.coroutines.delay
+
+internal const val DECK_RAIL_WIDTH_DP = 66f
+internal const val DECK_RAIL_GAP_DP = 10f
+internal const val DECK_CARD_WIDTH_DP = 376f
+internal const val DECK_TOTAL_WIDTH_DP = DECK_RAIL_WIDTH_DP + DECK_RAIL_GAP_DP + DECK_CARD_WIDTH_DP
 
 private data class DeckProfileOption(
     val label: String,
@@ -127,8 +133,8 @@ fun GameDeckRoot(
             openProgress.animateTo(
                 targetValue = 1f,
                 animationSpec = spring(
-                    dampingRatio = 0.84f,
-                    stiffness = 380f
+                    dampingRatio = 0.85f,
+                    stiffness = 400f
                 )
             )
         } else {
@@ -136,7 +142,7 @@ fun GameDeckRoot(
                 openProgress.animateTo(
                     targetValue = 0f,
                     animationSpec = tween(
-                        durationMillis = 190,
+                        durationMillis = 185,
                         easing = FastOutSlowInEasing
                     )
                 )
@@ -154,13 +160,15 @@ fun GameDeckRoot(
         val slideOffset = with(LocalDensity.current) { 24.dp.toPx() }
         val p = openProgress.value.coerceIn(0f, 1f)
         Box(
-            modifier = Modifier.graphicsLayer {
-                alpha = (p * 1.25f).coerceIn(0f, 1f)
-                scaleX = 0.88f + 0.12f * p
-                scaleY = 0.90f + 0.10f * p
-                translationX = if (isLeft) -(1f - p) * slideOffset else (1f - p) * slideOffset
-                transformOrigin = TransformOrigin(if (isLeft) 0f else 1f, 0.5f)
-            }
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    alpha = (p * 1.25f).coerceIn(0f, 1f)
+                    scaleX = 0.90f + 0.10f * p
+                    scaleY = 0.92f + 0.08f * p
+                    translationX = if (isLeft) -(1f - p) * slideOffset else (1f - p) * slideOffset
+                    transformOrigin = TransformOrigin(if (isLeft) 0f else 1f, 0.5f)
+                }
         ) {
             GameDeckWorkspace(
                 state = current,
@@ -182,67 +190,66 @@ private fun EdgeDeckHandle(
     isPressed: Boolean
 ) {
     val scheme = MaterialTheme.colorScheme
+    val motion = MaterialTheme.motionScheme
     var hinting by remember { mutableStateOf(true) }
 
     val handleWidth by animateDpAsState(
         targetValue = when {
-            isPressed -> 9.dp
-            hinting -> 7.dp
+            isPressed -> 10.dp
+            hinting -> 8.dp
             else -> 5.dp
         },
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
+        animationSpec = motion.defaultSpatialSpec(),
         label = "deckHandleWidth"
     )
     val handleHeight by animateDpAsState(
         targetValue = when {
-            isPressed -> 64.dp
-            hinting -> 58.dp
+            isPressed -> 68.dp
+            hinting -> 64.dp
             else -> 48.dp
         },
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
+        animationSpec = motion.defaultSpatialSpec(),
         label = "deckHandleHeight"
     )
-    val fillAlpha by animateFloatAsState(
-        targetValue = if (isPressed) 0.92f else if (hinting) 0.65f else 0.42f,
-        animationSpec = tween(180),
+    val handleAlpha by animateFloatAsState(
+        targetValue = if (isPressed || hinting) 0.96f else 0.62f,
+        animationSpec = motion.defaultEffectsSpec(),
         label = "deckHandleAlpha"
     )
 
     LaunchedEffect(Unit) {
-        delay(1_800L)
+        delay(2_000L)
         hinting = false
-    }
-
-    val pillShape = if (isLeft) {
-        RoundedCornerShape(topEnd = 999.dp, bottomEnd = 999.dp)
-    } else {
-        RoundedCornerShape(topStart = 999.dp, bottomStart = 999.dp)
     }
 
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = if (isLeft) Alignment.CenterStart else Alignment.CenterEnd
     ) {
-        Box(
+        Surface(
             modifier = Modifier
+                .padding(horizontal = 3.dp)
                 .width(handleWidth)
                 .height(handleHeight)
-                .border(
-                    width = 1.5.dp,
-                    color = scheme.primary.copy(alpha = 0.90f),
-                    shape = pillShape
+                .graphicsLayer { alpha = handleAlpha },
+            shape = CircleShape,
+            color = scheme.primary,
+            contentColor = scheme.onPrimary,
+            shadowElevation = 8.dp
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.ChevronRight,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(11.dp)
+                        .graphicsLayer { scaleX = if (isLeft) 1f else -1f }
                 )
-                .background(
-                    color = scheme.primary.copy(alpha = fillAlpha),
-                    shape = pillShape
-                )
-        )
+            }
+        }
     }
 }
 
@@ -259,15 +266,17 @@ private fun GameDeckWorkspace(
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val isLeft = state.side == GameDeckSide.LEFT
-    val screenHeightPx = LocalContext.current.resources.displayMetrics.heightPixels
-    val deckHeight = with(LocalDensity.current) {
-        (screenHeightPx * 0.86f).toDp().coerceIn(318.dp, 720.dp)
-    }
     val closeThreshold = with(LocalDensity.current) { 24.dp.toPx() }
+    val screenWidthDp = with(LocalDensity.current) {
+        LocalContext.current.resources.displayMetrics.widthPixels.toDp()
+    }
+    val maxWorkspaceWidth = (screenWidthDp - 24.dp).coerceAtLeast(320.dp)
+    val cardWidth: Dp = (maxWorkspaceWidth - DECK_RAIL_WIDTH_DP.dp - DECK_RAIL_GAP_DP.dp)
+        .coerceIn(260.dp, DECK_CARD_WIDTH_DP.dp)
 
     Row(
         modifier = Modifier
-            .height(deckHeight)
+            .fillMaxSize()
             .pointerInput(isLeft, closeThreshold) {
                 var dx = 0f
                 var dy = 0f
@@ -292,7 +301,7 @@ private fun GameDeckWorkspace(
                     dy += dragAmount.y
                 }
             },
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(DECK_RAIL_GAP_DP.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (isLeft) {
@@ -308,6 +317,7 @@ private fun GameDeckWorkspace(
             )
             DeckCard(
                 state = state,
+                cardWidth = cardWidth,
                 selectedTab = selectedTab,
                 onProfileSelected = onProfileSelected,
                 onAutoModeToggle = onAutoModeToggle,
@@ -318,6 +328,7 @@ private fun GameDeckWorkspace(
         } else {
             DeckCard(
                 state = state,
+                cardWidth = cardWidth,
                 selectedTab = selectedTab,
                 onProfileSelected = onProfileSelected,
                 onAutoModeToggle = onAutoModeToggle,
@@ -350,19 +361,18 @@ private fun DockRail(
 ) {
     val scheme = MaterialTheme.colorScheme
     val deckOpacity = opacity.coerceIn(0.45f, 1f)
-    val shape = RoundedCornerShape(28.dp)
 
     Box(
         modifier = Modifier
-            .width(76.dp)
+            .width(DECK_RAIL_WIDTH_DP.dp)
             .fillMaxHeight()
-            .shadow(12.dp, shape)
-            .clip(shape)
+            .shadow(10.dp, CircleShape)
+            .clip(CircleShape)
             .background(
                 Brush.verticalGradient(
                     listOf(
-                        scheme.surfaceContainerLow.copy(alpha = deckOpacity),
-                        scheme.surfaceContainer.copy(alpha = deckOpacity)
+                        scheme.surfaceContainerHighest.copy(alpha = deckOpacity),
+                        scheme.surfaceContainerHigh.copy(alpha = deckOpacity)
                     )
                 )
             )
@@ -370,7 +380,7 @@ private fun DockRail(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 6.dp, vertical = 10.dp),
+                .padding(horizontal = 4.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Column(
@@ -392,11 +402,10 @@ private fun DockRail(
                 )
             }
 
-            Spacer(modifier = Modifier.weight(1f))
-
             Box(
                 modifier = Modifier
-                    .width(28.dp)
+                    .padding(vertical = 8.dp)
+                    .width(24.dp)
                     .height(2.dp)
                     .clip(CircleShape)
                     .background(scheme.outlineVariant.copy(alpha = 0.55f))
@@ -404,19 +413,18 @@ private fun DockRail(
 
             Column(
                 modifier = Modifier
+                    .weight(1f)
                     .fillMaxWidth()
-                    .padding(top = 8.dp)
-                    .heightIn(max = 170.dp)
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (quickApps.isEmpty()) {
                     Surface(
                         onClick = onOpenManager,
                         modifier = Modifier.size(44.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        color = scheme.surfaceContainerHigh
+                        shape = MaterialShapes.Cookie4Sided.toShape(),
+                        color = scheme.tertiaryContainer
                     ) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
@@ -425,7 +433,7 @@ private fun DockRail(
                             Icon(
                                 imageVector = Icons.Rounded.Add,
                                 contentDescription = "Tambah aplikasi",
-                                tint = scheme.onSurface,
+                                tint = scheme.onTertiaryContainer,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -453,12 +461,12 @@ private fun DockRailNavItem(
     val scheme = MaterialTheme.colorScheme
     val motion = MaterialTheme.motionScheme
     val pillBg by animateColorAsState(
-        targetValue = if (selected) scheme.secondaryContainer else Color.Transparent,
+        targetValue = if (selected) scheme.primary else Color.Transparent,
         animationSpec = motion.defaultEffectsSpec(),
         label = "railPillBg"
     )
     val iconTint by animateColorAsState(
-        targetValue = if (selected) scheme.onSecondaryContainer else scheme.onSurfaceVariant,
+        targetValue = if (selected) scheme.onPrimary else scheme.onSurfaceVariant,
         animationSpec = motion.defaultEffectsSpec(),
         label = "railIconTint"
     )
@@ -467,10 +475,20 @@ private fun DockRailNavItem(
         animationSpec = motion.defaultEffectsSpec(),
         label = "railLabelTint"
     )
-    val pillScale by animateFloatAsState(
-        targetValue = if (selected) 1.05f else 1f,
-        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium),
-        label = "railPillScale"
+    val corner by animateDpAsState(
+        targetValue = if (selected) 20.dp else 12.dp,
+        animationSpec = motion.defaultSpatialSpec(),
+        label = "railPillCorner"
+    )
+    val indicatorWidth by animateDpAsState(
+        targetValue = if (selected) 48.dp else 44.dp,
+        animationSpec = motion.defaultSpatialSpec(),
+        label = "railPillWidth"
+    )
+    val indicatorHeight by animateDpAsState(
+        targetValue = if (selected) 34.dp else 30.dp,
+        animationSpec = motion.defaultSpatialSpec(),
+        label = "railPillHeight"
     )
 
     Column(
@@ -484,13 +502,9 @@ private fun DockRailNavItem(
     ) {
         Box(
             modifier = Modifier
-                .width(48.dp)
-                .height(28.dp)
-                .graphicsLayer {
-                    scaleX = pillScale
-                    scaleY = pillScale
-                }
-                .clip(CircleShape)
+                .width(indicatorWidth)
+                .height(indicatorHeight)
+                .clip(RoundedCornerShape(corner))
                 .background(pillBg),
             contentAlignment = Alignment.Center
         ) {
@@ -498,12 +512,12 @@ private fun DockRailNavItem(
                 imageVector = icon,
                 contentDescription = label,
                 tint = iconTint,
-                modifier = Modifier.size(19.dp)
+                modifier = Modifier.size(if (selected) 20.dp else 18.dp)
             )
         }
         Text(
             text = label,
-            fontSize = 10.sp,
+            fontSize = 9.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
             color = labelTint,
             maxLines = 1,
@@ -522,8 +536,8 @@ private fun DockRailAppIcon(
     Surface(
         onClick = onClick,
         modifier = Modifier.size(44.dp),
-        shape = RoundedCornerShape(14.dp),
-        color = scheme.surfaceContainerHigh
+        shape = MaterialShapes.Cookie4Sided.toShape(),
+        color = scheme.surfaceContainerHighest.copy(alpha = 0.9f)
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -535,7 +549,7 @@ private fun DockRailAppIcon(
                     contentDescription = app.label,
                     modifier = Modifier
                         .size(28.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(CircleShape)
                 )
             } else {
                 Text(
@@ -552,6 +566,7 @@ private fun DockRailAppIcon(
 @Composable
 private fun DeckCard(
     state: GameDeckUiState,
+    cardWidth: Dp,
     selectedTab: Int,
     onProfileSelected: (String?) -> Unit,
     onAutoModeToggle: () -> Unit,
@@ -561,19 +576,19 @@ private fun DeckCard(
 ) {
     val scheme = MaterialTheme.colorScheme
     val deckOpacity = state.opacity.coerceIn(0.45f, 1f)
-    val shape = RoundedCornerShape(28.dp)
+    val shape = RoundedCornerShape(26.dp)
 
     Box(
         modifier = Modifier
-            .width(354.dp)
+            .width(cardWidth)
             .fillMaxHeight()
-            .shadow(14.dp, shape)
+            .shadow(12.dp, shape)
             .clip(shape)
             .background(
                 Brush.verticalGradient(
                     listOf(
-                        scheme.surfaceContainerLow.copy(alpha = deckOpacity),
-                        scheme.surfaceContainer.copy(alpha = deckOpacity)
+                        scheme.surfaceContainerHighest.copy(alpha = deckOpacity),
+                        scheme.surfaceContainerHigh.copy(alpha = deckOpacity)
                     )
                 )
             )
@@ -627,8 +642,8 @@ private fun DashboardDeckContent(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
         DashboardTopRow(state)
         PerformanceHero(
@@ -762,7 +777,7 @@ private fun PerformanceHero(
 
     Surface(
         shape = RoundedCornerShape(22.dp),
-        color = scheme.surfaceContainerHigh
+        color = scheme.surfaceContainerHighest.copy(alpha = 0.86f)
     ) {
         Row(
             modifier = Modifier
@@ -813,7 +828,7 @@ private fun PerformanceHero(
             }
             Spacer(modifier = Modifier.width(12.dp))
             Column(
-                modifier = Modifier.width(126.dp),
+                modifier = Modifier.width(136.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
                 MiniMetric(
@@ -1072,7 +1087,7 @@ private fun RefreshRateSection(
                         selected = selectedHz == hz,
                         index = index,
                         lastIndex = options.lastIndex,
-                        modifier = Modifier.widthIn(min = 56.dp),
+                        modifier = Modifier.widthIn(min = 58.dp),
                         onClick = { onSelect(hz) }
                     )
                 }

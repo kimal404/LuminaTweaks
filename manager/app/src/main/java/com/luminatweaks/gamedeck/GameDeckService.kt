@@ -74,8 +74,8 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         private const val NOTIFICATION_ID = 4046
         private const val GAME_STALE_GRACE_MS = 10_000L
         private const val REOPEN_COOLDOWN_MS = 320L
-        private const val EXPANDED_HEIGHT_FRACTION = 0.86f
-        private const val EXPANDED_MAX_HEIGHT_DP = 720f
+        private const val EXPANDED_HEIGHT_FRACTION = 0.90f
+        private const val EXPANDED_MAX_HEIGHT_DP = 740f
         private const val COLLAPSED_WIDTH_DP = 24f
         private const val COLLAPSED_HEIGHT_DP = 72f
         private const val EDGE_MARGIN_DP = 12f
@@ -748,9 +748,12 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         val margin = (EDGE_MARGIN_DP * density).roundToInt()
         val halfScreen = displayMetrics.heightPixels / 2f
         val panelHeightPx = (displayMetrics.heightPixels * EXPANDED_HEIGHT_FRACTION)
-            .coerceIn(318f * density, EXPANDED_MAX_HEIGHT_DP * density)
+            .coerceAtMost(EXPANDED_MAX_HEIGHT_DP * density)
+            .coerceAtMost((displayMetrics.heightPixels - 16f * density).coerceAtLeast(280f * density))
+        val panelWidthPx = (DECK_TOTAL_WIDTH_DP * density)
+            .coerceAtMost((displayMetrics.widthPixels - 24f * density).coerceAtLeast(320f * density))
         val maxOffset = if (expandedWindow) {
-            (halfScreen - (panelHeightPx / 2f) - margin)
+            (halfScreen - (panelHeightPx / 2f) - (8f * density))
                 .roundToInt()
                 .coerceAtLeast(0)
         } else {
@@ -760,8 +763,8 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         params.y = edgeYOffsetPx.coerceIn(-maxOffset, maxOffset)
         if (expandedWindow) {
             params.x = (12f * density).roundToInt()
-            params.width = WindowManager.LayoutParams.WRAP_CONTENT
-            params.height = WindowManager.LayoutParams.WRAP_CONTENT
+            params.width = panelWidthPx.roundToInt()
+            params.height = panelHeightPx.roundToInt()
         } else {
             params.x = 0
             params.width = (COLLAPSED_WIDTH_DP * density).roundToInt()
