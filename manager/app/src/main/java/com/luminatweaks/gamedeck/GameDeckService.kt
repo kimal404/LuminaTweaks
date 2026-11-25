@@ -17,6 +17,7 @@ import android.content.pm.ServiceInfo
 import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.graphics.Rect
+import android.media.AudioManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
@@ -164,6 +165,9 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     private var pendingOverrideLabel: String? = null
     private var pendingOverrideUntilMs = 0L
     private var profileAutoMode = true
+    private var lastSliderInteractionMs = 0L
+    private var lastNonZeroVolumePct = 50
+    private var brightnessApplyJob: Job? = null
     private var prevRootCpuTotal = 0L
     private var prevRootCpuIdle = 0L
     private var lastCpuPercent = 0
@@ -329,6 +333,9 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         profileAutoMode = profileAutoMode,
                         rrModes = snapshot.rrModes,
                         selectedRrHz = snapshot.selectedRrHz,
+                        brightnessPercent = if (now - lastSliderInteractionMs > 1_200L) snapshot.brightnessPercent else uiState.value.brightnessPercent,
+                        volumePercent = if (now - lastSliderInteractionMs > 1_200L) snapshot.volumePercent else uiState.value.volumePercent,
+                        volumeMuted = if (now - lastSliderInteractionMs > 1_200L) snapshot.volumeMuted else uiState.value.volumeMuted,
                         dndEnabled = snapshot.dndEnabled,
                         quickApps = snapshot.quickApps
                     )
@@ -350,6 +357,9 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         val profileOverride: String,
         val rrModes: List<Int>,
         val selectedRrHz: Int?,
+        val brightnessPercent: Int,
+        val volumePercent: Int,
+        val volumeMuted: Boolean,
         val dndEnabled: Boolean,
         val quickApps: List<GameDeckQuickApp>
     )
@@ -389,6 +399,19 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         val profileProp = DeviceUtil.readSystemProperty("sys.lumina.profile") ?: "Balanced"
         val overrideProp = DeviceUtil.readSystemProperty("sys.lumina.profile_override") ?: "Auto"
 
+        val rawBrightness = runCatching {
+            Settings.System.getInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, 128)
+        }.getOrDefault(128)
+        val brightnessPct = ((rawBrightness * 100f) / 255f).roundToInt().coerceIn(5, 100)
+
+        val am = getSystemService(AudioManager::class.java)
+        val maxVol = am?.getStreamMaxVolume(AudioManager.STREAM_MUSIC)?.coerceAtLeast(1) ?: 15
+        val curVol = am?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 8
+        val volumePct = ((curVol * 100f) / maxVol).roundToInt().coerceIn(0, 100)
+        if (volumePct > 0) {
+            lastNonZeroVolumePct = volumePct
+        }
+
         return DeckSnapshot(
             fps = fps,
             frametimeMs = frametime,
@@ -401,6 +424,9 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             profileOverride = overrideProp,
             rrModes = supportedRefreshRates(),
             selectedRrHz = GameDeckPrefs.refreshRateHint(this),
+            brightnessPercent = brightnessPct,
+            volumePercent = volumePct,
+            volumeMuted = curVol == 0,
             dndEnabled = (getSystemService(NotificationManager::class.java)
                 ?.currentInterruptionFilter ?: NotificationManager.INTERRUPTION_FILTER_ALL) !=
                 NotificationManager.INTERRUPTION_FILTER_ALL,
@@ -544,8 +570,11 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         handleYOffsetPx = edgeYOffsetState.value,
                         onCollapse = { setExpanded(false) },
                         onProfileSelected = ::selectProfileOverride,
-                        onAutoModeToggle = ::toggleProfileAutoMode,
+                        onSetAutoMode = ::setProfileAutoMode,
                         onRefreshRateSelected = ::selectRefreshRate,
+                        onBrightnessChanged = ::setBrightnessPercent,
+                        onVolumeChanged = ::setVolumePercent,
+                        onToggleMute = ::toggleVolumeMute,
                         onToggleDnd = ::toggleDnd,
                         onQuickAppClick = ::launchFreeformApp,
                         onOpenManager = ::openManager,
@@ -851,13 +880,13 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         }
     }
 
-    private fun toggleProfileAutoMode() {
-        val nextAuto = !profileAutoMode
-        profileAutoMode = nextAuto
-        if (!nextAuto) {
+    private fun setProfileAutoMode(enableAuto: Boolean) {
+        if (profileAutoMode == enableAuto) return
+        profileAutoMode = enableAuto
+        if (!enableAuto) {
             uiState.value = uiState.value.copy(
                 profileAutoMode = false,
-                profileOverride = "Auto"
+                profileOverride = uiState.value.profile
             )
             Toast.makeText(
                 this@GameDeckService,
@@ -884,6 +913,59 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                     Toast.LENGTH_SHORT
                 ).show()
             }
+        }
+    }
+
+    private fun setBrightnessPercent(percent: Int, commit: Boolean) {
+        val clamped = percent.coerceIn(5, 100)
+        lastSliderInteractionMs = System.currentTimeMillis()
+        uiState.value = uiState.value.copy(brightnessPercent = clamped)
+
+        val fraction = clamped / 100f
+        val sysVal = (fraction * 255f).roundToInt().coerceIn(10, 255)
+        runCatching {
+            if (Settings.System.canWrite(this)) {
+                Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, sysVal)
+            }
+        }
+
+        brightnessApplyJob?.cancel()
+        if (commit) {
+            serviceScope.launch(Dispatchers.IO) {
+                runCatching { RootUtil.runAsRoot("cmd display set-brightness $fraction") }
+            }
+        } else {
+            brightnessApplyJob = serviceScope.launch(Dispatchers.IO) {
+                delay(35L)
+                runCatching { RootUtil.runAsRoot("cmd display set-brightness $fraction") }
+            }
+        }
+    }
+
+    private fun setVolumePercent(percent: Int) {
+        val clamped = percent.coerceIn(0, 100)
+        lastSliderInteractionMs = System.currentTimeMillis()
+        if (clamped > 0) {
+            lastNonZeroVolumePct = clamped
+        }
+        uiState.value = uiState.value.copy(
+            volumePercent = clamped,
+            volumeMuted = clamped == 0
+        )
+        val am = getSystemService(AudioManager::class.java) ?: return
+        val maxVol = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+        val targetVol = ((clamped / 100f) * maxVol).roundToInt().coerceIn(0, maxVol)
+        runCatching {
+            am.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0)
+        }
+    }
+
+    private fun toggleVolumeMute() {
+        val currentlyMuted = uiState.value.volumeMuted || uiState.value.volumePercent == 0
+        if (currentlyMuted) {
+            setVolumePercent(lastNonZeroVolumePct.coerceIn(15, 100))
+        } else {
+            setVolumePercent(0)
         }
     }
 

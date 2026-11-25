@@ -42,6 +42,9 @@ data class GameDeckUiState(
     val profileAutoMode: Boolean = true,
     val rrModes: List<Int> = emptyList(),
     val selectedRrHz: Int? = null,
+    val brightnessPercent: Int = 50,
+    val volumePercent: Int = 50,
+    val volumeMuted: Boolean = false,
     val dndEnabled: Boolean = false,
     val quickApps: List<GameDeckQuickApp> = emptyList()
 )
