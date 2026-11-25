@@ -74,8 +74,8 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         private const val NOTIFICATION_ID = 4046
         private const val GAME_STALE_GRACE_MS = 10_000L
         private const val REOPEN_COOLDOWN_MS = 320L
-        private const val EXPANDED_HEIGHT_FRACTION = 0.90f
-        private const val EXPANDED_MAX_HEIGHT_DP = 740f
+        private const val EXPANDED_HEIGHT_FRACTION = 0.76f
+        private const val EXPANDED_MAX_HEIGHT_DP = 336f
         private const val COLLAPSED_WIDTH_DP = 24f
         private const val COLLAPSED_HEIGHT_DP = 72f
         private const val EDGE_MARGIN_DP = 12f
@@ -748,8 +748,8 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         val margin = (EDGE_MARGIN_DP * density).roundToInt()
         val halfScreen = displayMetrics.heightPixels / 2f
         val panelHeightPx = (displayMetrics.heightPixels * EXPANDED_HEIGHT_FRACTION)
-            .coerceAtMost(EXPANDED_MAX_HEIGHT_DP * density)
-            .coerceAtMost((displayMetrics.heightPixels - 16f * density).coerceAtLeast(280f * density))
+            .coerceIn(288f * density, EXPANDED_MAX_HEIGHT_DP * density)
+            .coerceAtMost((displayMetrics.heightPixels - 28f * density).coerceAtLeast(260f * density))
         val panelWidthPx = (DECK_TOTAL_WIDTH_DP * density)
             .coerceAtMost((displayMetrics.widthPixels - 24f * density).coerceAtLeast(320f * density))
         val maxOffset = if (expandedWindow) {

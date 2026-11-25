@@ -17,6 +17,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -49,6 +50,7 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearWavyProgressIndicator
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -57,6 +59,7 @@ import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.ToggleButtonSize
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
@@ -89,7 +92,7 @@ import kotlin.math.abs
 import kotlinx.coroutines.delay
 
 internal const val DECK_RAIL_WIDTH_DP = 66f
-internal const val DECK_RAIL_GAP_DP = 10f
+internal const val DECK_RAIL_GAP_DP = 8f
 internal const val DECK_CARD_WIDTH_DP = 376f
 internal const val DECK_TOTAL_WIDTH_DP = DECK_RAIL_WIDTH_DP + DECK_RAIL_GAP_DP + DECK_CARD_WIDTH_DP
 
@@ -638,30 +641,32 @@ private fun DashboardDeckContent(
         "Menunggu frame"
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(7.dp)
-    ) {
-        DashboardTopRow(state)
-        PerformanceHero(
-            state = state,
-            fpsColor = fpsColor,
-            frametimeText = frametimeText
-        )
-        ProfileSection(
-            state = state,
-            onProfileSelected = onProfileSelected,
-            onAutoModeToggle = onAutoModeToggle
-        )
-        RefreshRateSection(
-            modes = state.rrModes,
-            selectedHz = state.selectedRrHz,
-            liveHz = state.targetHz,
-            onSelect = onRefreshRateSelected
-        )
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            DashboardTopRow(state)
+            PerformanceHero(
+                state = state,
+                fpsColor = fpsColor,
+                frametimeText = frametimeText
+            )
+            ProfileSection(
+                state = state,
+                onProfileSelected = onProfileSelected,
+                onAutoModeToggle = onAutoModeToggle
+            )
+            RefreshRateSection(
+                modes = state.rrModes,
+                selectedHz = state.selectedRrHz,
+                liveHz = state.targetHz,
+                onSelect = onRefreshRateSelected
+            )
+        }
     }
 }
 
@@ -782,7 +787,7 @@ private fun PerformanceHero(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -798,8 +803,8 @@ private fun PerformanceHero(
                     Text(
                         text = if (fps > 0) fps.toString() else "--",
                         style = MaterialTheme.typography.displaySmall.copy(
-                            fontSize = 32.sp,
-                            lineHeight = 34.sp,
+                            fontSize = 28.sp,
+                            lineHeight = 30.sp,
                             fontWeight = FontWeight.Black
                         ),
                         color = fpsColor,
@@ -829,7 +834,7 @@ private fun PerformanceHero(
             Spacer(modifier = Modifier.width(12.dp))
             Column(
                 modifier = Modifier.width(136.dp),
-                verticalArrangement = Arrangement.spacedBy(7.dp)
+                verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 MiniMetric(
                     label = "CPU",
@@ -897,7 +902,7 @@ private fun ProfileSection(
     val scheme = MaterialTheme.colorScheme
     val autoMode = state.profileAutoMode
 
-    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -920,7 +925,7 @@ private fun ProfileSection(
         deckProfileOptions.chunked(2).forEach { rowOptions ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 rowOptions.forEach { option ->
                     val selected = !autoMode &&
@@ -934,7 +939,10 @@ private fun ProfileSection(
                         },
                         enabled = !autoMode,
                         buttonSize = ToggleButtonSize.ExtraSmall,
-                        modifier = Modifier.weight(1f)
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(32.dp)
                     ) {
                         Text(
                             text = option.label,
@@ -953,7 +961,10 @@ private fun ProfileSection(
             checked = autoMode,
             onCheckedChange = { onAutoModeToggle() },
             buttonSize = ToggleButtonSize.ExtraSmall,
-            modifier = Modifier.fillMaxWidth()
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(34.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1034,7 +1045,7 @@ private fun RefreshRateSection(
         }
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -1118,8 +1129,9 @@ private fun RrToggle(
             if (checked) onClick()
         },
         buttonSize = ToggleButtonSize.ExtraSmall,
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
         shapes = connectedShapes(index, lastIndex),
-        modifier = modifier
+        modifier = modifier.height(30.dp)
     ) {
         Text(
             text = label,
