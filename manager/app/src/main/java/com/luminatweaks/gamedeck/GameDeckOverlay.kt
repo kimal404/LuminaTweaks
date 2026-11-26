@@ -33,6 +33,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -125,6 +127,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.ripple
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
@@ -164,6 +168,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -211,6 +216,8 @@ internal const val DECK_RAIL_GAP_DP = 10f
 internal const val DECK_CARD_WIDTH_DP = 354f
 internal const val DECK_TOTAL_WIDTH_DP = DECK_RAIL_WIDTH_DP + DECK_RAIL_GAP_DP + DECK_CARD_WIDTH_DP
 internal const val MAX_DECK_QUICK_APPS = 8
+private val ZENITH_THUMB_RADIUS = 22.dp
+private val ZENITH_TAP_SLOP = 12.dp
 
 private data class DeckProfileOption(
     val shortLabel: String,
@@ -3417,7 +3424,7 @@ private fun RefreshRateCard(
 }
 
 @Composable
-private fun ExpressiveLinearSlider(
+private fun DeckZenithSlider(
     value: Int,
     min: Int,
     max: Int,
@@ -3426,139 +3433,70 @@ private fun ExpressiveLinearSlider(
     modifier: Modifier = Modifier,
     enabled: Boolean = true
 ) {
-    val scheme = MaterialTheme.colorScheme
-    var isDragging by remember { mutableStateOf(false) }
-
-    val handleWidth by animateDpAsState(
-        targetValue = if (isDragging) 10.dp else 6.dp,
-        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium),
-        label = "md3eSliderHandleWidth"
-    )
-    val handleScaleY by animateFloatAsState(
-        targetValue = if (isDragging) 1.2f else 1f,
-        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium),
-        label = "md3eSliderHandleScaleY"
-    )
-
+    val haptic = LocalHapticFeedback.current
     val span = (max - min).coerceAtLeast(1)
-    val fraction = ((value - min).toFloat() / span.toFloat()).coerceIn(0f, 1f)
-
-    fun emitFraction(rawFraction: Float, commit: Boolean) {
-        val clamped = rawFraction.coerceIn(0f, 1f)
-        val mapped = (min + clamped * span).roundToInt().coerceIn(min, max)
-        onValueChange(mapped, commit)
+    var lastTick by remember { mutableIntStateOf(Int.MIN_VALUE) }
+    var latestValue by remember { mutableIntStateOf(value) }
+    LaunchedEffect(value) {
+        latestValue = value
     }
-
-    val gestureModifier = if (enabled) {
-        Modifier
-            .pointerInput(min, max) {
-                detectTapGestures(
-                    onPress = { offset ->
-                        isDragging = true
-                        emitFraction(offset.x / size.width.toFloat().coerceAtLeast(1f), false)
-                        val released = tryAwaitRelease()
-                        isDragging = false
-                        if (released) {
-                            emitFraction(offset.x / size.width.toFloat().coerceAtLeast(1f), true)
-                        }
-                    }
-                )
-            }
-            .pointerInput(min, max) {
-                var lastFraction = fraction
-                detectHorizontalDragGestures(
-                    onDragStart = { offset ->
-                        isDragging = true
-                        lastFraction = offset.x / size.width.toFloat().coerceAtLeast(1f)
-                        emitFraction(lastFraction, false)
-                    },
-                    onDragEnd = {
-                        isDragging = false
-                        emitFraction(lastFraction, true)
-                    },
-                    onDragCancel = {
-                        isDragging = false
-                        emitFraction(lastFraction, true)
-                    },
-                    onHorizontalDrag = { change, _ ->
-                        change.consume()
-                        lastFraction = change.position.x / size.width.toFloat().coerceAtLeast(1f)
-                        emitFraction(lastFraction, false)
-                    }
-                )
-            }
-    } else {
-        Modifier
-    }
-
-    BoxWithConstraints(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(36.dp)
-            .then(gestureModifier),
-        contentAlignment = Alignment.CenterStart
-    ) {
-        val totalWidth = maxWidth
-        val reservedForHandle = handleWidth + 8.dp
-        val trackAvailable = (totalWidth - reservedForHandle).coerceAtLeast(0.dp)
-        val activeWidth = trackAvailable * fraction
-        val inactiveWidth = trackAvailable * (1f - fraction)
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .width(activeWidth)
-                    .height(20.dp)
-                    .clip(
-                        RoundedCornerShape(
-                            topStart = 12.dp,
-                            bottomStart = 12.dp,
-                            topEnd = 4.dp,
-                            bottomEnd = 4.dp
-                        )
+            .pointerInput(enabled, min, max) {
+                if (!enabled) return@pointerInput
+                awaitEachGesture {
+                    val down = awaitFirstDown(
+                        requireUnconsumed = false,
+                        pass = PointerEventPass.Main
                     )
-                    .background(accentColor)
-            )
-
-            Box(
-                modifier = Modifier
-                    .padding(horizontal = 4.dp)
-                    .width(handleWidth)
-                    .height(32.dp)
-                    .graphicsLayer { scaleY = handleScaleY }
-                    .clip(CircleShape)
-                    .background(accentColor)
-            )
-
-            Box(
-                modifier = Modifier
-                    .width(inactiveWidth)
-                    .height(20.dp)
-                    .clip(
-                        RoundedCornerShape(
-                            topStart = 4.dp,
-                            bottomStart = 4.dp,
-                            topEnd = 12.dp,
-                            bottomEnd = 12.dp
-                        )
-                    )
-                    .background(scheme.surfaceContainerHighest),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                if (inactiveWidth >= 10.dp) {
-                    Box(
-                        modifier = Modifier
-                            .padding(end = 6.dp)
-                            .size(4.dp)
-                            .clip(CircleShape)
-                            .background(scheme.onSurfaceVariant.copy(alpha = 0.65f))
-                    )
+                    val reach = ZENITH_THUMB_RADIUS.toPx()
+                    val usable = size.width - reach * 2f
+                    if (usable <= 0f) return@awaitEachGesture
+                    val fraction = ((down.position.x - reach) / usable).coerceIn(0f, 1f)
+                    val tapped = (min + fraction * span).roundToInt().coerceIn(min, max)
+                    val slop = ZENITH_TAP_SLOP.toPx()
+                    var dragged = false
+                    while (true) {
+                        val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id }
+                            ?: break
+                        if (!change.pressed) break
+                        if ((change.position - down.position).getDistance() > slop) {
+                            dragged = true
+                        }
+                    }
+                    if (!dragged) {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onValueChange(tapped, false)
+                        onValueChange(tapped, true)
+                    }
                 }
             }
-        }
+    ) {
+        Slider(
+            value = value.toFloat(),
+            onValueChange = { raw ->
+                val mapped = raw.roundToInt().coerceIn(min, max)
+                if (mapped != lastTick) {
+                    lastTick = mapped
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                }
+                latestValue = mapped
+                onValueChange(mapped, false)
+            },
+            onValueChangeFinished = {
+                onValueChange(latestValue, true)
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = enabled,
+            valueRange = min.toFloat()..max.toFloat(),
+            colors = SliderDefaults.colors(
+                thumbColor = accentColor,
+                activeTrackColor = accentColor,
+                activeTickColor = accentColor,
+                inactiveTrackColor = accentColor.copy(alpha = 0.24f)
+            )
+        )
     }
 }
 
@@ -3573,9 +3511,25 @@ private fun BrightnessVolumeCard(
     interactive: Boolean = true
 ) {
     val scheme = MaterialTheme.colorScheme
-    val effectiveVol = if (volumeMuted) 0 else volumePercent
-    val brightnessFraction = (brightnessPercent / 100f).coerceIn(0.05f, 1f)
-    val volumeFraction = (effectiveVol / 100f).coerceIn(0f, 1f)
+    var brightnessDragging by remember { mutableStateOf(false) }
+    var brightnessLocal by remember { mutableIntStateOf(brightnessPercent.coerceIn(5, 100)) }
+    LaunchedEffect(brightnessPercent) {
+        if (!brightnessDragging) {
+            brightnessLocal = brightnessPercent.coerceIn(5, 100)
+        }
+    }
+    var volumeDragging by remember { mutableStateOf(false) }
+    var volumeLocal by remember {
+        mutableIntStateOf(if (volumeMuted) 0 else volumePercent.coerceIn(0, 100))
+    }
+    LaunchedEffect(volumePercent, volumeMuted) {
+        if (!volumeDragging) {
+            volumeLocal = if (volumeMuted) 0 else volumePercent.coerceIn(0, 100)
+        }
+    }
+
+    val brightnessFraction = (brightnessLocal / 100f).coerceIn(0.05f, 1f)
+    val volumeFraction = (volumeLocal / 100f).coerceIn(0f, 1f)
     val brightnessIcon = when {
         brightnessFraction < 0.33f -> Icons.Rounded.BrightnessLow
         brightnessFraction < 0.66f -> Icons.Rounded.BrightnessMedium
@@ -3610,7 +3564,7 @@ private fun BrightnessVolumeCard(
                         Icon(
                             imageVector = brightnessIcon,
                             contentDescription = "Brightness",
-                            tint = scheme.primary,
+                            tint = scheme.tertiary,
                             modifier = Modifier.size(20.dp)
                         )
                         Text(
@@ -3629,26 +3583,30 @@ private fun BrightnessVolumeCard(
                     }
                     Spacer(modifier = Modifier.weight(1f))
                     Text(
-                        text = "$brightnessPercent%",
+                        text = "$brightnessLocal%",
                         style = TextStyle(
                             fontSize = 13.sp,
                             lineHeight = 16.sp,
                             fontWeight = FontWeight.Bold,
                             platformStyle = PlatformTextStyle(includeFontPadding = false)
                         ),
-                        color = scheme.primary,
+                        color = scheme.tertiary,
                         maxLines = 1,
                         softWrap = false,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                ExpressiveLinearSlider(
-                    value = brightnessPercent,
+                DeckZenithSlider(
+                    value = brightnessLocal,
                     min = 5,
                     max = 100,
-                    accentColor = scheme.primary,
+                    accentColor = scheme.tertiary,
                     enabled = interactive,
-                    onValueChange = { pct, commit -> onBrightnessChanged(pct, commit) }
+                    onValueChange = { pct, commit ->
+                        brightnessDragging = !commit
+                        brightnessLocal = pct
+                        onBrightnessChanged(pct, commit)
+                    }
                 )
             }
 
@@ -3669,7 +3627,7 @@ private fun BrightnessVolumeCard(
                         Icon(
                             imageVector = volumeIcon,
                             contentDescription = "Suara",
-                            tint = if (volumeMuted || effectiveVol == 0) scheme.error else scheme.tertiary,
+                            tint = if (volumeMuted || volumeLocal == 0) scheme.error else scheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
                         Text(
@@ -3688,26 +3646,30 @@ private fun BrightnessVolumeCard(
                     }
                     Spacer(modifier = Modifier.weight(1f))
                     Text(
-                        text = "$effectiveVol%",
+                        text = "$volumeLocal%",
                         style = TextStyle(
                             fontSize = 13.sp,
                             lineHeight = 16.sp,
                             fontWeight = FontWeight.Bold,
                             platformStyle = PlatformTextStyle(includeFontPadding = false)
                         ),
-                        color = if (volumeMuted || effectiveVol == 0) scheme.error else scheme.tertiary,
+                        color = if (volumeMuted || volumeLocal == 0) scheme.error else scheme.primary,
                         maxLines = 1,
                         softWrap = false,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                ExpressiveLinearSlider(
-                    value = effectiveVol,
+                DeckZenithSlider(
+                    value = volumeLocal,
                     min = 0,
                     max = 100,
-                    accentColor = scheme.tertiary,
+                    accentColor = scheme.primary,
                     enabled = interactive,
-                    onValueChange = { pct, _ -> onVolumeChanged(pct) }
+                    onValueChange = { pct, commit ->
+                        volumeDragging = !commit
+                        volumeLocal = pct
+                        onVolumeChanged(pct)
+                    }
                 )
             }
         }
@@ -4103,8 +4065,8 @@ private fun FloatingHudDeckCard(
                         checkedIconColor = scheme.primary,
                         uncheckedThumbColor = scheme.onSurfaceVariant,
                         uncheckedTrackColor = scheme.surfaceContainerHighest,
-                        uncheckedIconColor = scheme.onSurfaceVariant,
-                        uncheckedBorderColor = scheme.outline.copy(alpha = 0.4f)
+                        uncheckedIconColor = scheme.surface,
+                        uncheckedBorderColor = scheme.outline.copy(alpha = 0.5f)
                     )
                 )
             }

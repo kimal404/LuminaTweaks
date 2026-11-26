@@ -342,7 +342,9 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                 if (gameActive && !wasGameActive) {
                     manualOverride = null
                 }
-                if (!gameActive && wasGameActive && manualOverride != true && !profileAutoMode) {
+                if (!gameActive && manualOverride != true && !profileAutoMode &&
+                    lastGameSeenMs > 0L && now - lastGameSeenMs > GAME_STALE_GRACE_MS
+                ) {
                     profileAutoMode = true
                     withContext(Dispatchers.IO) { DaemonManager.clearProfileOverride() }
                 }
@@ -662,7 +664,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
 
     private suspend fun sampleRootLoad(): Pair<Int, Int>? {
         val now = System.currentTimeMillis()
-        if (lastRootLoadMs > 0L && now - lastRootLoadMs < ROOT_LOAD_INTERVAL_MS) {
+        if (rootPrevTotal > 0L && now - lastRootLoadMs < ROOT_LOAD_INTERVAL_MS) {
             return if (lastRootCpu > 0 || lastRootGpu > 0) lastRootCpu to lastRootGpu else null
         }
         lastRootLoadMs = now
@@ -1775,8 +1777,8 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             localizedText("Siaga · menunggu sesi game", "Standby · waiting for game session")
         }
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("Lumina Game Deck")
+            .setSmallIcon(R.drawable.ic_lumina_mono)
+            .setContentTitle("Game Deck")
             .setContentText(status)
             .setSubText("LuminaTweaks")
             .setContentIntent(openIntent)
@@ -1794,7 +1796,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         val manager = getSystemService(NotificationManager::class.java) ?: return
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Lumina Game Deck",
+            "Game Deck",
             NotificationManager.IMPORTANCE_LOW
         ).apply {
             setShowBadge(false)

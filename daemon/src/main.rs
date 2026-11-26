@@ -65,6 +65,7 @@ const LEGACY_PROFILE_FILE_PATH: &str = "/data/local/tmp/lumina.profile";
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 const CONFIG_FALLBACK_INTERVAL: Duration = Duration::from_secs(2);
 const PERFORMANCE_GUARD_RECOVER_AFTER: Duration = Duration::from_secs(10);
+const FOCUS_RELEASE_GRACE: Duration = Duration::from_secs(12);
 const LEGACY_PROFILE_STATE_PATH: &str = "/data/adb/.config/lumina/profile.conf";
 
 extern "C" fn handle_signal(_: i32) {
@@ -768,7 +769,14 @@ fn main() {
                 .as_deref()
                 .map(|pkg| detector::pid_matches_package(died.pid, pkg))
                 .unwrap_or(false);
-            let confirmed_dead = died.pid <= 0 || main_proc_gone || died_is_main_pid;
+            let target_alive = runtime.target_game_pid > 0
+                && detector::process_exists(runtime.target_game_pid)
+                && active_pkg
+                    .as_deref()
+                    .map(|pkg| detector::pid_matches_package(runtime.target_game_pid, pkg))
+                    .unwrap_or(false);
+            let confirmed_dead = !target_alive
+                && (died.pid <= 0 || main_proc_gone || died_is_main_pid);
 
             if matches_target && confirmed_dead {
                 log!(
@@ -819,13 +827,6 @@ fn main() {
             (focus, _) => (focus, false),
         };
         let active_pid = if focus_from_fallback { 0 } else { active_pid };
-        let launcher_focus = binder_push
-            && screen_awake
-            && binder_focus
-                .as_deref()
-                .map(detector::is_launcher_package)
-                .unwrap_or(false);
-        let focus_released = binder_push && screen_awake && binder_focus.is_none();
         let focused = if screen_awake {
             match binder_focus {
                 Some(package) if is_app_enabled(&package) => {
@@ -849,21 +850,11 @@ fn main() {
         let focused = focused
             .map(|package| detector::sanitize_pkg_name(&package).to_string())
             .filter(|package| !package.is_empty());
-
-        if runtime.active_target_pkg.is_some() && (launcher_focus || focus_released) {
-            runtime.reset_to_balance_triggered(
-                if launcher_focus {
-                    "Launcher focus"
-                } else {
-                    "Foreground released"
-                },
-                &mut binder_client,
-            );
-            fps_monitor.observe(None, false, 0);
-            TextureController::sync_config(None);
-            last_pkg_for_texture = None;
-            fallback_blocked_until = Instant::now() + Duration::from_millis(1500);
-        }
+        let transient_focus = screen_awake
+            && focused
+                .as_deref()
+                .map(detector::is_ignored_package)
+                .unwrap_or(true);
 
         let current_target = if is_master_enabled() {
             let newly_focused_target = focused.as_deref().filter(|pkg| is_app_enabled(pkg));
@@ -893,14 +884,21 @@ fn main() {
 
                 if let Some(pid) = verified_pid {
                     runtime.target_game_pid = pid;
-                    if is_app_enabled(saved_pkg) {
+                    if !is_app_enabled(saved_pkg) {
+                        runtime.active_target_pkg = None;
+                        runtime.target_game_pid = 0;
+                        runtime.left_foreground_at = None;
+                        None
+                    } else if transient_focus {
+                        runtime.left_foreground_at = None;
+                        Some(saved_pkg.clone())
+                    } else {
                         if runtime.left_foreground_at.is_none() {
-                            log!("[SYSTEM] Focus lost -> {} grace 3s", saved_pkg);
+                            log!("[SYSTEM] Focus lost -> {} grace {:?}", saved_pkg, FOCUS_RELEASE_GRACE);
                             runtime.left_foreground_at = Some(Instant::now());
                         }
-
                         if let Some(left_time) = runtime.left_foreground_at {
-                            if left_time.elapsed() < Duration::from_secs(3) {
+                            if left_time.elapsed() < FOCUS_RELEASE_GRACE {
                                 Some(saved_pkg.clone())
                             } else {
                                 log!("[SYSTEM] Grace expired -> {}", saved_pkg);
@@ -912,32 +910,6 @@ fn main() {
                         } else {
                             None
                         }
-                    } else {
-                        runtime.active_target_pkg = None;
-                        runtime.target_game_pid = 0;
-                        runtime.left_foreground_at = None;
-                        None
-                    }
-                } else if detector::process_exists(runtime.target_game_pid)
-                    && detector::pid_matches_package(runtime.target_game_pid, saved_pkg)
-                {
-                    if runtime.left_foreground_at.is_none() {
-                        log!("[SYSTEM] Focus lost -> {} grace 3s", saved_pkg);
-                        runtime.left_foreground_at = Some(Instant::now());
-                    }
-
-                    if let Some(left_time) = runtime.left_foreground_at {
-                        if left_time.elapsed() < Duration::from_secs(3) {
-                            Some(saved_pkg.clone())
-                        } else {
-                            log!("[SYSTEM] Grace expired -> {}", saved_pkg);
-                            runtime.active_target_pkg = None;
-                            runtime.target_game_pid = 0;
-                            runtime.left_foreground_at = None;
-                            None
-                        }
-                    } else {
-                        None
                     }
                 } else {
                     log!("[SYSTEM] Process {} gone -> BALANCED", saved_pkg);
