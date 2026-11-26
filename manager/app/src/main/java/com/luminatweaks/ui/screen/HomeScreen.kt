@@ -33,8 +33,6 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -73,20 +71,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.ErrorOutline
-import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.HourglassEmpty
-import androidx.compose.material.icons.rounded.MenuBook
-import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Memory
+import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Smartphone
+import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -115,10 +110,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
@@ -236,8 +230,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
     var currentProfile by remember {
         mutableStateOf(DaemonManager.readCurrentProfile() ?: unknownLabel)
     }
-    var isRootGranted by remember { mutableStateOf(false) }
-    var selinuxStatus by remember { mutableStateOf("Unknown") }
     var showRebootDialog by remember { mutableStateOf(false) }
     var isScreenResumed by remember { mutableStateOf(true) }
     var resumeToken by remember { mutableIntStateOf(0) }
@@ -279,8 +271,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
         withContext(Dispatchers.IO) {
             val initialTemp = DeviceUtil.getBatteryTemperature(context)
             val initialStatus = DaemonManager.getStatus()
-            val initialRoot = RootUtil.checkRootAccess()
-            val initialSelinux = DeviceUtil.getSelinuxStatus()
 
             withContext(Dispatchers.Main) {
                 batteryTemp = initialTemp
@@ -288,8 +278,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                 if (initialStatus.pid != null) {
                     currentProfile = initialStatus.profile
                 }
-                isRootGranted = initialRoot
-                selinuxStatus = initialSelinux
                 isChecking = false
             }
         }
@@ -321,12 +309,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
         withContext(Dispatchers.IO) {
             while (pagerState.isScrollInProgress && isActive) {
                 delay(100L)
-            }
-            val refreshedRoot = RootUtil.checkRootAccess()
-            val refreshedSelinux = DeviceUtil.getSelinuxStatus()
-            withContext(Dispatchers.Main) {
-                isRootGranted = refreshedRoot
-                selinuxStatus = refreshedSelinux
             }
 
             var fallbackChecks = 0
@@ -498,8 +480,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             currentProfile = currentProfile,
                             kernelVersion = kernelVersion,
                             deviceModel = deviceModel,
-                            isRootGranted = isRootGranted,
-                            selinuxStatus = selinuxStatus,
                             onRequestRebootDialog = { showRebootDialog = true },
                             onRestartDaemon = restartAction
                         )
@@ -573,8 +553,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             currentProfile = currentProfile,
                             kernelVersion = kernelVersion,
                             deviceModel = deviceModel,
-                            isRootGranted = isRootGranted,
-                            selinuxStatus = selinuxStatus,
                             onRequestRebootDialog = { showRebootDialog = true },
                             onRestartDaemon = restartAction
                         )
@@ -734,8 +712,8 @@ fun HomeDashboardContent(
     currentProfile: String,
     kernelVersion: String,
     deviceModel: String,
-    isRootGranted: Boolean,
-    selinuxStatus: String,
+    isRootGranted: Boolean = false,
+    selinuxStatus: String = "",
     onRequestRebootDialog: () -> Unit,
     onRestartDaemon: suspend () -> Unit,
     onNavigateToPersonalisasi: () -> Unit = {}
@@ -912,37 +890,45 @@ fun HomeDashboardContent(
                 )
             }
 
-            item(key = "metrics") {
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    HomeHardwareTile(
-                        label = stringResource(R.string.home_thermal),
-                        value = batteryTemp,
-                        icon = Icons.Rounded.Thermostat,
-                        highlight = false,
-                        modifier = Modifier.weight(1f)
-                    )
-                    HomeHardwareTile(
-                        label = stringResource(R.string.home_profile),
-                        value = currentProfile,
-                        icon = Icons.Rounded.Speed,
-                        highlight = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
             item(key = "device") {
                 Spacer(modifier = Modifier.height(16.dp))
-                AZenithDeviceInfoCard(
-                    kernelVersion = kernelVersion,
-                    deviceModel = deviceModel,
-                    isRootGranted = isRootGranted,
-                    selinuxStatus = selinuxStatus
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    ConnectedCardRow(
+                        icon = Icons.Rounded.Thermostat,
+                        title = "Suhu",
+                        subtitle = batteryTemp,
+                        position = ContainerPosition.Top
+                    )
+                    ConnectedCardRow(
+                        icon = Icons.Rounded.Speed,
+                        title = stringResource(R.string.home_profile),
+                        subtitle = currentProfile,
+                        position = ContainerPosition.Middle,
+                        iconContainer = MaterialTheme.colorScheme.secondaryContainer,
+                        iconTint = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                    ConnectedCardRow(
+                        icon = Icons.Rounded.DeveloperBoard,
+                        title = stringResource(R.string.home_manager_version),
+                        subtitle = stringResource(
+                            R.string.home_version_release_format,
+                            com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")
+                        ),
+                        position = ContainerPosition.Middle
+                    )
+                    ConnectedCardRow(
+                        icon = Icons.Rounded.Memory,
+                        title = stringResource(R.string.home_kernel_version),
+                        subtitle = kernelVersion,
+                        position = ContainerPosition.Middle
+                    )
+                    ConnectedCardRow(
+                        icon = Icons.Rounded.Smartphone,
+                        title = stringResource(R.string.home_device_model),
+                        subtitle = deviceModel,
+                        position = ContainerPosition.Bottom
+                    )
+                }
             }
 
             item(key = "support") {
@@ -964,147 +950,6 @@ fun HomeDashboardContent(
                         title = stringResource(R.string.home_learn_more),
                         subtitle = stringResource(R.string.home_learn_more_desc),
                         onClick = { uriHandler.openUri("https://github.com/kimal404/LuminaTweaks") }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AZenithDeviceInfoCard(
-    kernelVersion: String,
-    deviceModel: String,
-    isRootGranted: Boolean,
-    selinuxStatus: String
-) {
-    val haptic = LocalHapticFeedback.current
-    val colorScheme = MaterialTheme.colorScheme
-    var isExpanded by remember { mutableStateOf(false) }
-
-    val rotationAngle by animateFloatAsState(
-        targetValue = if (isExpanded) 180f else 0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "expandArrowRotation"
-    )
-
-    val totalRows = if (isExpanded) 5 else 3
-    val innerRowColor = colorScheme.surfaceVariant.copy(alpha = 0.5f)
-    val infoInteraction = remember { MutableInteractionSource() }
-    val infoPressScale = pressScale(infoInteraction, 0.98f)
-
-    Surface(
-        shape = RoundedCornerShape(26.dp),
-        color = colorScheme.surfaceColorAtElevation(1.dp),
-        onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-            isExpanded = !isExpanded
-        },
-        interactionSource = infoInteraction,
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(infoPressScale)
-    ) {
-        Column(
-            modifier = Modifier
-                .padding(vertical = 16.dp)
-                .animateContentSize(
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioLowBouncy,
-                        stiffness = Spring.StiffnessLow
-                    )
-                )
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                HomeSquircleIcon(icon = Icons.Outlined.Info)
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = stringResource(R.string.aosp_section_device),
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = colorScheme.onSurface
-                )
-                Icon(
-                    imageVector = Icons.Rounded.ExpandMore,
-                    contentDescription = if (isExpanded) {
-                        stringResource(R.string.aosp_action_collapse)
-                    } else {
-                        stringResource(R.string.aosp_action_expand)
-                    },
-                    tint = colorScheme.onSurfaceVariant,
-                    modifier = Modifier.graphicsLayer {
-                        rotationZ = rotationAngle
-                    }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Column(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
-            ) {
-                HomeInfoRow(
-                    index = 0,
-                    count = totalRows,
-                    icon = Icons.Rounded.DeveloperBoard,
-                    title = stringResource(R.string.home_manager_version),
-                    subtitle = stringResource(
-                        R.string.home_version_release_format,
-                        com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")
-                    ),
-                    containerColor = innerRowColor,
-                    outerRadius = 18.dp
-                )
-                HomeInfoRow(
-                    index = 1,
-                    count = totalRows,
-                    icon = Icons.Rounded.Memory,
-                    title = stringResource(R.string.home_kernel_version),
-                    subtitle = kernelVersion,
-                    containerColor = innerRowColor,
-                    outerRadius = 18.dp
-                )
-                HomeInfoRow(
-                    index = 2,
-                    count = totalRows,
-                    icon = Icons.Rounded.Smartphone,
-                    title = stringResource(R.string.home_device_model),
-                    subtitle = deviceModel,
-                    containerColor = innerRowColor,
-                    outerRadius = 18.dp
-                )
-
-                if (isExpanded) {
-                    HomeInfoRow(
-                        index = 3,
-                        count = totalRows,
-                        icon = Icons.Rounded.Security,
-                        title = stringResource(R.string.home_root_access),
-                        subtitle = stringResource(
-                            if (isRootGranted) R.string.home_root_granted else R.string.home_root_denied
-                        ),
-                        highlightSubtitle = isRootGranted,
-                        containerColor = innerRowColor,
-                        outerRadius = 18.dp
-                    )
-                    HomeInfoRow(
-                        index = 4,
-                        count = totalRows,
-                        icon = Icons.Rounded.Security,
-                        title = stringResource(R.string.home_selinux_status),
-                        subtitle = selinuxStatus,
-                        containerColor = innerRowColor,
-                        outerRadius = 18.dp
                     )
                 }
             }
@@ -1135,146 +980,6 @@ private fun HomeSquircleIcon(
             tint = tint,
             modifier = Modifier.size(22.dp)
         )
-    }
-}
-
-@Composable
-private fun HomeHardwareTile(
-    label: String,
-    value: String,
-    icon: ImageVector,
-    highlight: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: (() -> Unit)? = null
-) {
-    val colorScheme = MaterialTheme.colorScheme
-    val iconBoxBgColor by animateColorAsState(
-        targetValue = if (highlight) {
-            colorScheme.primaryContainer
-        } else {
-            colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        },
-        animationSpec = tween(350),
-        label = "homeTileBg"
-    )
-    val iconColor by animateColorAsState(
-        targetValue = if (highlight) {
-            colorScheme.onPrimaryContainer
-        } else {
-            colorScheme.onSurfaceVariant
-        },
-        animationSpec = tween(350),
-        label = "homeTileIcon"
-    )
-
-    Surface(
-        shape = RoundedCornerShape(26.dp),
-        color = colorScheme.surfaceColorAtElevation(1.dp),
-        modifier = modifier.then(
-            if (onClick != null) Modifier.clickable { onClick() } else Modifier
-        )
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(74.dp)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(iconBoxBgColor),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = iconColor,
-                    modifier = Modifier.size(32.dp)
-                )
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            Column(modifier = Modifier.padding(horizontal = 4.dp)) {
-                AnimatedContent(
-                    targetState = value,
-                    transitionSpec = {
-                        fadeIn(animationSpec = tween(180)) togetherWith fadeOut(animationSpec = tween(140))
-                    },
-                    label = "homeTileValue"
-                ) { animatedValue ->
-                    Text(
-                        text = animatedValue,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun HomeInfoRow(
-    index: Int,
-    count: Int,
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    highlightSubtitle: Boolean = false,
-    containerColor: Color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
-    outerRadius: Dp = 26.dp
-) {
-    val shape = connectedContainerShape(
-        index = index,
-        count = count,
-        outerRadius = outerRadius,
-        innerRadius = 4.dp
-    )
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(containerColor)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier.padding(end = 16.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            HomeSquircleIcon(icon = icon)
-        }
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(vertical = 8.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (highlightSubtitle) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
     }
 }
 
