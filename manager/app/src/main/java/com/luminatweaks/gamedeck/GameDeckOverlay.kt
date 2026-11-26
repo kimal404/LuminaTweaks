@@ -437,6 +437,7 @@ private fun GameDeckWorkspace(
     onOpenManager: () -> Unit
 ) {
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
+    LaunchedEffect(Unit) { pagerState.scrollToPage(0) }
     val coroutineScope = rememberCoroutineScope()
     var showAppPicker by remember { mutableStateOf(false) }
     var isWidgetEditorMounted by remember { mutableStateOf(false) }
@@ -953,7 +954,6 @@ private fun DeckCard(
                 )
                 else -> HorizontalPager(
                     state = pagerState,
-                    beyondViewportPageCount = 1,
                     modifier = Modifier.fillMaxSize(),
                     key = { it }
                 ) { page ->

@@ -707,6 +707,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             private var downRawY = 0f
             private var startEdgeY = 0
             private var gestureMode = 0 // 0 = undecided, 1 = expand, 2 = vertical drag
+            private var absorbGestureUntilUp = false
 
             override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
                 if (ev.actionMasked == MotionEvent.ACTION_OUTSIDE) {
@@ -716,7 +717,19 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                     return true
                 }
 
-                if (!isWindowExpandedState.value && !isCollapsing) {
+                if (isCollapsing) {
+                    if (ev.actionMasked == MotionEvent.ACTION_UP || ev.actionMasked == MotionEvent.ACTION_CANCEL) {
+                        absorbGestureUntilUp = false
+                        gestureMode = 0
+                    }
+                    return true
+                }
+
+                if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
+                    absorbGestureUntilUp = !isWindowExpandedState.value
+                }
+
+                if (absorbGestureUntilUp || !isWindowExpandedState.value) {
                     val density = resources.displayMetrics.density
                     val touchSlopPx = 8f * density
                     val swipeThresholdPx = 12f * density
@@ -773,6 +786,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                                 }
                             }
                             gestureMode = 0
+                            absorbGestureUntilUp = false
                             return true
                         }
                     }
