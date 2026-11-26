@@ -189,6 +189,8 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     private var lastSliderInteractionMs = 0L
     private var lastNonZeroVolumePct = 50
     private var brightnessApplyJob: Job? = null
+    private var lastValidFps = 0
+    private var lastValidFpsMs = 0L
     private var lastCpuPercent = 0
     private var lastGpuPercent = 0
     private var cachedRrModes: List<Int>? = null
@@ -449,7 +451,18 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     ): DeckSnapshot {
         val hz = readDisplayHz().coerceAtLeast(30)
         val rawFps = if (collectHeavy) (feed?.fps?.takeIf { it > 0f } ?: 0f) else 0f
-        val fps = if (rawFps > 0f) rawFps.roundToInt().coerceIn(1, hz) else 0
+        val nowSampleMs = System.currentTimeMillis()
+        val fps = if (rawFps > 0f) {
+            val rounded = rawFps.roundToInt().coerceIn(1, hz)
+            lastValidFps = rounded
+            lastValidFpsMs = nowSampleMs
+            rounded
+        } else if (lastValidFps > 0 && nowSampleMs - lastValidFpsMs <= 2_500L) {
+            lastValidFps.coerceIn(1, hz)
+        } else {
+            lastValidFps = 0
+            0
+        }
         val frametime = when {
             !collectHeavy -> 0f
             feed != null && feed.frametimeMs > 0f -> feed.frametimeMs
@@ -909,19 +922,14 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             focusFlags
         }
         params.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
-        params.gravity = Gravity.CENTER_VERTICAL or (if (isLeft) Gravity.LEFT else Gravity.RIGHT)
-        if (expandedWindow && isWidgetEditorOpen) {
+        if (expandedWindow) {
             params.gravity = Gravity.FILL
             params.x = 0
             params.y = 0
             params.width = WindowManager.LayoutParams.MATCH_PARENT
             params.height = WindowManager.LayoutParams.MATCH_PARENT
-        } else if (expandedWindow) {
-            params.x = (12f * density).roundToInt()
-            params.y = 0
-            params.width = panelWidthPx.roundToInt()
-            params.height = panelHeightPx.roundToInt()
         } else {
+            params.gravity = Gravity.CENTER_VERTICAL or (if (isLeft) Gravity.LEFT else Gravity.RIGHT)
             params.x = 0
             params.y = edgeYOffsetPx.coerceIn(-maxOffset, maxOffset)
             params.width = (COLLAPSED_WIDTH_DP * density).roundToInt()

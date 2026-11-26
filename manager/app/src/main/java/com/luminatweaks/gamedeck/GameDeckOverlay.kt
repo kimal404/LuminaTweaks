@@ -452,12 +452,12 @@ private fun GameDeckWorkspace(
             onWidgetEditorVisibilityChanged(true)
             isWidgetEditorMounted = true
             coroutineScope.launch {
-                delay(16L)
+                widgetEditorProgress.snapTo(0f)
                 widgetEditorProgress.animateTo(
                     targetValue = 1f,
                     animationSpec = spring(
-                        dampingRatio = 0.84f,
-                        stiffness = 380f
+                        dampingRatio = 0.86f,
+                        stiffness = 420f
                     )
                 )
             }
@@ -471,7 +471,7 @@ private fun GameDeckWorkspace(
                 widgetEditorProgress.animateTo(
                     targetValue = 0f,
                     animationSpec = tween(
-                        durationMillis = 220,
+                        durationMillis = 200,
                         easing = FastOutSlowInEasing
                     )
                 )
@@ -535,8 +535,20 @@ private fun GameDeckWorkspace(
     val editorP = widgetEditorProgress.value.coerceIn(0f, 1f)
 
     Box(modifier = Modifier.fillMaxSize()) {
-        val deckRowModifier = if (isWidgetEditorMounted) {
-            Modifier
+        Spacer(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(isWidgetEditorMounted) {
+                    detectTapGestures {
+                        if (!isWidgetEditorMounted) {
+                            onCollapse()
+                        }
+                    }
+                }
+        )
+
+        Row(
+            modifier = Modifier
                 .align(if (isLeft) Alignment.CenterStart else Alignment.CenterEnd)
                 .padding(
                     start = if (isLeft) 12.dp else 0.dp,
@@ -545,17 +557,11 @@ private fun GameDeckWorkspace(
                 .width(maxWorkspaceWidth)
                 .height(panelHeightDp)
                 .graphicsLayer {
-                    val s = 1f - 0.04f * editorP
+                    val s = 1f - 0.05f * editorP
                     scaleX = s
                     scaleY = s
-                    alpha = (1f - 1.45f * editorP).coerceIn(0f, 1f)
-                }
-        } else {
-            Modifier.fillMaxSize()
-        }
-
-        Row(
-            modifier = deckRowModifier,
+                    alpha = (1f - 2.4f * editorP).coerceIn(0f, 1f)
+                },
             horizontalArrangement = Arrangement.spacedBy(DECK_RAIL_GAP_DP.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1572,7 +1578,7 @@ private fun FullScreenWidgetEditorOverlay(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
-                    alpha = (p * 1.35f).coerceIn(0f, 1f)
+                    alpha = ((p - 0.10f) / 0.90f).coerceIn(0f, 1f)
                     val s = 0.93f + 0.07f * p
                     scaleX = s
                     scaleY = s
