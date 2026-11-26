@@ -439,27 +439,66 @@ private fun GameDeckWorkspace(
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
     val coroutineScope = rememberCoroutineScope()
     var showAppPicker by remember { mutableStateOf(false) }
-    var showWidgetEditor by remember { mutableStateOf(false) }
+    var isWidgetEditorMounted by remember { mutableStateOf(false) }
+    var isWidgetEditorClosing by remember { mutableStateOf(false) }
+    val widgetEditorProgress = remember { Animatable(0f) }
+
     LaunchedEffect(showAppPicker) {
         onAppPickerVisibilityChanged(showAppPicker)
     }
-    LaunchedEffect(showWidgetEditor) {
-        onWidgetEditorVisibilityChanged(showWidgetEditor)
+
+    val openWidgetEditor: () -> Unit = {
+        if (!isWidgetEditorMounted && !isWidgetEditorClosing) {
+            onWidgetEditorVisibilityChanged(true)
+            isWidgetEditorMounted = true
+            coroutineScope.launch {
+                delay(16L)
+                widgetEditorProgress.animateTo(
+                    targetValue = 1f,
+                    animationSpec = spring(
+                        dampingRatio = 0.84f,
+                        stiffness = 380f
+                    )
+                )
+            }
+        }
+    }
+
+    val closeWidgetEditor: () -> Unit = {
+        if (isWidgetEditorMounted && !isWidgetEditorClosing) {
+            isWidgetEditorClosing = true
+            coroutineScope.launch {
+                widgetEditorProgress.animateTo(
+                    targetValue = 0f,
+                    animationSpec = tween(
+                        durationMillis = 220,
+                        easing = FastOutSlowInEasing
+                    )
+                )
+                isWidgetEditorMounted = false
+                isWidgetEditorClosing = false
+                onWidgetEditorVisibilityChanged(false)
+            }
+        }
     }
 
     val isLeft = state.side == GameDeckSide.LEFT
-    val closeThreshold = with(LocalDensity.current) { 24.dp.toPx() }
-    val screenWidthDp = with(LocalDensity.current) {
-        LocalContext.current.resources.displayMetrics.widthPixels.toDp()
-    }
+    val density = LocalDensity.current
+    val closeThreshold = with(density) { 24.dp.toPx() }
+    val dm = LocalContext.current.resources.displayMetrics
+    val screenWidthDp = with(density) { dm.widthPixels.toDp() }
+    val screenHeightDp = with(density) { dm.heightPixels.toDp() }
     val maxWorkspaceWidth = (screenWidthDp - 24.dp).coerceAtLeast(320.dp)
+    val panelHeightDp = (screenHeightDp * 0.86f)
+        .coerceIn(316.dp, 348.dp)
+        .coerceAtMost((screenHeightDp - 20.dp).coerceAtLeast(280.dp))
     val cardWidth: Dp = (maxWorkspaceWidth - DECK_RAIL_WIDTH_DP.dp - DECK_RAIL_GAP_DP.dp)
         .coerceIn(260.dp, DECK_CARD_WIDTH_DP.dp)
 
     val handleTabSelect: (Int) -> Unit = { tab ->
-        if (showAppPicker || showWidgetEditor) {
+        if (showAppPicker || isWidgetEditorMounted) {
             showAppPicker = false
-            showWidgetEditor = false
+            closeWidgetEditor()
             coroutineScope.launch { pagerState.scrollToPage(tab) }
         } else if (pagerState.currentPage == tab) {
             onCollapse()
@@ -493,103 +532,136 @@ private fun GameDeckWorkspace(
         }
     }
 
-    if (showWidgetEditor) {
-        FullScreenWidgetEditorOverlay(
-            state = state,
-            onToggleWidget = onToggleDashboardWidget,
-            onMoveWidget = onMoveDashboardWidget,
-            onResetWidgets = onResetDashboardWidgets,
-            onDone = { showWidgetEditor = false }
-        )
-        return
-    }
+    val editorP = widgetEditorProgress.value.coerceIn(0f, 1f)
 
-    Row(
-        modifier = Modifier.fillMaxSize(),
-        horizontalArrangement = Arrangement.spacedBy(DECK_RAIL_GAP_DP.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (isLeft) {
-            DockRail(
-                modifier = railSwipeModifier,
-                selectedTab = if (showAppPicker) -1 else pagerState.targetPage,
-                isAddActive = showAppPicker,
-                opacity = state.opacity,
-                quickApps = state.quickApps,
-                onSelectTab = handleTabSelect,
-                onQuickAppClick = onQuickAppClick,
-                onAddAppClick = {
-                    showWidgetEditor = false
-                    showAppPicker = !showAppPicker
+    Box(modifier = Modifier.fillMaxSize()) {
+        val deckRowModifier = if (isWidgetEditorMounted) {
+            Modifier
+                .align(if (isLeft) Alignment.CenterStart else Alignment.CenterEnd)
+                .padding(
+                    start = if (isLeft) 12.dp else 0.dp,
+                    end = if (isLeft) 0.dp else 12.dp
+                )
+                .width(maxWorkspaceWidth)
+                .height(panelHeightDp)
+                .graphicsLayer {
+                    val s = 1f - 0.04f * editorP
+                    scaleX = s
+                    scaleY = s
+                    alpha = (1f - 0.50f * editorP).coerceIn(0f, 1f)
                 }
-            )
-            DeckCard(
-                state = state,
-                cardWidth = cardWidth,
-                pagerState = pagerState,
-                showAppPicker = showAppPicker,
-                onOpenWidgetEditor = { showWidgetEditor = true },
-                onCloseAppPicker = { showAppPicker = false },
-                onToggleQuickApp = onToggleQuickApp,
-                onProfileSelected = onProfileSelected,
-                onSetAutoMode = onSetAutoMode,
-                onRefreshRateSelected = onRefreshRateSelected,
-                onBrightnessChanged = onBrightnessChanged,
-                onVolumeChanged = onVolumeChanged,
-                onToggleMute = onToggleMute,
-                onMusicPlayPause = onMusicPlayPause,
-                onMusicNext = onMusicNext,
-                onMusicPrevious = onMusicPrevious,
-                onMusicSeek = onMusicSeek,
-                onOpenMusicApp = onOpenMusicApp,
-                onToggleKeepScreenOn = onToggleKeepScreenOn,
-                onToggleDnd = onToggleDnd,
-                onToggleAutoBrightnessLock = onToggleAutoBrightnessLock,
-                onToggleRotationLock = onToggleRotationLock,
-                onClearRam = onClearRam,
-                onTakeScreenshot = onTakeScreenshot,
-                onOpenManager = onOpenManager
-            )
         } else {
-            DeckCard(
+            Modifier.fillMaxSize()
+        }
+
+        Row(
+            modifier = deckRowModifier,
+            horizontalArrangement = Arrangement.spacedBy(DECK_RAIL_GAP_DP.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (isLeft) {
+                DockRail(
+                    modifier = railSwipeModifier,
+                    selectedTab = if (showAppPicker) -1 else pagerState.targetPage,
+                    isAddActive = showAppPicker,
+                    opacity = state.opacity,
+                    quickApps = state.quickApps,
+                    onSelectTab = handleTabSelect,
+                    onQuickAppClick = onQuickAppClick,
+                    onAddAppClick = {
+                        closeWidgetEditor()
+                        showAppPicker = !showAppPicker
+                    }
+                )
+                DeckCard(
+                    state = state,
+                    cardWidth = cardWidth,
+                    pagerState = pagerState,
+                    showAppPicker = showAppPicker,
+                    showWidgetEditor = false,
+                    onOpenWidgetEditor = openWidgetEditor,
+                    onCloseWidgetEditor = closeWidgetEditor,
+                    onCloseAppPicker = { showAppPicker = false },
+                    onToggleQuickApp = onToggleQuickApp,
+                    onProfileSelected = onProfileSelected,
+                    onSetAutoMode = onSetAutoMode,
+                    onRefreshRateSelected = onRefreshRateSelected,
+                    onBrightnessChanged = onBrightnessChanged,
+                    onVolumeChanged = onVolumeChanged,
+                    onToggleMute = onToggleMute,
+                    onMusicPlayPause = onMusicPlayPause,
+                    onMusicNext = onMusicNext,
+                    onMusicPrevious = onMusicPrevious,
+                    onMusicSeek = onMusicSeek,
+                    onOpenMusicApp = onOpenMusicApp,
+                    onToggleDashboardWidget = onToggleDashboardWidget,
+                    onResetDashboardWidgets = onResetDashboardWidgets,
+                    onMoveDashboardWidget = onMoveDashboardWidget,
+                    onToggleKeepScreenOn = onToggleKeepScreenOn,
+                    onToggleDnd = onToggleDnd,
+                    onToggleAutoBrightnessLock = onToggleAutoBrightnessLock,
+                    onToggleRotationLock = onToggleRotationLock,
+                    onClearRam = onClearRam,
+                    onTakeScreenshot = onTakeScreenshot,
+                    onOpenManager = onOpenManager
+                )
+            } else {
+                DeckCard(
+                    state = state,
+                    cardWidth = cardWidth,
+                    pagerState = pagerState,
+                    showAppPicker = showAppPicker,
+                    showWidgetEditor = false,
+                    onOpenWidgetEditor = openWidgetEditor,
+                    onCloseWidgetEditor = closeWidgetEditor,
+                    onCloseAppPicker = { showAppPicker = false },
+                    onToggleQuickApp = onToggleQuickApp,
+                    onProfileSelected = onProfileSelected,
+                    onSetAutoMode = onSetAutoMode,
+                    onRefreshRateSelected = onRefreshRateSelected,
+                    onBrightnessChanged = onBrightnessChanged,
+                    onVolumeChanged = onVolumeChanged,
+                    onToggleMute = onToggleMute,
+                    onMusicPlayPause = onMusicPlayPause,
+                    onMusicNext = onMusicNext,
+                    onMusicPrevious = onMusicPrevious,
+                    onMusicSeek = onMusicSeek,
+                    onOpenMusicApp = onOpenMusicApp,
+                    onToggleDashboardWidget = onToggleDashboardWidget,
+                    onResetDashboardWidgets = onResetDashboardWidgets,
+                    onMoveDashboardWidget = onMoveDashboardWidget,
+                    onToggleKeepScreenOn = onToggleKeepScreenOn,
+                    onToggleDnd = onToggleDnd,
+                    onToggleAutoBrightnessLock = onToggleAutoBrightnessLock,
+                    onToggleRotationLock = onToggleRotationLock,
+                    onClearRam = onClearRam,
+                    onTakeScreenshot = onTakeScreenshot,
+                    onOpenManager = onOpenManager
+                )
+                DockRail(
+                    modifier = railSwipeModifier,
+                    selectedTab = if (showAppPicker) -1 else pagerState.targetPage,
+                    isAddActive = showAppPicker,
+                    opacity = state.opacity,
+                    quickApps = state.quickApps,
+                    onSelectTab = handleTabSelect,
+                    onQuickAppClick = onQuickAppClick,
+                    onAddAppClick = {
+                        closeWidgetEditor()
+                        showAppPicker = !showAppPicker
+                    }
+                )
+            }
+        }
+
+        if (isWidgetEditorMounted) {
+            FullScreenWidgetEditorOverlay(
                 state = state,
-                cardWidth = cardWidth,
-                pagerState = pagerState,
-                showAppPicker = showAppPicker,
-                onOpenWidgetEditor = { showWidgetEditor = true },
-                onCloseAppPicker = { showAppPicker = false },
-                onToggleQuickApp = onToggleQuickApp,
-                onProfileSelected = onProfileSelected,
-                onSetAutoMode = onSetAutoMode,
-                onRefreshRateSelected = onRefreshRateSelected,
-                onBrightnessChanged = onBrightnessChanged,
-                onVolumeChanged = onVolumeChanged,
-                onToggleMute = onToggleMute,
-                onMusicPlayPause = onMusicPlayPause,
-                onMusicNext = onMusicNext,
-                onMusicPrevious = onMusicPrevious,
-                onMusicSeek = onMusicSeek,
-                onOpenMusicApp = onOpenMusicApp,
-                onToggleKeepScreenOn = onToggleKeepScreenOn,
-                onToggleDnd = onToggleDnd,
-                onToggleAutoBrightnessLock = onToggleAutoBrightnessLock,
-                onToggleRotationLock = onToggleRotationLock,
-                onClearRam = onClearRam,
-                onTakeScreenshot = onTakeScreenshot,
-                onOpenManager = onOpenManager
-            )
-            DockRail(
-                modifier = railSwipeModifier,
-                selectedTab = if (showAppPicker) -1 else pagerState.targetPage,
-                isAddActive = showAppPicker,
-                opacity = state.opacity,
-                quickApps = state.quickApps,
-                onSelectTab = handleTabSelect,
-                onQuickAppClick = onQuickAppClick,
-                onAddAppClick = {
-                    showWidgetEditor = false
-                    showAppPicker = !showAppPicker
-                }
+                progress = editorP,
+                onToggleWidget = onToggleDashboardWidget,
+                onMoveWidget = onMoveDashboardWidget,
+                onResetWidgets = onResetDashboardWidgets,
+                onDone = closeWidgetEditor
             )
         }
     }
@@ -1347,6 +1419,7 @@ private fun BatteryCapsulePill(
 @Composable
 private fun FullScreenWidgetEditorOverlay(
     state: GameDeckUiState,
+    progress: Float,
     onToggleWidget: (String) -> Unit,
     onMoveWidget: (Int, Int) -> Unit,
     onResetWidgets: () -> Unit,
@@ -1386,8 +1459,9 @@ private fun FullScreenWidgetEditorOverlay(
     val settlingOffset = remember { Animatable(0f) }
 
     val defaultStepPx = with(density) { 82.dp.toPx() }
-    val itemSpacingPx = with(density) { 10.dp.toPx() }
+    val itemSpacingPx = with(density) { 12.dp.toPx() }
     val autoScrollMarginPx = with(density) { 54.dp.toPx() }
+    val enterSlidePx = with(density) { 26.dp.toPx() }
     val activeListState = rememberLazyListState()
     val libraryListState = rememberLazyListState()
 
@@ -1495,58 +1569,67 @@ private fun FullScreenWidgetEditorOverlay(
         }
     }
 
+    val p = progress.coerceIn(0f, 1f)
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.78f))
+            .background(Color.Black.copy(alpha = 0.82f * p))
             .displayCutoutPadding()
-            .padding(horizontal = 24.dp, vertical = 14.dp)
+            .padding(horizontal = 22.dp, vertical = 14.dp)
     ) {
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    alpha = (p * 1.35f).coerceIn(0f, 1f)
+                    val s = 0.93f + 0.07f * p
+                    scaleX = s
+                    scaleY = s
+                    translationY = (1f - p) * enterSlidePx
+                },
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = CircleShape,
-                color = scheme.surfaceContainerLow,
-                shadowElevation = 6.dp,
-                border = BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.28f))
+                shape = RoundedCornerShape(28.dp),
+                color = scheme.surfaceContainerHigh,
+                shadowElevation = 8.dp
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 12.dp, end = 8.dp, top = 7.dp, bottom = 7.dp),
+                        .padding(start = 12.dp, end = 10.dp, top = 10.dp, bottom = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            .background(scheme.primaryContainer),
+                            .size(42.dp)
+                            .clip(RoundedCornerShape(15.dp))
+                            .background(scheme.primary),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Tune,
                             contentDescription = null,
-                            tint = scheme.onPrimaryContainer,
-                            modifier = Modifier.size(17.dp)
+                            tint = scheme.onPrimary,
+                            modifier = Modifier.size(21.dp)
                         )
                     }
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Atur Widget",
-                            fontSize = 14.5.sp,
-                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.ExtraBold,
                             color = scheme.onSurface,
                             maxLines = 1,
                             softWrap = false
                         )
                         Text(
-                            text = "Tahan kartu atau tarik = untuk ubah urutan",
-                            fontSize = 10.5.sp,
+                            text = "Tahan kartu atau tarik = untuk urutkan",
+                            fontSize = 11.5.sp,
                             fontWeight = FontWeight.Medium,
                             color = scheme.onSurfaceVariant,
                             maxLines = 1,
@@ -1560,8 +1643,8 @@ private fun FullScreenWidgetEditorOverlay(
                             onResetWidgets()
                         },
                         enabled = !isDefaultConfig,
-                        shape = CircleShape,
-                        color = if (isDefaultConfig) scheme.surfaceContainer else scheme.secondaryContainer,
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (isDefaultConfig) scheme.surfaceContainerHighest else scheme.secondaryContainer,
                         contentColor = if (isDefaultConfig) {
                             scheme.onSurfaceVariant.copy(alpha = 0.45f)
                         } else {
@@ -1569,18 +1652,18 @@ private fun FullScreenWidgetEditorOverlay(
                         }
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.RestartAlt,
                                 contentDescription = "Reset susunan widget",
-                                modifier = Modifier.size(15.dp)
+                                modifier = Modifier.size(16.dp)
                             )
                             Text(
                                 text = "Reset",
-                                fontSize = 11.5.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
                                 softWrap = false
@@ -1593,23 +1676,23 @@ private fun FullScreenWidgetEditorOverlay(
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onDone()
                         },
-                        shape = CircleShape,
+                        shape = RoundedCornerShape(16.dp),
                         color = scheme.primary,
                         contentColor = scheme.onPrimary
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 15.dp, vertical = 8.dp),
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Check,
                                 contentDescription = null,
-                                modifier = Modifier.size(15.dp)
+                                modifier = Modifier.size(16.dp)
                             )
                             Text(
                                 text = "Selesai",
-                                fontSize = 11.5.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
                                 softWrap = false
@@ -1627,11 +1710,10 @@ private fun FullScreenWidgetEditorOverlay(
             ) {
                 Surface(
                     modifier = Modifier
-                        .weight(0.57f)
+                        .weight(0.56f)
                         .fillMaxHeight(),
-                    shape = RoundedCornerShape(24.dp),
-                    color = scheme.surfaceContainerLow,
-                    border = BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.25f))
+                    shape = RoundedCornerShape(28.dp),
+                    color = scheme.surfaceContainer
                 ) {
                     if (activeItems.isEmpty()) {
                         Box(
@@ -1640,7 +1722,8 @@ private fun FullScreenWidgetEditorOverlay(
                         ) {
                             Text(
                                 text = "Minimal 1 widget aktif",
-                                fontSize = 12.sp,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
                                 color = scheme.onSurfaceVariant
                             )
                         }
@@ -1649,7 +1732,7 @@ private fun FullScreenWidgetEditorOverlay(
                             state = activeListState,
                             userScrollEnabled = draggedKey == null,
                             contentPadding = PaddingValues(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
                             items(
@@ -1669,17 +1752,17 @@ private fun FullScreenWidgetEditorOverlay(
                                     label = "fullEditorDragScale"
                                 )
                                 val cardElevation by animateDpAsState(
-                                    targetValue = if (isDragging) 12.dp else if (isSettling) 4.dp else 0.dp,
+                                    targetValue = if (isDragging) 14.dp else if (isSettling) 4.dp else 0.dp,
                                     animationSpec = spring(
                                         dampingRatio = 0.78f,
                                         stiffness = Spring.StiffnessMediumLow
                                     ),
                                     label = "fullEditorDragElev"
                                 )
-                                val borderColor by animateColorAsState(
-                                    targetValue = if (isElevated) scheme.primary else scheme.outlineVariant.copy(alpha = 0.35f),
+                                val cardBg by animateColorAsState(
+                                    targetValue = if (isElevated) scheme.surfaceContainerHighest else scheme.surfaceContainerHigh,
                                     animationSpec = tween(durationMillis = 180),
-                                    label = "fullEditorBorderColor"
+                                    label = "fullEditorCardBg"
                                 )
                                 val activeTranslationY = when {
                                     isDragging -> dragOffsetY
@@ -1688,13 +1771,9 @@ private fun FullScreenWidgetEditorOverlay(
                                 }
 
                                 Surface(
-                                    shape = RoundedCornerShape(20.dp),
-                                    color = if (isElevated) scheme.surfaceContainerHighest else scheme.surfaceContainerHigh,
+                                    shape = RoundedCornerShape(24.dp),
+                                    color = cardBg,
                                     shadowElevation = cardElevation,
-                                    border = BorderStroke(
-                                        width = if (isElevated) 1.5.dp else 1.dp,
-                                        color = borderColor
-                                    ),
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .then(
@@ -1745,100 +1824,104 @@ private fun FullScreenWidgetEditorOverlay(
                                             )
                                         }
                                 ) {
-                                    Box(modifier = Modifier.fillMaxWidth()) {
-                                        Column(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(11.dp),
-                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                                         ) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                modifier = Modifier.padding(end = 30.dp)
-                                            ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(28.dp)
-                                                        .clip(RoundedCornerShape(8.dp))
-                                                        .background(
-                                                            if (isElevated) {
-                                                                scheme.primary.copy(alpha = 0.2f)
-                                                            } else {
-                                                                scheme.surfaceContainer
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(34.dp)
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .background(
+                                                        if (isElevated) {
+                                                            scheme.primary
+                                                        } else {
+                                                            scheme.secondaryContainer
+                                                        }
+                                                    )
+                                                    .pointerInput(item.key) {
+                                                        detectVerticalDragGestures(
+                                                            onDragStart = {
+                                                                settlingKey = null
+                                                                draggedKey = item.key
+                                                                dragOffsetY = 0f
+                                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                            },
+                                                            onDragEnd = {
+                                                                releaseDraggedCard(item.key)
+                                                            },
+                                                            onDragCancel = {
+                                                                releaseDraggedCard(item.key)
+                                                            },
+                                                            onVerticalDrag = { change, dragAmount ->
+                                                                change.consume()
+                                                                dragOffsetY += dragAmount
+                                                                processReorderStep(item.key)
                                                             }
                                                         )
-                                                        .pointerInput(item.key) {
-                                                            detectVerticalDragGestures(
-                                                                onDragStart = {
-                                                                    settlingKey = null
-                                                                    draggedKey = item.key
-                                                                    dragOffsetY = 0f
-                                                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                                },
-                                                                onDragEnd = {
-                                                                    releaseDraggedCard(item.key)
-                                                                },
-                                                                onDragCancel = {
-                                                                    releaseDraggedCard(item.key)
-                                                                },
-                                                                onVerticalDrag = { change, dragAmount ->
-                                                                    change.consume()
-                                                                    dragOffsetY += dragAmount
-                                                                    processReorderStep(item.key)
-                                                                }
-                                                            )
-                                                        },
-                                                    contentAlignment = Alignment.Center
-                                                ) {
+                                                    },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.DragHandle,
+                                                    contentDescription = "Geser urutan",
+                                                    tint = if (isElevated) scheme.onPrimary else scheme.onSecondaryContainer,
+                                                    modifier = Modifier.size(19.dp)
+                                                )
+                                            }
+                                            Text(
+                                                text = item.title,
+                                                fontSize = 13.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = scheme.onSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Surface(
+                                                onClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                    onToggleWidget(item.key)
+                                                },
+                                                enabled = activeItems.size > 1,
+                                                modifier = Modifier.size(32.dp),
+                                                shape = RoundedCornerShape(11.dp),
+                                                color = if (activeItems.size > 1) {
+                                                    scheme.errorContainer
+                                                } else {
+                                                    scheme.surfaceContainer
+                                                },
+                                                contentColor = if (activeItems.size > 1) {
+                                                    scheme.onErrorContainer
+                                                } else {
+                                                    scheme.onSurfaceVariant.copy(alpha = 0.35f)
+                                                }
+                                            ) {
+                                                Box(contentAlignment = Alignment.Center) {
                                                     Icon(
-                                                        imageVector = Icons.Rounded.DragHandle,
-                                                        contentDescription = "Geser urutan",
-                                                        tint = if (isElevated) scheme.primary else scheme.onSurfaceVariant,
-                                                        modifier = Modifier.size(16.dp)
+                                                        imageVector = Icons.Rounded.Remove,
+                                                        contentDescription = "Sembunyikan ${item.title}",
+                                                        modifier = Modifier.size(18.dp)
                                                     )
                                                 }
-                                                Text(
-                                                    text = item.title,
-                                                    fontSize = 12.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = scheme.onSurface,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
                                             }
-                                            LiveDashboardWidgetPreview(widgetKey = item.key, state = state)
                                         }
 
-                                        Surface(
-                                            onClick = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                onToggleWidget(item.key)
-                                            },
-                                            enabled = activeItems.size > 1,
+                                        Box(
                                             modifier = Modifier
-                                                .align(Alignment.TopEnd)
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(18.dp))
+                                                .background(scheme.surfaceContainerLow)
                                                 .padding(8.dp)
-                                                .size(26.dp),
-                                            shape = CircleShape,
-                                            color = if (activeItems.size > 1) {
-                                                scheme.errorContainer
-                                            } else {
-                                                scheme.surfaceContainer
-                                            },
-                                            contentColor = if (activeItems.size > 1) {
-                                                scheme.onErrorContainer
-                                            } else {
-                                                scheme.onSurfaceVariant.copy(alpha = 0.35f)
-                                            }
                                         ) {
-                                            Box(contentAlignment = Alignment.Center) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.Remove,
-                                                    contentDescription = "Sembunyikan ${item.title}",
-                                                    modifier = Modifier.size(15.dp)
-                                                )
-                                            }
+                                            LiveDashboardWidgetPreview(widgetKey = item.key, state = state)
                                         }
                                     }
                                 }
@@ -1849,17 +1932,16 @@ private fun FullScreenWidgetEditorOverlay(
 
                 Surface(
                     modifier = Modifier
-                        .weight(0.43f)
+                        .weight(0.44f)
                         .fillMaxHeight(),
-                    shape = RoundedCornerShape(24.dp),
-                    color = scheme.surfaceContainerLow,
-                    border = BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.25f))
+                    shape = RoundedCornerShape(28.dp),
+                    color = scheme.surfaceContainer
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1867,25 +1949,25 @@ private fun FullScreenWidgetEditorOverlay(
                         ) {
                             Text(
                                 text = "Pustaka Widget",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.5.sp,
+                                fontWeight = FontWeight.ExtraBold,
                                 color = scheme.onSurface,
                                 maxLines = 1,
                                 softWrap = false,
                                 modifier = Modifier.weight(1f)
                             )
                             Surface(
-                                shape = CircleShape,
-                                color = scheme.surfaceContainerHigh
+                                shape = RoundedCornerShape(12.dp),
+                                color = scheme.primaryContainer
                             ) {
                                 Text(
-                                    text = "${activeItems.size}/${allItems.size} aktif",
-                                    fontSize = 10.5.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = scheme.primary,
+                                    text = "${activeItems.size}/${allItems.size} Aktif",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = scheme.onPrimaryContainer,
                                     maxLines = 1,
                                     softWrap = false,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                                 )
                             }
                         }
@@ -1899,13 +1981,13 @@ private fun FullScreenWidgetEditorOverlay(
                             ) {
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                                    modifier = Modifier.padding(horizontal = 12.dp)
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.padding(horizontal = 14.dp)
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .size(34.dp)
-                                            .clip(CircleShape)
+                                            .size(50.dp)
+                                            .clip(RoundedCornerShape(16.dp))
                                             .background(scheme.primaryContainer),
                                         contentAlignment = Alignment.Center
                                     ) {
@@ -1913,19 +1995,19 @@ private fun FullScreenWidgetEditorOverlay(
                                             imageVector = Icons.Rounded.Check,
                                             contentDescription = null,
                                             tint = scheme.onPrimaryContainer,
-                                            modifier = Modifier.size(18.dp)
+                                            modifier = Modifier.size(25.dp)
                                         )
                                     }
                                     Text(
                                         text = "Semua widget aktif",
-                                        fontSize = 12.5.sp,
+                                        fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = scheme.onSurface,
                                         textAlign = TextAlign.Center
                                     )
                                     Text(
-                                        text = "Ketuk tombol - pada widget aktif untuk menyimpannya di sini.",
-                                        fontSize = 10.sp,
+                                        text = "Ketuk tombol - pada kartu aktif untuk menyimpannya di sini.",
+                                        fontSize = 11.sp,
                                         color = scheme.onSurfaceVariant,
                                         textAlign = TextAlign.Center
                                     )
@@ -1934,7 +2016,7 @@ private fun FullScreenWidgetEditorOverlay(
                         } else {
                             LazyColumn(
                                 state = libraryListState,
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
                                 modifier = Modifier
                                     .weight(1f)
                                     .fillMaxWidth()
@@ -1948,14 +2030,14 @@ private fun FullScreenWidgetEditorOverlay(
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                             onToggleWidget(item.key)
                                         },
-                                        shape = RoundedCornerShape(18.dp),
+                                        shape = RoundedCornerShape(24.dp),
                                         color = scheme.surfaceContainerHigh,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .animateItem(
                                                 fadeInSpec = spring(stiffness = Spring.StiffnessMediumLow),
                                                 placementSpec = spring(
-                                                    dampingRatio = 0.78f,
+                                                    dampingRatio = 0.82f,
                                                     stiffness = Spring.StiffnessMediumLow
                                                 ),
                                                 fadeOutSpec = spring(stiffness = Spring.StiffnessMediumLow)
@@ -1964,18 +2046,18 @@ private fun FullScreenWidgetEditorOverlay(
                                         Column(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(10.dp),
-                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                                .padding(14.dp),
+                                            verticalArrangement = Arrangement.spacedBy(10.dp)
                                         ) {
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                                             ) {
                                                 Box(
                                                     modifier = Modifier
-                                                        .size(28.dp)
-                                                        .clip(RoundedCornerShape(9.dp))
+                                                        .size(34.dp)
+                                                        .clip(RoundedCornerShape(12.dp))
                                                         .background(scheme.primaryContainer),
                                                     contentAlignment = Alignment.Center
                                                 ) {
@@ -1983,12 +2065,12 @@ private fun FullScreenWidgetEditorOverlay(
                                                         imageVector = item.icon,
                                                         contentDescription = null,
                                                         tint = scheme.onPrimaryContainer,
-                                                        modifier = Modifier.size(15.dp)
+                                                        modifier = Modifier.size(18.dp)
                                                     )
                                                 }
                                                 Text(
                                                     text = item.title,
-                                                    fontSize = 11.5.sp,
+                                                    fontSize = 13.5.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     color = scheme.onSurface,
                                                     maxLines = 1,
@@ -1997,8 +2079,8 @@ private fun FullScreenWidgetEditorOverlay(
                                                 )
                                                 Box(
                                                     modifier = Modifier
-                                                        .size(26.dp)
-                                                        .clip(CircleShape)
+                                                        .size(32.dp)
+                                                        .clip(RoundedCornerShape(11.dp))
                                                         .background(scheme.primary),
                                                     contentAlignment = Alignment.Center
                                                 ) {
@@ -2006,11 +2088,19 @@ private fun FullScreenWidgetEditorOverlay(
                                                         imageVector = Icons.Rounded.Add,
                                                         contentDescription = "Pasang ${item.title}",
                                                         tint = scheme.onPrimary,
-                                                        modifier = Modifier.size(15.dp)
+                                                        modifier = Modifier.size(18.dp)
                                                     )
                                                 }
                                             }
-                                            LiveDashboardWidgetPreview(widgetKey = item.key, state = state)
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(18.dp))
+                                                    .background(scheme.surfaceContainerLow)
+                                                    .padding(8.dp)
+                                            ) {
+                                                LiveDashboardWidgetPreview(widgetKey = item.key, state = state)
+                                            }
                                         }
                                     }
                                 }
