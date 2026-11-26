@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -1498,61 +1499,122 @@ private fun FullScreenWidgetEditorOverlay(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.78f))
-            .padding(horizontal = 20.dp, vertical = 14.dp)
+            .displayCutoutPadding()
+            .padding(horizontal = 24.dp, vertical = 14.dp)
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(
+            Surface(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                shape = CircleShape,
+                color = scheme.surfaceContainerLow,
+                shadowElevation = 6.dp,
+                border = BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.28f))
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Atur Widget",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                    Text(
-                        text = "Tahan kartu atau tarik = untuk ubah urutan",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color.White.copy(alpha = 0.72f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                Surface(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onDone()
-                    },
-                    shape = CircleShape,
-                    color = scheme.primary,
-                    contentColor = scheme.onPrimary
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 12.dp, end = 8.dp, top = 7.dp, bottom = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(scheme.primaryContainer),
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Rounded.Check,
+                            imageVector = Icons.Rounded.Tune,
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp)
+                            tint = scheme.onPrimaryContainer,
+                            modifier = Modifier.size(17.dp)
                         )
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Selesai",
-                            fontSize = 12.sp,
+                            text = "Atur Widget",
+                            fontSize = 14.5.sp,
                             fontWeight = FontWeight.Bold,
+                            color = scheme.onSurface,
                             maxLines = 1,
                             softWrap = false
                         )
+                        Text(
+                            text = "Tahan kartu atau tarik = untuk ubah urutan",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = scheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Surface(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onResetWidgets()
+                        },
+                        enabled = !isDefaultConfig,
+                        shape = CircleShape,
+                        color = if (isDefaultConfig) scheme.surfaceContainer else scheme.secondaryContainer,
+                        contentColor = if (isDefaultConfig) {
+                            scheme.onSurfaceVariant.copy(alpha = 0.45f)
+                        } else {
+                            scheme.onSecondaryContainer
+                        }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.RestartAlt,
+                                contentDescription = "Reset susunan widget",
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = "Reset",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    }
+
+                    Surface(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onDone()
+                        },
+                        shape = CircleShape,
+                        color = scheme.primary,
+                        contentColor = scheme.onPrimary
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 15.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = "Selesai",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
                     }
                 }
             }
@@ -1813,22 +1875,18 @@ private fun FullScreenWidgetEditorOverlay(
                                 modifier = Modifier.weight(1f)
                             )
                             Surface(
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    onResetWidgets()
-                                },
-                                modifier = Modifier.size(30.dp),
                                 shape = CircleShape,
-                                color = if (isDefaultConfig) scheme.surfaceContainer else scheme.secondaryContainer,
-                                contentColor = if (isDefaultConfig) scheme.onSurfaceVariant else scheme.onSecondaryContainer
+                                color = scheme.surfaceContainerHigh
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.RestartAlt,
-                                        contentDescription = "Reset susunan widget",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
+                                Text(
+                                    text = "${activeItems.size}/${allItems.size} aktif",
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = scheme.primary,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
                             }
                         }
 
