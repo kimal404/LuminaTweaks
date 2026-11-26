@@ -5,9 +5,12 @@ package com.luminatweaks.gamedeck
 import android.graphics.Bitmap
 import android.content.pm.ApplicationInfo
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -39,6 +42,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -104,12 +108,14 @@ import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.material3.toShape
@@ -169,6 +175,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.model.AppItem
+import com.luminatweaks.ui.screen.FloatingFpsConfig
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.max
@@ -247,6 +254,7 @@ fun GameDeckRoot(
     onToggleQuickApp: (String) -> Unit,
     onAppPickerVisibilityChanged: (Boolean) -> Unit = {},
     onWidgetEditorVisibilityChanged: (Boolean) -> Unit = {},
+    onFloatingHudChange: (FloatingFpsConfig) -> Unit = {},
     onOpenManager: () -> Unit,
     onCollapseSettled: () -> Unit
 ) {
@@ -331,6 +339,7 @@ fun GameDeckRoot(
                 onToggleQuickApp = onToggleQuickApp,
                 onAppPickerVisibilityChanged = onAppPickerVisibilityChanged,
                 onWidgetEditorVisibilityChanged = onWidgetEditorVisibilityChanged,
+                onFloatingHudChange = onFloatingHudChange,
                 onOpenManager = onOpenManager
             )
         }
@@ -434,6 +443,7 @@ private fun GameDeckWorkspace(
     onToggleQuickApp: (String) -> Unit,
     onAppPickerVisibilityChanged: (Boolean) -> Unit,
     onWidgetEditorVisibilityChanged: (Boolean) -> Unit,
+    onFloatingHudChange: (FloatingFpsConfig) -> Unit,
     onOpenManager: () -> Unit
 ) {
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
@@ -605,6 +615,7 @@ private fun GameDeckWorkspace(
                     onToggleRotationLock = onToggleRotationLock,
                     onClearRam = onClearRam,
                     onTakeScreenshot = onTakeScreenshot,
+                    onFloatingHudChange = onFloatingHudChange,
                     onOpenManager = onOpenManager
                 )
             } else {
@@ -633,6 +644,7 @@ private fun GameDeckWorkspace(
                     onToggleRotationLock = onToggleRotationLock,
                     onClearRam = onClearRam,
                     onTakeScreenshot = onTakeScreenshot,
+                    onFloatingHudChange = onFloatingHudChange,
                     onOpenManager = onOpenManager
                 )
                 DockRail(
@@ -921,6 +933,7 @@ private fun DeckCard(
     onToggleRotationLock: () -> Unit,
     onClearRam: () -> Unit,
     onTakeScreenshot: () -> Unit,
+    onFloatingHudChange: (FloatingFpsConfig) -> Unit,
     onOpenManager: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -977,11 +990,13 @@ private fun DeckCard(
                     } else {
                         ToolsDeckContent(
                             state = state,
+                            onToggleKeepScreenOn = onToggleKeepScreenOn,
                             onToggleDnd = onToggleDnd,
                             onToggleAutoBrightnessLock = onToggleAutoBrightnessLock,
                             onToggleRotationLock = onToggleRotationLock,
                             onClearRam = onClearRam,
                             onTakeScreenshot = onTakeScreenshot,
+                            onFloatingHudChange = onFloatingHudChange,
                             onOpenManager = onOpenManager
                         )
                     }
@@ -3750,15 +3765,15 @@ private fun CompactToolBentoTile(
 @Composable
 private fun ToolsDeckContent(
     state: GameDeckUiState,
+    onToggleKeepScreenOn: () -> Unit,
     onToggleDnd: () -> Unit,
     onToggleAutoBrightnessLock: () -> Unit,
     onToggleRotationLock: () -> Unit,
     onClearRam: () -> Unit,
     onTakeScreenshot: () -> Unit,
+    onFloatingHudChange: (FloatingFpsConfig) -> Unit,
     onOpenManager: () -> Unit
 ) {
-    val scheme = MaterialTheme.colorScheme
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -3766,92 +3781,466 @@ private fun ToolsDeckContent(
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = scheme.surfaceContainer,
-            modifier = Modifier.fillMaxWidth()
+        ToolCategoryCard(
+            title = "Overlay & Layar",
+            icon = Icons.Rounded.Visibility
         ) {
-            Column(
+            FloatingHudDeckCard(
+                config = state.floatingHud,
+                onChange = onFloatingHudChange
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CompactToolBentoTile(
+                    icon = Icons.Rounded.Visibility,
+                    title = "Layar Nyala",
+                    subtitle = if (state.keepScreenOn) "Aktif" else "Nonaktif",
+                    active = state.keepScreenOn,
+                    onClick = onToggleKeepScreenOn,
+                    modifier = Modifier.weight(1f)
+                )
+                CompactToolBentoTile(
+                    icon = Icons.Rounded.BrightnessAuto,
+                    title = "Kunci Cahaya",
+                    subtitle = if (state.autoBrightnessLocked) "Terkunci" else "Otomatis",
+                    active = state.autoBrightnessLocked,
+                    onClick = onToggleAutoBrightnessLock,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            CompactToolBentoTile(
+                icon = Icons.Rounded.ScreenLockRotation,
+                title = "Kunci Rotasi",
+                subtitle = if (state.rotationLocked) "Terkunci" else "Bebas",
+                active = state.rotationLocked,
+                onClick = onToggleRotationLock,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        ToolCategoryCard(
+            title = "Fokus & Utilitas",
+            icon = Icons.Rounded.Bolt
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CompactToolBentoTile(
+                    icon = Icons.Rounded.NotificationsOff,
+                    title = "Jangan Ganggu",
+                    subtitle = if (state.dndEnabled) "Aktif" else "Nonaktif",
+                    active = state.dndEnabled,
+                    onClick = onToggleDnd,
+                    modifier = Modifier.weight(1f)
+                )
+                CompactToolBentoTile(
+                    icon = Icons.Rounded.CleaningServices,
+                    title = "Bersihkan RAM",
+                    subtitle = state.ramStatusLabel,
+                    active = false,
+                    onClick = onClearRam,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            CompactToolBentoTile(
+                icon = Icons.Rounded.Screenshot,
+                title = "Screenshot",
+                subtitle = "Tangkap layar",
+                active = false,
+                onClick = onTakeScreenshot,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        ToolCategoryCard(
+            title = "Navigasi",
+            icon = Icons.Rounded.Apps
+        ) {
+            WideToolButton(
+                icon = Icons.Rounded.Apps,
+                title = "Lumina Manager",
+                subtitle = "Buka aplikasi utama",
+                onClick = onOpenManager
+            )
+        }
+    }
+}
+
+@Composable
+private fun ToolCategoryCard(
+    title: String,
+    icon: ImageVector,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = scheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                modifier = Modifier.padding(horizontal = 2.dp)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = scheme.primary,
+                    modifier = Modifier.size(15.dp)
+                )
+                Text(
+                    text = title,
+                    style = TextStyle(
+                        fontSize = 12.sp,
+                        lineHeight = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                    ),
+                    color = scheme.onSurface,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            content()
+        }
+    }
+}
+
+@Composable
+private fun FloatingHudDeckCard(
+    config: FloatingFpsConfig,
+    onChange: (FloatingFpsConfig) -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val haptic = LocalHapticFeedback.current
+    var expanded by remember { mutableStateOf(false) }
+    val arrowRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMedium),
+        label = "floatingHudArrow"
+    )
+    val canDisableMetric = config.activeModuleCount > 1
+
+    Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = scheme.surfaceContainerHigh,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text(
-                    text = "Tools",
-                    fontSize = 13.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = scheme.onSurface,
-                    modifier = Modifier.padding(horizontal = 2.dp),
-                    maxLines = 1
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(RoundedCornerShape(11.dp))
+                        .background(scheme.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Visibility,
+                        contentDescription = null,
+                        tint = scheme.onPrimaryContainer,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = "Floating HUD",
+                        style = TextStyle(
+                            fontSize = 12.5.sp,
+                            lineHeight = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            platformStyle = PlatformTextStyle(includeFontPadding = false)
+                        ),
+                        color = scheme.onSurface,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = if (config.enabled) "Aktif" else "Nonaktif",
+                        style = TextStyle(
+                            fontSize = 10.sp,
+                            lineHeight = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            platformStyle = PlatformTextStyle(includeFontPadding = false)
+                        ),
+                        color = if (config.enabled) scheme.primary else scheme.onSurfaceVariant,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .clickable {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            expanded = !expanded
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.ExpandMore,
+                        contentDescription = if (expanded) "Tutup pengaturan" else "Buka pengaturan",
+                        tint = scheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .size(18.dp)
+                            .rotate(arrowRotation)
+                    )
+                }
+                Switch(
+                    checked = config.enabled,
+                    onCheckedChange = { enabled ->
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onChange(config.copy(enabled = enabled))
+                    }
                 )
+            }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(
+                    animationSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow)
+                ) + fadeIn(tween(160)),
+                exit = shrinkVertically(
+                    animationSpec = spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMedium)
+                ) + fadeOut(tween(120))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    CompactToolBentoTile(
-                        icon = Icons.Rounded.NotificationsOff,
-                        title = "Jangan Ganggu",
-                        subtitle = if (state.dndEnabled) "Aktif" else "Nonaktif",
-                        active = state.dndEnabled,
-                        onClick = onToggleDnd,
-                        modifier = Modifier.weight(1f)
-                    )
-                    CompactToolBentoTile(
-                        icon = Icons.Rounded.BrightnessAuto,
-                        title = "Kunci Cahaya",
-                        subtitle = if (state.autoBrightnessLocked) "Terkunci" else "Otomatis",
-                        active = state.autoBrightnessLocked,
-                        onClick = onToggleAutoBrightnessLock,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+                    HudSectionLabel(text = "Metrik Tampil")
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        HudConfigChip(label = "FPS", selected = config.showFps) {
+                            if (config.showFps && !canDisableMetric) return@HudConfigChip
+                            onChange(config.copy(showFps = !config.showFps))
+                        }
+                        HudConfigChip(label = "Frametime", selected = config.showFrametime) {
+                            if (config.showFrametime && !canDisableMetric) return@HudConfigChip
+                            onChange(config.copy(showFrametime = !config.showFrametime))
+                        }
+                        HudConfigChip(label = "CPU", selected = config.showCpuCluster) {
+                            if (config.showCpuCluster && !canDisableMetric) return@HudConfigChip
+                            onChange(config.copy(showCpuCluster = !config.showCpuCluster))
+                        }
+                        HudConfigChip(label = "Suhu", selected = config.showTemp) {
+                            if (config.showTemp && !canDisableMetric) return@HudConfigChip
+                            onChange(config.copy(showTemp = !config.showTemp))
+                        }
+                        HudConfigChip(label = "RAM", selected = config.showRam) {
+                            if (config.showRam && !canDisableMetric) return@HudConfigChip
+                            onChange(config.copy(showRam = !config.showRam))
+                        }
+                        HudConfigChip(label = "Profil", selected = config.showProfile) {
+                            if (config.showProfile && !canDisableMetric) return@HudConfigChip
+                            onChange(config.copy(showProfile = !config.showProfile))
+                        }
+                    }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    CompactToolBentoTile(
-                        icon = Icons.Rounded.ScreenLockRotation,
-                        title = "Kunci Rotasi",
-                        subtitle = if (state.rotationLocked) "Terkunci" else "Bebas",
-                        active = state.rotationLocked,
-                        onClick = onToggleRotationLock,
-                        modifier = Modifier.weight(1f)
-                    )
-                    CompactToolBentoTile(
-                        icon = Icons.Rounded.CleaningServices,
-                        title = "Bersihkan RAM",
-                        subtitle = state.ramStatusLabel,
-                        active = false,
-                        onClick = onClearRam,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+                    HudSectionLabel(text = "Ukuran Teks")
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        HudConfigChip(label = "Kecil", selected = config.scale <= 0.9f) {
+                            onChange(config.copy(scale = 0.85f))
+                        }
+                        HudConfigChip(label = "Normal", selected = config.scale > 0.9f && config.scale < 1.1f) {
+                            onChange(config.copy(scale = 1f))
+                        }
+                        HudConfigChip(label = "Besar", selected = config.scale >= 1.1f) {
+                            onChange(config.copy(scale = 1.2f))
+                        }
+                    }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    CompactToolBentoTile(
-                        icon = Icons.Rounded.Screenshot,
-                        title = "Screenshot",
-                        subtitle = "Tangkap layar",
-                        active = false,
-                        onClick = onTakeScreenshot,
-                        modifier = Modifier.weight(1f)
-                    )
-                    CompactToolBentoTile(
-                        icon = Icons.Rounded.Apps,
-                        title = "Lumina Manager",
-                        subtitle = "Buka aplikasi",
-                        active = false,
-                        onClick = onOpenManager,
-                        modifier = Modifier.weight(1f)
-                    )
+                    HudSectionLabel(text = "Opasitas Latar")
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        HudConfigChip(label = "55%", selected = config.bgAlpha < 0.65f) {
+                            onChange(config.copy(bgAlpha = 0.55f))
+                        }
+                        HudConfigChip(label = "75%", selected = config.bgAlpha >= 0.65f && config.bgAlpha < 0.85f) {
+                            onChange(config.copy(bgAlpha = 0.75f))
+                        }
+                        HudConfigChip(label = "90%", selected = config.bgAlpha >= 0.85f) {
+                            onChange(config.copy(bgAlpha = 0.9f))
+                        }
+                    }
+
+                    HudSectionLabel(text = "Interval")
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        HudConfigChip(label = "250 ms", selected = config.intervalMs == 250) {
+                            onChange(config.copy(intervalMs = 250))
+                        }
+                        HudConfigChip(label = "500 ms", selected = config.intervalMs == 500) {
+                            onChange(config.copy(intervalMs = 500))
+                        }
+                        HudConfigChip(label = "1 s", selected = config.intervalMs == 1000) {
+                            onChange(config.copy(intervalMs = 1000))
+                        }
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun HudSectionLabel(text: String) {
+    Text(
+        text = text,
+        style = TextStyle(
+            fontSize = 9.5.sp,
+            lineHeight = 12.sp,
+            fontWeight = FontWeight.Bold,
+            platformStyle = PlatformTextStyle(includeFontPadding = false)
+        ),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 2.dp, top = 2.dp),
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Ellipsis
+    )
+}
+
+@Composable
+private fun HudConfigChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    FilterChip(
+        selected = selected,
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onClick()
+        },
+        label = {
+            Text(
+                text = label,
+                style = TextStyle(
+                    fontSize = 10.sp,
+                    lineHeight = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    )
+}
+
+@Composable
+private fun WideToolButton(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val haptic = LocalHapticFeedback.current
+    Surface(
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onClick()
+        },
+        shape = RoundedCornerShape(18.dp),
+        color = scheme.surfaceContainerHigh,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(scheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = scheme.onPrimaryContainer,
+                    modifier = Modifier.size(17.dp)
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = TextStyle(
+                        fontSize = 11.5.sp,
+                        lineHeight = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                    ),
+                    color = scheme.onSurface,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = subtitle,
+                    style = TextStyle(
+                        fontSize = 9.5.sp,
+                        lineHeight = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                    ),
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Icon(
+                imageVector = Icons.Rounded.ChevronRight,
+                contentDescription = null,
+                tint = scheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }

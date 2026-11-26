@@ -32,7 +32,9 @@ data class LiveFeedSample(
     val frametimeMs: Float,
     val epochMs: Long,
     val gameActive: Boolean,
-    val packageName: String?
+    val packageName: String?,
+    val cpuPercent: Float? = null,
+    val gpuPercent: Float? = null
 )
 
 object LiveSessionFeed {
@@ -72,12 +74,20 @@ object LiveSessionFeed {
             ?.substringBefore(':')
             ?.trim()
             ?.takeIf { it.isNotEmpty() && it != "-" }
+        val cpuPercent = parts.getOrNull(5)
+            ?.toFloatOrNull()
+            ?.takeIf { it.isFinite() && it in 0f..100f }
+        val gpuPercent = parts.getOrNull(6)
+            ?.toFloatOrNull()
+            ?.takeIf { it.isFinite() && it in 0f..100f }
         return LiveFeedSample(
             fps = if (fps > 0f) fps else 0f,
             frametimeMs = if (frametime > 0f) frametime else 0f,
             epochMs = epochMs,
             gameActive = gameActive,
-            packageName = packageName
+            packageName = packageName,
+            cpuPercent = cpuPercent,
+            gpuPercent = gpuPercent
         )
     }
 
@@ -109,17 +119,13 @@ internal class SysfsTelemetry {
     }
 
     fun gpuPercent(): Float? {
-        readGpuBusyPair("/sys/class/kgsl/kgsl-3d0/gpubusy")?.let { return it }
-        for (path in GPU_PERCENT_NODES) {
-            readPercent(path)?.let { return it }
-        }
-        val devfreq = File("/sys/class/devfreq")
-        for (entry in devfreq.listFiles().orEmpty()) {
-            val name = entry.name.lowercase()
-            if (!name.contains("gpu") && !name.contains("mali") && !name.contains("kgsl")) continue
-            for (node in listOf("gpu_busy_percentage", "gpu_load", "utilisation", "utilization", "load")) {
-                readPercent(File(entry, node).absolutePath)?.let { return it }
+        for (source in GPU_SOURCES) {
+            val value = if (source.pair) {
+                readGpuBusyPair(source.path)
+            } else {
+                readPercent(source.path)
             }
+            if (value != null) return value
         }
         return null
     }
@@ -193,13 +199,51 @@ internal class SysfsTelemetry {
 
     private companion object {
         val PERCENT_NUMBER = Regex("""-?\d+(?:\.\d+)?""")
-        val GPU_PERCENT_NODES = listOf(
-            "/sys/kernel/gpu/gpu_busy",
-            "/sys/class/misc/mali0/device/utilization",
-            "/sys/module/ged/parameters/gpu_loading",
-            "/sys/kernel/ged/hal/gpu_utilization",
-            "/sys/class/devfreq/gpufreq/gpu_busy_percentage"
-        )
+        val GPU_SOURCES: List<GpuProbe> = discoverGpuSources()
+
+        fun discoverGpuSources(): List<GpuProbe> {
+            val sources = ArrayList<GpuProbe>(8)
+            val pairPath = "/sys/class/kgsl/kgsl-3d0/gpubusy"
+            if (File(pairPath).exists()) {
+                sources += GpuProbe(pairPath, pair = true)
+            }
+            val nodes = listOf(
+                "/sys/kernel/gpu/gpu_busy",
+                "/sys/class/misc/mali0/device/utilization",
+                "/sys/module/ged/parameters/gpu_loading",
+                "/sys/kernel/ged/hal/gpu_utilization",
+                "/sys/class/devfreq/gpufreq/gpu_busy_percentage"
+            )
+            for (path in nodes) {
+                if (File(path).exists()) {
+                    sources += GpuProbe(path, pair = false)
+                }
+            }
+            val devfreq = File("/sys/class/devfreq")
+            for (entry in devfreq.listFiles().orEmpty()) {
+                val name = entry.name.lowercase()
+                if (!name.contains("gpu") && !name.contains("mali") && !name.contains("kgsl")) continue
+                for (node in listOf("gpu_busy_percentage", "gpu_load", "utilisation", "utilization", "load")) {
+                    val file = File(entry, node)
+                    if (file.exists()) {
+                        sources += GpuProbe(file.absolutePath, pair = false)
+                    }
+                }
+            }
+            if (sources.isEmpty()) {
+                for (path in listOf(
+                    "/sys/class/kgsl/kgsl-3d0/devfreq/gpu_busy_percentage",
+                    "/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage"
+                )) {
+                    if (File(path).exists()) {
+                        sources += GpuProbe(path, pair = false)
+                    }
+                }
+            }
+            return sources
+        }
     }
 }
+
+private data class GpuProbe(val path: String, val pair: Boolean)
 

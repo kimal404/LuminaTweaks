@@ -3,6 +3,7 @@ package com.luminatweaks.gamedeck
 
 import android.content.Context
 import android.graphics.Bitmap
+import com.luminatweaks.ui.screen.FloatingFpsConfig
 
 val DEFAULT_DASHBOARD_WIDGET_ORDER = listOf("telemetry", "profile", "music", "refresh_rate", "sliders")
 
@@ -70,6 +71,7 @@ data class GameDeckUiState(
     val isMusicPlaying: Boolean = false,
     val musicPositionMs: Long = 0L,
     val musicDurationMs: Long = 0L,
+    val floatingHud: FloatingFpsConfig = FloatingFpsConfig(),
     val quickApps: List<GameDeckQuickApp> = emptyList()
 )
 

@@ -64,6 +64,8 @@ import com.luminatweaks.data.DaemonManager
 import com.luminatweaks.data.LiveSessionFeed
 import com.luminatweaks.data.SysfsTelemetry
 import com.luminatweaks.service.FloatingFpsService
+import com.luminatweaks.ui.screen.FloatingFpsConfig
+import com.luminatweaks.ui.screen.FloatingFpsPrefs
 import com.luminatweaks.ui.theme.LuminaTheme
 import com.luminatweaks.util.DeviceUtil
 import com.luminatweaks.util.RootUtil
@@ -406,6 +408,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         isMusicPlaying = snapshot.isMusicPlaying,
                         musicPositionMs = snapshot.musicPositionMs,
                         musicDurationMs = snapshot.musicDurationMs,
+                        floatingHud = snapshot.floatingHud,
                         quickApps = snapshot.quickApps
                     )
                 }
@@ -441,6 +444,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         val isMusicPlaying: Boolean,
         val musicPositionMs: Long,
         val musicDurationMs: Long,
+        val floatingHud: FloatingFpsConfig,
         val quickApps: List<GameDeckQuickApp>
     )
 
@@ -479,8 +483,24 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
 
         val quickApps = resolveQuickApps(config)
 
-        val cpu = if (collectHeavy) readCpuLoad() else lastCpuPercent
-        val gpu = if (collectHeavy) readGpuLoad() else lastGpuPercent
+        val feedCpu = feed?.cpuPercent
+        val feedGpu = feed?.gpuPercent
+        val cpu = when {
+            !collectHeavy -> lastCpuPercent
+            feedCpu != null -> {
+                lastCpuPercent = feedCpu.roundToInt().coerceIn(0, 100)
+                lastCpuPercent
+            }
+            else -> readCpuLoad()
+        }
+        val gpu = when {
+            !collectHeavy -> lastGpuPercent
+            feedGpu != null -> {
+                lastGpuPercent = feedGpu.roundToInt().coerceIn(0, 100)
+                lastGpuPercent
+            }
+            else -> readGpuLoad()
+        }
 
         val profileProp = DeviceUtil.readSystemProperty("sys.lumina.profile") ?: "Balanced"
         val overrideProp = DeviceUtil.readSystemProperty("sys.lumina.profile_override") ?: "Auto"
@@ -564,6 +584,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             isMusicPlaying = liveMedia.isPlaying,
             musicPositionMs = liveMedia.positionMs,
             musicDurationMs = liveMedia.durationMs,
+            floatingHud = FloatingFpsPrefs.load(this),
             quickApps = quickApps
         )
     }
@@ -695,6 +716,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         onToggleQuickApp = ::toggleQuickApp,
                         onAppPickerVisibilityChanged = ::setAppPickerOpen,
                         onWidgetEditorVisibilityChanged = ::setWidgetEditorOpen,
+                        onFloatingHudChange = ::applyFloatingHudConfig,
                         onOpenManager = ::openManager,
                         onCollapseSettled = ::handleCollapseSettled
                     )
@@ -1325,6 +1347,30 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         keepScreenOnEnabled = !keepScreenOnEnabled
         uiState.value = uiState.value.copy(keepScreenOn = keepScreenOnEnabled)
         updateWindowLayout()
+    }
+
+    private fun applyFloatingHudConfig(config: FloatingFpsConfig) {
+        FloatingFpsPrefs.save(this, config)
+        uiState.value = uiState.value.copy(floatingHud = config)
+        if (!config.enabled) {
+            runCatching { stopService(Intent(this, FloatingFpsService::class.java)) }
+            return
+        }
+        serviceScope.launch {
+            val granted = withContext(Dispatchers.IO) {
+                FloatingFpsService.ensureOverlayPermission(this@GameDeckService)
+            }
+            if (!granted) {
+                val disabled = FloatingFpsPrefs.load(this@GameDeckService).copy(enabled = false)
+                FloatingFpsPrefs.save(this@GameDeckService, disabled)
+                uiState.value = uiState.value.copy(floatingHud = disabled)
+                Toast.makeText(this@GameDeckService, "Izin overlay diperlukan", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            withContext(Dispatchers.Default) {
+                FloatingFpsService.sync(this@GameDeckService, config)
+            }
+        }
     }
 
     private fun applyDashboardWidgets(widgets: GameDeckPrefs.DashboardWidgets) {

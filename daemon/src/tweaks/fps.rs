@@ -20,7 +20,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -187,14 +187,167 @@ fn write_status_file(path: &str, frame: &str) {
     }
 }
 
+enum GpuSource {
+    Pair(String),
+    Percent(String),
+}
+
+struct LoadSampler {
+    previous_cpu: Option<(u64, u64)>,
+    gpu_sources: Vec<GpuSource>,
+    last_cpu: f32,
+    last_gpu: f32,
+}
+
+impl LoadSampler {
+    fn new() -> Self {
+        Self {
+            previous_cpu: None,
+            gpu_sources: discover_gpu_sources(),
+            last_cpu: 0.0,
+            last_gpu: 0.0,
+        }
+    }
+
+    fn sample(&mut self) -> (f32, f32) {
+        if let Some(value) = self.sample_cpu() {
+            self.last_cpu = value;
+        }
+        if let Some(value) = self.sample_gpu() {
+            self.last_gpu = value;
+        }
+        (self.last_cpu, self.last_gpu)
+    }
+
+    fn sample_cpu(&mut self) -> Option<f32> {
+        let text = fs::read_to_string("/proc/stat").ok()?;
+        let line = text.lines().find(|line| line.starts_with("cpu "))?;
+        let values: Vec<u64> = line
+            .split_whitespace()
+            .skip(1)
+            .filter_map(|value| value.parse::<u64>().ok())
+            .collect();
+        if values.len() < 5 {
+            return None;
+        }
+        let idle = values[3].saturating_add(values[4]);
+        let total = values
+            .iter()
+            .fold(0u64, |acc, value| acc.saturating_add(*value));
+        let (previous_total, previous_idle) = self.previous_cpu.replace((total, idle))?;
+        let total_delta = total.saturating_sub(previous_total);
+        let idle_delta = idle.saturating_sub(previous_idle);
+        if total_delta == 0 {
+            return None;
+        }
+        let busy = total_delta.saturating_sub(idle_delta) as f32;
+        Some((busy * 100.0 / total_delta as f32).clamp(0.0, 100.0))
+    }
+
+    fn sample_gpu(&self) -> Option<f32> {
+        for source in &self.gpu_sources {
+            let value = match source {
+                GpuSource::Pair(path) => read_gpu_pair(path),
+                GpuSource::Percent(path) => read_gpu_percent(path),
+            };
+            if value.is_some() {
+                return value;
+            }
+        }
+        None
+    }
+}
+
+fn discover_gpu_sources() -> Vec<GpuSource> {
+    let mut sources = Vec::new();
+    let pair_path = "/sys/class/kgsl/kgsl-3d0/gpubusy";
+    if Path::new(pair_path).exists() {
+        sources.push(GpuSource::Pair(pair_path.to_string()));
+    }
+    for path in [
+        "/sys/module/ged/parameters/gpu_loading",
+        "/sys/kernel/ged/hal/gpu_utilization",
+        "/sys/kernel/gpu/gpu_busy",
+        "/sys/class/misc/mali0/device/utilization",
+        "/sys/class/devfreq/gpufreq/gpu_busy_percentage",
+    ] {
+        if Path::new(path).exists() {
+            sources.push(GpuSource::Percent(path.to_string()));
+        }
+    }
+    if let Ok(entries) = fs::read_dir("/sys/class/devfreq") {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+            if !name.contains("gpu") && !name.contains("mali") && !name.contains("kgsl") {
+                continue;
+            }
+            for node in [
+                "gpu_busy_percentage",
+                "gpu_load",
+                "utilisation",
+                "utilization",
+                "load",
+            ] {
+                let path = entry.path().join(node);
+                if path.is_file() {
+                    sources.push(GpuSource::Percent(path.to_string_lossy().into_owned()));
+                }
+            }
+        }
+    }
+    if sources.is_empty() {
+        for path in [
+            "/sys/class/kgsl/kgsl-3d0/devfreq/gpu_busy_percentage",
+            "/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage",
+        ] {
+            if Path::new(path).exists() {
+                sources.push(GpuSource::Percent(path.to_string()));
+            }
+        }
+    }
+    sources
+}
+
+fn read_gpu_pair(path: &str) -> Option<f32> {
+    let text = fs::read_to_string(path).ok()?;
+    let mut parts = text.split_whitespace();
+    let busy = parts.next()?.parse::<f32>().ok()?;
+    let total = parts.next()?.parse::<f32>().ok()?;
+    if !busy.is_finite() || !total.is_finite() || total <= 0.0 {
+        return None;
+    }
+    Some((busy / total * 100.0).clamp(0.0, 100.0))
+}
+
+fn read_gpu_percent(path: &str) -> Option<f32> {
+    let text = fs::read_to_string(path).ok()?;
+    let value = text.split_whitespace().next()?.parse::<f32>().ok()?;
+    if !value.is_finite() || value < 0.0 {
+        return None;
+    }
+    Some(value.clamp(0.0, 100.0))
+}
+
+fn sample_load() -> (f32, f32) {
+    static SAMPLER: OnceLock<Mutex<LoadSampler>> = OnceLock::new();
+    let sampler = SAMPLER.get_or_init(|| Mutex::new(LoadSampler::new()));
+    match sampler.lock() {
+        Ok(mut guard) => guard.sample(),
+        Err(_) => (0.0, 0.0),
+    }
+}
+
 fn write_status(fps: f32, frametime_ms: f32, game_active: bool, package: Option<&str>) {
+    let (cpu, gpu) = sample_load();
     let frame = format!(
-        "{:.1} {} {:.1} {} {}",
+        "{:.1} {} {:.1} {} {} {:.1} {:.1}",
         fps,
         epoch_ms(),
         frametime_ms.max(0.0),
         if game_active { 1 } else { 0 },
         package.unwrap_or("-"),
+        cpu,
+        gpu,
     );
     write_status_file(STATUS_PATH, &frame);
     write_status_file(PUBLIC_STATUS_PATH, &frame);
