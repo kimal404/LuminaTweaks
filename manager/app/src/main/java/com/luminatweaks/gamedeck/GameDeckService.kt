@@ -59,6 +59,7 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.luminatweaks.MainActivity
 import com.luminatweaks.R
+import com.luminatweaks.data.AppProfileConfig
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DaemonManager
 import com.luminatweaks.data.LiveSessionFeed
@@ -419,6 +420,8 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         isBatterySaver = snapshot.isBatterySaver,
                         rrModes = snapshot.rrModes,
                         selectedRrHz = snapshot.selectedRrHz,
+                        rrPerApp = snapshot.rrPerApp,
+                        gamePackage = snapshot.gamePackage,
                         brightnessPercent = if (now - lastSliderInteractionMs > 1_200L) snapshot.brightnessPercent else uiState.value.brightnessPercent,
                         volumePercent = if (now - lastSliderInteractionMs > 1_200L) snapshot.volumePercent else uiState.value.volumePercent,
                         volumeMuted = if (now - lastSliderInteractionMs > 1_200L) snapshot.volumeMuted else uiState.value.volumeMuted,
@@ -464,6 +467,8 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         val isBatterySaver: Boolean,
         val rrModes: List<Int>,
         val selectedRrHz: Int?,
+        val rrPerApp: Boolean,
+        val gamePackage: String?,
         val brightnessPercent: Int,
         val volumePercent: Int,
         val volumeMuted: Boolean,
@@ -608,6 +613,23 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             ) == 0
         }.getOrDefault(false)
 
+        val gamePackage = feed?.packageName?.takeIf { it.isNotBlank() }
+            ?: lastForegroundPkg?.takeIf { ConfigRepository.isAppActive(it) }
+        val rrModeMap = if (gamePackage != null) {
+            runCatching { ConfigRepository.getRefreshRateModes() }.getOrDefault(emptyList())
+        } else {
+            emptyList()
+        }
+        val configuredRr = gamePackage
+            ?.let { runCatching { ConfigRepository.getAppConfigs()[it] }.getOrNull() }
+            ?.refreshRate
+            ?.takeIf { it.isNotBlank() && !it.equals("default", ignoreCase = true) }
+        val perAppHz = configuredRr?.toIntOrNull()?.let { value ->
+            rrModeMap.firstOrNull { it.id == value }?.hz
+                ?: value.takeIf { supportedRefreshRates().contains(it) }
+        }
+        val globalRrHz = GameDeckPrefs.refreshRateHint(this)
+
         return DeckSnapshot(
             fps = fps,
             frametimeMs = frametime,
@@ -621,7 +643,9 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             profile = profileProp,
             profileOverride = overrideProp,
             rrModes = supportedRefreshRates(),
-            selectedRrHz = GameDeckPrefs.refreshRateHint(this),
+            selectedRrHz = perAppHz ?: globalRrHz,
+            rrPerApp = perAppHz != null,
+            gamePackage = gamePackage,
             brightnessPercent = brightnessPct,
             volumePercent = volumePct,
             volumeMuted = curVol == 0,
@@ -1331,9 +1355,60 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     }
 
     private fun selectRefreshRate(hz: Int?) {
+        val gamePkg = uiState.value.gamePackage
+        if (gamePkg != null) {
+            serviceScope.launch(Dispatchers.IO) {
+                val modeId = if (hz == null) null else resolveRefreshModeId(hz)
+                if (hz != null && modeId == null) {
+                    withContext(Dispatchers.Main) {
+                        showStatusBanner(
+                            localizedText(
+                                "Mode refresh rate tidak tersedia",
+                                "Refresh rate mode unavailable"
+                            ),
+                            icon = "error"
+                        )
+                    }
+                    return@launch
+                }
+                val configs = runCatching { ConfigRepository.getAppConfigs() }
+                    .getOrDefault(emptyMap())
+                val profile = configs[gamePkg] ?: AppProfileConfig(pkg = gamePkg, custom = true)
+                ConfigRepository.saveAppConfig(
+                    profile.copy(refreshRate = modeId?.toString() ?: "default")
+                )
+                val applyId = if (modeId != null) {
+                    modeId
+                } else {
+                    runCatching { ConfigRepository.getCurrentRefreshRateId() }.getOrNull()
+                }
+                ConfigRepository.applyRefreshRateMode(
+                    applyId,
+                    if (modeId != null) hz else GameDeckPrefs.refreshRateHint(this@GameDeckService)
+                )
+                uiState.value = uiState.value.copy(
+                    selectedRrHz = hz,
+                    rrPerApp = hz != null,
+                    targetHz = hz ?: readDisplayHz()
+                )
+                withContext(Dispatchers.Main) {
+                    showStatusBanner(
+                        if (hz == null) {
+                            localizedText("Game RR ikut Global", "Game RR follows Global")
+                        } else {
+                            "Game RR $hz Hz"
+                        },
+                        icon = if (hz == null) "info" else "check_circle"
+                    )
+                }
+            }
+            return
+        }
+
         GameDeckPrefs.setRefreshRateHint(this, hz)
         uiState.value = uiState.value.copy(
             selectedRrHz = hz,
+            rrPerApp = false,
             targetHz = hz ?: readDisplayHz()
         )
         serviceScope.launch(Dispatchers.IO) {
@@ -1341,21 +1416,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                 if (hz == null) {
                     ConfigRepository.setRefreshRate(null)
                 } else {
-                    var modeId = ConfigRepository.cachedTweaksState
-                        ?.rrModes
-                        ?.firstOrNull { it.hz == hz }
-                        ?.id
-                    if (modeId == null) {
-                        modeId = ConfigRepository.getRefreshRateModes()
-                            .firstOrNull { it.hz == hz }
-                            ?.id
-                    }
-                    if (modeId == null) {
-                        modeId = currentDisplay()?.supportedModes
-                            ?.filter { (it.refreshRate + 0.5f).toInt() == hz }
-                            ?.minByOrNull { it.modeId }
-                            ?.modeId
-                    }
+                    val modeId = resolveRefreshModeId(hz)
                     if (modeId == null) {
                         withContext(Dispatchers.Main) {
                             showStatusBanner(
@@ -1370,11 +1431,26 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                     }
                     ConfigRepository.setRefreshRate(modeId, hz)
                     withContext(Dispatchers.Main) {
-                        showStatusBanner("Refresh rate ${hz} Hz")
+                        showStatusBanner("Refresh rate $hz Hz")
                     }
                 }
             }
         }
+    }
+
+    private suspend fun resolveRefreshModeId(hz: Int): Int? {
+        ConfigRepository.cachedTweaksState?.rrModes
+            ?.firstOrNull { it.hz == hz }
+            ?.id
+            ?.let { return it }
+        ConfigRepository.getRefreshRateModes()
+            .firstOrNull { it.hz == hz }
+            ?.id
+            ?.let { return it }
+        return currentDisplay()?.supportedModes
+            ?.filter { (it.refreshRate + 0.5f).toInt() == hz }
+            ?.minByOrNull { it.modeId }
+            ?.modeId
     }
 
     private fun toggleDnd() {

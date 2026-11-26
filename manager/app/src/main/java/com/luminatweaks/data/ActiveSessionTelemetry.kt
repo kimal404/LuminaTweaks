@@ -117,18 +117,55 @@ internal data class CpuTimes(val total: Long, val idle: Long)
  */
 internal class SysfsTelemetry {
     private var previousCpu: CpuTimes? = null
+    private val coreMaxFreq = HashMap<Int, Long>()
+    private val coreMinFreq = HashMap<Int, Long>()
 
     fun cpuPercent(): Float? {
-        val current = readCpuTimes() ?: return null
-        val previous = previousCpu
-        previousCpu = current
-        if (previous == null) return null
-        val total = current.total - previous.total
-        val idle = current.idle - previous.idle
-        if (total <= 0L) return null
-        return (((total - idle).toDouble() / total.toDouble()) * 100.0)
-            .toFloat()
-            .coerceIn(0f, 100f)
+        val current = readCpuTimes()
+        if (current != null) {
+            val previous = previousCpu
+            previousCpu = current
+            if (previous != null) {
+                val total = current.total - previous.total
+                val idle = current.idle - previous.idle
+                if (total > 0L) {
+                    return (((total - idle).toDouble() / total.toDouble()) * 100.0)
+                        .toFloat()
+                        .coerceIn(0f, 100f)
+                }
+            }
+        }
+        return readCpuFrequencyPercent()
+    }
+
+    private fun readCpuFrequencyPercent(): Float? {
+        val cpuRoot = File("/sys/devices/system/cpu")
+        val cores = Runtime.getRuntime().availableProcessors().coerceIn(1, 32)
+        var weightedCur = 0.0
+        var weightedMax = 0.0
+        for (index in 0 until cores) {
+            val dir = File(cpuRoot, "cpu$index/cpufreq")
+            val cur = readLongValue(File(dir, "scaling_cur_freq").absolutePath)
+                ?: readLongValue(File(dir, "cpuinfo_cur_freq").absolutePath)
+                ?: continue
+            val max = coreMaxFreq.getOrPut(index) {
+                readLongValue(File(dir, "cpuinfo_max_freq").absolutePath)
+                    ?: readLongValue(File(dir, "scaling_max_freq").absolutePath)
+                    ?: 0L
+            }
+            if (max <= 0L) continue
+            val min = coreMinFreq.getOrPut(index) {
+                readLongValue(File(dir, "cpuinfo_min_freq").absolutePath)
+                    ?: readLongValue(File(dir, "scaling_min_freq").absolutePath)
+                    ?: 0L
+            }
+            val span = (max - min).coerceAtLeast(1L)
+            val norm = ((cur - min).toDouble() / span).coerceIn(0.02, 1.0)
+            weightedCur += norm * max
+            weightedMax += max
+        }
+        if (weightedMax <= 0.0) return null
+        return ((weightedCur / weightedMax) * 100.0).toFloat().coerceIn(2f, 100f)
     }
 
     fun gpuPercent(): Float? {

@@ -62,6 +62,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -70,6 +71,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -489,34 +491,47 @@ fun AospTopBar(
     containerColor: Color = MaterialTheme.colorScheme.background,
     scrolled: Boolean? = null
 ) {
-    val collapsedFraction = scrollBehavior.state.collapsedFraction
-    val titleSize = (26f - (6f * collapsedFraction)).sp
     val scrimSurface = if (containerColor == Color.Transparent) {
         MaterialTheme.colorScheme.background
     } else {
         containerColor
     }
-    val headerScrolled = scrolled ?: (scrollBehavior.state.overlappedFraction > 0.01f)
+    val autoScrolled by remember {
+        derivedStateOf { scrollBehavior.state.overlappedFraction > 0.01f }
+    }
+    val headerScrolled = scrolled ?: autoScrolled
     LargeTopAppBar(
         title = {
             if (subtitle.isNullOrBlank()) {
                 Text(
                     text = title,
-                    fontSize = titleSize,
+                    fontSize = 26.sp,
                     letterSpacing = (-0.4).sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.graphicsLayer {
+                        val scale = 1f - 0.23f * scrollBehavior.state.collapsedFraction.coerceIn(0f, 1f)
+                        scaleX = scale
+                        scaleY = scale
+                        transformOrigin = TransformOrigin(0f, 0.5f)
+                    }
                 )
             } else {
                 Column {
                     Text(
                         text = title,
-                        fontSize = titleSize,
+                        fontSize = 26.sp,
                         letterSpacing = (-0.4).sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.graphicsLayer {
+                            val scale = 1f - 0.23f * scrollBehavior.state.collapsedFraction.coerceIn(0f, 1f)
+                            scaleX = scale
+                            scaleY = scale
+                            transformOrigin = TransformOrigin(0f, 0.5f)
+                        }
                     )
                     Text(
                         text = subtitle,

@@ -214,7 +214,7 @@ fun PersonalisasiScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .appBarFade(fadeSurface, scrollBehavior.state.overlappedFraction)
+                    .appBarFade(fadeSurface) { scrollBehavior.state.overlappedFraction }
                     .statusBarsPadding()
             ) {
                 LargeFlexibleTopAppBar(

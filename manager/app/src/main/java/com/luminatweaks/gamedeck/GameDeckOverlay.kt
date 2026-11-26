@@ -8,7 +8,6 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
@@ -317,7 +316,6 @@ fun GameDeckRoot(
             .coerceIn(with(density) { 316.dp.toPx() }, with(density) { 348.dp.toPx() })
             .coerceAtLeast(1f)
         val pivotY = (0.5f + (handleYOffsetPx.toFloat() / panelHeightPx)).coerceIn(0.08f, 0.92f)
-        val p = openProgress.value.coerceIn(0f, 1f)
         var lastBanner by remember { mutableStateOf("") }
         var lastBannerIcon by remember { mutableStateOf("check_circle") }
         LaunchedEffect(current.statusBannerKey) {
@@ -331,6 +329,7 @@ fun GameDeckRoot(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
+                    val p = openProgress.value.coerceIn(0f, 1f)
                     alpha = (p * 1.25f).coerceIn(0f, 1f)
                     scaleX = 0.90f + 0.10f * p
                     scaleY = 0.92f + 0.08f * p
@@ -2198,6 +2197,8 @@ private fun LiveDashboardWidgetPreview(
             modes = state.rrModes,
             selectedHz = state.selectedRrHz,
             liveHz = state.targetHz,
+            gameScoped = state.gamePackage != null,
+            perApp = state.rrPerApp,
             onSelect = {},
             interactive = false
         )
@@ -2792,12 +2793,6 @@ private fun DashboardDeckContent(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .animateContentSize(
-                animationSpec = spring(
-                    dampingRatio = 0.80f,
-                    stiffness = Spring.StiffnessMediumLow
-                )
-            )
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -2842,6 +2837,8 @@ private fun DashboardDeckContent(
                             modes = state.rrModes,
                             selectedHz = state.selectedRrHz,
                             liveHz = state.targetHz,
+                            gameScoped = state.gamePackage != null,
+                            perApp = state.rrPerApp,
                             onSelect = onRefreshRateSelected
                         )
                     }
@@ -3304,6 +3301,8 @@ private fun RefreshRateCard(
     modes: List<Int>,
     selectedHz: Int?,
     liveHz: Int,
+    gameScoped: Boolean = false,
+    perApp: Boolean = false,
     onSelect: (Int?) -> Unit,
     interactive: Boolean = true
 ) {
@@ -3311,10 +3310,11 @@ private fun RefreshRateCard(
     var menuExpanded by remember { mutableStateOf(false) }
     val sortedModes = remember(modes) { modes.distinct().sorted() }
     val displayLiveHz = if (liveHz > 0) liveHz else (selectedHz ?: 60)
-    val pillLabel = if (selectedHz == null) {
-        "Auto · $displayLiveHz Hz"
-    } else {
-        "$selectedHz Hz"
+    val pillLabel = when {
+        selectedHz != null && perApp -> "Game · $selectedHz Hz"
+        selectedHz != null -> "$selectedHz Hz"
+        gameScoped -> "Global · $displayLiveHz Hz"
+        else -> "Auto · $displayLiveHz Hz"
     }
     val pillContainer = if (selectedHz != null) {
         scheme.primaryContainer
@@ -3371,6 +3371,17 @@ private fun RefreshRateCard(
                 maxLines = 1,
                 softWrap = false
             )
+            if (perApp) {
+                Spacer(modifier = Modifier.width(5.dp))
+                Text(
+                    text = "PER-APP",
+                    fontSize = 8.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = scheme.primary,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
             Spacer(modifier = Modifier.weight(1f))
             Box {
                 if (interactive) {
@@ -3389,7 +3400,11 @@ private fun RefreshRateCard(
                         DropdownMenuItem(
                             text = {
                                 Text(
-                                    text = "Auto ($displayLiveHz Hz)",
+                                    text = if (gameScoped) {
+                                        "Ikut Global ($displayLiveHz Hz)"
+                                    } else {
+                                        "Auto ($displayLiveHz Hz)"
+                                    },
                                     fontWeight = if (selectedHz == null) FontWeight.Bold else FontWeight.Normal
                                 )
                             },

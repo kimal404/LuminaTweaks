@@ -46,15 +46,18 @@ fun rememberHeaderScrolled(scrollState: ScrollState): State<Boolean> =
     }
 
 @Composable
-fun Modifier.appBarFade(surface: Color, overlap: Float = 1f): Modifier {
-    val fraction by animateFloatAsState(
-        targetValue = overlap.coerceIn(0f, 1f),
+fun Modifier.appBarFade(surface: Color, overlap: () -> Float): Modifier {
+    val scrolled by remember {
+        derivedStateOf { overlap() > 0.02f }
+    }
+    val fraction = animateFloatAsState(
+        targetValue = if (scrolled) 1f else 0f,
         animationSpec = tween(220, easing = FastOutSlowInEasing),
         label = "appBarScrimFraction"
     )
-    val scrimAlpha = 0.95f * fraction
 
     return this.drawBehind {
+        val scrimAlpha = 0.95f * fraction.value.coerceIn(0f, 1f)
         if (scrimAlpha > 0.001f) {
             drawRect(
                 brush = Brush.verticalGradient(
@@ -69,4 +72,4 @@ fun Modifier.appBarFade(surface: Color, overlap: Float = 1f): Modifier {
 
 @Composable
 fun Modifier.scrolledHeader(scrolled: Boolean, surface: Color): Modifier =
-    appBarFade(surface, if (scrolled) 1f else 0f)
+    appBarFade(surface) { if (scrolled) 1f else 0f }

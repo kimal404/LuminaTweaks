@@ -30,10 +30,8 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -296,7 +294,7 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                         currentProfile = resolved
                     }
                 }
-                delay(200L)
+                delay(500L)
             }
         }
     }
@@ -819,7 +817,7 @@ fun HomeDashboardContent(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .appBarFade(fadeSurface, scrollBehavior.state.overlappedFraction)
+                    .appBarFade(fadeSurface) { scrollBehavior.state.overlappedFraction }
                     .statusBarsPadding()
             ) {
                 LargeFlexibleTopAppBar(
@@ -1156,7 +1154,6 @@ private fun CoreStatusHero(
             .fillMaxWidth()
             .then(heroPressScale)
             .height(100.dp)
-            .animateContentSize(animationSpec = spring())
     ) {
         Row(
             modifier = Modifier
