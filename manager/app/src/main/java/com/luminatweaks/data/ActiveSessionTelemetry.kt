@@ -144,7 +144,36 @@ internal class SysfsTelemetry {
                 fallback = value
             }
         }
+        readGpuClockPercent()?.let { return it }
         return fallback
+    }
+
+    private fun readGpuClockPercent(): Float? {
+        val pairs = listOf(
+            "/sys/kernel/gpu/gpu_clock" to "/sys/kernel/gpu/gpu_max_clock",
+            "/sys/class/kgsl/kgsl-3d0/devfreq/cur_freq" to "/sys/class/kgsl/kgsl-3d0/devfreq/max_freq",
+            "/sys/class/kgsl/kgsl-3d0/gpuclk" to "/sys/class/kgsl/kgsl-3d0/max_gpuclk"
+        )
+        for ((curPath, maxPath) in pairs) {
+            val cur = readLongValue(curPath) ?: continue
+            val max = readLongValue(maxPath) ?: continue
+            if (max > 0L) return ((cur * 100L) / max).toFloat().coerceIn(1f, 100f)
+        }
+        for (entry in File("/sys/class/devfreq").listFiles().orEmpty()) {
+            val name = entry.name.lowercase()
+            if (!name.contains("gpu") && !name.contains("mali") && !name.contains("kgsl")) continue
+            val cur = readLongValue(File(entry, "cur_freq").absolutePath) ?: continue
+            val max = readLongValue(File(entry, "max_freq").absolutePath) ?: continue
+            if (max > 0L) return ((cur * 100L) / max).toFloat().coerceIn(1f, 100f)
+        }
+        return null
+    }
+
+    private fun readLongValue(path: String): Long? {
+        return readText(path)
+            ?.split(Regex("\\s+"))
+            ?.firstOrNull()
+            ?.toLongOrNull()
     }
 
     fun batteryTempC(context: Context): Float? {
@@ -245,6 +274,19 @@ internal class SysfsTelemetry {
                 val name = entry.name.lowercase()
                 if (!name.contains("gpu") && !name.contains("mali") && !name.contains("kgsl")) continue
                 for (node in listOf("gpu_busy_percentage", "gpu_load", "utilisation", "utilization", "load")) {
+                    val file = File(entry, node)
+                    if (file.exists()) {
+                        sources += GpuProbe(file.absolutePath, pair = false)
+                    }
+                }
+            }
+            val platform = File("/sys/devices/platform")
+            for (entry in platform.listFiles().orEmpty()) {
+                val name = entry.name.lowercase()
+                if (!name.contains("mali") && !name.contains("gpu") && !name.contains("kgsl") && !name.contains("dfrgx")) {
+                    continue
+                }
+                for (node in listOf("utilization", "utilisation", "gpu_loading", "gpu_busy_percentage", "load")) {
                     val file = File(entry, node)
                     if (file.exists()) {
                         sources += GpuProbe(file.absolutePath, pair = false)

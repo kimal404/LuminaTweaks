@@ -73,6 +73,7 @@ data class GameDeckUiState(
     val musicDurationMs: Long = 0L,
     val floatingHud: FloatingFpsConfig = FloatingFpsConfig(),
     val statusBanner: String? = null,
+    val statusBannerIcon: String = "check_circle",
     val statusBannerKey: Long = 0L,
     val quickApps: List<GameDeckQuickApp> = emptyList()
 )

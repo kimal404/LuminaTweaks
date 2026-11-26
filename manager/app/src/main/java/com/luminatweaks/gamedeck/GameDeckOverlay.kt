@@ -92,9 +92,11 @@ import androidx.compose.material.icons.rounded.BrightnessMedium
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Info
@@ -317,8 +319,12 @@ fun GameDeckRoot(
         val pivotY = (0.5f + (handleYOffsetPx.toFloat() / panelHeightPx)).coerceIn(0.08f, 0.92f)
         val p = openProgress.value.coerceIn(0f, 1f)
         var lastBanner by remember { mutableStateOf("") }
-        LaunchedEffect(current.statusBanner) {
-            current.statusBanner?.let { lastBanner = it }
+        var lastBannerIcon by remember { mutableStateOf("check_circle") }
+        LaunchedEffect(current.statusBannerKey) {
+            current.statusBanner?.let {
+                lastBanner = it
+                lastBannerIcon = current.statusBannerIcon
+            }
         }
         val bannerText = current.statusBanner ?: lastBanner
         Box(
@@ -364,22 +370,19 @@ fun GameDeckRoot(
             )
             AnimatedVisibility(
                 visible = current.statusBanner != null,
-                enter = fadeIn(tween(160)) + slideInVertically(
-                    initialOffsetY = { it / 2 },
-                    animationSpec = spring(
-                        dampingRatio = 0.8f,
-                        stiffness = Spring.StiffnessMediumLow
-                    )
+                enter = fadeIn(tween(200)) + slideInVertically(
+                    animationSpec = tween(200),
+                    initialOffsetY = { it / 2 }
                 ),
-                exit = fadeOut(tween(130)) + slideOutVertically(
-                    targetOffsetY = { it / 3 },
-                    animationSpec = tween(150)
+                exit = fadeOut(tween(200)) + slideOutVertically(
+                    animationSpec = tween(200),
+                    targetOffsetY = { it / 2 }
                 ),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 16.dp)
             ) {
-                StatusBannerPill(text = bannerText)
+                StatusBannerPill(text = bannerText, iconName = lastBannerIcon)
             }
         }
     }
@@ -4299,36 +4302,41 @@ private fun WideToolButton(
 }
 
 @Composable
-private fun StatusBannerPill(text: String) {
+private fun StatusBannerPill(text: String, iconName: String) {
     val scheme = MaterialTheme.colorScheme
+    val icon = when (iconName) {
+        "error" -> Icons.Rounded.Error
+        "info" -> Icons.Rounded.Info
+        else -> Icons.Rounded.CheckCircle
+    }
     Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = scheme.inverseSurface,
-        contentColor = scheme.inverseOnSurface,
-        shadowElevation = 8.dp
+        shape = CircleShape,
+        color = scheme.surfaceContainerHighest,
+        contentColor = scheme.onSurface,
+        shadowElevation = 10.dp
     ) {
         Row(
             modifier = Modifier
                 .widthIn(max = 300.dp)
-                .padding(horizontal = 14.dp, vertical = 9.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Icon(
-                imageVector = Icons.Rounded.Info,
+                imageVector = icon,
                 contentDescription = null,
-                tint = scheme.inverseOnSurface,
-                modifier = Modifier.size(15.dp)
+                tint = if (iconName == "error") scheme.error else scheme.primary,
+                modifier = Modifier.size(18.dp)
             )
             Text(
                 text = text,
                 style = TextStyle(
-                    fontSize = 11.5.sp,
-                    lineHeight = 14.sp,
+                    fontSize = 12.sp,
+                    lineHeight = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                     platformStyle = PlatformTextStyle(includeFontPadding = false)
                 ),
-                color = scheme.inverseOnSurface,
+                color = scheme.onSurface,
                 maxLines = 1,
                 softWrap = false,
                 overflow = TextOverflow.Ellipsis

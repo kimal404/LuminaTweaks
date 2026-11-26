@@ -258,8 +258,54 @@ impl LoadSampler {
                 fallback = Some(value);
             }
         }
-        fallback
+        read_gpu_clock_percent().or(fallback)
     }
+}
+
+fn read_gpu_clock_percent() -> Option<f32> {
+    for (cur_path, max_path) in [
+        ("/sys/kernel/gpu/gpu_clock", "/sys/kernel/gpu/gpu_max_clock"),
+        (
+            "/sys/class/kgsl/kgsl-3d0/devfreq/cur_freq",
+            "/sys/class/kgsl/kgsl-3d0/devfreq/max_freq",
+        ),
+        (
+            "/sys/class/kgsl/kgsl-3d0/gpuclk",
+            "/sys/class/kgsl/kgsl-3d0/max_gpuclk",
+        ),
+    ] {
+        let cur = fs::read_to_string(cur_path)
+            .ok()
+            .and_then(|text| text.trim().parse::<u64>().ok());
+        let max = fs::read_to_string(max_path)
+            .ok()
+            .and_then(|text| text.trim().parse::<u64>().ok());
+        if let (Some(cur), Some(max)) = (cur, max) {
+            if max > 0 {
+                return Some((cur as f32 * 100.0 / max as f32).clamp(1.0, 100.0));
+            }
+        }
+    }
+    if let Ok(entries) = fs::read_dir("/sys/class/devfreq") {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+            if !name.contains("gpu") && !name.contains("mali") && !name.contains("kgsl") {
+                continue;
+            }
+            let cur = fs::read_to_string(entry.path().join("cur_freq"))
+                .ok()
+                .and_then(|text| text.trim().parse::<u64>().ok());
+            let max = fs::read_to_string(entry.path().join("max_freq"))
+                .ok()
+                .and_then(|text| text.trim().parse::<u64>().ok());
+            if let (Some(cur), Some(max)) = (cur, max) {
+                if max > 0 {
+                    return Some((cur as f32 * 100.0 / max as f32).clamp(1.0, 100.0));
+                }
+            }
+        }
+    }
+    None
 }
 
 fn discover_gpu_sources() -> Vec<GpuSource> {

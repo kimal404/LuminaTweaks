@@ -751,11 +751,21 @@ object ConfigRepository {
         content.toIntOrNull()
     }
 
-    suspend fun setRefreshRate(id: Int?) = withContext(Dispatchers.IO) {
+    suspend fun setRefreshRate(id: Int?, hz: Int? = null) = withContext(Dispatchers.IO) {
         cachedTweaksState = cachedTweaksState?.copy(currentRrId = id)
         ensureDir()
         if (id != null) {
-            runSuCmd("echo $id > $CONFIG_DIR/current_rr.txt && /system/bin/service call SurfaceFlinger 1035 i32 $id", 4)
+            val props = if (hz != null && hz > 0) {
+                " && setprop persist.vendor.display.refresh_rate $hz" +
+                    " && setprop persist.sys.display.refresh_rate $hz"
+            } else {
+                ""
+            }
+            runSuCmd(
+                "echo $id > $CONFIG_DIR/current_rr.txt && " +
+                    "/system/bin/service call SurfaceFlinger 1035 i32 $id$props",
+                4
+            )
         } else {
             runSuCmd("rm -f $CONFIG_DIR/current_rr.txt", 3)
         }
