@@ -12,31 +12,44 @@
 
 ## What is LuminaTweaks?
 
-LuminaTweaks is an Android root module built to stabilize framerates and eliminate gaming stutter. It automatically boosts hardware performance when you open a game and restores balanced settings during normal use to save battery.
+**LuminaTweaks** is a modular Android root performance suite built with a lightweight **Rust system daemon** and a **Material Design 3 Expressive** manager app. It dynamically detects active game sessions to stabilize framerates, tune CPU/GPU scheduling, and restore power-saving defaults the moment you exit a game.
+
+---
+
+## Key Features
+
+- **Adaptive Performance Profiles** — Automatic switching between *Eco*, *Balanced*, *Performance*, and *Performance Lite* with per-app overrides.
+- **Lumina Game Deck** — Floating *in-game overlay* featuring live FPS/frametime telemetry, CPU/GPU radial gauges, quick profile & refresh-rate toggles, wavy media controls, freeform app shortcuts, and a split-screen widget customizer.
+- **Low-Overhead Rust Daemon** — Native background service handling process detection, sysfs/thermal tuning, and hardware state synchronization with minimal memory footprint.
+- **Material 3 Expressive UI** — Clean edge-to-edge Jetpack Compose interface with dynamic color theming and real-time device diagnostics.
 
 ---
 
 ## Installation
 
-Compatible with Android 11+ on the following root managers:
+Compatible with **Android 11+** on the following root solutions:
 
-- KernelSU / KernelSU Next
-- APatch
-- Magisk
+- **KernelSU / KernelSU Next**
+- **APatch**
+- **Magisk**
 
-Flash the release zip via your root manager and reboot.
+1. Download the latest release ZIP from [Releases](https://github.com/kimal404/LuminaTweaks/releases).
+2. Flash the module via your root manager and reboot your device.
+3. Open **Lumina Manager** to configure per-app profiles and enable **Game Deck**.
 
 ---
 
-## Credits
+## Credits & Acknowledgements
 
 - **Author:** [@kimal404](https://github.com/kimal404)
-- **[AZenith](https://github.com/Liliya2727/AZenith)** by [@Liliya2727](https://github.com/Liliya2727) — Transplantasi kode ColorEngine, sistem intensitas aksen, dan bagian Personalisasi Warna (Apache 2.0).
-- **[Encore Tweaks](https://github.com/Rem01Gaming/encore)** by [@Rem01Gaming](https://github.com/Rem01Gaming) — Referensi dan adaptasi kode pemantauan proses/binder (Apache 2.0).
+- **[Encore Tweaks](https://github.com/Rem01Gaming/encore)** by [@Rem01Gaming](https://github.com/Rem01Gaming) — System performance tweak references and binder process-observer logic.
+- **[AZenith](https://github.com/Liliya2727/AZenith)** by [@Liliya2727](https://github.com/Liliya2727) — ColorEngine theme system and UI/UX feature design references.
+
+For complete third-party copyrights, component attributions, and license notices, see **[NOTICE.md](NOTICE.md)**.
 
 ---
 
-## Links
+## Community & Links
 
 - [GitHub Repository](https://github.com/kimal404/LuminaTweaks)
 - [Telegram Channel](https://t.me/MallArchiven)
