@@ -548,7 +548,7 @@ private fun GameDeckWorkspace(
                     val s = 1f - 0.04f * editorP
                     scaleX = s
                     scaleY = s
-                    alpha = (1f - 0.50f * editorP).coerceIn(0f, 1f)
+                    alpha = (1f - 1.45f * editorP).coerceIn(0f, 1f)
                 }
         } else {
             Modifier.fillMaxSize()

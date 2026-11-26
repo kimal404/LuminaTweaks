@@ -1354,7 +1354,31 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             Toast.makeText(this, "Minimal 1 widget aktif", Toast.LENGTH_SHORT).show()
             return
         }
-        applyDashboardWidgets(candidate)
+        val isEnabling = when (widgetKey) {
+            "telemetry" -> !cur.showTelemetry && candidate.showTelemetry
+            "profile" -> !cur.showProfile && candidate.showProfile
+            "music" -> !cur.showMusic && candidate.showMusic
+            "refresh_rate" -> !cur.showRefreshRate && candidate.showRefreshRate
+            "sliders" -> !cur.showSliders && candidate.showSliders
+            else -> false
+        }
+        val nextOrder = if (isEnabling) {
+            fun isKeyEnabled(k: String): Boolean = when (k) {
+                "telemetry" -> candidate.showTelemetry
+                "profile" -> candidate.showProfile
+                "music" -> candidate.showMusic
+                "refresh_rate" -> candidate.showRefreshRate
+                "sliders" -> candidate.showSliders
+                else -> false
+            }
+            val withoutKey = cur.order.filterNot { it == widgetKey }
+            val activeBefore = withoutKey.filter { isKeyEnabled(it) }
+            val inactiveAfter = withoutKey.filterNot { isKeyEnabled(it) }
+            activeBefore + widgetKey + inactiveAfter
+        } else {
+            cur.order
+        }
+        applyDashboardWidgets(candidate.copy(order = nextOrder))
     }
 
     private fun toggleAutoBrightnessLock() {
