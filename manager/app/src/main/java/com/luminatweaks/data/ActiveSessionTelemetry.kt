@@ -41,6 +41,7 @@ object LiveSessionFeed {
     private const val FRESH_AGE_MS = 2_500L
     private const val PUBLIC_FPS_PATH = "/data/local/tmp/lumina.fps"
     private const val LEGACY_FPS_PATH = "/data/adb/.config/lumina/fps.txt"
+    private val PERCENT_NUMBER = Regex("""-?\d+(?:\.\d+)?""")
 
     fun read(context: Context): LiveFeedSample? {
         val candidates = ArrayList<LiveFeedSample>(4)
@@ -54,7 +55,19 @@ object LiveSessionFeed {
         }
         val newest = candidates.maxByOrNull { it.epochMs } ?: return null
         val fresh = System.currentTimeMillis() - newest.epochMs <= FRESH_AGE_MS
-        return if (fresh) newest else null
+        if (!fresh) return null
+        val cpu = newest.cpuPercent
+            ?: parsePercent(DeviceUtil.readSystemProperty("sys.lumina.cpu"))
+        val gpu = newest.gpuPercent
+            ?: parsePercent(DeviceUtil.readSystemProperty("sys.lumina.gpu"))
+        return newest.copy(cpuPercent = cpu, gpuPercent = gpu)
+    }
+
+    private fun parsePercent(raw: String?): Float? {
+        if (raw.isNullOrBlank()) return null
+        val value = raw.trim().substringBefore(' ').substringBefore('@').toFloatOrNull()
+            ?: PERCENT_NUMBER.find(raw)?.value?.toFloatOrNull()
+        return value?.takeIf { it.isFinite() && it in 0f..100f }
     }
 
     private fun parse(raw: String?): LiveFeedSample? {
@@ -119,15 +132,19 @@ internal class SysfsTelemetry {
     }
 
     fun gpuPercent(): Float? {
+        var fallback: Float? = null
         for (source in GPU_SOURCES) {
             val value = if (source.pair) {
                 readGpuBusyPair(source.path)
             } else {
                 readPercent(source.path)
             }
-            if (value != null) return value
+            if (value != null) {
+                if (value > 0f) return value
+                fallback = value
+            }
         }
-        return null
+        return fallback
     }
 
     fun batteryTempC(context: Context): Float? {
@@ -210,9 +227,13 @@ internal class SysfsTelemetry {
             val nodes = listOf(
                 "/sys/kernel/gpu/gpu_busy",
                 "/sys/class/misc/mali0/device/utilization",
+                "/sys/class/misc/mali0/device/utilisation",
+                "/proc/mali/utilization",
                 "/sys/module/ged/parameters/gpu_loading",
                 "/sys/kernel/ged/hal/gpu_utilization",
-                "/sys/class/devfreq/gpufreq/gpu_busy_percentage"
+                "/sys/kernel/ged/hal/gpu_loading",
+                "/sys/class/devfreq/gpufreq/gpu_busy_percentage",
+                "/sys/class/devfreq/gpufreq/gpu_loading"
             )
             for (path in nodes) {
                 if (File(path).exists()) {

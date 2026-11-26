@@ -39,7 +39,6 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.WindowManager
 import android.widget.FrameLayout
-import android.widget.Toast
 import androidx.compose.runtime.Recomposer
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.AndroidUiDispatcher
@@ -92,6 +91,29 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         private const val HIDDEN_POLL_MS = 1_500L
         private const val COLLAPSED_POLL_MS = 1_500L
         private const val EXPANDED_POLL_MS = 1_000L
+        private const val ROOT_LOAD_INTERVAL_MS = 3_000L
+        private const val STATUS_BANNER_MS = 2_200L
+        private val WHITESPACE = Regex("\\s+")
+        private val GPU_METRIC_NUMBER = Regex("""-?\d+(?:\.\d+)?""")
+        private const val ROOT_LOAD_SCRIPT =
+            "head -n 1 /proc/stat 2>/dev/null; " +
+                "for p in " +
+                "/sys/class/kgsl/kgsl-3d0/gpubusy " +
+                "/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage " +
+                "/sys/module/ged/parameters/gpu_loading " +
+                "/sys/kernel/ged/hal/gpu_utilization " +
+                "/sys/kernel/ged/hal/gpu_loading " +
+                "/sys/kernel/gpu/gpu_busy " +
+                "/sys/class/misc/mali0/device/utilization " +
+                "/sys/class/misc/mali0/device/utilisation " +
+                "/proc/mali/utilization " +
+                "/sys/class/devfreq/*gpu*/gpu_busy_percentage " +
+                "/sys/class/devfreq/*gpu*/gpu_loading " +
+                "/sys/class/devfreq/*gpu*/load " +
+                "/sys/class/devfreq/*mali*/load " +
+                "/sys/devices/platform/*mali*/utilisation " +
+                "/sys/devices/platform/*mali*/utilization; " +
+                "do if [ -r \"\$p\" ]; then echo \"L:\$p\"; head -n 1 \"\$p\" 2>/dev/null; fi; done"
         private const val REOPEN_COOLDOWN_MS = 320L
         private const val EXPANDED_HEIGHT_FRACTION = 0.86f
         private const val EXPANDED_MAX_HEIGHT_DP = 348f
@@ -200,6 +222,12 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     private var cachedQuickApps: List<GameDeckQuickApp> = emptyList()
     private var lastGameProbeMs = 0L
     private var lastGameProbeResult = false
+    private var statusBannerJob: Job? = null
+    private var lastRootLoadMs = 0L
+    private var rootPrevTotal = 0L
+    private var rootPrevIdle = 0L
+    private var lastRootCpu = 0
+    private var lastRootGpu = 0
 
     override fun onCreate() {
         super.onCreate()
@@ -448,7 +476,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
         val quickApps: List<GameDeckQuickApp>
     )
 
-    private fun collectSnapshot(
+    private suspend fun collectSnapshot(
         config: GameDeckConfig,
         collectHeavy: Boolean,
         feed: com.luminatweaks.data.LiveFeedSample?
@@ -483,12 +511,21 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
 
         val quickApps = resolveQuickApps(config)
 
-        val feedCpu = feed?.cpuPercent
-        val feedGpu = feed?.gpuPercent
+        val feedCpu = feed?.cpuPercent?.takeIf { it > 0f }
+        val feedGpu = feed?.gpuPercent?.takeIf { it > 0f }
+        val rootLoad = if (collectHeavy && (feedCpu == null || feedGpu == null)) {
+            sampleRootLoad()
+        } else {
+            null
+        }
         val cpu = when {
             !collectHeavy -> lastCpuPercent
             feedCpu != null -> {
                 lastCpuPercent = feedCpu.roundToInt().coerceIn(0, 100)
+                lastCpuPercent
+            }
+            rootLoad != null && rootLoad.first > 0 -> {
+                lastCpuPercent = rootLoad.first
                 lastCpuPercent
             }
             else -> readCpuLoad()
@@ -497,6 +534,10 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             !collectHeavy -> lastGpuPercent
             feedGpu != null -> {
                 lastGpuPercent = feedGpu.roundToInt().coerceIn(0, 100)
+                lastGpuPercent
+            }
+            rootLoad != null && rootLoad.second > 0 -> {
+                lastGpuPercent = rootLoad.second
                 lastGpuPercent
             }
             else -> readGpuLoad()
@@ -617,6 +658,80 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             lastGpuPercent = direct
         }
         return lastGpuPercent
+    }
+
+    private suspend fun sampleRootLoad(): Pair<Int, Int>? {
+        val now = System.currentTimeMillis()
+        if (lastRootLoadMs > 0L && now - lastRootLoadMs < ROOT_LOAD_INTERVAL_MS) {
+            return if (lastRootCpu > 0 || lastRootGpu > 0) lastRootCpu to lastRootGpu else null
+        }
+        lastRootLoadMs = now
+        val (ok, output) = RootUtil.runAsRootWithOutput(ROOT_LOAD_SCRIPT)
+        if (!ok || output.isBlank()) return null
+        var currentCpu: Int? = null
+        var currentGpu: Int? = null
+        var pendingNode: String? = null
+        for (line in output.lineSequence()) {
+            val trimmed = line.trim()
+            when {
+                trimmed.startsWith("cpu ") -> {
+                    val values = trimmed.split(WHITESPACE).drop(1).mapNotNull { it.toLongOrNull() }
+                    if (values.size >= 5) {
+                        val idle = values[3] + values[4]
+                        val total = values.sum()
+                        if (rootPrevTotal > 0L && total > rootPrevTotal) {
+                            val totalDelta = total - rootPrevTotal
+                            val idleDelta = (idle - rootPrevIdle).coerceAtLeast(0L)
+                            currentCpu = (((totalDelta - idleDelta) * 100.0) / totalDelta)
+                                .roundToInt()
+                                .coerceIn(0, 100)
+                        }
+                        rootPrevTotal = total
+                        rootPrevIdle = idle
+                    }
+                }
+                trimmed.startsWith("L:") -> pendingNode = trimmed.substring(2)
+                pendingNode != null && trimmed.isNotEmpty() -> {
+                    val node = pendingNode
+                    pendingNode = null
+                    if (node != null) {
+                        val parsed = parseGpuSample(node, trimmed)
+                        if (parsed != null && (parsed > 0 || currentGpu == null)) {
+                            currentGpu = parsed
+                        }
+                    }
+                }
+            }
+        }
+        if (currentCpu != null) lastRootCpu = currentCpu
+        if (currentGpu != null) lastRootGpu = currentGpu
+        return if (lastRootCpu > 0 || lastRootGpu > 0) lastRootCpu to lastRootGpu else null
+    }
+
+    private fun parseGpuSample(node: String, raw: String): Int? {
+        val text = raw.trim()
+        if (text.isEmpty()) return null
+        if (node.endsWith("gpubusy")) {
+            val parts = text.split(WHITESPACE)
+            val busy = parts.getOrNull(0)?.toFloatOrNull() ?: return null
+            val total = parts.getOrNull(1)?.toFloatOrNull() ?: return null
+            if (total <= 0f) return null
+            return (busy / total * 100f).roundToInt().coerceIn(0, 100)
+        }
+        val value = GPU_METRIC_NUMBER.find(text)?.value?.toFloatOrNull() ?: return null
+        return value.roundToInt().coerceIn(0, 100)
+    }
+
+    private fun showStatusBanner(message: String) {
+        statusBannerJob?.cancel()
+        uiState.value = uiState.value.copy(
+            statusBanner = message,
+            statusBannerKey = System.currentTimeMillis()
+        )
+        statusBannerJob = serviceScope.launch {
+            delay(STATUS_BANNER_MS)
+            uiState.value = uiState.value.copy(statusBanner = null)
+        }
     }
 
     private fun isForegroundGameActive(nowMs: Long): Boolean {
@@ -1017,14 +1132,12 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
 
     private fun selectProfileOverride(name: String?) {
         if (profileAutoMode || name == null) {
-            Toast.makeText(
-                this@GameDeckService,
+            showStatusBanner(
                 localizedText(
                     "Matikan Auto Mode dulu untuk memilih profil",
                     "Turn off Auto Mode to choose a profile"
-                ),
-                Toast.LENGTH_SHORT
-            ).show()
+                )
+            )
             return
         }
 
@@ -1044,11 +1157,9 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             }
             if (!ok) {
                 pendingOverrideLabel = null
-                Toast.makeText(
-                    this@GameDeckService,
-                    localizedText("Gagal menerapkan profil", "Failed to apply profile"),
-                    Toast.LENGTH_SHORT
-                ).show()
+                showStatusBanner(
+                    localizedText("Gagal menerapkan profil", "Failed to apply profile")
+                )
             }
         }
     }
@@ -1061,11 +1172,9 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                 profileAutoMode = false,
                 profileOverride = uiState.value.profile
             )
-            Toast.makeText(
-                this@GameDeckService,
-                localizedText("Mode manual — pilih profil", "Manual mode — select a profile"),
-                Toast.LENGTH_SHORT
-            ).show()
+            showStatusBanner(
+                localizedText("Mode manual — pilih profil", "Manual mode — select a profile")
+            )
             return
         }
 
@@ -1080,11 +1189,9 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                 DaemonManager.clearProfileOverride()
             }
             if (!ok) {
-                Toast.makeText(
-                    this@GameDeckService,
-                    localizedText("Gagal kembali ke Auto Mode", "Failed to restore Auto Mode"),
-                    Toast.LENGTH_SHORT
-                ).show()
+                showStatusBanner(
+                    localizedText("Gagal kembali ke Auto Mode", "Failed to restore Auto Mode")
+                )
             }
         }
     }
@@ -1204,14 +1311,12 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
     private fun toggleDnd() {
         val manager = getSystemService(NotificationManager::class.java) ?: return
         if (!manager.isNotificationPolicyAccessGranted) {
-            Toast.makeText(
-                this,
+            showStatusBanner(
                 localizedText(
                     "Izinkan akses Jangan Ganggu terlebih dahulu",
                     "Allow Do Not Disturb access first"
-                ),
-                Toast.LENGTH_SHORT
-            ).show()
+                )
+            )
             runCatching {
                 startActivity(
                     Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
@@ -1364,7 +1469,9 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                 val disabled = FloatingFpsPrefs.load(this@GameDeckService).copy(enabled = false)
                 FloatingFpsPrefs.save(this@GameDeckService, disabled)
                 uiState.value = uiState.value.copy(floatingHud = disabled)
-                Toast.makeText(this@GameDeckService, "Izin overlay diperlukan", Toast.LENGTH_SHORT).show()
+                showStatusBanner(
+                    localizedText("Izin overlay diperlukan", "Overlay permission required")
+                )
                 return@launch
             }
             withContext(Dispatchers.Default) {
@@ -1419,7 +1526,9 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             candidate.showSliders
         ).count { it }
         if (activeCount == 0) {
-            Toast.makeText(this, "Minimal 1 widget aktif", Toast.LENGTH_SHORT).show()
+            showStatusBanner(
+                localizedText("Minimal 1 widget aktif", "Keep at least 1 widget active")
+            )
             return
         }
         val isEnabling = when (widgetKey) {
@@ -1541,11 +1650,13 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             }
             lastRamStatusLabel = if (freedMb > 0) "+${freedMb} MB" else "Optimal"
             uiState.value = uiState.value.copy(ramStatusLabel = lastRamStatusLabel)
-            Toast.makeText(
-                this@GameDeckService,
-                if (freedMb > 0) "RAM dibersihkan (+${freedMb} MB)" else "Memori sudah optimal",
-                Toast.LENGTH_SHORT
-            ).show()
+            showStatusBanner(
+                if (freedMb > 0) {
+                    "RAM dibersihkan (+${freedMb} MB)"
+                } else {
+                    localizedText("Memori sudah optimal", "Memory already optimal")
+                }
+            )
         }
     }
 
@@ -1571,9 +1682,13 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             view?.visibility = View.VISIBLE
             if (savedPath != null) {
                 MediaScannerConnection.scanFile(this@GameDeckService, arrayOf(savedPath), arrayOf("image/png"), null)
-                Toast.makeText(this@GameDeckService, "Screenshot tersimpan", Toast.LENGTH_SHORT).show()
+                showStatusBanner(
+                    localizedText("Screenshot tersimpan", "Screenshot saved")
+                )
             } else {
-                Toast.makeText(this@GameDeckService, "Gagal mengambil screenshot", Toast.LENGTH_SHORT).show()
+                showStatusBanner(
+                    localizedText("Gagal mengambil screenshot", "Failed to capture screenshot")
+                )
             }
         }
     }
@@ -1655,17 +1770,20 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val status = if (visible) {
-            localizedText("Lumina Game Deck aktif", "Lumina Game Deck active")
+            localizedText("Panel siap digunakan", "Panel ready to use")
         } else {
-            localizedText("Menunggu sesi game", "Waiting for game session")
+            localizedText("Siaga · menunggu sesi game", "Standby · waiting for game session")
         }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("Lumina Game Deck")
             .setContentText(status)
+            .setSubText("LuminaTweaks")
             .setContentIntent(openIntent)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .addAction(0, localizedText("Matikan", "Stop"), stopIntent)
             .build()

@@ -245,16 +245,20 @@ impl LoadSampler {
     }
 
     fn sample_gpu(&self) -> Option<f32> {
+        let mut fallback = None;
         for source in &self.gpu_sources {
             let value = match source {
                 GpuSource::Pair(path) => read_gpu_pair(path),
                 GpuSource::Percent(path) => read_gpu_percent(path),
             };
-            if value.is_some() {
-                return value;
+            if let Some(value) = value {
+                if value > 0.0 {
+                    return Some(value);
+                }
+                fallback = Some(value);
             }
         }
-        None
+        fallback
     }
 }
 
@@ -267,12 +271,30 @@ fn discover_gpu_sources() -> Vec<GpuSource> {
     for path in [
         "/sys/module/ged/parameters/gpu_loading",
         "/sys/kernel/ged/hal/gpu_utilization",
+        "/sys/kernel/ged/hal/gpu_loading",
         "/sys/kernel/gpu/gpu_busy",
         "/sys/class/misc/mali0/device/utilization",
+        "/sys/class/misc/mali0/device/utilisation",
+        "/proc/mali/utilization",
         "/sys/class/devfreq/gpufreq/gpu_busy_percentage",
+        "/sys/class/devfreq/gpufreq/gpu_loading",
     ] {
         if Path::new(path).exists() {
             sources.push(GpuSource::Percent(path.to_string()));
+        }
+    }
+    if let Ok(entries) = fs::read_dir("/sys/devices/platform") {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+            if !name.contains("mali") && !name.contains("gpu") {
+                continue;
+            }
+            for node in ["utilisation", "utilization", "gpu_loading", "load"] {
+                let path = entry.path().join(node);
+                if path.is_file() {
+                    sources.push(GpuSource::Percent(path.to_string_lossy().into_owned()));
+                }
+            }
         }
     }
     if let Ok(entries) = fs::read_dir("/sys/class/devfreq") {
@@ -321,11 +343,23 @@ fn read_gpu_pair(path: &str) -> Option<f32> {
 
 fn read_gpu_percent(path: &str) -> Option<f32> {
     let text = fs::read_to_string(path).ok()?;
-    let value = text.split_whitespace().next()?.parse::<f32>().ok()?;
-    if !value.is_finite() || value < 0.0 {
-        return None;
-    }
-    Some(value.clamp(0.0, 100.0))
+    parse_leading_number(&text)
+        .filter(|value| value.is_finite() && *value >= 0.0)
+        .map(|value| value.clamp(0.0, 100.0))
+}
+
+fn parse_leading_number(text: &str) -> Option<f32> {
+    let start = text
+        .char_indices()
+        .find(|(_, ch)| ch.is_ascii_digit() || *ch == '-')
+        .map(|(index, _)| index)?;
+    let rest = &text[start..];
+    let end = rest
+        .char_indices()
+        .find(|(_, ch)| !(ch.is_ascii_digit() || *ch == '.' || *ch == '-'))
+        .map(|(index, _)| index)
+        .unwrap_or(rest.len());
+    rest[..end].parse::<f32>().ok()
 }
 
 fn sample_load() -> (f32, f32) {
@@ -355,6 +389,12 @@ fn write_status(fps: f32, frametime_ms: f32, game_active: bool, package: Option<
         write_status_file(APP_FPS_PATH, &frame);
     }
     publish_property(&frame);
+    publish_load(cpu, gpu);
+}
+
+fn publish_load(cpu: f32, gpu: f32) {
+    let _ = crate::core::sysprop::set("sys.lumina.cpu", &format!("{:.1}", cpu));
+    let _ = crate::core::sysprop::set("sys.lumina.gpu", &format!("{:.1}", gpu));
 }
 
 fn write_idle(game_active: bool, package: Option<&str>) {

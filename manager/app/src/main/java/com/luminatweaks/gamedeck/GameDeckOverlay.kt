@@ -11,6 +11,8 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -58,6 +60,7 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.LazyColumn
@@ -74,12 +77,15 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.VolumeOff
+import androidx.compose.material.icons.automirrored.rounded.VolumeDown
+import androidx.compose.material.icons.automirrored.rounded.VolumeMute
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.BrightnessAuto
+import androidx.compose.material.icons.rounded.BrightnessHigh
+import androidx.compose.material.icons.rounded.BrightnessLow
 import androidx.compose.material.icons.rounded.BrightnessMedium
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.DragHandle
@@ -89,6 +95,7 @@ import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Pause
@@ -116,6 +123,7 @@ import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.material3.toShape
@@ -301,6 +309,11 @@ fun GameDeckRoot(
             .coerceAtLeast(1f)
         val pivotY = (0.5f + (handleYOffsetPx.toFloat() / panelHeightPx)).coerceIn(0.08f, 0.92f)
         val p = openProgress.value.coerceIn(0f, 1f)
+        var lastBanner by remember { mutableStateOf("") }
+        LaunchedEffect(current.statusBanner) {
+            current.statusBanner?.let { lastBanner = it }
+        }
+        val bannerText = current.statusBanner ?: lastBanner
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -342,6 +355,25 @@ fun GameDeckRoot(
                 onFloatingHudChange = onFloatingHudChange,
                 onOpenManager = onOpenManager
             )
+            AnimatedVisibility(
+                visible = current.statusBanner != null,
+                enter = fadeIn(tween(160)) + slideInVertically(
+                    initialOffsetY = { it / 2 },
+                    animationSpec = spring(
+                        dampingRatio = 0.8f,
+                        stiffness = Spring.StiffnessMediumLow
+                    )
+                ),
+                exit = fadeOut(tween(130)) + slideOutVertically(
+                    targetOffsetY = { it / 3 },
+                    animationSpec = tween(150)
+                ),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 16.dp)
+            ) {
+                StatusBannerPill(text = bannerText)
+            }
         }
     }
 }
@@ -3542,6 +3574,18 @@ private fun BrightnessVolumeCard(
 ) {
     val scheme = MaterialTheme.colorScheme
     val effectiveVol = if (volumeMuted) 0 else volumePercent
+    val brightnessFraction = (brightnessPercent / 100f).coerceIn(0.05f, 1f)
+    val volumeFraction = (effectiveVol / 100f).coerceIn(0f, 1f)
+    val brightnessIcon = when {
+        brightnessFraction < 0.33f -> Icons.Rounded.BrightnessLow
+        brightnessFraction < 0.66f -> Icons.Rounded.BrightnessMedium
+        else -> Icons.Rounded.BrightnessHigh
+    }
+    val volumeIcon = when {
+        volumeMuted || volumeFraction <= 0.01f -> Icons.AutoMirrored.Rounded.VolumeMute
+        volumeFraction < 0.5f -> Icons.AutoMirrored.Rounded.VolumeDown
+        else -> Icons.AutoMirrored.Rounded.VolumeUp
+    }
 
     Surface(
         shape = RoundedCornerShape(24.dp),
@@ -3552,36 +3596,50 @@ private fun BrightnessVolumeCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.BrightnessMedium,
-                        contentDescription = "Brightness",
-                        tint = scheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "Brightness",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = scheme.onSurface,
-                        maxLines = 1,
-                        softWrap = false
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = brightnessIcon,
+                            contentDescription = "Brightness",
+                            tint = scheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "Brightness",
+                            style = TextStyle(
+                                fontSize = 13.5.sp,
+                                lineHeight = 17.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                platformStyle = PlatformTextStyle(includeFontPadding = false)
+                            ),
+                            color = scheme.onSurface,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                     Spacer(modifier = Modifier.weight(1f))
                     Text(
                         text = "$brightnessPercent%",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = TextStyle(
+                            fontSize = 13.sp,
+                            lineHeight = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            platformStyle = PlatformTextStyle(includeFontPadding = false)
+                        ),
                         color = scheme.primary,
                         maxLines = 1,
-                        softWrap = false
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
                 ExpressiveLinearSlider(
@@ -3594,40 +3652,53 @@ private fun BrightnessVolumeCard(
                 )
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = if (volumeMuted || effectiveVol == 0) {
-                            Icons.AutoMirrored.Rounded.VolumeOff
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = if (interactive) {
+                            Modifier.clickable(onClick = onToggleMute)
                         } else {
-                            Icons.AutoMirrored.Rounded.VolumeUp
-                        },
-                        contentDescription = "Suara",
-                        tint = if (volumeMuted || effectiveVol == 0) scheme.error else scheme.tertiary,
-                        modifier = Modifier
-                            .size(20.dp)
-                            .then(if (interactive) Modifier.clickable(onClick = onToggleMute) else Modifier)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "Suara",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = scheme.onSurface,
-                        maxLines = 1,
-                        softWrap = false
-                    )
+                            Modifier
+                        }
+                    ) {
+                        Icon(
+                            imageVector = volumeIcon,
+                            contentDescription = "Suara",
+                            tint = if (volumeMuted || effectiveVol == 0) scheme.error else scheme.tertiary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "Suara",
+                            style = TextStyle(
+                                fontSize = 13.5.sp,
+                                lineHeight = 17.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                platformStyle = PlatformTextStyle(includeFontPadding = false)
+                            ),
+                            color = scheme.onSurface,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                     Spacer(modifier = Modifier.weight(1f))
                     Text(
                         text = "$effectiveVol%",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = TextStyle(
+                            fontSize = 13.sp,
+                            lineHeight = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            platformStyle = PlatformTextStyle(includeFontPadding = false)
+                        ),
                         color = if (volumeMuted || effectiveVol == 0) scheme.error else scheme.tertiary,
                         maxLines = 1,
-                        softWrap = false
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
                 ExpressiveLinearSlider(
@@ -4014,7 +4085,27 @@ private fun FloatingHudDeckCard(
                     onCheckedChange = { enabled ->
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onChange(config.copy(enabled = enabled))
-                    }
+                    },
+                    thumbContent = {
+                        Icon(
+                            imageVector = if (config.enabled) {
+                                Icons.Rounded.Check
+                            } else {
+                                Icons.Rounded.Close
+                            },
+                            contentDescription = null,
+                            modifier = Modifier.size(SwitchDefaults.IconSize)
+                        )
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = scheme.onPrimary,
+                        checkedTrackColor = scheme.primary,
+                        checkedIconColor = scheme.primary,
+                        uncheckedThumbColor = scheme.onSurfaceVariant,
+                        uncheckedTrackColor = scheme.surfaceContainerHighest,
+                        uncheckedIconColor = scheme.onSurfaceVariant,
+                        uncheckedBorderColor = scheme.outline.copy(alpha = 0.4f)
+                    )
                 )
             }
 
@@ -4240,6 +4331,45 @@ private fun WideToolButton(
                 contentDescription = null,
                 tint = scheme.onSurfaceVariant,
                 modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusBannerPill(text: String) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = scheme.inverseSurface,
+        contentColor = scheme.inverseOnSurface,
+        shadowElevation = 8.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .widthIn(max = 300.dp)
+                .padding(horizontal = 14.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Info,
+                contentDescription = null,
+                tint = scheme.inverseOnSurface,
+                modifier = Modifier.size(15.dp)
+            )
+            Text(
+                text = text,
+                style = TextStyle(
+                    fontSize = 11.5.sp,
+                    lineHeight = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = scheme.inverseOnSurface,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
