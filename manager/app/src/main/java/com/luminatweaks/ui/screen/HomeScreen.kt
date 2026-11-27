@@ -17,6 +17,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -28,6 +29,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -39,13 +41,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
@@ -56,7 +58,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.HourglassEmpty
@@ -64,7 +65,6 @@ import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material3.CircularWavyProgressIndicator
@@ -92,10 +92,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -103,25 +106,28 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
-import com.luminatweaks.ui.component.luminaHazeHeader
+import com.luminatweaks.BuildConfig
 import com.luminatweaks.R
 import com.luminatweaks.data.DaemonManager
 import com.luminatweaks.service.FloatingFpsService
+import com.luminatweaks.ui.component.ExpressiveInfoTile
 import com.luminatweaks.ui.component.LuminaBottomBar
 import com.luminatweaks.ui.component.TouchOriginDialog
 import com.luminatweaks.ui.component.bouncyClickable
+import com.luminatweaks.ui.component.luminaHazeHeader
 import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.component.rememberDialogOrigin
 import com.luminatweaks.ui.theme.LocalCornerRadius
@@ -130,7 +136,12 @@ import com.luminatweaks.ui.theme.LocalPageTransition
 import com.luminatweaks.ui.theme.PageTransition
 import com.luminatweaks.util.DeviceUtil
 import com.luminatweaks.util.RootUtil
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
+import java.util.Locale
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -163,6 +174,15 @@ fun getConnectedContainerShape(
         )
         ContainerPosition.Single -> RoundedCornerShape(outerRadius)
     }
+}
+
+@Composable
+private fun homeLocalizedLabel(id: String, en: String): String {
+    val isIndonesian = remember {
+        val lang = Locale.getDefault().language.lowercase(Locale.ROOT)
+        lang == "in" || lang == "id"
+    }
+    return if (isIndonesian) id else en
 }
 
 @Composable
@@ -740,6 +760,8 @@ fun HomeDashboardContent(
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val uriHandler = LocalUriHandler.current
+    val scheme = MaterialTheme.colorScheme
     var isRestarting by remember { mutableStateOf(false) }
     var showPowerDialog by remember { mutableStateOf(false) }
     val isRunning = daemonPid != null
@@ -774,7 +796,7 @@ fun HomeDashboardContent(
                 text = stringResource(R.string.power_menu_title),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = scheme.onSurface
             )
         }
 
@@ -823,27 +845,23 @@ fun HomeDashboardContent(
     }
 
     val isFloating = LocalFloatingNavBar.current
-    val bottomPadding = if (isFloating) {
-        112.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    } else {
-        28.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    }
+    val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomPadding = if (isFloating) 112.dp + navInset else 28.dp + navInset
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
-    val fadeSurface = MaterialTheme.colorScheme.background
+    val fadeSurface = scheme.background
     val hazeState = remember { HazeState() }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         contentWindowInsets = WindowInsets(0.dp),
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = scheme.background,
         topBar = {
             Box(
-                modifier = Modifier
-                    .luminaHazeHeader(
-                        hazeState = hazeState,
-                        surfaceColor = fadeSurface,
-                        overlappedFraction = scrollBehavior.state.overlappedFraction
-                    )
+                modifier = Modifier.luminaHazeHeader(
+                    hazeState = hazeState,
+                    surfaceColor = fadeSurface,
+                    overlappedFraction = scrollBehavior.state.overlappedFraction
+                )
             ) {
                 LargeFlexibleTopAppBar(
                     title = {
@@ -880,103 +898,549 @@ fun HomeDashboardContent(
         }
     ) { innerPadding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().hazeSource(state = hazeState),
+            modifier = Modifier
+                .fillMaxSize()
+                .hazeSource(state = hazeState),
             contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding(),
+                top = innerPadding.calculateTopPadding() + 8.dp,
                 bottom = bottomPadding,
                 start = 16.dp,
                 end = 16.dp
-            )
+            ),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item(key = "status") {
-                Spacer(modifier = Modifier.height(12.dp))
-                CoreStatusHero(
-                    modifier = heroOrigin.trackedModifier(),
-                    isChecking = isChecking,
-                    isRestarting = isRestarting,
-                    isRunning = isRunning,
-                    isModuleInstalled = isModuleInstalled,
-                    isRebootRequired = isRebootRequired,
-                    daemonPid = daemonPid,
-                    onStart = {
-                        when {
-                            isChecking || isRestarting -> Unit
-                            isRunning -> {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                powerDialogOriginPoint = heroOrigin.origin
-                                showPowerDialog = true
+            item(key = "hero_bento") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(248.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        DaemonStatusBentoTile(
+                            modifier = Modifier
+                                .weight(0.55f)
+                                .then(heroOrigin.trackedModifier()),
+                            isChecking = isChecking,
+                            isRestarting = isRestarting,
+                            isRunning = isRunning,
+                            isModuleInstalled = isModuleInstalled,
+                            isRebootRequired = isRebootRequired,
+                            daemonPid = daemonPid,
+                            onClick = {
+                                when {
+                                    isChecking || isRestarting -> Unit
+                                    isRunning -> {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        powerDialogOriginPoint = heroOrigin.origin
+                                        showPowerDialog = true
+                                    }
+                                    isRebootRequired -> onRequestRebootDialog()
+                                    else -> launchRestart()
+                                }
                             }
-                            isRebootRequired -> onRequestRebootDialog()
-                            else -> launchRestart()
-                        }
-                    }
-                )
-            }
+                        )
 
-            item(key = "device") {
-                Spacer(modifier = Modifier.height(16.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    ConnectedCardRow(
-                        icon = Icons.Rounded.Thermostat,
-                        title = "Suhu",
-                        subtitle = batteryTemp,
-                        position = ContainerPosition.Top
-                    )
-                    ConnectedCardRow(
-                        icon = Icons.Rounded.Speed,
-                        title = stringResource(R.string.home_profile),
-                        subtitle = currentProfile,
-                        position = ContainerPosition.Middle,
-                        iconContainer = MaterialTheme.colorScheme.secondaryContainer,
-                        iconTint = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                    ConnectedCardRow(
-                        icon = Icons.Rounded.DeveloperBoard,
-                        title = stringResource(R.string.home_manager_version),
-                        subtitle = stringResource(
-                            R.string.home_version_release_format,
-                            com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")
-                        ),
-                        position = ContainerPosition.Middle
-                    )
-                    ConnectedCardRow(
-                        icon = Icons.Rounded.Memory,
-                        title = stringResource(R.string.home_kernel_version),
-                        subtitle = kernelVersion,
-                        position = ContainerPosition.Middle
-                    )
-                    ConnectedCardRow(
-                        icon = Icons.Rounded.Smartphone,
-                        title = stringResource(R.string.home_device_model),
-                        subtitle = deviceModel,
-                        position = ContainerPosition.Bottom
+                        ActiveProfileBentoTile(
+                            modifier = Modifier.weight(0.45f),
+                            label = stringResource(R.string.home_profile),
+                            profileName = currentProfile
+                        )
+                    }
+
+                    TemperatureHeroTile(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        batteryTemp = batteryTemp
                     )
                 }
             }
 
-            item(key = "support") {
-                val uriHandler = LocalUriHandler.current
-                Spacer(modifier = Modifier.height(16.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    HomeActionRow(
-                        index = 0,
-                        count = 2,
+            item(key = "device_specs_card") {
+                DeviceSpecsBentoCard(
+                    deviceLabel = stringResource(R.string.home_device_model),
+                    deviceValue = deviceModel,
+                    kernelLabel = stringResource(R.string.home_kernel_version),
+                    kernelValue = kernelVersion,
+                    managerLabel = stringResource(R.string.home_manager_version),
+                    managerValue = stringResource(
+                        R.string.home_version_release_format,
+                        BuildConfig.VERSION_NAME.removeSuffix(".0")
+                    )
+                )
+            }
+
+            item(key = "support_tiles_pair") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    ExpressiveInfoTile(
+                        modifier = Modifier.weight(1f),
                         icon = Icons.Rounded.Favorite,
                         title = stringResource(R.string.home_support_us),
                         subtitle = stringResource(R.string.home_support_us_desc),
-                        onClick = { uriHandler.openUri("https://sociabuzz.com/kimal404") }
+                        accentColor = scheme.tertiary,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            uriHandler.openUri("https://sociabuzz.com/kimal404")
+                        }
                     )
-                    HomeActionRow(
-                        index = 1,
-                        count = 2,
+
+                    ExpressiveInfoTile(
+                        modifier = Modifier.weight(1f),
                         icon = Icons.Rounded.MenuBook,
                         title = stringResource(R.string.home_learn_more),
                         subtitle = stringResource(R.string.home_learn_more_desc),
-                        onClick = { uriHandler.openUri("https://github.com/kimal404/LuminaTweaks") }
+                        accentColor = scheme.primary,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            uriHandler.openUri("https://github.com/kimal404/LuminaTweaks")
+                        }
                     )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DaemonStatusBentoTile(
+    isChecking: Boolean,
+    isRestarting: Boolean,
+    isRunning: Boolean,
+    isModuleInstalled: Boolean,
+    isRebootRequired: Boolean,
+    daemonPid: String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    val isAlive = isRunning && !isRestarting
+    val interactionSource = remember { MutableInteractionSource() }
+    val scaleModifier = pressScale(interactionSource, 0.965f)
+    val containerColor by animateColorAsState(
+        targetValue = when {
+            isChecking || isRestarting -> scheme.surfaceContainerHighest
+            isAlive -> scheme.secondaryContainer
+            isRebootRequired -> scheme.tertiaryContainer
+            else -> scheme.errorContainer
+        },
+        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+        label = "daemonBentoContainer"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = when {
+            isChecking || isRestarting -> scheme.onSurfaceVariant
+            isAlive -> scheme.onSecondaryContainer
+            isRebootRequired -> scheme.onTertiaryContainer
+            else -> scheme.onErrorContainer
+        },
+        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+        label = "daemonBentoContent"
+    )
+    val statusText = when {
+        isChecking -> "CHECKING"
+        isRestarting -> "STARTING"
+        isAlive -> "ALIVE"
+        isRebootRequired -> stringResource(R.string.dialog_reboot_required_title)
+        !isModuleInstalled -> stringResource(R.string.home_core_module_inactive)
+        else -> "SLEEP"
+    }
+    val cleanPid = daemonPid?.takeIf { it.all(Char::isDigit) }
+
+    Surface(
+        onClick = onClick,
+        interactionSource = interactionSource,
+        shape = RoundedCornerShape(26.dp),
+        color = containerColor,
+        contentColor = contentColor,
+        modifier = modifier
+            .fillMaxWidth()
+            .then(scaleModifier)
+            .animateContentSize(animationSpec = spring())
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            when {
+                isChecking || isRestarting -> CircularWavyProgressIndicator(
+                    modifier = Modifier.size(30.dp),
+                    color = contentColor,
+                    trackColor = contentColor.copy(alpha = 0.24f)
+                )
+                isAlive -> Icon(
+                    imageVector = Icons.Outlined.CheckCircle,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(32.dp)
+                )
+                isRebootRequired -> Icon(
+                    imageVector = Icons.Rounded.Refresh,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(32.dp)
+                )
+                !isModuleInstalled -> Icon(
+                    imageVector = Icons.Rounded.ErrorOutline,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(32.dp)
+                )
+                else -> Icon(
+                    imageVector = Icons.Rounded.HourglassEmpty,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = statusText,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                    ),
+                    color = contentColor,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Text(
+                    text = if (isAlive && cleanPid != null) {
+                        "PID: $cleanPid"
+                    } else {
+                        homeLocalizedLabel("Ketuk untuk kelola", "Tap to manage")
+                    },
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.Medium,
+                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                    ),
+                    color = contentColor.copy(alpha = 0.8f),
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActiveProfileBentoTile(
+    label: String,
+    profileName: String,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(26.dp))
+            .background(scheme.surfaceContainerHigh)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(RoundedCornerShape(13.dp))
+                .background(scheme.primary.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Speed,
+                contentDescription = null,
+                tint = scheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Medium,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = scheme.primary,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            AnimatedContent(
+                targetState = profileName,
+                transitionSpec = {
+                    (fadeIn(animationSpec = tween(180)) + slideInVertically { it / 3 }) togetherWith
+                        (fadeOut(animationSpec = tween(140)) + slideOutVertically { -it / 3 })
+                },
+                label = "activeProfileTransition"
+            ) { targetProfile ->
+                Text(
+                    text = targetProfile,
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                    ),
+                    color = scheme.onSurface,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TemperatureHeroTile(
+    batteryTemp: String,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    val tempCelsius = remember(batteryTemp) {
+        val normalized = batteryTemp.replace(',', '.')
+        Regex("""-?\d+(\.\d+)?""").find(normalized)?.value?.toFloatOrNull() ?: 35f
+    }
+    val tempProgressTarget = ((tempCelsius - 25f) / 25f).coerceIn(0.08f, 1f)
+    val animatedProgress by animateFloatAsState(
+        targetValue = tempProgressTarget,
+        animationSpec = spring(stiffness = 300f),
+        label = "tempProgress"
+    )
+    val thermalAccent by animateColorAsState(
+        targetValue = when {
+            tempCelsius >= 44f -> scheme.error
+            tempCelsius >= 40f -> scheme.tertiary
+            else -> scheme.primary
+        },
+        label = "thermalAccent"
+    )
+    val thermalStateLabel = when {
+        tempCelsius >= 44f -> homeLocalizedLabel("Tinggi", "High")
+        tempCelsius >= 40f -> homeLocalizedLabel("Hangat", "Warm")
+        else -> homeLocalizedLabel("Normal", "Normal")
+    }
+
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(26.dp))
+            .background(scheme.surfaceContainerHigh)
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = homeLocalizedLabel("Suhu", "Thermal"),
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = scheme.onSurface,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(thermalAccent.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Thermostat,
+                    contentDescription = null,
+                    tint = thermalAccent,
+                    modifier = Modifier.size(19.dp)
+                )
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = batteryTemp,
+                style = MaterialTheme.typography.displaySmall.copy(
+                    fontFamily = FontFamily.SansSerif,
+                    fontSize = 34.sp,
+                    lineHeight = 36.sp,
+                    fontWeight = FontWeight.Black,
+                    fontFeatureSettings = "tnum",
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = scheme.onSurface,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Text(
+                text = thermalStateLabel,
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = thermalAccent,
+                maxLines = 1,
+                softWrap = false
+            )
+        }
+
+        ExpressiveWavyThermalBar(
+            progress = animatedProgress,
+            activeColor = thermalAccent,
+            trackColor = thermalAccent.copy(alpha = 0.2f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(12.dp)
+        )
+    }
+}
+
+@Composable
+private fun ExpressiveWavyThermalBar(
+    progress: Float,
+    activeColor: Color,
+    trackColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier) {
+        val strokeWidth = 3.2.dp.toPx()
+        val halfStroke = strokeWidth / 2f
+        val centerY = size.height / 2f
+        val usableWidth = (size.width - strokeWidth).coerceAtLeast(1f)
+        val clamped = progress.coerceIn(0f, 1f)
+        val activeEnd = halfStroke + usableWidth * clamped
+        val waveLength = 14.dp.toPx()
+        val amplitude = 2.4.dp.toPx()
+
+        if (activeEnd < size.width - halfStroke) {
+            val trackStart = (activeEnd + 4.dp.toPx()).coerceAtMost(size.width - halfStroke)
+            drawLine(
+                color = trackColor,
+                start = Offset(trackStart, centerY),
+                end = Offset(size.width - halfStroke, centerY),
+                strokeWidth = strokeWidth,
+                cap = StrokeCap.Round
+            )
+        }
+
+        if (clamped > 0f) {
+            val wavePath = Path()
+            var x = halfStroke
+            var isFirst = true
+            while (x <= activeEnd) {
+                val angle = ((x - halfStroke) / waveLength) * 2f * PI.toFloat()
+                val y = centerY + sin(angle) * amplitude
+                if (isFirst) {
+                    wavePath.moveTo(x, y)
+                    isFirst = false
+                } else {
+                    wavePath.lineTo(x, y)
+                }
+                x += 2f
+            }
+            val endAngle = ((activeEnd - halfStroke) / waveLength) * 2f * PI.toFloat()
+            wavePath.lineTo(activeEnd, centerY + sin(endAngle) * amplitude)
+
+            drawPath(
+                path = wavePath,
+                color = activeColor,
+                style = Stroke(
+                    width = strokeWidth,
+                    cap = StrokeCap.Round,
+                    join = StrokeJoin.Round
+                )
+            )
+        }
+    }
+}
+
+@Composable
+private fun DeviceSpecsBentoCard(
+    deviceLabel: String,
+    deviceValue: String,
+    kernelLabel: String,
+    kernelValue: String,
+    managerLabel: String,
+    managerValue: String
+) {
+    val scheme = MaterialTheme.colorScheme
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(26.dp))
+            .background(scheme.surfaceContainerHigh)
+            .padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        HomeEditorialSpecItem(
+            label = deviceLabel,
+            value = deviceValue
+        )
+        HomeEditorialSpecItem(
+            label = kernelLabel,
+            value = kernelValue
+        )
+        HomeEditorialSpecItem(
+            label = managerLabel,
+            value = managerValue
+        )
+    }
+}
+
+@Composable
+private fun HomeEditorialSpecItem(
+    label: String,
+    value: String
+) {
+    val scheme = MaterialTheme.colorScheme
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Medium,
+                platformStyle = PlatformTextStyle(includeFontPadding = false)
+            ),
+            color = scheme.primary,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleSmall.copy(
+                fontWeight = FontWeight.SemiBold,
+                platformStyle = PlatformTextStyle(includeFontPadding = false)
+            ),
+            color = scheme.onSurface,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -1003,76 +1467,6 @@ private fun HomeSquircleIcon(
             tint = tint,
             modifier = Modifier.size(22.dp)
         )
-    }
-}
-
-@Composable
-private fun HomeActionRow(
-    index: Int,
-    count: Int,
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit,
-    enabled: Boolean = true
-) {
-    val haptic = LocalHapticFeedback.current
-    val shape = connectedContainerShape(index = index, count = count)
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressScaleModifier = pressScale(interactionSource, 0.975f, enabled)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(pressScaleModifier)
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                enabled = enabled
-            ) {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onClick()
-            }
-            .alpha(if (enabled) 1f else 0.55f)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier.padding(end = 16.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            HomeSquircleIcon(icon = icon)
-        }
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(vertical = 8.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        Box(
-            modifier = Modifier.padding(start = 16.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.ChevronRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
     }
 }
 
@@ -1122,136 +1516,6 @@ private fun PowerActionRow(
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
-    }
-}
-
-@Composable
-private fun CoreStatusHero(
-    isChecking: Boolean,
-    isRestarting: Boolean,
-    isRunning: Boolean,
-    isModuleInstalled: Boolean,
-    isRebootRequired: Boolean,
-    daemonPid: String?,
-    onStart: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val isAlive = isRunning && !isRestarting
-    val heroInteraction = remember { MutableInteractionSource() }
-    val heroPressScale = pressScale(heroInteraction, 0.97f)
-    val containerColor by animateColorAsState(
-        targetValue = when {
-            isChecking || isRestarting -> MaterialTheme.colorScheme.surfaceContainerHighest
-            isAlive -> MaterialTheme.colorScheme.secondaryContainer
-            isRebootRequired -> MaterialTheme.colorScheme.tertiaryContainer
-            else -> MaterialTheme.colorScheme.errorContainer
-        },
-        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-        label = "bannerContainer"
-    )
-    val contentColor by animateColorAsState(
-        targetValue = when {
-            isChecking || isRestarting -> MaterialTheme.colorScheme.onSurfaceVariant
-            isAlive -> MaterialTheme.colorScheme.onSecondaryContainer
-            isRebootRequired -> MaterialTheme.colorScheme.onTertiaryContainer
-            else -> MaterialTheme.colorScheme.onErrorContainer
-        },
-        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
-        label = "bannerContent"
-    )
-    val statusText = when {
-        isChecking -> "CHECKING"
-        isRestarting -> "STARTING"
-        isAlive -> "ALIVE"
-        isRebootRequired -> stringResource(R.string.dialog_reboot_required_title)
-        !isModuleInstalled -> stringResource(R.string.home_core_module_inactive)
-        else -> "SLEEP"
-    }
-    val cleanPid = daemonPid?.takeIf { it.all(Char::isDigit) }
-
-    Surface(
-        onClick = onStart,
-        interactionSource = heroInteraction,
-        shape = RoundedCornerShape(26.dp),
-        color = containerColor,
-        contentColor = contentColor,
-        modifier = modifier
-            .fillMaxWidth()
-            .then(heroPressScale)
-            .height(100.dp)
-            .animateContentSize(animationSpec = spring())
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 24.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            when {
-                isChecking || isRestarting -> CircularWavyProgressIndicator(
-                    modifier = Modifier.size(38.dp),
-                    color = contentColor,
-                    trackColor = contentColor.copy(alpha = 0.24f)
-                )
-                isAlive -> Icon(
-                    imageVector = Icons.Outlined.CheckCircle,
-                    contentDescription = null,
-                    tint = contentColor,
-                    modifier = Modifier.size(42.dp)
-                )
-                isRebootRequired -> Icon(
-                    imageVector = Icons.Rounded.Refresh,
-                    contentDescription = null,
-                    tint = contentColor,
-                    modifier = Modifier.size(42.dp)
-                )
-                !isModuleInstalled -> Icon(
-                    imageVector = Icons.Rounded.ErrorOutline,
-                    contentDescription = null,
-                    tint = contentColor,
-                    modifier = Modifier.size(42.dp)
-                )
-                else -> Icon(
-                    imageVector = Icons.Rounded.HourglassEmpty,
-                    contentDescription = null,
-                    tint = contentColor,
-                    modifier = Modifier.size(42.dp)
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .height(42.dp)
-                    .width(1.5.dp)
-                    .background(contentColor.copy(alpha = 0.3f))
-            )
-
-            Column(
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.Start
-            ) {
-                Text(
-                    text = statusText,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = contentColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                if (isAlive && cleanPid != null) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "PID: $cleanPid",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Medium,
-                        color = contentColor.copy(alpha = 0.8f),
-                        maxLines = 1
-                    )
-                }
-            }
-        }
     }
 }
 
