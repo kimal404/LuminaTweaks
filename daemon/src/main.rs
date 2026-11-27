@@ -41,7 +41,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tweaks::texture::TextureController;
 use tweaks::utility::UtilityController;
-use tweaks::{display, engine, fas, fps, renderer, sched, soc, thermal};
+use tweaks::{display, engine, fps, renderer, sched, soc, thermal};
 
 static SHUTDOWN: AtomicBool = AtomicBool::new(false);
 
@@ -650,7 +650,6 @@ fn main() {
     let mut fallback_blocked_until = Instant::now();
     let mut last_screen_state: Option<bool> = None;
     let mut fps_monitor = fps::FpsMonitor::new();
-    let mut fas_controller = fas::FasController::new(fps_monitor.tap());
     let mut thermal_monitor = thermal::ThermalMonitor::new();
     let mut performance_guard = false;
     let mut performance_guard_recover_at: Option<Instant> = None;
@@ -963,7 +962,6 @@ fn main() {
             };
 
             if target != last_pkg_for_texture {
-                fas_controller.reset(target.as_deref());
                 if let Some(ref pkg) = target {
                     TextureController::apply_foreground(pkg);
                     if TextureController::is_angle_active_for(pkg) {
@@ -1051,17 +1049,6 @@ fn main() {
                 _ => {}
             }
         }
-        let fas_profile_active = runtime.current_profile == Some(Profile::Performance)
-            && !runtime.current_lite
-            && !performance_guard;
-        fas_controller.tick(
-            fas_profile_active,
-            screen_awake && current_target.is_some(),
-            display::saved_mode_hz().filter(|hz| *hz >= 30),
-            runtime.current_lite,
-            thermal_pressure,
-        );
-
         let sleep_ms = if binder_client.is_push() {
             250
         } else if current_target.is_some() {
