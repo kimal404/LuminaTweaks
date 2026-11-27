@@ -13,9 +13,9 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.LocaleList
+import android.os.SystemClock
 import android.text.format.DateFormat
 import android.widget.Toast
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -55,6 +55,7 @@ import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -71,7 +72,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTopAppBarState
-import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -91,7 +91,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -115,6 +114,7 @@ import com.luminatweaks.ui.component.rememberDialogOrigin
 import com.luminatweaks.ui.theme.ColorMode
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.ui.theme.ThemeController
+import com.luminatweaks.util.DeviceUtil
 import com.luminatweaks.util.LogUtil
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -165,6 +165,8 @@ fun SettingsScreen(
         mutableStateOf(ThemeController.getAppSettings(context).colorMode)
     }
 
+    val deviceModel = remember { DeviceUtil.getMarketDeviceName(context) }
+    var uptimeText by remember { mutableStateOf(formatDeviceUptime()) }
     var systemWallpaperBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
     var showLanguageSheet by remember { mutableStateOf(false) }
     var showLogBottomSheet by remember { mutableStateOf(false) }
@@ -193,6 +195,13 @@ fun SettingsScreen(
         systemWallpaperBitmap = loadSystemWallpaperBitmap(context)
     }
 
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            uptimeText = formatDeviceUptime()
+            delay(30_000L)
+        }
+    }
+
     LuminaDrillTransition(
         targetState = activeSettingsSubscreen,
         isForward = { _, target -> target != "main" }
@@ -213,6 +222,7 @@ fun SettingsScreen(
                 val bottomPadding = if (isFloating) 112.dp + navInset else 28.dp + navInset
                 val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
                 val fadeSurface = scheme.background
+                val topBarScrimAlpha = (scrollBehavior.state.overlappedFraction * 1.4f).coerceIn(0f, 0.96f)
 
                 val openPersonalisasi: () -> Unit = {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -262,17 +272,6 @@ fun SettingsScreen(
                     )
                 }
 
-                val selectLanguage: (String) -> Unit = { tag ->
-                    if (currentLanguage != tag) {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        currentLanguage = tag
-                        coroutineScope.launch {
-                            delay(90L)
-                            setAppLanguage(context, tag)
-                        }
-                    }
-                }
-
                 Scaffold(
                     modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
                     contentWindowInsets = WindowInsets(0.dp),
@@ -281,6 +280,7 @@ fun SettingsScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .background(fadeSurface.copy(alpha = topBarScrimAlpha))
                                 .appBarFade(fadeSurface) { scrollBehavior.state.overlappedFraction }
                                 .statusBarsPadding()
                         ) {
@@ -317,7 +317,7 @@ fun SettingsScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(304.dp),
+                                    .height(312.dp),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 Column(
@@ -327,22 +327,19 @@ fun SettingsScreen(
                                     verticalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
                                     MonetPersonalizationTile(
-                                        modifier = Modifier.weight(0.44f),
+                                        modifier = Modifier.weight(0.41f),
                                         title = stringResource(R.string.personalization_title),
                                         onClick = openPersonalisasi
                                     )
 
-                                    ThemeAndLanguageTile(
-                                        modifier = Modifier.weight(0.56f),
+                                    ThemeAndDeviceOverviewTile(
+                                        modifier = Modifier.weight(0.59f),
                                         colorMode = currentColorMode,
-                                        currentLanguage = currentLanguage,
-                                        languageTitle = stringResource(R.string.settings_language),
-                                        onCycleThemeMode = cycleThemeMode,
-                                        onSelectLanguage = selectLanguage,
-                                        onOpenLanguageSheet = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            showLanguageSheet = true
-                                        }
+                                        deviceLabel = settingsLocalizedLabel("Perangkat", "Device"),
+                                        deviceValue = deviceModel,
+                                        uptimeLabel = settingsLocalizedLabel("Waktu aktif", "Device uptime"),
+                                        uptimeValue = uptimeText,
+                                        onCycleThemeMode = cycleThemeMode
                                     )
                                 }
 
@@ -477,7 +474,21 @@ fun SettingsScreen(
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 SettingsActionRow(
                                     index = 0,
-                                    count = 3,
+                                    count = 4,
+                                    icon = Icons.Rounded.Language,
+                                    title = stringResource(R.string.settings_language),
+                                    subtitle = if (currentLanguage == "en") {
+                                        stringResource(R.string.language_english)
+                                    } else {
+                                        stringResource(R.string.language_indonesian)
+                                    },
+                                    highlightSubtitle = true,
+                                    onClick = { showLanguageSheet = true }
+                                )
+
+                                SettingsActionRow(
+                                    index = 1,
+                                    count = 4,
                                     icon = Icons.Rounded.Security,
                                     title = stringResource(R.string.settings_compatibility),
                                     subtitle = stringResource(R.string.settings_compatibility_desc),
@@ -485,8 +496,8 @@ fun SettingsScreen(
                                 )
 
                                 SettingsActionRow(
-                                    index = 1,
-                                    count = 3,
+                                    index = 2,
+                                    count = 4,
                                     icon = Icons.Rounded.Info,
                                     title = stringResource(R.string.settings_about),
                                     subtitle = stringResource(
@@ -497,8 +508,8 @@ fun SettingsScreen(
                                 )
 
                                 SettingsActionRow(
-                                    index = 2,
-                                    count = 3,
+                                    index = 3,
+                                    count = 4,
                                     icon = Icons.Rounded.DeleteForever,
                                     title = stringResource(R.string.settings_module_uninstall_title),
                                     subtitle = stringResource(R.string.settings_module_uninstall_desc),
@@ -670,12 +681,11 @@ private fun MonetPersonalizationTile(
     val scheme = MaterialTheme.colorScheme
     val interactionSource = remember { MutableInteractionSource() }
     val scaleModifier = pressScale(interactionSource, 0.97f)
-    val activePrimary = scheme.primary
     val swatchColors = listOf(
-        lerp(activePrimary, Color.White, 0.78f),
-        lerp(activePrimary, Color.White, 0.50f),
-        lerp(activePrimary, Color.White, 0.24f),
-        activePrimary
+        scheme.primaryContainer,
+        scheme.inversePrimary,
+        scheme.tertiary,
+        scheme.primary
     )
 
     Column(
@@ -705,7 +715,7 @@ private fun MonetPersonalizationTile(
             overflow = TextOverflow.Ellipsis
         )
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         Box(
             modifier = Modifier
@@ -727,13 +737,13 @@ private fun MonetPersonalizationTile(
 }
 
 @Composable
-private fun ThemeAndLanguageTile(
+private fun ThemeAndDeviceOverviewTile(
     colorMode: ColorMode,
-    currentLanguage: String,
-    languageTitle: String,
+    deviceLabel: String,
+    deviceValue: String,
+    uptimeLabel: String,
+    uptimeValue: String,
     onCycleThemeMode: () -> Unit,
-    onSelectLanguage: (String) -> Unit,
-    onOpenLanguageSheet: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -762,10 +772,10 @@ private fun ThemeAndLanguageTile(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(58.dp)
+                .height(44.dp)
                 .then(themeScale)
-                .clip(RoundedCornerShape(18.dp))
-                .background(scheme.surfaceContainerLowest)
+                .clip(RoundedCornerShape(16.dp))
+                .background(scheme.secondaryContainer)
                 .clickable(
                     interactionSource = themeInteraction,
                     indication = null,
@@ -778,7 +788,7 @@ private fun ThemeAndLanguageTile(
             Icon(
                 imageVector = modeIcon,
                 contentDescription = null,
-                tint = scheme.primary,
+                tint = scheme.onSecondaryContainer,
                 modifier = Modifier.size(16.dp)
             )
             Spacer(modifier = Modifier.width(6.dp))
@@ -788,7 +798,7 @@ private fun ThemeAndLanguageTile(
                     fontWeight = FontWeight.SemiBold,
                     platformStyle = PlatformTextStyle(includeFontPadding = false)
                 ),
-                color = scheme.onSurface,
+                color = scheme.onSecondaryContainer,
                 maxLines = 1,
                 softWrap = false,
                 overflow = TextOverflow.Ellipsis
@@ -796,85 +806,51 @@ private fun ThemeAndLanguageTile(
         }
 
         Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 6.dp, vertical = 2.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = languageTitle,
-                style = MaterialTheme.typography.labelMedium.copy(
-                    fontWeight = FontWeight.Medium,
-                    platformStyle = PlatformTextStyle(includeFontPadding = false)
-                ),
-                color = scheme.onSurfaceVariant,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.clickable(onClick = onOpenLanguageSheet)
+            EditorialSpecItem(
+                label = deviceLabel,
+                value = deviceValue
             )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                LanguageMiniPill(
-                    modifier = Modifier.weight(1f),
-                    label = "ID",
-                    selected = currentLanguage != "en",
-                    onClick = { onSelectLanguage("id") }
-                )
-                LanguageMiniPill(
-                    modifier = Modifier.weight(1f),
-                    label = "EN",
-                    selected = currentLanguage == "en",
-                    onClick = { onSelectLanguage("en") }
-                )
-            }
+            EditorialSpecItem(
+                label = uptimeLabel,
+                value = uptimeValue
+            )
         }
     }
 }
 
 @Composable
-private fun LanguageMiniPill(
+private fun EditorialSpecItem(
     label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    value: String
 ) {
     val scheme = MaterialTheme.colorScheme
-    val interactionSource = remember { MutableInteractionSource() }
-    val scaleModifier = pressScale(interactionSource, 0.94f)
-    val bgColor by animateColorAsState(
-        targetValue = if (selected) scheme.primary else scheme.surfaceContainerLowest,
-        label = "langPillBg"
-    )
-    val fgColor by animateColorAsState(
-        targetValue = if (selected) scheme.onPrimary else scheme.onSurface,
-        label = "langPillFg"
-    )
-
-    Box(
-        modifier = modifier
-            .height(38.dp)
-            .then(scaleModifier)
-            .clip(RoundedCornerShape(14.dp))
-            .background(bgColor)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick
-            ),
-        contentAlignment = Alignment.Center
-    ) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(
             text = label,
-            style = MaterialTheme.typography.labelLarge.copy(
-                fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Medium,
                 platformStyle = PlatformTextStyle(includeFontPadding = false)
             ),
-            color = fgColor,
+            color = scheme.primary,
             maxLines = 1,
-            softWrap = false
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleSmall.copy(
+                fontWeight = FontWeight.SemiBold,
+                platformStyle = PlatformTextStyle(includeFontPadding = false)
+            ),
+            color = scheme.onSurface,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -1126,13 +1102,14 @@ private fun SettingsActionRow(
     accentColor: Color = MaterialTheme.colorScheme.primary
 ) {
     val haptic = LocalHapticFeedback.current
+    val scheme = MaterialTheme.colorScheme
     val shape = connectedContainerShape(index = index, count = count)
     val interactionSource = remember { MutableInteractionSource() }
     val pressScaleModifier = pressScale(interactionSource, 0.975f, enabled)
-    val titleColor = if (accentColor == MaterialTheme.colorScheme.error) {
-        MaterialTheme.colorScheme.error
+    val titleColor = if (accentColor == scheme.error) {
+        scheme.error
     } else {
-        MaterialTheme.colorScheme.onSurface
+        scheme.onSurface
     }
 
     Row(
@@ -1140,7 +1117,7 @@ private fun SettingsActionRow(
             .fillMaxWidth()
             .then(pressScaleModifier)
             .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .background(scheme.surfaceContainerHigh)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -1161,7 +1138,7 @@ private fun SettingsActionRow(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(accentColor.copy(alpha = 0.12f)),
+                    .background(accentColor.copy(alpha = 0.14f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -1187,9 +1164,9 @@ private fun SettingsActionRow(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
                 color = if (highlightSubtitle) {
-                    MaterialTheme.colorScheme.primary
+                    scheme.primary
                 } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
+                    scheme.onSurfaceVariant
                 },
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -1202,10 +1179,10 @@ private fun SettingsActionRow(
             Icon(
                 imageVector = Icons.Rounded.ChevronRight,
                 contentDescription = null,
-                tint = if (accentColor == MaterialTheme.colorScheme.error) {
-                    MaterialTheme.colorScheme.error
+                tint = if (accentColor == scheme.error) {
+                    scheme.error
                 } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
+                    scheme.onSurfaceVariant
                 }
             )
         }
@@ -1387,6 +1364,13 @@ private fun SettingsRadioRing(selected: Boolean) {
             }
         }
     }
+}
+
+private fun formatDeviceUptime(): String {
+    val totalSec = (SystemClock.elapsedRealtime() / 1000L).coerceAtLeast(0L)
+    val hours = totalSec / 3600L
+    val minutes = (totalSec % 3600L) / 60L
+    return "${hours}h ${minutes}m"
 }
 
 @SuppressLint("MissingPermission")

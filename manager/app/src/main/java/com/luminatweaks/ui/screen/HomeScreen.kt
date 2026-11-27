@@ -1,19 +1,3 @@
-/*
- * Copyright (C) 2026 kimal
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 @file:OptIn(
     androidx.compose.foundation.ExperimentalFoundationApi::class,
     ExperimentalMaterial3ExpressiveApi::class,
@@ -30,8 +14,10 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -216,6 +202,13 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
         if (!isNavigating) targetTab = pagerState.currentPage
     }
     var currentSubscreen by remember { mutableStateOf<String?>(null) }
+    var renderedSubscreen by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(currentSubscreen) {
+        if (currentSubscreen != null) {
+            renderedSubscreen = currentSubscreen
+        }
+    }
+
     val unknownLabel = stringResource(R.string.status_unknown)
     val kernelVersion = remember(unknownLabel) { System.getProperty("os.version") ?: unknownLabel }
     val deviceModel = remember { DeviceUtil.getMarketDeviceName(context) }
@@ -294,7 +287,7 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                         currentProfile = resolved
                     }
                 }
-                delay(500L)
+                delay(200L)
             }
         }
     }
@@ -423,46 +416,13 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
     var overlayConfig by remember { mutableStateOf(FloatingFpsPrefs.load(context)) }
     val homeScope = rememberCoroutineScope()
 
-    LuminaDrillTransition(
-        targetState = currentSubscreen,
-        isForward = { _, target -> target != null }
-    ) { subscreen ->
-        if (subscreen == "personalisasi") {
-            PersonalisasiScreen(onBackClick = { currentSubscreen = null })
-        } else if (subscreen == "compatibility") {
-            CompatibilityScreen(onBackClick = { currentSubscreen = null })
-        } else if (subscreen == "telemetry_overlay") {
-            BackHandler { currentSubscreen = null }
-            TelemetryOverlayScreen(
-                config = overlayConfig,
-                targetHz = 120,
-                onConfigChange = { updated ->
-                    val wasEnabled = overlayConfig.enabled
-                    overlayConfig = updated
-                    FloatingFpsPrefs.save(context, updated)
-                    if (updated.enabled && !wasEnabled) {
-                        homeScope.launch {
-                            val granted = FloatingFpsService.ensureOverlayPermission(context)
-                            if (granted) {
-                                FloatingFpsService.sync(context, updated)
-                            } else {
-                                val reverted = updated.copy(enabled = false)
-                                overlayConfig = reverted
-                                FloatingFpsPrefs.save(context, reverted)
-                            }
-                        }
-                    } else {
-                        FloatingFpsService.sync(context, updated)
-                    }
-                },
-                onBack = { currentSubscreen = null }
-            )
-        } else if (isFloating) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
-            ) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        if (isFloating) {
+            Box(modifier = Modifier.fillMaxSize()) {
                 LuminaTabPager(
                     pagerState = pagerState,
                     modifier = Modifier.fillMaxSize(),
@@ -492,6 +452,7 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             }
                         )
                         3 -> SettingsScreen(
+                            onNavigateToAbout = { currentSubscreen = "about" },
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" },
                             onNavigateToCompatibility = { currentSubscreen = "compatibility" },
                             onNavigateToTweaks = { onTabSelected(2) },
@@ -565,10 +526,69 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                             }
                         )
                         3 -> SettingsScreen(
+                            onNavigateToAbout = { currentSubscreen = "about" },
                             onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" },
                             onNavigateToCompatibility = { currentSubscreen = "compatibility" },
                             onNavigateToTweaks = { onTabSelected(2) },
                             onOpenSetupWizard = onOpenSetupWizard
+                        )
+                    }
+                }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = currentSubscreen != null,
+            enter = slideInHorizontally(
+                animationSpec = tween(320, easing = DrillEmphasizedDecelerate)
+            ) { it } + fadeIn(animationSpec = tween(220)),
+            exit = slideOutHorizontally(
+                animationSpec = tween(280, easing = DrillEmphasizedAccelerate)
+            ) { it } + fadeOut(animationSpec = tween(220)),
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(2f)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+            ) {
+                when (renderedSubscreen) {
+                    "personalisasi" -> PersonalisasiScreen(
+                        onBackClick = { currentSubscreen = null }
+                    )
+                    "compatibility" -> CompatibilityScreen(
+                        onBackClick = { currentSubscreen = null }
+                    )
+                    "about" -> AboutScreen(
+                        onBackClick = { currentSubscreen = null }
+                    )
+                    "telemetry_overlay" -> {
+                        BackHandler { currentSubscreen = null }
+                        TelemetryOverlayScreen(
+                            config = overlayConfig,
+                            targetHz = 120,
+                            onConfigChange = { updated ->
+                                val wasEnabled = overlayConfig.enabled
+                                overlayConfig = updated
+                                FloatingFpsPrefs.save(context, updated)
+                                if (updated.enabled && !wasEnabled) {
+                                    homeScope.launch {
+                                        val granted = FloatingFpsService.ensureOverlayPermission(context)
+                                        if (granted) {
+                                            FloatingFpsService.sync(context, updated)
+                                        } else {
+                                            val reverted = updated.copy(enabled = false)
+                                            overlayConfig = reverted
+                                            FloatingFpsPrefs.save(context, reverted)
+                                        }
+                                    }
+                                } else {
+                                    FloatingFpsService.sync(context, updated)
+                                }
+                            },
+                            onBack = { currentSubscreen = null }
                         )
                     }
                 }
@@ -817,7 +837,7 @@ fun HomeDashboardContent(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .appBarFade(fadeSurface) { scrollBehavior.state.overlappedFraction }
+                    .appBarFade(fadeSurface, scrollBehavior.state.overlappedFraction)
                     .statusBarsPadding()
             ) {
                 LargeFlexibleTopAppBar(
@@ -1154,6 +1174,7 @@ private fun CoreStatusHero(
             .fillMaxWidth()
             .then(heroPressScale)
             .height(100.dp)
+            .animateContentSize(animationSpec = spring())
     ) {
         Row(
             modifier = Modifier
