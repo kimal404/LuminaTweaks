@@ -1382,10 +1382,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                 } else {
                     runCatching { ConfigRepository.getCurrentRefreshRateId() }.getOrNull()
                 }
-                ConfigRepository.applyRefreshRateMode(
-                    applyId,
-                    if (modeId != null) hz else GameDeckPrefs.refreshRateHint(this@GameDeckService)
-                )
+                ConfigRepository.applyRefreshRateMode(applyId)
                 uiState.value = uiState.value.copy(
                     selectedRrHz = hz,
                     rrPerApp = hz != null,
@@ -1429,7 +1426,7 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         }
                         return@launch
                     }
-                    ConfigRepository.setRefreshRate(modeId, hz)
+                    ConfigRepository.setRefreshRate(modeId)
                     withContext(Dispatchers.Main) {
                         showStatusBanner("Refresh rate $hz Hz")
                     }

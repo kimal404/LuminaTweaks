@@ -65,7 +65,7 @@ const LEGACY_PROFILE_FILE_PATH: &str = "/data/local/tmp/lumina.profile";
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 const CONFIG_FALLBACK_INTERVAL: Duration = Duration::from_secs(2);
 const PERFORMANCE_GUARD_RECOVER_AFTER: Duration = Duration::from_secs(10);
-const FOCUS_RELEASE_GRACE: Duration = Duration::from_secs(12);
+const FOCUS_RELEASE_GRACE: Duration = Duration::from_secs(5);
 const LEGACY_PROFILE_STATE_PATH: &str = "/data/adb/.config/lumina/profile.conf";
 
 extern "C" fn handle_signal(_: i32) {
@@ -850,11 +850,16 @@ fn main() {
         let focused = focused
             .map(|package| detector::sanitize_pkg_name(&package).to_string())
             .filter(|package| !package.is_empty());
+        let launcher_focus = focused
+            .as_deref()
+            .map(detector::is_launcher_package)
+            .unwrap_or(true);
         let transient_focus = screen_awake
+            && !launcher_focus
             && focused
                 .as_deref()
                 .map(detector::is_ignored_package)
-                .unwrap_or(true);
+                .unwrap_or(false);
 
         let current_target = if is_master_enabled() {
             let newly_focused_target = focused.as_deref().filter(|pkg| is_app_enabled(pkg));
