@@ -9,9 +9,12 @@ import android.graphics.Canvas
 import android.net.Uri
 import android.provider.Settings
 import android.util.LruCache
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -36,6 +39,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -43,6 +47,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.MoreVert
@@ -54,44 +61,48 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.TopAppBarState
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.pullToRefresh
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.luminatweaks.R
 import com.luminatweaks.data.AppProfileConfig
 import com.luminatweaks.data.ConfigRepository
@@ -160,6 +171,10 @@ fun AppsScreen(
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusRequester = remember { FocusRequester() }
     val packageManager = remember { context.packageManager }
     val coroutineScope = rememberCoroutineScope()
     val listState = rememberLazyListState()
@@ -168,6 +183,7 @@ fun AppsScreen(
     var isLoading by remember { mutableStateOf(true) }
     var isRefreshing by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+    var isSearchFocused by remember { mutableStateOf(false) }
     var hideSystemApps by remember { mutableStateOf(true) }
     var showMoreMenu by remember { mutableStateOf(false) }
 
@@ -211,9 +227,13 @@ fun AppsScreen(
     }
 
     LaunchedEffect(searchQuery) {
-        if (listState.firstVisibleItemIndex > 0) {
+        if (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {
             listState.scrollToItem(0)
         }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { focusManager.clearFocus() }
     }
 
     val activeApp = rawApps.find { it.packageName == selectedPackageName }
@@ -243,6 +263,7 @@ fun AppsScreen(
 
     val isFloating = LocalFloatingNavBar.current
     val navBottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     LuminaDrillTransition(
         targetState = activeApp,
@@ -263,254 +284,336 @@ fun AppsScreen(
                 onBack = { selectedPackageName = null }
             )
         } else {
-            val topAppBarState = rememberSaveable(saver = TopAppBarState.Saver) {
-                TopAppBarState(
-                    initialHeightOffsetLimit = -Float.MAX_VALUE,
-                    initialHeightOffset = 0f,
-                    initialContentOffset = 0f
-                )
+            BackHandler(enabled = isSearchFocused || searchQuery.isNotEmpty()) {
+                if (searchQuery.isNotEmpty()) {
+                    searchQuery = ""
+                }
+                isSearchFocused = false
+                focusManager.clearFocus()
+                keyboardController?.hide()
             }
-            val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(topAppBarState)
-            val fadeSurface = MaterialTheme.colorScheme.background
+
+            val scheme = MaterialTheme.colorScheme
             val hazeState = remember { HazeState() }
             val pullToRefreshState = rememberPullToRefreshState()
-            val headerBlurFraction = if (
-                listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0
-            ) {
-                1f
-            } else {
-                scrollBehavior.state.overlappedFraction
-            }
 
-            Scaffold(
-                contentWindowInsets = WindowInsets(0.dp),
-                containerColor = MaterialTheme.colorScheme.background,
-                topBar = {
-                    Column(
-                        modifier = Modifier.luminaHazeHeader(
-                            hazeState = hazeState,
-                            surfaceColor = fadeSurface,
-                            overlappedFraction = headerBlurFraction
-                        )
-                    ) {
-                        LargeFlexibleTopAppBar(
-                            title = {
-                                Text(
-                                    text = stringResource(R.string.apps_title),
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            },
-                            actions = {
-                                Box {
-                                    IconButton(onClick = { showMoreMenu = true }) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.MoreVert,
-                                            contentDescription = stringResource(R.string.action_more),
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
+            val titleRowHeight = 52.dp
+            val searchPillHeight = 46.dp
+            val headerBottomGap = 10.dp
+            val expandedHeaderHeight = statusBarTop + titleRowHeight + searchPillHeight + headerBottomGap
+            val collapseRangePx = with(density) { titleRowHeight.toPx() }
 
-                                    DropdownMenu(
-                                        expanded = showMoreMenu,
-                                        onDismissRequest = { showMoreMenu = false }
-                                    ) {
-                                        DropdownMenuItem(
-                                            text = {
-                                                Text(
-                                                    if (hideSystemApps) {
-                                                        stringResource(R.string.apps_show_system)
-                                                    } else {
-                                                        stringResource(R.string.apps_hide_system)
-                                                    }
-                                                )
-                                            },
-                                            onClick = {
-                                                hideSystemApps = !hideSystemApps
-                                                showMoreMenu = false
-                                            }
-                                        )
-                                    }
-                                }
-                            },
-                            colors = TopAppBarDefaults.topAppBarColors(
-                                containerColor = Color.Transparent,
-                                scrolledContainerColor = Color.Transparent
-                            ),
-                            scrollBehavior = scrollBehavior,
-                            windowInsets = WindowInsets(0, 0, 0, 0)
-                        )
-
-                        TextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            placeholder = {
-                                Text(
-                                    text = stringResource(R.string.apps_search_placeholder),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Rounded.Search,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            },
-                            trailingIcon = {
-                                AnimatedVisibility(
-                                    visible = searchQuery.isNotEmpty(),
-                                    enter = fadeIn(tween(150)) + scaleIn(initialScale = 0.8f),
-                                    exit = fadeOut(tween(120)) + scaleOut(targetScale = 0.8f)
-                                ) {
-                                    IconButton(onClick = { searchQuery = "" }) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Clear,
-                                            contentDescription = stringResource(R.string.action_clear),
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            },
-                            singleLine = true,
-                            shape = CircleShape,
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent,
-                                disabledIndicatorColor = Color.Transparent
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp)
-                                .padding(top = 2.dp, bottom = 10.dp)
-                        )
+            val scrollCollapse by remember(collapseRangePx) {
+                derivedStateOf {
+                    if (listState.firstVisibleItemIndex > 0) {
+                        1f
+                    } else {
+                        (listState.firstVisibleItemScrollOffset / collapseRangePx).coerceIn(0f, 1f)
                     }
                 }
-            ) { innerPadding ->
+            }
+
+            val focusCollapse by animateFloatAsState(
+                targetValue = if (isSearchFocused || searchQuery.isNotEmpty()) 1f else 0f,
+                animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+                label = "appsSearchFocusCollapse"
+            )
+
+            val collapseProgress = maxOf(scrollCollapse, focusCollapse)
+            val currentTitleHeight = titleRowHeight * (1f - collapseProgress)
+            val currentHeaderHeight = statusBarTop + currentTitleHeight + searchPillHeight + headerBottomGap
+
+            Box(
+                modifier = modifier
+                    .fillMaxSize()
+                    .background(scheme.background)
+                    .pullToRefresh(
+                        state = pullToRefreshState,
+                        isRefreshing = isRefreshing,
+                        onRefresh = refreshApps
+                    )
+            ) {
                 if (isLoading) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(innerPadding),
+                            .padding(top = expandedHeaderHeight),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        CircularProgressIndicator(color = scheme.primary)
                     }
                 } else {
-                    Box(
-                        modifier = modifier
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
                             .fillMaxSize()
-                            .pullToRefresh(
-                                state = pullToRefreshState,
-                                isRefreshing = isRefreshing,
-                                onRefresh = refreshApps
-                            )
-                            .nestedScroll(scrollBehavior.nestedScrollConnection)
+                            .hazeSource(state = hazeState),
+                        contentPadding = PaddingValues(
+                            start = 16.dp,
+                            end = 16.dp,
+                            top = expandedHeaderHeight + 4.dp,
+                            bottom = if (isFloating) 112.dp + navBottomInset else 28.dp + navBottomInset
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .hazeSource(state = hazeState),
-                            contentPadding = PaddingValues(
-                                start = 16.dp,
-                                end = 16.dp,
-                                top = innerPadding.calculateTopPadding() + 4.dp,
-                                bottom = if (isFloating) 112.dp + navBottomInset else 28.dp + navBottomInset
-                            ),
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            if (filteredApps.isEmpty() && !isRefreshing) {
-                                item(key = "empty_state") {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(26.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                                            .padding(vertical = 40.dp, horizontal = 20.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = appsLocalizedLabel(
-                                                "Tidak ada aplikasi yang cocok",
-                                                "No matching applications found"
-                                            ),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            } else {
-                                itemsIndexed(filteredApps, key = { _, appItem -> appItem.packageName }) { index, appItem ->
-                                    val currentCfg = appConfigs[appItem.packageName]
-                                        ?: AppProfileConfig(pkg = appItem.packageName)
-                                    val isEnabled = if (appConfigs.containsKey(appItem.packageName)) {
-                                        !currentCfg.disabled && currentCfg.saklarUtama
-                                    } else {
-                                        ConfigRepository.isAppActive(appItem.packageName)
-                                    }
-
-                                    AppRowCard(
-                                        app = appItem,
-                                        isEnabled = isEnabled,
-                                        onClick = { selectedPackageName = appItem.packageName },
-                                        modifier = Modifier.animateItem(
-                                            fadeInSpec = null,
-                                            placementSpec = spring(
-                                                dampingRatio = Spring.DampingRatioLowBouncy,
-                                                stiffness = Spring.StiffnessLow
-                                            ),
-                                            fadeOutSpec = null
+                        if (filteredApps.isEmpty() && !isRefreshing) {
+                            item(key = "empty_state") {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(26.dp))
+                                        .background(scheme.surfaceContainerHigh)
+                                        .padding(vertical = 40.dp, horizontal = 20.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = appsLocalizedLabel(
+                                            "Tidak ada aplikasi yang cocok",
+                                            "No matching applications found"
                                         ),
-                                        onToggleActive = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            val updated = if (!isEnabled) {
-                                                currentCfg.copy(
-                                                    saklarUtama = true,
-                                                    disabled = false,
-                                                    custom = currentCfg.custom || !ConfigRepository.defaultGames.contains(appItem.packageName)
-                                                )
-                                            } else {
-                                                currentCfg.copy(
-                                                    saklarUtama = false,
-                                                    disabled = true,
-                                                    custom = false
-                                                )
-                                            }
-                                            appConfigs[appItem.packageName] = updated
-                                            coroutineScope.launch {
-                                                ConfigRepository.saveAppConfig(updated)
-                                            }
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = scheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        } else {
+                            itemsIndexed(filteredApps, key = { _, appItem -> appItem.packageName }) { index, appItem ->
+                                val currentCfg = appConfigs[appItem.packageName]
+                                    ?: AppProfileConfig(pkg = appItem.packageName)
+                                val isEnabled = if (appConfigs.containsKey(appItem.packageName)) {
+                                    !currentCfg.disabled && currentCfg.saklarUtama
+                                } else {
+                                    ConfigRepository.isAppActive(appItem.packageName)
+                                }
+
+                                AppRowCard(
+                                    app = appItem,
+                                    isEnabled = isEnabled,
+                                    onClick = {
+                                        focusManager.clearFocus()
+                                        selectedPackageName = appItem.packageName
+                                    },
+                                    modifier = Modifier.animateItem(
+                                        fadeInSpec = null,
+                                        placementSpec = spring(
+                                            dampingRatio = Spring.DampingRatioLowBouncy,
+                                            stiffness = Spring.StiffnessLow
+                                        ),
+                                        fadeOutSpec = null
+                                    ),
+                                    onToggleActive = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        val updated = if (!isEnabled) {
+                                            currentCfg.copy(
+                                                saklarUtama = true,
+                                                disabled = false,
+                                                custom = currentCfg.custom || !ConfigRepository.defaultGames.contains(appItem.packageName)
+                                            )
+                                        } else {
+                                            currentCfg.copy(
+                                                saklarUtama = false,
+                                                disabled = true,
+                                                custom = false
+                                            )
+                                        }
+                                        appConfigs[appItem.packageName] = updated
+                                        coroutineScope.launch {
+                                            ConfigRepository.saveAppConfig(updated)
+                                        }
+                                    },
+                                    onOpenAppInfo = {
+                                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                            data = Uri.fromParts("package", appItem.packageName, null)
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        }
+                                        context.startActivity(intent)
+                                    },
+                                    shape = connectedContainerShape(
+                                        index = index,
+                                        count = filteredApps.size
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    PullToRefreshDefaults.LoadingIndicator(
+                        state = pullToRefreshState,
+                        isRefreshing = isRefreshing,
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = currentHeaderHeight)
+                    )
+                }
+
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .luminaHazeHeader(
+                            hazeState = hazeState,
+                            surfaceColor = scheme.background,
+                            overlappedFraction = collapseProgress
+                        )
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(currentTitleHeight)
+                            .clipToBounds()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(titleRowHeight)
+                                .padding(start = 20.dp, end = 8.dp)
+                                .graphicsLayer {
+                                    alpha = (1f - collapseProgress * 1.45f).coerceIn(0f, 1f)
+                                    translationY = -size.height * 0.35f * collapseProgress
+                                    val s = 1f - 0.04f * collapseProgress
+                                    scaleX = s
+                                    scaleY = s
+                                    transformOrigin = TransformOrigin(0f, 0.5f)
+                                },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = stringResource(R.string.apps_title),
+                                fontSize = 28.sp,
+                                letterSpacing = (-0.5).sp,
+                                fontWeight = FontWeight.Bold,
+                                color = scheme.onBackground,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            Box {
+                                IconButton(
+                                    onClick = { showMoreMenu = true },
+                                    enabled = collapseProgress < 0.5f
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.MoreVert,
+                                        contentDescription = stringResource(R.string.action_more),
+                                        tint = scheme.onSurfaceVariant
+                                    )
+                                }
+
+                                DropdownMenu(
+                                    expanded = showMoreMenu,
+                                    onDismissRequest = { showMoreMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                if (hideSystemApps) {
+                                                    stringResource(R.string.apps_show_system)
+                                                } else {
+                                                    stringResource(R.string.apps_hide_system)
+                                                }
+                                            )
                                         },
-                                        onOpenAppInfo = {
-                                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                                data = Uri.fromParts("package", appItem.packageName, null)
-                                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                            }
-                                            context.startActivity(intent)
-                                        },
-                                        shape = connectedContainerShape(
-                                            index = index,
-                                            count = filteredApps.size
-                                        )
+                                        onClick = {
+                                            hideSystemApps = !hideSystemApps
+                                            showMoreMenu = false
+                                        }
                                     )
                                 }
                             }
                         }
+                    }
 
-                        PullToRefreshDefaults.LoadingIndicator(
-                            state = pullToRefreshState,
-                            isRefreshing = isRefreshing,
-                            modifier = Modifier
-                                .align(Alignment.TopCenter)
-                                .padding(top = innerPadding.calculateTopPadding())
-                        )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                            .padding(top = 2.dp, bottom = headerBottomGap)
+                            .height(searchPillHeight)
+                            .clip(CircleShape)
+                            .background(scheme.surfaceContainerHigh)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                focusRequester.requestFocus()
+                            }
+                            .padding(horizontal = 16.dp),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Search,
+                                contentDescription = null,
+                                tint = if (isSearchFocused) scheme.primary else scheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+
+                            Box(
+                                modifier = Modifier.weight(1f),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                if (searchQuery.isEmpty()) {
+                                    Text(
+                                        text = stringResource(R.string.apps_search_placeholder),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = scheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+
+                                BasicTextField(
+                                    value = searchQuery,
+                                    onValueChange = { searchQuery = it },
+                                    singleLine = true,
+                                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                        color = scheme.onSurface
+                                    ),
+                                    cursorBrush = SolidColor(scheme.primary),
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                    keyboardActions = KeyboardActions(
+                                        onSearch = {
+                                            focusManager.clearFocus()
+                                            keyboardController?.hide()
+                                        }
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .focusRequester(focusRequester)
+                                        .onFocusChanged { state ->
+                                            isSearchFocused = state.isFocused
+                                        }
+                                )
+                            }
+
+                            AnimatedVisibility(
+                                visible = searchQuery.isNotEmpty(),
+                                enter = fadeIn(tween(150)) + scaleIn(initialScale = 0.8f),
+                                exit = fadeOut(tween(120)) + scaleOut(targetScale = 0.8f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clip(CircleShape)
+                                        .clickable {
+                                            searchQuery = ""
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Clear,
+                                        contentDescription = stringResource(R.string.action_clear),
+                                        tint = scheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
