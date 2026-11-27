@@ -73,6 +73,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -109,12 +110,17 @@ import com.luminatweaks.BuildConfig
 import com.luminatweaks.R
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.ui.component.TouchOriginDialog
-import com.luminatweaks.ui.component.appBarFade
 import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.component.rememberDialogOrigin
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.DeviceUtil
 import com.luminatweaks.util.LogUtil
+import dev.chrisbanes.haze.HazeProgressive
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -166,8 +172,6 @@ fun SettingsScreen(
         "${BuildConfig.VERSION_NAME.removeSuffix(".0")} (${BuildConfig.VERSION_CODE})"
     }
 
-    var tickMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    var uptimeText by remember { mutableStateOf(formatDeviceUptime()) }
     var systemWallpaperBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
     var showLanguageSheet by remember { mutableStateOf(false) }
     var showLogBottomSheet by remember { mutableStateOf(false) }
@@ -182,408 +186,427 @@ fun SettingsScreen(
     var uninstallOriginPoint by remember { mutableStateOf(Offset(0.5f, 0.5f)) }
     val uninstallOrigin = rememberDialogOrigin()
 
-    val activeSettingsSubscreen = when {
-        showAboutScreen && onNavigateToAbout == null -> "about"
-        showPersonalisasiScreen && onNavigateToPersonalisasi == null -> "personalisasi"
-        showCompatibilityScreen && onNavigateToCompatibility == null -> "compatibility"
-        showTweaksScreen && onNavigateToTweaks == null -> "tweaks"
-        else -> "main"
-    }
+    val hasInlineSubscreen = (showAboutScreen && onNavigateToAbout == null) ||
+        (showPersonalisasiScreen && onNavigateToPersonalisasi == null) ||
+        (showCompatibilityScreen && onNavigateToCompatibility == null) ||
+        (showTweaksScreen && onNavigateToTweaks == null)
 
     LaunchedEffect(Unit) {
         isToastNotifications = ConfigRepository.getToastNotifications()
         systemWallpaperBitmap = loadSystemWallpaperBitmap(context)
     }
 
-    LaunchedEffect(Unit) {
-        while (isActive) {
-            val now = System.currentTimeMillis()
-            tickMs = now
-            uptimeText = formatDeviceUptime()
-            val remainder = 1000L - (now % 1000L)
-            delay(remainder.coerceIn(250L, 1000L))
+    if (hasInlineSubscreen) {
+        when {
+            showAboutScreen && onNavigateToAbout == null ->
+                AboutScreen(onBackClick = { showAboutScreen = false })
+            showPersonalisasiScreen && onNavigateToPersonalisasi == null ->
+                PersonalisasiScreen(onBackClick = { showPersonalisasiScreen = false })
+            showCompatibilityScreen && onNavigateToCompatibility == null ->
+                CompatibilityScreen(onBackClick = { showCompatibilityScreen = false })
+            showTweaksScreen && onNavigateToTweaks == null ->
+                TweaksScreen(onBackClick = { showTweaksScreen = false })
+        }
+        return
+    }
+
+    val scheme = MaterialTheme.colorScheme
+    val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomPadding = if (isFloating) 112.dp + navInset else 28.dp + navInset
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    val fadeSurface = scheme.background
+    val hazeState = remember { HazeState() }
+    val blurProgress by remember {
+        derivedStateOf {
+            (scrollBehavior.state.overlappedFraction * 1.35f).coerceIn(0f, 1f)
         }
     }
 
-    LuminaDrillTransition(
-        targetState = activeSettingsSubscreen,
-        isForward = { _, target -> target != "main" }
-    ) { route ->
-        when (route) {
-            "about" -> AboutScreen(onBackClick = { showAboutScreen = false })
-            "personalisasi" -> PersonalisasiScreen(onBackClick = { showPersonalisasiScreen = false })
-            "compatibility" -> CompatibilityScreen(onBackClick = { showCompatibilityScreen = false })
-            "tweaks" -> TweaksScreen(onBackClick = { showTweaksScreen = false })
-            else -> {
-                val scheme = MaterialTheme.colorScheme
-                val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-                val bottomPadding = if (isFloating) 112.dp + navInset else 28.dp + navInset
-                val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
-                val fadeSurface = scheme.background
-                val topBarScrimAlpha = (scrollBehavior.state.overlappedFraction * 1.4f).coerceIn(0f, 0.96f)
+    val openPersonalisasi: () -> Unit = {
+        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        if (onNavigateToPersonalisasi != null) {
+            onNavigateToPersonalisasi()
+        } else {
+            showPersonalisasiScreen = true
+        }
+    }
 
-                val openPersonalisasi: () -> Unit = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    if (onNavigateToPersonalisasi != null) {
-                        onNavigateToPersonalisasi()
-                    } else {
-                        showPersonalisasiScreen = true
-                    }
-                }
+    val openCompatibility: () -> Unit = {
+        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        if (onNavigateToCompatibility != null) {
+            onNavigateToCompatibility()
+        } else {
+            showCompatibilityScreen = true
+        }
+    }
 
-                val openCompatibility: () -> Unit = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    if (onNavigateToCompatibility != null) {
-                        onNavigateToCompatibility()
-                    } else {
-                        showCompatibilityScreen = true
-                    }
-                }
+    val openAbout: () -> Unit = {
+        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        if (onNavigateToAbout != null) {
+            onNavigateToAbout()
+        } else {
+            showAboutScreen = true
+        }
+    }
 
-                val openAbout: () -> Unit = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    if (onNavigateToAbout != null) {
-                        onNavigateToAbout()
-                    } else {
-                        showAboutScreen = true
-                    }
-                }
-
-                Scaffold(
-                    modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-                    contentWindowInsets = WindowInsets(0.dp),
-                    containerColor = scheme.background,
-                    topBar = {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(fadeSurface.copy(alpha = topBarScrimAlpha))
-                                .appBarFade(fadeSurface) { scrollBehavior.state.overlappedFraction }
-                                .statusBarsPadding()
-                        ) {
-                            LargeFlexibleTopAppBar(
-                                title = {
-                                    Text(
-                                        text = stringResource(R.string.title_settings),
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                },
-                                colors = TopAppBarDefaults.topAppBarColors(
-                                    containerColor = Color.Transparent,
-                                    scrolledContainerColor = Color.Transparent
-                                ),
-                                scrollBehavior = scrollBehavior,
-                                windowInsets = WindowInsets(0, 0, 0, 0)
-                            )
-                        }
-                    }
-                ) { innerPadding ->
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(
-                            top = innerPadding.calculateTopPadding() + 8.dp,
-                            bottom = bottomPadding,
-                            start = 16.dp,
-                            end = 16.dp
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+    Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        contentWindowInsets = WindowInsets(0.dp),
+        containerColor = scheme.background,
+        topBar = {
+            val topBarModifier = if (blurProgress > 0.01f) {
+                Modifier
+                    .fillMaxWidth()
+                    .hazeEffect(
+                        state = hazeState,
+                        style = HazeStyle(
+                            backgroundColor = fadeSurface,
+                            tints = listOf(
+                                HazeTint(fadeSurface.copy(alpha = 0.62f * blurProgress))
+                            ),
+                            blurRadius = (24f * blurProgress).dp,
+                            noiseFactor = 0f
+                        )
                     ) {
-                        item(key = "hero_bento") {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(332.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight(),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    MonetPersonalizationTile(
-                                        modifier = Modifier.weight(0.35f),
-                                        title = stringResource(R.string.personalization_title),
-                                        onClick = openPersonalisasi
-                                    )
-
-                                    DeviceSpecsOverviewTile(
-                                        modifier = Modifier.weight(0.65f),
-                                        deviceLabel = settingsLocalizedLabel("Model perangkat", "Device model"),
-                                        deviceValue = deviceModel,
-                                        packageLabel = settingsLocalizedLabel("Nama paket", "Package name"),
-                                        packageValue = packageName,
-                                        versionLabel = settingsLocalizedLabel("Versi manajer", "Manager version"),
-                                        versionValue = versionSummary,
-                                        uptimeLabel = settingsLocalizedLabel("Waktu aktif perangkat", "Device uptime"),
-                                        uptimeValue = uptimeText
-                                    )
-                                }
-
-                                LockscreenHeroTile(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight(),
-                                    title = stringResource(R.string.app_name),
-                                    wallpaper = systemWallpaperBitmap,
-                                    clockTickMs = tickMs,
-                                    languageTag = currentLanguage
-                                )
-                            }
-                        }
-
-                        item(key = "quick_tools_pair") {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                SuiteMediumTile(
-                                    modifier = Modifier.weight(1f),
-                                    icon = Icons.Rounded.Description,
-                                    title = if (isGeneratingLog) {
-                                        settingsLocalizedLabel("Menyimpan...", "Bundling...")
-                                    } else {
-                                        stringResource(R.string.settings_save_log)
-                                    },
-                                    enabled = !isGeneratingLog,
-                                    onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        showLogBottomSheet = true
-                                    }
-                                )
-
-                                SuiteMediumTile(
-                                    modifier = Modifier.weight(1f),
-                                    icon = Icons.Rounded.AutoFixHigh,
-                                    title = stringResource(R.string.settings_setup_wizard),
-                                    onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        onOpenSetupWizard()
-                                    }
-                                )
-                            }
-                        }
-
-                        item(key = "about_and_module") {
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                SettingsSwitchRow(
-                                    index = 0,
-                                    count = 5,
-                                    icon = Icons.Rounded.Notifications,
-                                    title = stringResource(R.string.settings_toast_notifications),
-                                    subtitle = settingsLocalizedLabel(
-                                        "Tampilkan info saat profil aktif berganti",
-                                        "Show alert when active profile switches"
-                                    ),
-                                    checked = isToastNotifications,
-                                    onCheckedChange = { enabled ->
-                                        isToastNotifications = enabled
-                                        coroutineScope.launch {
-                                            ConfigRepository.setToastNotifications(enabled)
-                                        }
-                                    }
-                                )
-
-                                SettingsActionRow(
-                                    index = 1,
-                                    count = 5,
-                                    icon = Icons.Rounded.Language,
-                                    title = stringResource(R.string.settings_language),
-                                    subtitle = if (currentLanguage == "en") {
-                                        stringResource(R.string.language_english)
-                                    } else {
-                                        stringResource(R.string.language_indonesian)
-                                    },
-                                    highlightSubtitle = true,
-                                    onClick = { showLanguageSheet = true }
-                                )
-
-                                SettingsActionRow(
-                                    index = 2,
-                                    count = 5,
-                                    icon = Icons.Rounded.Security,
-                                    title = stringResource(R.string.settings_compatibility),
-                                    subtitle = stringResource(R.string.settings_compatibility_desc),
-                                    onClick = openCompatibility
-                                )
-
-                                SettingsActionRow(
-                                    index = 3,
-                                    count = 5,
-                                    icon = Icons.Rounded.Info,
-                                    title = stringResource(R.string.settings_about),
-                                    subtitle = stringResource(
-                                        R.string.settings_version_format,
-                                        BuildConfig.VERSION_NAME.removeSuffix(".0")
-                                    ),
-                                    onClick = openAbout
-                                )
-
-                                SettingsActionRow(
-                                    index = 4,
-                                    count = 5,
-                                    icon = Icons.Rounded.DeleteForever,
-                                    title = stringResource(R.string.settings_module_uninstall_title),
-                                    subtitle = stringResource(R.string.settings_module_uninstall_desc),
-                                    enabled = !isUninstalling,
-                                    accentColor = scheme.error,
-                                    modifier = uninstallOrigin.trackedModifier(),
-                                    onClick = {
-                                        uninstallOriginPoint = uninstallOrigin.origin
-                                        showUninstallDialog = true
-                                    }
-                                )
-                            }
-                        }
+                        progressive = HazeProgressive.verticalGradient(
+                            startIntensity = 1f,
+                            endIntensity = 0f
+                        )
                     }
-                }
+                    .background(
+                        brush = Brush.verticalGradient(
+                            0.0f to fadeSurface.copy(alpha = 0.90f * blurProgress),
+                            0.65f to fadeSurface.copy(alpha = 0.65f * blurProgress),
+                            1.0f to Color.Transparent
+                        )
+                    )
+                    .statusBarsPadding()
+            } else {
+                Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+            }
 
-                TouchOriginDialog(
-                    visible = showUninstallDialog,
-                    onDismiss = { if (!isUninstalling) showUninstallDialog = false },
-                    origin = uninstallOriginPoint
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.DeleteForever,
-                            contentDescription = null,
-                            tint = scheme.error,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
+            Box(modifier = topBarModifier) {
+                LargeFlexibleTopAppBar(
+                    title = {
                         Text(
-                            text = stringResource(R.string.settings_module_uninstall_title),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = TextAlign.Center
+                            text = stringResource(R.string.title_settings),
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = stringResource(R.string.settings_module_uninstall_dialog_desc),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = scheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(20.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
-                        ) {
-                            TextButton(
-                                onClick = { showUninstallDialog = false },
-                                enabled = !isUninstalling
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.action_cancel),
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                            TextButton(
-                                onClick = {
-                                    isUninstalling = true
-                                    coroutineScope.launch {
-                                        uninstallModule(context)
-                                    }
-                                },
-                                enabled = !isUninstalling
-                            ) {
-                                Text(
-                                    text = if (isUninstalling) {
-                                        stringResource(R.string.settings_module_uninstall_processing)
-                                    } else {
-                                        stringResource(R.string.settings_module_uninstall_confirm)
-                                    },
-                                    color = scheme.error,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-                }
-
-                val languages = listOf(
-                    "id" to stringResource(R.string.language_indonesian),
-                    "en" to stringResource(R.string.language_english)
-                )
-                SettingsOptionSheet(
-                    show = showLanguageSheet,
-                    title = stringResource(R.string.dialog_select_language),
-                    selectable = true,
-                    options = languages.map { SettingsSheetOption(it.first, it.second) },
-                    isSelected = { it == currentLanguage },
-                    onSelect = { tag ->
-                        if (currentLanguage != tag) {
-                            currentLanguage = tag
-                            coroutineScope.launch {
-                                delay(120L)
-                                setAppLanguage(context, tag)
-                            }
-                        }
                     },
-                    onDismiss = { showLanguageSheet = false }
-                )
-
-                SettingsOptionSheet(
-                    show = showLogBottomSheet,
-                    title = stringResource(R.string.dialog_log_subsystem),
-                    selectable = false,
-                    options = listOf(
-                        SettingsSheetOption(
-                            value = "save",
-                            label = stringResource(R.string.settings_save_log),
-                            supporting = stringResource(R.string.log_option_save_desc)
-                        ),
-                        SettingsSheetOption(
-                            value = "share",
-                            label = stringResource(R.string.log_option_share),
-                            supporting = stringResource(R.string.log_option_share_desc)
-                        )
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent
                     ),
-                    isSelected = { false },
-                    onSelect = { action ->
-                        isGeneratingLog = true
-                        coroutineScope.launch {
-                            if (action == "save") {
-                                val file = LogUtil.dumpDiagnosticLogs(context, saveToDownloads = true)
-                                isGeneratingLog = false
-                                if (file != null) {
-                                    Toast.makeText(
-                                        context,
-                                        context.getString(R.string.toast_log_saved, file.name),
-                                        Toast.LENGTH_LONG
-                                    ).show()
-                                } else {
-                                    Toast.makeText(
-                                        context,
-                                        context.getString(R.string.toast_log_export_failed),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            } else {
-                                val file = LogUtil.dumpDiagnosticLogs(context, saveToDownloads = false)
-                                isGeneratingLog = false
-                                if (file != null) {
-                                    val intent = LogUtil.getShareLogIntent(context, file)
-                                    context.startActivity(intent)
-                                } else {
-                                    Toast.makeText(
-                                        context,
-                                        context.getString(R.string.toast_log_share_failed),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            }
-                        }
-                    },
-                    onDismiss = { showLogBottomSheet = false }
+                    scrollBehavior = scrollBehavior,
+                    windowInsets = WindowInsets(0, 0, 0, 0)
                 )
             }
         }
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .hazeSource(state = hazeState),
+            contentPadding = PaddingValues(
+                top = innerPadding.calculateTopPadding() + 8.dp,
+                bottom = bottomPadding,
+                start = 16.dp,
+                end = 16.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item(key = "hero_bento") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(332.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        MonetPersonalizationTile(
+                            modifier = Modifier.weight(0.35f),
+                            title = stringResource(R.string.personalization_title),
+                            onClick = openPersonalisasi
+                        )
+
+                        DeviceSpecsOverviewTile(
+                            modifier = Modifier.weight(0.65f),
+                            deviceLabel = settingsLocalizedLabel("Model perangkat", "Device model"),
+                            deviceValue = deviceModel,
+                            packageLabel = settingsLocalizedLabel("Nama paket", "Package name"),
+                            packageValue = packageName,
+                            versionLabel = settingsLocalizedLabel("Versi manajer", "Manager version"),
+                            versionValue = versionSummary,
+                            uptimeLabel = settingsLocalizedLabel("Waktu aktif perangkat", "Device uptime")
+                        )
+                    }
+
+                    LockscreenHeroTile(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        wallpaper = systemWallpaperBitmap,
+                        languageTag = currentLanguage
+                    )
+                }
+            }
+
+            item(key = "quick_tools_pair") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    SuiteMediumTile(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Rounded.Description,
+                        title = if (isGeneratingLog) {
+                            settingsLocalizedLabel("Menyimpan...", "Bundling...")
+                        } else {
+                            stringResource(R.string.settings_save_log)
+                        },
+                        enabled = !isGeneratingLog,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            showLogBottomSheet = true
+                        }
+                    )
+
+                    SuiteMediumTile(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Rounded.AutoFixHigh,
+                        title = stringResource(R.string.settings_setup_wizard),
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onOpenSetupWizard()
+                        }
+                    )
+                }
+            }
+
+            item(key = "about_and_module") {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    SettingsSwitchRow(
+                        index = 0,
+                        count = 5,
+                        icon = Icons.Rounded.Notifications,
+                        title = stringResource(R.string.settings_toast_notifications),
+                        subtitle = settingsLocalizedLabel(
+                            "Tampilkan info saat profil aktif berganti",
+                            "Show alert when active profile switches"
+                        ),
+                        checked = isToastNotifications,
+                        onCheckedChange = { enabled ->
+                            isToastNotifications = enabled
+                            coroutineScope.launch {
+                                ConfigRepository.setToastNotifications(enabled)
+                            }
+                        }
+                    )
+
+                    SettingsActionRow(
+                        index = 1,
+                        count = 5,
+                        icon = Icons.Rounded.Language,
+                        title = stringResource(R.string.settings_language),
+                        subtitle = if (currentLanguage == "en") {
+                            stringResource(R.string.language_english)
+                        } else {
+                            stringResource(R.string.language_indonesian)
+                        },
+                        highlightSubtitle = true,
+                        onClick = { showLanguageSheet = true }
+                    )
+
+                    SettingsActionRow(
+                        index = 2,
+                        count = 5,
+                        icon = Icons.Rounded.Security,
+                        title = stringResource(R.string.settings_compatibility),
+                        subtitle = stringResource(R.string.settings_compatibility_desc),
+                        onClick = openCompatibility
+                    )
+
+                    SettingsActionRow(
+                        index = 3,
+                        count = 5,
+                        icon = Icons.Rounded.Info,
+                        title = stringResource(R.string.settings_about),
+                        subtitle = stringResource(
+                            R.string.settings_version_format,
+                            BuildConfig.VERSION_NAME.removeSuffix(".0")
+                        ),
+                        onClick = openAbout
+                    )
+
+                    SettingsActionRow(
+                        index = 4,
+                        count = 5,
+                        icon = Icons.Rounded.DeleteForever,
+                        title = stringResource(R.string.settings_module_uninstall_title),
+                        subtitle = stringResource(R.string.settings_module_uninstall_desc),
+                        enabled = !isUninstalling,
+                        accentColor = scheme.error,
+                        modifier = uninstallOrigin.trackedModifier(),
+                        onClick = {
+                            uninstallOriginPoint = uninstallOrigin.origin
+                            showUninstallDialog = true
+                        }
+                    )
+                }
+            }
+        }
     }
+
+    TouchOriginDialog(
+        visible = showUninstallDialog,
+        onDismiss = { if (!isUninstalling) showUninstallDialog = false },
+        origin = uninstallOriginPoint
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.DeleteForever,
+                contentDescription = null,
+                tint = scheme.error,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = stringResource(R.string.settings_module_uninstall_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.settings_module_uninstall_dialog_desc),
+                style = MaterialTheme.typography.bodyMedium,
+                color = scheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(20.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(
+                    onClick = { showUninstallDialog = false },
+                    enabled = !isUninstalling
+                ) {
+                    Text(
+                        text = stringResource(R.string.action_cancel),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                TextButton(
+                    onClick = {
+                        isUninstalling = true
+                        coroutineScope.launch {
+                            uninstallModule(context)
+                        }
+                    },
+                    enabled = !isUninstalling
+                ) {
+                    Text(
+                        text = if (isUninstalling) {
+                            stringResource(R.string.settings_module_uninstall_processing)
+                        } else {
+                            stringResource(R.string.settings_module_uninstall_confirm)
+                        },
+                        color = scheme.error,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+    }
+
+    val languages = listOf(
+        "id" to stringResource(R.string.language_indonesian),
+        "en" to stringResource(R.string.language_english)
+    )
+    SettingsOptionSheet(
+        show = showLanguageSheet,
+        title = stringResource(R.string.dialog_select_language),
+        selectable = true,
+        options = languages.map { SettingsSheetOption(it.first, it.second) },
+        isSelected = { it == currentLanguage },
+        onSelect = { tag ->
+            if (currentLanguage != tag) {
+                currentLanguage = tag
+                coroutineScope.launch {
+                    delay(120L)
+                    setAppLanguage(context, tag)
+                }
+            }
+        },
+        onDismiss = { showLanguageSheet = false }
+    )
+
+    SettingsOptionSheet(
+        show = showLogBottomSheet,
+        title = stringResource(R.string.dialog_log_subsystem),
+        selectable = false,
+        options = listOf(
+            SettingsSheetOption(
+                value = "save",
+                label = stringResource(R.string.settings_save_log),
+                supporting = stringResource(R.string.log_option_save_desc)
+            ),
+            SettingsSheetOption(
+                value = "share",
+                label = stringResource(R.string.log_option_share),
+                supporting = stringResource(R.string.log_option_share_desc)
+            )
+        ),
+        isSelected = { false },
+        onSelect = { action ->
+            isGeneratingLog = true
+            coroutineScope.launch {
+                if (action == "save") {
+                    val file = LogUtil.dumpDiagnosticLogs(context, saveToDownloads = true)
+                    isGeneratingLog = false
+                    if (file != null) {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.toast_log_saved, file.name),
+                            Toast.LENGTH_LONG
+                        ).show()
+                    } else {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.toast_log_export_failed),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                } else {
+                    val file = LogUtil.dumpDiagnosticLogs(context, saveToDownloads = false)
+                    isGeneratingLog = false
+                    if (file != null) {
+                        val intent = LogUtil.getShareLogIntent(context, file)
+                        context.startActivity(intent)
+                    } else {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.toast_log_share_failed),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            }
+        },
+        onDismiss = { showLogBottomSheet = false }
+    )
 }
 
 @Composable
@@ -659,10 +682,17 @@ private fun DeviceSpecsOverviewTile(
     versionLabel: String,
     versionValue: String,
     uptimeLabel: String,
-    uptimeValue: String,
     modifier: Modifier = Modifier
 ) {
     val scheme = MaterialTheme.colorScheme
+    var uptimeText by remember { mutableStateOf(formatDeviceUptime()) }
+
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            uptimeText = formatDeviceUptime()
+            delay(1000L)
+        }
+    }
 
     Column(
         modifier = modifier
@@ -686,7 +716,7 @@ private fun DeviceSpecsOverviewTile(
         )
         EditorialSpecItem(
             label = uptimeLabel,
-            value = uptimeValue
+            value = uptimeText
         )
     }
 }
@@ -725,14 +755,22 @@ private fun EditorialSpecItem(
 
 @Composable
 private fun LockscreenHeroTile(
-    title: String,
     wallpaper: ImageBitmap?,
-    clockTickMs: Long,
     languageTag: String,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val scheme = MaterialTheme.colorScheme
+    var clockTickMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            val now = System.currentTimeMillis()
+            clockTickMs = now
+            val remainder = 1000L - (now % 1000L)
+            delay(remainder.coerceIn(250L, 1000L))
+        }
+    }
 
     val clockParts = remember(clockTickMs, context, languageTag) {
         val now = Date(clockTickMs)
@@ -792,9 +830,9 @@ private fun LockscreenHeroTile(
                 .background(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color.Black.copy(alpha = 0.34f),
+                            Color.Black.copy(alpha = 0.24f),
                             Color.Black.copy(alpha = 0.14f),
-                            Color.Black.copy(alpha = 0.38f)
+                            Color.Black.copy(alpha = 0.36f)
                         )
                     )
                 )
@@ -803,32 +841,14 @@ private fun LockscreenHeroTile(
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 12.dp, vertical = 22.dp)
+                .padding(horizontal = 12.dp, vertical = 18.dp),
+            contentAlignment = Alignment.Center
         ) {
             val digitSize = (maxWidth.value * 0.31f).coerceIn(38f, 50f).sp
             val daySize = (digitSize.value * 0.48f).sp
             val dateSize = (digitSize.value * 0.27f).coerceIn(11f, 13.5f).sp
 
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall.copy(
-                    fontWeight = FontWeight.SemiBold,
-                    platformStyle = PlatformTextStyle(includeFontPadding = false)
-                ),
-                color = Color.White,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.align(Alignment.TopCenter)
-            )
-
-            Column(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .padding(top = 6.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(contentAlignment = Alignment.Center) {
                     Row(
                         modifier = Modifier.graphicsLayer { scaleY = 1.1f },

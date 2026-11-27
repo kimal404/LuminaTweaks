@@ -71,6 +71,7 @@ kotlin {
 }
 
 dependencies {
+    implementation("dev.chrisbanes.haze:haze:1.5.2")
     implementation("io.coil-kt:coil-compose:2.6.0")
 
     implementation(platform(libs.androidx.compose.bom))
