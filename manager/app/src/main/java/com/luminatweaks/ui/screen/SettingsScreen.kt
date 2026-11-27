@@ -55,6 +55,7 @@ import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -365,95 +366,29 @@ fun SettingsScreen(
                             }
                         }
 
-                        item(key = "toast_banner_tile") {
-                            val toggleToast: (Boolean) -> Unit = { enabled ->
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                isToastNotifications = enabled
-                                coroutineScope.launch {
-                                    ConfigRepository.setToastNotifications(enabled)
-                                }
-                            }
-                            val interactionSource = remember { MutableInteractionSource() }
-                            val scaleModifier = pressScale(interactionSource, 0.98f)
-
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .then(scaleModifier)
-                                    .clip(RoundedCornerShape(24.dp))
-                                    .background(scheme.surfaceContainerHigh)
-                                    .clickable(
-                                        interactionSource = interactionSource,
-                                        indication = null
-                                    ) { toggleToast(!isToastNotifications) }
-                                    .padding(horizontal = 18.dp, vertical = 14.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = stringResource(R.string.settings_toast_notifications),
-                                        style = MaterialTheme.typography.titleSmall.copy(
-                                            fontWeight = FontWeight.SemiBold,
-                                            platformStyle = PlatformTextStyle(includeFontPadding = false)
-                                        ),
-                                        color = scheme.onSurface,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Spacer(modifier = Modifier.height(3.dp))
-                                    Text(
-                                        text = settingsLocalizedLabel(
-                                            "Tampilkan info saat profil aktif berganti",
-                                            "Show alert when active profile switches"
-                                        ),
-                                        style = MaterialTheme.typography.bodySmall.copy(
-                                            platformStyle = PlatformTextStyle(includeFontPadding = false)
-                                        ),
-                                        color = scheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-
-                                Switch(
-                                    checked = isToastNotifications,
-                                    onCheckedChange = toggleToast,
-                                    interactionSource = interactionSource,
-                                    thumbContent = {
-                                        if (isToastNotifications) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Check,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(SwitchDefaults.IconSize)
-                                            )
-                                        } else {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Close,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(SwitchDefaults.IconSize)
-                                            )
-                                        }
-                                    },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = scheme.onPrimary,
-                                        checkedIconColor = scheme.primary,
-                                        checkedTrackColor = scheme.primary,
-                                        uncheckedThumbColor = scheme.outline,
-                                        uncheckedIconColor = scheme.surfaceContainerHighest,
-                                        uncheckedTrackColor = scheme.surfaceContainerHighest
-                                    )
-                                )
-                            }
-                        }
-
                         item(key = "about_and_module") {
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                SettingsActionRow(
+                                SettingsSwitchRow(
                                     index = 0,
-                                    count = 4,
+                                    count = 5,
+                                    icon = Icons.Rounded.Notifications,
+                                    title = stringResource(R.string.settings_toast_notifications),
+                                    subtitle = settingsLocalizedLabel(
+                                        "Tampilkan info saat profil aktif berganti",
+                                        "Show alert when active profile switches"
+                                    ),
+                                    checked = isToastNotifications,
+                                    onCheckedChange = { enabled ->
+                                        isToastNotifications = enabled
+                                        coroutineScope.launch {
+                                            ConfigRepository.setToastNotifications(enabled)
+                                        }
+                                    }
+                                )
+
+                                SettingsActionRow(
+                                    index = 1,
+                                    count = 5,
                                     icon = Icons.Rounded.Language,
                                     title = stringResource(R.string.settings_language),
                                     subtitle = if (currentLanguage == "en") {
@@ -466,8 +401,8 @@ fun SettingsScreen(
                                 )
 
                                 SettingsActionRow(
-                                    index = 1,
-                                    count = 4,
+                                    index = 2,
+                                    count = 5,
                                     icon = Icons.Rounded.Security,
                                     title = stringResource(R.string.settings_compatibility),
                                     subtitle = stringResource(R.string.settings_compatibility_desc),
@@ -475,8 +410,8 @@ fun SettingsScreen(
                                 )
 
                                 SettingsActionRow(
-                                    index = 2,
-                                    count = 4,
+                                    index = 3,
+                                    count = 5,
                                     icon = Icons.Rounded.Info,
                                     title = stringResource(R.string.settings_about),
                                     subtitle = stringResource(
@@ -487,8 +422,8 @@ fun SettingsScreen(
                                 )
 
                                 SettingsActionRow(
-                                    index = 3,
-                                    count = 4,
+                                    index = 4,
+                                    count = 5,
                                     icon = Icons.Rounded.DeleteForever,
                                     title = stringResource(R.string.settings_module_uninstall_title),
                                     subtitle = stringResource(R.string.settings_module_uninstall_desc),
@@ -868,11 +803,11 @@ private fun LockscreenHeroTile(
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 4.dp, vertical = 22.dp)
+                .padding(horizontal = 12.dp, vertical = 22.dp)
         ) {
-            val digitSize = (maxWidth.value * 0.41f).coerceIn(54f, 74f).sp
-            val daySize = (digitSize.value * 0.50f).sp
-            val dateSize = (digitSize.value * 0.215f).coerceIn(12f, 15f).sp
+            val digitSize = (maxWidth.value * 0.31f).coerceIn(38f, 50f).sp
+            val daySize = (digitSize.value * 0.48f).sp
+            val dateSize = (digitSize.value * 0.27f).coerceIn(11f, 13.5f).sp
 
             Text(
                 text = title,
@@ -896,8 +831,8 @@ private fun LockscreenHeroTile(
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Row(
-                        modifier = Modifier.graphicsLayer { scaleY = 1.12f },
-                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        modifier = Modifier.graphicsLayer { scaleY = 1.1f },
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
@@ -907,11 +842,11 @@ private fun LockscreenHeroTile(
                                 fontSize = digitSize,
                                 lineHeight = digitSize,
                                 fontWeight = FontWeight.Black,
-                                letterSpacing = (-2.5).sp,
+                                letterSpacing = (-1.0).sp,
                                 fontFeatureSettings = "tnum",
                                 platformStyle = PlatformTextStyle(includeFontPadding = false)
                             ),
-                            color = Color.White.copy(alpha = 0.58f),
+                            color = Color.White.copy(alpha = 0.56f),
                             maxLines = 1,
                             softWrap = false
                         )
@@ -922,11 +857,11 @@ private fun LockscreenHeroTile(
                                 fontSize = digitSize,
                                 lineHeight = digitSize,
                                 fontWeight = FontWeight.Black,
-                                letterSpacing = (-2.5).sp,
+                                letterSpacing = (-1.0).sp,
                                 fontFeatureSettings = "tnum",
                                 platformStyle = PlatformTextStyle(includeFontPadding = false)
                             ),
-                            color = Color.White.copy(alpha = 0.58f),
+                            color = Color.White.copy(alpha = 0.56f),
                             maxLines = 1,
                             softWrap = false
                         )
@@ -934,13 +869,13 @@ private fun LockscreenHeroTile(
 
                     Text(
                         text = clockParts[2],
-                        modifier = Modifier.offset(y = 2.dp),
-                        style = MaterialTheme.typography.headlineMedium.copy(
+                        modifier = Modifier.offset(y = 1.dp),
+                        style = MaterialTheme.typography.headlineSmall.copy(
                             fontFamily = FontFamily.SansSerif,
                             fontSize = daySize,
                             lineHeight = daySize,
                             fontWeight = FontWeight.Black,
-                            letterSpacing = (-0.4).sp,
+                            letterSpacing = (-0.3).sp,
                             platformStyle = PlatformTextStyle(includeFontPadding = false)
                         ),
                         color = Color.White,
@@ -950,7 +885,7 @@ private fun LockscreenHeroTile(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
                     text = clockParts[3],
@@ -1018,6 +953,122 @@ private fun SuiteMediumTile(
             softWrap = false,
             overflow = TextOverflow.Ellipsis
         )
+    }
+}
+
+@Composable
+private fun SettingsSwitchRow(
+    index: Int,
+    count: Int,
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true
+) {
+    val haptic = LocalHapticFeedback.current
+    val scheme = MaterialTheme.colorScheme
+    val shape = connectedContainerShape(index = index, count = count)
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressScaleModifier = pressScale(interactionSource, 0.975f, enabled)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(pressScaleModifier)
+            .clip(shape)
+            .background(scheme.surfaceContainerHigh)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = enabled
+            ) {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onCheckedChange(!checked)
+            }
+            .alpha(if (enabled) 1f else 0.55f)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.padding(end = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(scheme.primary.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = scheme.primary,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 8.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = scheme.onSurface,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Box(
+            modifier = Modifier.padding(start = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Switch(
+                checked = checked,
+                onCheckedChange = { next ->
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onCheckedChange(next)
+                },
+                enabled = enabled,
+                interactionSource = interactionSource,
+                thumbContent = {
+                    if (checked) {
+                        Icon(
+                            imageVector = Icons.Rounded.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(SwitchDefaults.IconSize)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Rounded.Close,
+                            contentDescription = null,
+                            modifier = Modifier.size(SwitchDefaults.IconSize)
+                        )
+                    }
+                },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = scheme.onPrimary,
+                    checkedIconColor = scheme.primary,
+                    checkedTrackColor = scheme.primary,
+                    uncheckedThumbColor = scheme.outline,
+                    uncheckedIconColor = scheme.surfaceContainerHighest,
+                    uncheckedTrackColor = scheme.surfaceContainerHighest
+                )
+            )
+        }
     }
 }
 
