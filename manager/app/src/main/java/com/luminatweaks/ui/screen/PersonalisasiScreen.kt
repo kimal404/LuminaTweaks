@@ -64,6 +64,7 @@ import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.RoundedCorner
+import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material.icons.rounded.Waves
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ColorScheme
@@ -125,6 +126,10 @@ import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.theme.AccentIntensity
 import com.luminatweaks.ui.theme.ColorEngine
 import com.luminatweaks.ui.theme.ColorMode
+import com.luminatweaks.ui.theme.HapticSettings
+import com.luminatweaks.ui.theme.LocalHapticConfig
+import com.luminatweaks.ui.theme.LuminaHapticEngine
+import com.luminatweaks.ui.theme.LuminaHapticPulse
 import com.luminatweaks.ui.theme.ThemeController
 import com.luminatweaks.ui.theme.animateColorSchemeAsState
 import com.luminatweaks.ui.theme.keyColorOptions
@@ -172,6 +177,8 @@ fun PersonalisasiScreen(
     var currentIntensity by remember { mutableStateOf(savedSettings.accentIntensity) }
     var currentCornerRadius by remember { mutableIntStateOf(savedSettings.cornerRadius) }
     var isFloatingNavBar by remember { mutableStateOf(savedSettings.floatingNavBar) }
+    var hapticEnabled by remember { mutableStateOf(savedSettings.hapticEnabled) }
+    var hapticIntensity by remember { mutableFloatStateOf(savedSettings.hapticIntensity) }
 
     val isDark = currentColorMode.getDarkThemeValue(isSystemInDarkTheme())
     val swatchSchemeCache = remember(currentColorSpec) {
@@ -417,6 +424,41 @@ fun PersonalisasiScreen(
                         }
                     )
                 }
+            }
+
+            item(key = "haptic_feedback_section") {
+                Text(
+                    text = persLocalizedLabel("Umpan Balik Haptik", "Haptic Feedback"),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 20.dp, bottom = 8.dp)
+                )
+                PersHapticFeedbackCard(
+                    enabled = hapticEnabled,
+                    intensity = hapticIntensity,
+                    onEnabledChange = { checked ->
+                        hapticEnabled = checked
+                        ThemeController.saveHapticSettings(context, checked, hapticIntensity)
+                        if (checked) {
+                            LuminaHapticEngine.perform(
+                                context = context,
+                                settings = HapticSettings(enabled = true, intensity = hapticIntensity),
+                                pulse = LuminaHapticPulse.Click
+                            )
+                        }
+                    },
+                    onIntensityChange = { newIntensity ->
+                        hapticIntensity = newIntensity
+                        ThemeController.saveHapticSettings(context, hapticEnabled, newIntensity)
+                        if (hapticEnabled) {
+                            LuminaHapticEngine.perform(
+                                context = context,
+                                settings = HapticSettings(enabled = true, intensity = newIntensity),
+                                pulse = LuminaHapticPulse.Tick
+                            )
+                        }
+                    }
+                )
             }
 
             item(key = "appearance_and_nav") {
@@ -834,5 +876,155 @@ private fun PersCornerRadiusRow(
             steps = stepCount,
             modifier = Modifier.fillMaxWidth()
         )
+    }
+}
+
+@Composable
+private fun PersHapticFeedbackCard(
+    enabled: Boolean,
+    intensity: Float,
+    onEnabledChange: (Boolean) -> Unit,
+    onIntensityChange: (Float) -> Unit
+) {
+    val context = LocalContext.current
+    val currentConfig = LocalHapticConfig.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressScaleModifier = pressScale(interactionSource, 0.975f)
+    val minVal = ThemeController.MIN_HAPTIC_INTENSITY
+    val maxVal = ThemeController.MAX_HAPTIC_INTENSITY
+    var sliderPos by remember(intensity) { mutableFloatStateOf(intensity.coerceIn(minVal, maxVal)) }
+    val pct = (sliderPos * 100f).roundToInt()
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(26.dp))
+            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .padding(vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(pressScaleModifier)
+                .clip(RoundedCornerShape(22.dp))
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null
+                ) { onEnabledChange(!enabled) }
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            PersSquircleIcon(icon = Icons.Rounded.Vibration)
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(vertical = 4.dp)
+            ) {
+                Text(
+                    text = persLocalizedLabel("Getaran UI Global", "Global UI Haptics"),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = persLocalizedLabel(
+                        "Terapkan toggle & kekuatan getaran ke seluruh layar",
+                        "Apply toggle & strength across all screens"
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Switch(
+                checked = enabled,
+                onCheckedChange = onEnabledChange,
+                interactionSource = interactionSource,
+                thumbContent = {
+                    if (enabled) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(SwitchDefaults.IconSize)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            modifier = Modifier.size(SwitchDefaults.IconSize)
+                        )
+                    }
+                }
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = persLocalizedLabel("Kekuatan getaran", "Haptic strength"),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = "$pct%",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                IconButton(
+                    onClick = {
+                        val defVal = ThemeController.DEFAULT_HAPTIC_INTENSITY
+                        sliderPos = defVal
+                        onIntensityChange(defVal)
+                        LuminaHapticEngine.perform(
+                            context = context,
+                            settings = HapticSettings(enabled = true, intensity = defVal),
+                            pulse = LuminaHapticPulse.Heavy
+                        )
+                    },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Restore,
+                        contentDescription = stringResource(R.string.action_reset),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            Slider(
+                value = sliderPos,
+                enabled = enabled,
+                onValueChange = { raw ->
+                    val stepped = ((raw * 10f).roundToInt() / 10f).coerceIn(minVal, maxVal)
+                    if (stepped != sliderPos) {
+                        sliderPos = stepped
+                        onIntensityChange(stepped)
+                    }
+                },
+                valueRange = minVal..maxVal,
+                steps = 8,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 }

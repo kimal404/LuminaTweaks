@@ -116,6 +116,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luminatweaks.R
+import com.luminatweaks.ui.theme.LocalHapticConfig
+import com.luminatweaks.ui.theme.LuminaHapticEngine
+import com.luminatweaks.ui.theme.LuminaHapticPulse
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DisplayRrMode
 import com.luminatweaks.gamedeck.GameDeckPrefs
@@ -1301,6 +1304,7 @@ private fun <T> TweakOptionSheet(
     subtitle: String? = null
 ) {
     val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
     val scheme = MaterialTheme.colorScheme
 
     LuminaAnchoredSheet(
@@ -1403,6 +1407,7 @@ private fun <T> TweakOptionSheet(
                                 .clip(rowShape)
                                 .background(fillColor, rowShape)
                                 .clickable {
+                                    LuminaHapticEngine.perform(context, LocalHapticConfig.current, LuminaHapticPulse.Click)
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     onSelect(option.value)
                                 }
@@ -1520,6 +1525,7 @@ internal fun ConnectedTweakSwitchRow(
     onCheckedChange: (Boolean) -> Unit
 ) {
     val shape = connectedContainerShape(index = index, count = count)
+    val context = LocalContext.current
     val interactionSource = remember { MutableInteractionSource() }
     val pressScaleModifier = pressScale(interactionSource, 0.975f)
 
@@ -1532,7 +1538,10 @@ internal fun ConnectedTweakSwitchRow(
             .clickable(
                 interactionSource = interactionSource,
                 indication = null
-            ) { onCheckedChange(!checked) }
+            ) {
+                LuminaHapticEngine.perform(context, LocalHapticConfig.current, LuminaHapticPulse.Tick)
+                onCheckedChange(!checked)
+            }
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

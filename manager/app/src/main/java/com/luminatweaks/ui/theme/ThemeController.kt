@@ -21,6 +21,9 @@ import android.content.Context
 import android.content.res.Configuration
 import android.graphics.Color as AndroidColor
 import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.ColorScheme
@@ -30,8 +33,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import kotlin.math.roundToInt
 
 enum class ColorMode(val value: Int) {
     SYSTEM(3), LIGHT(4), DARK(5), DARKAMOLED(6);
@@ -96,6 +101,59 @@ enum class AccentIntensity(val label: String) {
     }
 }
 
+data class HapticSettings(
+    val enabled: Boolean = true,
+    val intensity: Float = ThemeController.DEFAULT_HAPTIC_INTENSITY
+)
+
+val LocalHapticConfig = staticCompositionLocalOf { HapticSettings() }
+
+enum class LuminaHapticPulse(val baseDurationMs: Long, val baseAmplitude: Int) {
+    Tick(12L, 70),
+    Click(18L, 140),
+    Heavy(30L, 235)
+}
+
+object LuminaHapticEngine {
+    fun perform(
+        context: Context,
+        settings: HapticSettings,
+        pulse: LuminaHapticPulse = LuminaHapticPulse.Click
+    ) {
+        if (!settings.enabled) return
+        val clampedIntensity = settings.intensity.coerceIn(
+            ThemeController.MIN_HAPTIC_INTENSITY,
+            ThemeController.MAX_HAPTIC_INTENSITY
+        )
+        val scaledAmplitude = (pulse.baseAmplitude * clampedIntensity)
+            .roundToInt()
+            .coerceIn(1, 255)
+
+        runCatching {
+            val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val manager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                manager?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            }
+            if (vibrator == null || !vibrator.hasVibrator()) return
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val effect = if (vibrator.hasAmplitudeControl()) {
+                    VibrationEffect.createOneShot(pulse.baseDurationMs, scaledAmplitude)
+                } else {
+                    VibrationEffect.createOneShot(pulse.baseDurationMs, VibrationEffect.DEFAULT_AMPLITUDE)
+                }
+                vibrator.vibrate(effect)
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(pulse.baseDurationMs)
+            }
+        }
+    }
+}
+
 data class AppThemeSettings(
     val colorMode: ColorMode,
     val keyColor: Int,
@@ -106,13 +164,19 @@ data class AppThemeSettings(
     val colorStyle: ColorStyle = ColorStyle.Default,
     val scrollAnimation: Boolean = true,
     val edgeSwipeBack: Boolean = true,
-    val pageTransition: PageTransition = PageTransition.CrossAxis
+    val pageTransition: PageTransition = PageTransition.CrossAxis,
+    val hapticEnabled: Boolean = true,
+    val hapticIntensity: Float = ThemeController.DEFAULT_HAPTIC_INTENSITY
 )
 
 object ThemeController {
     const val DEFAULT_CORNER_RADIUS = 18
     const val MIN_CORNER_RADIUS = 0
     const val MAX_CORNER_RADIUS = 32
+
+    const val DEFAULT_HAPTIC_INTENSITY = 0.7f
+    const val MIN_HAPTIC_INTENSITY = 0.1f
+    const val MAX_HAPTIC_INTENSITY = 1.0f
 
     fun getAppSettings(context: Context): AppThemeSettings {
         val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -132,6 +196,9 @@ object ThemeController {
         val scrollAnimation = prefs.getBoolean("scroll_animation", true)
         val edgeSwipeBack = prefs.getBoolean("edge_swipe_back", true)
         val pageTransition = PageTransition.fromPersisted(prefs.getString("page_transition", null))
+        val hapticEnabled = prefs.getBoolean("haptic_feedback_enabled", true)
+        val hapticIntensity = prefs.getFloat("haptic_feedback_intensity", DEFAULT_HAPTIC_INTENSITY)
+            .coerceIn(MIN_HAPTIC_INTENSITY, MAX_HAPTIC_INTENSITY)
 
         return AppThemeSettings(
             colorMode = colorMode,
@@ -143,7 +210,9 @@ object ThemeController {
             colorStyle = colorStyle,
             scrollAnimation = scrollAnimation,
             edgeSwipeBack = edgeSwipeBack,
-            pageTransition = pageTransition
+            pageTransition = pageTransition,
+            hapticEnabled = hapticEnabled,
+            hapticIntensity = hapticIntensity
         )
     }
 
@@ -170,6 +239,14 @@ object ThemeController {
             editor.putBoolean("floating_nav_bar", floatingNavBar)
         }
         editor.apply()
+    }
+
+    fun saveHapticSettings(context: Context, enabled: Boolean, intensity: Float) {
+        val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        prefs.edit()
+            .putBoolean("haptic_feedback_enabled", enabled)
+            .putFloat("haptic_feedback_intensity", intensity.coerceIn(MIN_HAPTIC_INTENSITY, MAX_HAPTIC_INTENSITY))
+            .apply()
     }
 
     fun saveCornerRadius(context: Context, radius: Int) {

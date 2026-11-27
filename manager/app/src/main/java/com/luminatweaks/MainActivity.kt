@@ -14,6 +14,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -23,7 +24,10 @@ import androidx.lifecycle.lifecycleScope
 import com.luminatweaks.data.LuminaBridge
 import com.luminatweaks.ui.screen.HomeScreen
 import com.luminatweaks.ui.screen.SetupWizardScreen
+import com.luminatweaks.ui.theme.HapticSettings
+import com.luminatweaks.ui.theme.LocalHapticConfig
 import com.luminatweaks.ui.theme.LuminaTheme
+import com.luminatweaks.ui.theme.ThemeController
 import java.io.DataOutputStream
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -70,6 +74,14 @@ class MainActivity : ComponentActivity() {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
         setContent {
+            val appSettings = remember { ThemeController.getAppSettings(this@MainActivity) }
+            val hapticSettings = remember(appSettings.hapticEnabled, appSettings.hapticIntensity) {
+                HapticSettings(
+                    enabled = appSettings.hapticEnabled,
+                    intensity = appSettings.hapticIntensity
+                )
+            }
+            CompositionLocalProvider(LocalHapticConfig provides hapticSettings) {
             LuminaTheme {
                 var isSetupFinished by remember {
                     mutableStateOf(prefs.getBoolean(KEY_SETUP_WIZARD_V2_COMPLETED, false))
@@ -97,6 +109,7 @@ class MainActivity : ComponentActivity() {
                         HomeScreen(onOpenSetupWizard = { isSetupFinished = false })
                     }
                 }
+            }
             }
         }
     }
