@@ -903,7 +903,10 @@ fn main() {
                     detector::find_pid_for_pkg(saved_pkg)
                 };
 
-                if let Some(pid) = verified_pid {
+                if verified_pid.is_none() && focused.is_none() && screen_awake {
+                    runtime.left_foreground_at = None;
+                    Some(saved_pkg.clone())
+                } else if let Some(pid) = verified_pid {
                     runtime.target_game_pid = pid;
                     if !is_app_enabled(saved_pkg) {
                         runtime.active_target_pkg = None;
