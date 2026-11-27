@@ -190,12 +190,9 @@ private data class TweakDialogOption<T>(
     val label: String
 )
 
-@Composable
 internal fun localizedLabel(id: String, en: String): String {
-    val isIndonesian = remember {
-        val lang = Locale.getDefault().language.lowercase(Locale.ROOT)
-        lang == "in" || lang == "id"
-    }
+    val lang = Locale.getDefault().language.lowercase(Locale.ROOT)
+    val isIndonesian = lang == "in" || lang == "id"
     return if (isIndonesian) id else en
 }
 
