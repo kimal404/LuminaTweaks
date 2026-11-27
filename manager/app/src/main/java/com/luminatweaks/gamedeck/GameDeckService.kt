@@ -1388,16 +1388,6 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                     rrPerApp = hz != null,
                     targetHz = hz ?: readDisplayHz()
                 )
-                withContext(Dispatchers.Main) {
-                    showStatusBanner(
-                        if (hz == null) {
-                            localizedText("Game RR ikut Global", "Game RR follows Global")
-                        } else {
-                            "Game RR $hz Hz"
-                        },
-                        icon = if (hz == null) "info" else "check_circle"
-                    )
-                }
             }
             return
         }
@@ -1427,9 +1417,6 @@ class GameDeckService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedSta
                         return@launch
                     }
                     ConfigRepository.setRefreshRate(modeId)
-                    withContext(Dispatchers.Main) {
-                        showStatusBanner("Refresh rate $hz Hz")
-                    }
                 }
             }
         }

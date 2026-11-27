@@ -3371,17 +3371,6 @@ private fun RefreshRateCard(
                 maxLines = 1,
                 softWrap = false
             )
-            if (perApp) {
-                Spacer(modifier = Modifier.width(5.dp))
-                Text(
-                    text = "PER-APP",
-                    fontSize = 8.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = scheme.primary,
-                    maxLines = 1,
-                    softWrap = false
-                )
-            }
             Spacer(modifier = Modifier.weight(1f))
             Box {
                 if (interactive) {
