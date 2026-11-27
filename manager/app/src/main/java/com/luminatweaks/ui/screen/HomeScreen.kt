@@ -155,7 +155,7 @@ import com.luminatweaks.ui.component.OdometerNumber
 import com.luminatweaks.ui.component.TouchOriginDialog
 import com.luminatweaks.ui.component.bouncyClickable
 import com.luminatweaks.ui.component.luminaHazeHeader
-import com.luminatweaks.ui.component.luminaRubberBand
+import com.luminatweaks.ui.component.dampOverscrollPull
 import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.component.rememberDialogOrigin
 import com.luminatweaks.ui.theme.LocalCornerRadius
@@ -985,7 +985,7 @@ fun HomeDashboardContent(
                     scrollBehavior.state.heightOffset >= -0.5f
                 if (source == NestedScrollSource.UserInput && available.y > 0f && atTop) {
                     rawPullPx = (rawPullPx + available.y).coerceAtMost(840f)
-                    val damped = luminaRubberBand(rawPullPx, maxRevealPx)
+                    val damped = dampOverscrollPull(rawPullPx, maxRevealPx)
                     if (damped >= maxRevealPx * 0.72f && !thresholdHapticFired) {
                         thresholdHapticFired = true
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -1075,7 +1075,7 @@ fun HomeDashboardContent(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item(key = "elastic_engine_reveal") {
-                val dampedPx = luminaRubberBand(pullAnim.value, maxRevealPx)
+                val dampedPx = dampOverscrollPull(pullAnim.value, maxRevealPx)
                 val revealHeightDp = with(density) { dampedPx.toDp() }
                 val progress = (dampedPx / (maxRevealPx * 0.85f)).coerceIn(0f, 1f)
 
@@ -1987,7 +1987,6 @@ private fun TelegramChannelBentoCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = scheme.onSurfaceVariant,
                 speed = 26.dp,
-                alwaysScroll = true,
                 modifier = Modifier.fillMaxWidth()
             )
         }
