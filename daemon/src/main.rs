@@ -67,6 +67,7 @@ const CONFIG_FALLBACK_INTERVAL: Duration = Duration::from_secs(2);
 const PERFORMANCE_GUARD_RECOVER_AFTER: Duration = Duration::from_secs(10);
 const FOCUS_RELEASE_GRACE: Duration = Duration::from_secs(5);
 const TRANSIENT_FOCUS_GRACE: Duration = Duration::from_secs(12);
+const FOCUS_VERIFY_INTERVAL: Duration = Duration::from_secs(2);
 const LEGACY_PROFILE_STATE_PATH: &str = "/data/adb/.config/lumina/profile.conf";
 
 extern "C" fn handle_signal(_: i32) {
@@ -654,6 +655,7 @@ fn main() {
     let mut performance_guard = false;
     let mut performance_guard_recover_at: Option<Instant> = None;
     let mut last_heartbeat = Instant::now();
+    let mut last_focus_verify = Instant::now();
     let mut reload_pending_at: Option<Instant> = None;
     let mut reload_force = false;
 
@@ -848,9 +850,22 @@ fn main() {
         } else {
             None
         };
-        let focused = focused
+        let mut focused = focused
             .map(|package| detector::sanitize_pkg_name(&package).to_string())
             .filter(|package| !package.is_empty());
+        if screen_awake
+            && !suppress_fallback
+            && last_focus_verify.elapsed() >= FOCUS_VERIFY_INTERVAL
+        {
+            last_focus_verify = Instant::now();
+            if let Some(top) = detector::get_top_resumed_package_cached() {
+                let top = detector::sanitize_pkg_name(&top).to_string();
+                if !top.is_empty() && focused.as_deref() != Some(top.as_str()) {
+                    log!("[SYSTEM] Focus verify -> {}", top);
+                    focused = Some(top);
+                }
+            }
+        }
         let launcher_focus = focused
             .as_deref()
             .map(detector::is_launcher_package)
