@@ -309,16 +309,14 @@ fun TweaksScreen(
         }
     }
 
-    val rrModeSubtitle = remember(liveRefreshRate, currentRrId, rrModes, defaultDynamicLabel) {
-        val targetMode = rrModes.find { it.id == currentRrId }
-        when {
-            targetMode != null && targetMode.hz != liveRefreshRate ->
-                localizedLabel("Target ${targetMode.hz} Hz", "Target ${targetMode.hz} Hz")
-            currentRrId == null ->
-                defaultDynamicLabel
-            else ->
-                localizedLabel("Terkunci ${targetMode?.hz ?: liveRefreshRate} Hz", "Locked ${targetMode?.hz ?: liveRefreshRate} Hz")
-        }
+    val targetRrMode = rrModes.find { it.id == currentRrId }
+    val rrModeSubtitle = when {
+        targetRrMode != null && targetRrMode.hz != liveRefreshRate ->
+            localizedLabel("Target ${targetRrMode.hz} Hz", "Target ${targetRrMode.hz} Hz")
+        currentRrId == null ->
+            defaultDynamicLabel
+        else ->
+            localizedLabel("Terkunci ${targetRrMode?.hz ?: liveRefreshRate} Hz", "Locked ${targetRrMode?.hz ?: liveRefreshRate} Hz")
     }
 
     val currentRendererShortText = remember(currentRendererId, defaultRendererLabel) {
