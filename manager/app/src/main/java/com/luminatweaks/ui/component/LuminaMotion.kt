@@ -1,17 +1,34 @@
+/*
+ * Copyright (C) 2026 kimal
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 @file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 
 package com.luminatweaks.ui.component
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,9 +36,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.BottomSheetDefaults
@@ -64,8 +79,9 @@ import kotlin.math.sign
 
 fun luminaRubberBand(over: Float, reach: Float): Float {
     if (over == 0f || reach <= 0f) return 0f
-    val d = abs(over)
-    return sign(over) * (1f - 1f / (d * 0.55f / reach + 1f)) * reach
+    val distance = abs(over)
+    val damped = reach * (1f - reach / (reach + distance * 0.55f))
+    return sign(over) * damped
 }
 
 @Composable
@@ -120,64 +136,33 @@ private fun SingleOdometerDigit(
     } else {
         24.sp
     }
-    val digitHeightDp: Dp = with(density) { resolvedFontSize.toDp() * 1.18f }
     val digitWidthDp: Dp = with(density) { resolvedFontSize.toDp() * digitWidthMultiplier }
-    val digitHeightPx = with(density) { digitHeightDp.toPx() }
-    val animatable = remember { Animatable(0f) }
 
-    LaunchedEffect(targetDigit) {
-        animatable.animateTo(
-            targetValue = targetDigit.toFloat(),
-            animationSpec = tween(
-                durationMillis = 750,
-                easing = FastOutSlowInEasing
-            )
-        )
-    }
-
-    Box(
+    AnimatedContent(
+        targetState = targetDigit,
+        transitionSpec = {
+            val rollingUp = targetState >= initialState
+            val enter = slideInVertically(
+                animationSpec = spring(dampingRatio = 0.85f, stiffness = 420f)
+            ) { height -> if (rollingUp) height else -height } + fadeIn(tween(180))
+            val exit = slideOutVertically(
+                animationSpec = spring(dampingRatio = 0.85f, stiffness = 420f)
+            ) { height -> if (rollingUp) -height else height } + fadeOut(tween(140))
+            enter togetherWith exit
+        },
+        contentAlignment = Alignment.Center,
         modifier = Modifier
             .width(digitWidthDp)
-            .height(digitHeightDp)
-            .clipToBounds()
-            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-            .drawWithContent {
-                drawContent()
-                drawRect(
-                    brush = Brush.verticalGradient(
-                        0.0f to Color.Transparent,
-                        0.20f to Color.Black,
-                        0.80f to Color.Black,
-                        1.0f to Color.Transparent
-                    ),
-                    blendMode = BlendMode.DstIn
-                )
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        val currentVal = animatable.value
-        val baseIndex = currentVal.toInt()
-        val fractional = currentVal - baseIndex
-
-        for (i in 0..9) {
-            val offsetFromCurrent = i - currentVal
-            if (offsetFromCurrent in -1.2f..1.2f) {
-                val yOffsetDp = with(density) { (offsetFromCurrent * digitHeightPx).toDp() }
-                val alpha = (1f - abs(offsetFromCurrent)).coerceIn(0f, 1f)
-                val blurScale = 1f + abs(fractional) * 0.08f
-
-                Text(
-                    text = i.toString(),
-                    style = style,
-                    color = color.copy(alpha = alpha),
-                    maxLines = 1,
-                    softWrap = false,
-                    modifier = Modifier
-                        .offset(y = yOffsetDp)
-                        .graphicsLayer { scaleY = blurScale }
-                )
-            }
-        }
+            .clipToBounds(),
+        label = "luminaDigitRoller"
+    ) { digit ->
+        Text(
+            text = digit.toString(),
+            style = style,
+            color = color,
+            maxLines = 1,
+            softWrap = false
+        )
     }
 }
 
