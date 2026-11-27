@@ -796,7 +796,6 @@ fun HomeDashboardContent(
             null
         } ?: Build.HARDWARE
     }
-    val cpuCores = remember { Runtime.getRuntime().availableProcessors() }
 
     var telemetry by remember { mutableStateOf(readSystemTelemetry(context)) }
 
@@ -1024,9 +1023,8 @@ fun HomeDashboardContent(
                 DeviceSpecsBentoCard(
                     deviceLabel = homeLocalizedLabel("Model perangkat", "Device model"),
                     deviceValue = deviceModel,
-                    hardwareLabel = homeLocalizedLabel("Platform & prosesor", "Platform & processor"),
-                    socModel = socModel,
-                    cpuCores = cpuCores,
+                    socLabel = "SoC",
+                    socValue = socModel,
                     kernelLabel = homeLocalizedLabel("Versi kernel", "Kernel version"),
                     kernelValue = kernelVersion,
                     managerLabel = homeLocalizedLabel("Versi manajer", "Manager version"),
@@ -1672,32 +1670,6 @@ private fun UptimeBentoCard(
                 overflow = TextOverflow.Ellipsis
             )
         }
-
-        Row(
-            modifier = Modifier
-                .clip(CircleShape)
-                .background(scheme.secondaryContainer)
-                .padding(horizontal = 10.dp, vertical = 5.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(scheme.secondary)
-            )
-            Text(
-                text = homeLocalizedLabel("Aktif", "Online"),
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontWeight = FontWeight.SemiBold,
-                    platformStyle = PlatformTextStyle(includeFontPadding = false)
-                ),
-                color = scheme.onSecondaryContainer,
-                maxLines = 1,
-                softWrap = false
-            )
-        }
     }
 }
 
@@ -1757,7 +1729,7 @@ private fun TelegramChannelBentoCard(
             )
 
             Text(
-                text = "@MallArchiven • ${homeLocalizedLabel("Rilis & info pembaruan", "Releases & updates")}",
+                text = "@MallArchiven",
                 style = MaterialTheme.typography.bodySmall.copy(
                     platformStyle = PlatformTextStyle(includeFontPadding = false)
                 ),
@@ -1770,20 +1742,16 @@ private fun TelegramChannelBentoCard(
 
         Box(
             modifier = Modifier
+                .size(28.dp)
                 .clip(CircleShape)
-                .background(scheme.secondaryContainer)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .background(scheme.surfaceContainerHighest),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = homeLocalizedLabel("Gabung", "Join"),
-                style = MaterialTheme.typography.labelMedium.copy(
-                    fontWeight = FontWeight.SemiBold,
-                    platformStyle = PlatformTextStyle(includeFontPadding = false)
-                ),
-                color = scheme.onSecondaryContainer,
-                maxLines = 1,
-                softWrap = false
+            Icon(
+                imageVector = Icons.Rounded.ChevronRight,
+                contentDescription = null,
+                tint = scheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp)
             )
         }
     }
@@ -1849,13 +1817,46 @@ private fun ExpressiveWavyThermalBar(
 }
 
 @Composable
-private fun CpuChipSvgIcon(
+private fun DevicePhoneSvgIcon(
     tint: Color,
     modifier: Modifier = Modifier
 ) {
     Canvas(modifier = modifier) {
         val w = size.width
-        val stroke = 1.4.dp.toPx()
+        val h = size.height
+        val stroke = 1.5.dp.toPx()
+        drawRoundRect(
+            color = tint,
+            topLeft = Offset(w * 0.24f, h * 0.10f),
+            size = Size(w * 0.52f, h * 0.80f),
+            cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()),
+            style = Stroke(width = stroke)
+        )
+        drawLine(
+            color = tint,
+            start = Offset(w * 0.43f, h * 0.20f),
+            end = Offset(w * 0.57f, h * 0.20f),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            color = tint,
+            start = Offset(w * 0.40f, h * 0.80f),
+            end = Offset(w * 0.60f, h * 0.80f),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+@Composable
+private fun SocChipSvgIcon(
+    tint: Color,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val stroke = 1.5.dp.toPx()
         val pad = w * 0.22f
         val bodySize = w - pad * 2f
 
@@ -1863,20 +1864,20 @@ private fun CpuChipSvgIcon(
             color = tint,
             topLeft = Offset(pad, pad),
             size = Size(bodySize, bodySize),
-            cornerRadius = CornerRadius(2.2.dp.toPx(), 2.2.dp.toPx()),
+            cornerRadius = CornerRadius(2.5.dp.toPx(), 2.5.dp.toPx()),
             style = Stroke(width = stroke)
         )
 
         val innerPad = w * 0.36f
         val innerSize = w - innerPad * 2f
         drawRoundRect(
-            color = tint.copy(alpha = 0.35f),
+            color = tint.copy(alpha = 0.32f),
             topLeft = Offset(innerPad, innerPad),
             size = Size(innerSize, innerSize),
-            cornerRadius = CornerRadius(1.dp.toPx(), 1.dp.toPx())
+            cornerRadius = CornerRadius(1.2.dp.toPx(), 1.2.dp.toPx())
         )
 
-        val pinPositions = listOf(0.35f, 0.5f, 0.65f)
+        val pinPositions = listOf(0.35f, 0.50f, 0.65f)
         val pinLen = pad * 0.65f
         pinPositions.forEach { frac ->
             val pos = w * frac
@@ -1913,12 +1914,94 @@ private fun CpuChipSvgIcon(
 }
 
 @Composable
+private fun KernelTerminalSvgIcon(
+    tint: Color,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.5.dp.toPx()
+        drawRoundRect(
+            color = tint,
+            topLeft = Offset(w * 0.14f, h * 0.18f),
+            size = Size(w * 0.72f, h * 0.64f),
+            cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()),
+            style = Stroke(width = stroke)
+        )
+        val promptPath = Path().apply {
+            moveTo(w * 0.30f, h * 0.38f)
+            lineTo(w * 0.44f, h * 0.50f)
+            lineTo(w * 0.30f, h * 0.62f)
+        }
+        drawPath(
+            path = promptPath,
+            color = tint,
+            style = Stroke(
+                width = stroke,
+                cap = StrokeCap.Round,
+                join = StrokeJoin.Round
+            )
+        )
+        drawLine(
+            color = tint,
+            start = Offset(w * 0.50f, h * 0.62f),
+            end = Offset(w * 0.68f, h * 0.62f),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+@Composable
+private fun ManagerShieldSvgIcon(
+    tint: Color,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val stroke = 1.5.dp.toPx()
+        val shieldPath = Path().apply {
+            moveTo(w * 0.50f, h * 0.12f)
+            lineTo(w * 0.82f, h * 0.24f)
+            lineTo(w * 0.82f, h * 0.50f)
+            quadraticTo(w * 0.82f, h * 0.74f, w * 0.50f, h * 0.88f)
+            quadraticTo(w * 0.18f, h * 0.74f, w * 0.18f, h * 0.50f)
+            lineTo(w * 0.18f, h * 0.24f)
+            close()
+        }
+        drawPath(
+            path = shieldPath,
+            color = tint,
+            style = Stroke(
+                width = stroke,
+                join = StrokeJoin.Round
+            )
+        )
+        val checkPath = Path().apply {
+            moveTo(w * 0.36f, h * 0.50f)
+            lineTo(w * 0.46f, h * 0.60f)
+            lineTo(w * 0.65f, h * 0.40f)
+        }
+        drawPath(
+            path = checkPath,
+            color = tint,
+            style = Stroke(
+                width = stroke,
+                cap = StrokeCap.Round,
+                join = StrokeJoin.Round
+            )
+        )
+    }
+}
+
+@Composable
 private fun DeviceSpecsBentoCard(
     deviceLabel: String,
     deviceValue: String,
-    hardwareLabel: String,
-    socModel: String,
-    cpuCores: Int,
+    socLabel: String,
+    socValue: String,
     kernelLabel: String,
     kernelValue: String,
     managerLabel: String,
@@ -1931,17 +2014,60 @@ private fun DeviceSpecsBentoCard(
             .fillMaxWidth()
             .clip(RoundedCornerShape(26.dp))
             .background(scheme.surfaceContainerHigh)
-            .padding(horizontal = 18.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        HomeEditorialSpecItem(
+        HomeSvgSpecRow(
             label = deviceLabel,
-            value = deviceValue
+            value = deviceValue,
+            icon = { DevicePhoneSvgIcon(tint = scheme.primary, modifier = Modifier.size(18.dp)) }
         )
+        HomeSvgSpecRow(
+            label = socLabel,
+            value = socValue,
+            icon = { SocChipSvgIcon(tint = scheme.primary, modifier = Modifier.size(18.dp)) }
+        )
+        HomeSvgSpecRow(
+            label = kernelLabel,
+            value = kernelValue,
+            icon = { KernelTerminalSvgIcon(tint = scheme.primary, modifier = Modifier.size(18.dp)) }
+        )
+        HomeSvgSpecRow(
+            label = managerLabel,
+            value = managerValue,
+            icon = { ManagerShieldSvgIcon(tint = scheme.primary, modifier = Modifier.size(18.dp)) }
+        )
+    }
+}
 
-        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+@Composable
+private fun HomeSvgSpecRow(
+    label: String,
+    value: String,
+    icon: @Composable () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(scheme.primary.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center
+        ) {
+            icon()
+        }
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
             Text(
-                text = hardwareLabel,
+                text = label,
                 style = MaterialTheme.typography.labelSmall.copy(
                     fontWeight = FontWeight.Medium,
                     platformStyle = PlatformTextStyle(includeFontPadding = false)
@@ -1951,90 +2077,18 @@ private fun DeviceSpecsBentoCard(
                 softWrap = false,
                 overflow = TextOverflow.Ellipsis
             )
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = socModel,
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        platformStyle = PlatformTextStyle(includeFontPadding = false)
-                    ),
-                    color = scheme.onSurface,
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(scheme.primary.copy(alpha = 0.14f))
-                        .padding(horizontal = 8.dp, vertical = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    CpuChipSvgIcon(
-                        tint = scheme.primary,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(
-                        text = "$cpuCores Core",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.SemiBold,
-                            platformStyle = PlatformTextStyle(includeFontPadding = false)
-                        ),
-                        color = scheme.primary,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                }
-            }
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = scheme.onSurface,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
         }
-
-        HomeEditorialSpecItem(
-            label = kernelLabel,
-            value = kernelValue
-        )
-
-        HomeEditorialSpecItem(
-            label = managerLabel,
-            value = managerValue
-        )
-    }
-}
-
-@Composable
-private fun HomeEditorialSpecItem(
-    label: String,
-    value: String
-) {
-    val scheme = MaterialTheme.colorScheme
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontWeight = FontWeight.Medium,
-                platformStyle = PlatformTextStyle(includeFontPadding = false)
-            ),
-            color = scheme.primary,
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleSmall.copy(
-                fontWeight = FontWeight.SemiBold,
-                platformStyle = PlatformTextStyle(includeFontPadding = false)
-            ),
-            color = scheme.onSurface,
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Ellipsis
-        )
     }
 }
 
