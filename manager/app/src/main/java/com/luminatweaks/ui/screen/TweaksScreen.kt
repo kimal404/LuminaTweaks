@@ -1305,6 +1305,7 @@ private fun <T> TweakOptionSheet(
 ) {
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
+    val hapticConfig = LocalHapticConfig.current
     val scheme = MaterialTheme.colorScheme
 
     LuminaAnchoredSheet(
@@ -1407,7 +1408,7 @@ private fun <T> TweakOptionSheet(
                                 .clip(rowShape)
                                 .background(fillColor, rowShape)
                                 .clickable {
-                                    LuminaHapticEngine.perform(context, LocalHapticConfig.current, LuminaHapticPulse.Click)
+                                    LuminaHapticEngine.perform(context, hapticConfig, LuminaHapticPulse.Click)
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     onSelect(option.value)
                                 }
@@ -1526,6 +1527,7 @@ internal fun ConnectedTweakSwitchRow(
 ) {
     val shape = connectedContainerShape(index = index, count = count)
     val context = LocalContext.current
+    val hapticConfig = LocalHapticConfig.current
     val interactionSource = remember { MutableInteractionSource() }
     val pressScaleModifier = pressScale(interactionSource, 0.975f)
 
@@ -1539,7 +1541,7 @@ internal fun ConnectedTweakSwitchRow(
                 interactionSource = interactionSource,
                 indication = null
             ) {
-                LuminaHapticEngine.perform(context, LocalHapticConfig.current, LuminaHapticPulse.Tick)
+                LuminaHapticEngine.perform(context, hapticConfig, LuminaHapticPulse.Tick)
                 onCheckedChange(!checked)
             }
             .padding(horizontal = 16.dp, vertical = 8.dp),
