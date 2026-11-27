@@ -12,6 +12,7 @@ import android.util.LruCache
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -106,6 +107,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
 import com.luminatweaks.R
 import com.luminatweaks.data.AppProfileConfig
@@ -123,6 +125,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+private enum class AppsFilter {
+    ALL,
+    GAMES,
+    ACTIVE
+}
 
 private object LuminaAppIconCache {
     private val cache = LruCache<String, ImageBitmap>(150)
@@ -189,6 +197,7 @@ fun AppsScreen(
     var searchQuery by remember { mutableStateOf("") }
     var isSearchFocused by remember { mutableStateOf(false) }
     var hideSystemApps by remember { mutableStateOf(true) }
+    var selectedFilter by remember { mutableStateOf(AppsFilter.ALL) }
     var showMoreMenu by remember { mutableStateOf(false) }
 
     val appConfigs = remember { mutableStateMapOf<String, AppProfileConfig>() }
@@ -230,7 +239,7 @@ fun AppsScreen(
         }
     }
 
-    LaunchedEffect(searchQuery) {
+    LaunchedEffect(searchQuery, selectedFilter) {
         if (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {
             listState.scrollToItem(0)
         }
@@ -246,11 +255,22 @@ fun AppsScreen(
         rawApps.filter { app -> if (hideSystemApps) !app.isSystemApp else true }
     }
 
-    val filteredApps = remember(visibleBaseApps, searchQuery, appConfigs.toMap()) {
+    val filteredApps = remember(visibleBaseApps, searchQuery, selectedFilter, appConfigs.toMap()) {
+        val byFilter = when (selectedFilter) {
+            AppsFilter.ALL -> visibleBaseApps
+            AppsFilter.GAMES -> visibleBaseApps.filter { app ->
+                ConfigRepository.defaultGames.contains(app.packageName)
+            }
+            AppsFilter.ACTIVE -> visibleBaseApps.filter { app ->
+                appConfigs[app.packageName]?.let { !it.disabled && it.saklarUtama }
+                    ?: ConfigRepository.isAppActive(app.packageName)
+            }
+        }
+
         val filtered = if (searchQuery.isBlank()) {
-            visibleBaseApps
+            byFilter
         } else {
-            visibleBaseApps.filter { app ->
+            byFilter.filter { app ->
                 app.name.contains(searchQuery, ignoreCase = true) ||
                     app.packageName.contains(searchQuery, ignoreCase = true)
             }
@@ -303,8 +323,13 @@ fun AppsScreen(
 
             val titleRowHeight = 52.dp
             val searchPillHeight = 46.dp
-            val headerBottomGap = 10.dp
-            val expandedHeaderHeight = statusBarTop + titleRowHeight + searchPillHeight + headerBottomGap
+            val filterTopGap = 8.dp
+            val filterPillHeight = 32.dp
+            val filterBottomGap = 8.dp
+            val filterSectionHeight = filterTopGap + filterPillHeight + filterBottomGap
+
+            val expandedHeaderBodyHeight = titleRowHeight + 2.dp + searchPillHeight + filterSectionHeight
+            val expandedHeaderHeight = statusBarTop + expandedHeaderBodyHeight
             val collapseRangePx = with(density) { titleRowHeight.toPx() }
 
             var targetCollapsePx by remember { mutableFloatStateOf(0f) }
@@ -379,7 +404,15 @@ fun AppsScreen(
 
             val collapseProgress = maxOf(scrollCollapse, focusCollapse)
             val currentTitleHeight = titleRowHeight * (1f - collapseProgress)
-            val currentHeaderHeight = statusBarTop + currentTitleHeight + searchPillHeight + headerBottomGap
+            val searchTopOffset = lerp(
+                titleRowHeight + 2.dp,
+                (titleRowHeight - searchPillHeight) / 2f,
+                collapseProgress
+            )
+            val searchEndPadding = lerp(16.dp, 60.dp, collapseProgress)
+            val filterTopOffset = searchTopOffset + searchPillHeight + filterTopGap
+            val currentHeaderBodyHeight = filterTopOffset + filterPillHeight + filterBottomGap
+            val currentHeaderHeight = statusBarTop + currentHeaderBodyHeight
 
             Box(
                 modifier = modifier
@@ -505,9 +538,10 @@ fun AppsScreen(
                     )
                 }
 
-                Column(
+                Box(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
+                        .fillMaxWidth()
                         .luminaHazeHeader(
                             hazeState = hazeState,
                             surfaceColor = scheme.background,
@@ -517,166 +551,268 @@ fun AppsScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(currentTitleHeight)
-                            .clipToBounds()
+                            .height(currentHeaderBodyHeight)
                     ) {
-                        Row(
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(titleRowHeight)
-                                .padding(start = 20.dp, end = 8.dp)
-                                .graphicsLayer {
-                                    alpha = (1f - collapseProgress * 1.15f).coerceIn(0f, 1f)
-                                    translationY = -size.height * 0.65f * collapseProgress
-                                    val s = 1f - 0.03f * collapseProgress
-                                    scaleX = s
-                                    scaleY = s
-                                    transformOrigin = TransformOrigin(0f, 0.5f)
-                                },
-                            verticalAlignment = Alignment.CenterVertically
+                                .height(currentTitleHeight)
+                                .clipToBounds()
                         ) {
-                            Text(
-                                text = stringResource(R.string.apps_title),
-                                fontSize = 28.sp,
-                                letterSpacing = (-0.5).sp,
-                                fontWeight = FontWeight.Bold,
-                                color = scheme.onBackground,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(titleRowHeight)
+                                    .padding(start = 20.dp, end = 60.dp)
+                                    .graphicsLayer {
+                                        alpha = (1f - collapseProgress * 1.15f).coerceIn(0f, 1f)
+                                        translationY = -size.height * 0.65f * collapseProgress
+                                        val s = 1f - 0.03f * collapseProgress
+                                        scaleX = s
+                                        scaleY = s
+                                        transformOrigin = TransformOrigin(0f, 0.5f)
+                                    },
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.apps_title),
+                                    fontSize = 28.sp,
+                                    letterSpacing = (-0.5).sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = scheme.onBackground,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
 
-                            Box {
-                                IconButton(
-                                    onClick = { showMoreMenu = true },
-                                    enabled = collapseProgress < 0.5f
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    top = searchTopOffset,
+                                    start = 16.dp,
+                                    end = searchEndPadding
+                                )
+                                .height(searchPillHeight)
+                                .clip(CircleShape)
+                                .background(scheme.surfaceContainerHigh)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.MoreVert,
-                                        contentDescription = stringResource(R.string.action_more),
-                                        tint = scheme.onSurfaceVariant
+                                    focusRequester.requestFocus()
+                                }
+                                .padding(horizontal = 16.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Search,
+                                    contentDescription = null,
+                                    tint = if (isSearchFocused) scheme.primary else scheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+
+                                Box(
+                                    modifier = Modifier.weight(1f),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    if (searchQuery.isEmpty()) {
+                                        Text(
+                                            text = stringResource(R.string.apps_search_placeholder),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = scheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+
+                                    BasicTextField(
+                                        value = searchQuery,
+                                        onValueChange = { searchQuery = it },
+                                        singleLine = true,
+                                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                            color = scheme.onSurface
+                                        ),
+                                        cursorBrush = SolidColor(scheme.primary),
+                                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                        keyboardActions = KeyboardActions(
+                                            onSearch = {
+                                                focusManager.clearFocus()
+                                                keyboardController?.hide()
+                                            }
+                                        ),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .focusRequester(focusRequester)
+                                            .onFocusChanged { state ->
+                                                isSearchFocused = state.isFocused
+                                            }
                                     )
                                 }
 
-                                DropdownMenu(
-                                    expanded = showMoreMenu,
-                                    onDismissRequest = { showMoreMenu = false }
+                                AnimatedVisibility(
+                                    visible = searchQuery.isNotEmpty(),
+                                    enter = fadeIn(tween(150)) + scaleIn(initialScale = 0.8f),
+                                    exit = fadeOut(tween(120)) + scaleOut(targetScale = 0.8f)
                                 ) {
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                if (hideSystemApps) {
-                                                    stringResource(R.string.apps_show_system)
-                                                } else {
-                                                    stringResource(R.string.apps_hide_system)
-                                                }
-                                            )
-                                        },
-                                        onClick = {
-                                            hideSystemApps = !hideSystemApps
-                                            showMoreMenu = false
-                                        }
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(CircleShape)
+                                            .clickable {
+                                                searchQuery = ""
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Clear,
+                                            contentDescription = stringResource(R.string.action_clear),
+                                            tint = scheme.onSurfaceVariant,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .padding(top = 2.dp, bottom = headerBottomGap)
-                            .height(searchPillHeight)
-                            .clip(CircleShape)
-                            .background(scheme.surfaceContainerHigh)
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) {
-                                focusRequester.requestFocus()
-                            }
-                            .padding(horizontal = 16.dp),
-                        contentAlignment = Alignment.CenterStart
-                    ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    top = filterTopOffset,
+                                    start = 16.dp,
+                                    end = 16.dp
+                                )
+                                .height(filterPillHeight),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Search,
-                                contentDescription = null,
-                                tint = if (isSearchFocused) scheme.primary else scheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
-                            )
-
-                            Box(
-                                modifier = Modifier.weight(1f),
-                                contentAlignment = Alignment.CenterStart
-                            ) {
-                                if (searchQuery.isEmpty()) {
-                                    Text(
-                                        text = stringResource(R.string.apps_search_placeholder),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = scheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
+                            AppsFilterPill(
+                                label = appsLocalizedLabel("Semua", "All"),
+                                selected = selectedFilter == AppsFilter.ALL,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    selectedFilter = AppsFilter.ALL
                                 }
+                            )
+                            AppsFilterPill(
+                                label = appsLocalizedLabel("Game", "Games"),
+                                selected = selectedFilter == AppsFilter.GAMES,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    selectedFilter = if (selectedFilter == AppsFilter.GAMES) {
+                                        AppsFilter.ALL
+                                    } else {
+                                        AppsFilter.GAMES
+                                    }
+                                }
+                            )
+                            AppsFilterPill(
+                                label = appsLocalizedLabel("Aktif", "Active"),
+                                selected = selectedFilter == AppsFilter.ACTIVE,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    selectedFilter = if (selectedFilter == AppsFilter.ACTIVE) {
+                                        AppsFilter.ALL
+                                    } else {
+                                        AppsFilter.ACTIVE
+                                    }
+                                }
+                            )
+                        }
 
-                                BasicTextField(
-                                    value = searchQuery,
-                                    onValueChange = { searchQuery = it },
-                                    singleLine = true,
-                                    textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                        color = scheme.onSurface
-                                    ),
-                                    cursorBrush = SolidColor(scheme.primary),
-                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                                    keyboardActions = KeyboardActions(
-                                        onSearch = {
-                                            focusManager.clearFocus()
-                                            keyboardController?.hide()
-                                        }
-                                    ),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .focusRequester(focusRequester)
-                                        .onFocusChanged { state ->
-                                            isSearchFocused = state.isFocused
-                                        }
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .height(titleRowHeight)
+                                .padding(end = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            IconButton(onClick = { showMoreMenu = true }) {
+                                Icon(
+                                    imageVector = Icons.Rounded.MoreVert,
+                                    contentDescription = stringResource(R.string.action_more),
+                                    tint = scheme.onSurfaceVariant
                                 )
                             }
 
-                            AnimatedVisibility(
-                                visible = searchQuery.isNotEmpty(),
-                                enter = fadeIn(tween(150)) + scaleIn(initialScale = 0.8f),
-                                exit = fadeOut(tween(120)) + scaleOut(targetScale = 0.8f)
+                            DropdownMenu(
+                                expanded = showMoreMenu,
+                                onDismissRequest = { showMoreMenu = false }
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(28.dp)
-                                        .clip(CircleShape)
-                                        .clickable {
-                                            searchQuery = ""
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Clear,
-                                        contentDescription = stringResource(R.string.action_clear),
-                                        tint = scheme.onSurfaceVariant,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            if (hideSystemApps) {
+                                                stringResource(R.string.apps_show_system)
+                                            } else {
+                                                stringResource(R.string.apps_hide_system)
+                                            }
+                                        )
+                                    },
+                                    onClick = {
+                                        hideSystemApps = !hideSystemApps
+                                        showMoreMenu = false
+                                    }
+                                )
                             }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AppsFilterPill(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressScaleModifier = pressScale(interactionSource, 0.96f)
+
+    val containerColor by animateColorAsState(
+        targetValue = if (selected) scheme.secondaryContainer else scheme.surfaceContainerHigh,
+        animationSpec = tween(durationMillis = 180),
+        label = "filterPillContainer"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) scheme.onSecondaryContainer else scheme.onSurfaceVariant,
+        animationSpec = tween(durationMillis = 180),
+        label = "filterPillContent"
+    )
+
+    Box(
+        modifier = Modifier
+            .height(32.dp)
+            .then(pressScaleModifier)
+            .clip(CircleShape)
+            .background(containerColor)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = 14.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            color = contentColor,
+            maxLines = 1
+        )
     }
 }
 
