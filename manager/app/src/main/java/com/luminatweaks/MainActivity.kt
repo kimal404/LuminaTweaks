@@ -22,7 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.hapticfeedback.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.lifecycle.lifecycleScope
 import com.luminatweaks.data.LuminaBridge
 import com.luminatweaks.ui.screen.HomeScreen
