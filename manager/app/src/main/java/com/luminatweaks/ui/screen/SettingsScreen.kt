@@ -23,6 +23,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -46,7 +47,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -56,6 +56,7 @@ import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.LightMode
+import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -115,7 +116,9 @@ import com.luminatweaks.ui.theme.ColorMode
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.ui.theme.ThemeController
 import com.luminatweaks.util.LogUtil
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
@@ -347,9 +350,9 @@ fun SettingsScreen(
                                     modifier = Modifier
                                         .weight(1f)
                                         .fillMaxHeight(),
-                                    title = settingsLocalizedLabel("Layar Kunci", "Lock Screen"),
+                                    title = stringResource(R.string.app_name),
                                     wallpaper = systemWallpaperBitmap,
-                                    onClick = openCompatibility
+                                    languageTag = currentLanguage
                                 )
                             }
                         }
@@ -474,7 +477,16 @@ fun SettingsScreen(
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 SettingsActionRow(
                                     index = 0,
-                                    count = 2,
+                                    count = 3,
+                                    icon = Icons.Rounded.Security,
+                                    title = stringResource(R.string.settings_compatibility),
+                                    subtitle = stringResource(R.string.settings_compatibility_desc),
+                                    onClick = openCompatibility
+                                )
+
+                                SettingsActionRow(
+                                    index = 1,
+                                    count = 3,
                                     icon = Icons.Rounded.Info,
                                     title = stringResource(R.string.settings_about),
                                     subtitle = stringResource(
@@ -485,8 +497,8 @@ fun SettingsScreen(
                                 )
 
                                 SettingsActionRow(
-                                    index = 1,
-                                    count = 2,
+                                    index = 2,
+                                    count = 3,
                                     icon = Icons.Rounded.DeleteForever,
                                     title = stringResource(R.string.settings_module_uninstall_title),
                                     subtitle = stringResource(R.string.settings_module_uninstall_desc),
@@ -871,13 +883,11 @@ private fun LanguageMiniPill(
 private fun LockscreenHeroTile(
     title: String,
     wallpaper: ImageBitmap?,
-    onClick: () -> Unit,
+    languageTag: String,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val scheme = MaterialTheme.colorScheme
-    val interactionSource = remember { MutableInteractionSource() }
-    val scaleModifier = pressScale(interactionSource, 0.97f)
     var clockTickMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     LaunchedEffect(Unit) {
@@ -888,8 +898,9 @@ private fun LockscreenHeroTile(
         }
     }
 
-    val (hourText, minuteText) = remember(clockTickMs, context) {
-        val cal = Calendar.getInstance().apply { timeInMillis = clockTickMs }
+    val clockParts = remember(clockTickMs, context, languageTag) {
+        val now = Date(clockTickMs)
+        val cal = Calendar.getInstance().apply { time = now }
         val is24h = DateFormat.is24HourFormat(context)
         val rawHour = if (is24h) {
             cal.get(Calendar.HOUR_OF_DAY)
@@ -897,21 +908,25 @@ private fun LockscreenHeroTile(
             val h12 = cal.get(Calendar.HOUR)
             if (h12 == 0) 12 else h12
         }
-        val h = String.format(Locale.US, "%02d", rawHour)
-        val m = String.format(Locale.US, "%02d", cal.get(Calendar.MINUTE))
-        h to m
+        val hourStr = String.format(Locale.US, "%02d", rawHour)
+        val minuteStr = String.format(Locale.US, "%02d", cal.get(Calendar.MINUTE))
+        val locale = if (languageTag == "en") {
+            Locale.ENGLISH
+        } else {
+            Locale.forLanguageTag("id-ID")
+        }
+        val rawDay = SimpleDateFormat("EEEE", locale).format(now)
+        val dayStr = rawDay.replaceFirstChar { ch ->
+            if (ch.isLowerCase()) ch.titlecase(locale) else ch.toString()
+        }
+        val dateStr = SimpleDateFormat("d MMMM yyyy", locale).format(now)
+        listOf(hourStr, minuteStr, dayStr, dateStr)
     }
 
     Box(
         modifier = modifier
-            .then(scaleModifier)
             .clip(RoundedCornerShape(26.dp))
             .background(scheme.surfaceContainerHighest)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick
-            )
     ) {
         if (wallpaper != null) {
             Image(
@@ -943,19 +958,21 @@ private fun LockscreenHeroTile(
                         colors = listOf(
                             Color.Black.copy(alpha = 0.34f),
                             Color.Black.copy(alpha = 0.14f),
-                            Color.Black.copy(alpha = 0.42f)
+                            Color.Black.copy(alpha = 0.38f)
                         )
                     )
                 )
         )
 
-        Column(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 14.dp, vertical = 22.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 8.dp, vertical = 22.dp)
         ) {
+            val digitSize = (maxWidth.value * 0.36f).coerceIn(42f, 64f).sp
+            val daySize = (digitSize.value * 0.45f).sp
+            val dateSize = (digitSize.value * 0.21f).sp
+
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleSmall.copy(
@@ -966,47 +983,81 @@ private fun LockscreenHeroTile(
                 maxLines = 1,
                 softWrap = false,
                 overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                modifier = Modifier.align(Alignment.TopCenter)
             )
 
             Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy((-4).dp)
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(top = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = clockParts[0],
+                            style = MaterialTheme.typography.displayLarge.copy(
+                                fontSize = digitSize,
+                                lineHeight = digitSize,
+                                fontWeight = FontWeight.Bold,
+                                fontFeatureSettings = "tnum",
+                                platformStyle = PlatformTextStyle(includeFontPadding = false)
+                            ),
+                            color = Color.White.copy(alpha = 0.56f),
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                        Text(
+                            text = clockParts[1],
+                            style = MaterialTheme.typography.displayLarge.copy(
+                                fontSize = digitSize,
+                                lineHeight = digitSize,
+                                fontWeight = FontWeight.Bold,
+                                fontFeatureSettings = "tnum",
+                                platformStyle = PlatformTextStyle(includeFontPadding = false)
+                            ),
+                            color = Color.White.copy(alpha = 0.56f),
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+
+                    Text(
+                        text = clockParts[2],
+                        style = MaterialTheme.typography.headlineSmall.copy(
+                            fontSize = daySize,
+                            lineHeight = daySize,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = (-0.3).sp,
+                            platformStyle = PlatformTextStyle(includeFontPadding = false)
+                        ),
+                        color = Color.White,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+
                 Text(
-                    text = hourText,
-                    style = MaterialTheme.typography.displayLarge.copy(
-                        fontSize = 54.sp,
-                        lineHeight = 52.sp,
+                    text = clockParts[3],
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontSize = dateSize,
+                        lineHeight = dateSize,
                         fontWeight = FontWeight.Bold,
-                        fontFeatureSettings = "tnum",
                         platformStyle = PlatformTextStyle(includeFontPadding = false)
                     ),
                     color = Color.White,
                     maxLines = 1,
-                    softWrap = false
-                )
-                Text(
-                    text = minuteText,
-                    style = MaterialTheme.typography.displayLarge.copy(
-                        fontSize = 54.sp,
-                        lineHeight = 52.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFeatureSettings = "tnum",
-                        platformStyle = PlatformTextStyle(includeFontPadding = false)
-                    ),
-                    color = Color.White,
-                    maxLines = 1,
-                    softWrap = false
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
-
-            Icon(
-                imageVector = Icons.Outlined.Lock,
-                contentDescription = null,
-                tint = Color.White.copy(alpha = 0.92f),
-                modifier = Modifier.size(22.dp)
-            )
         }
     }
 }
