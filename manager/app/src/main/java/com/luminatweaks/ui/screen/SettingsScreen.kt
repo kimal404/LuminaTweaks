@@ -1,19 +1,3 @@
-/*
- * Copyright (C) 2026 kimal
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 @file:OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 
 package com.luminatweaks.ui.screen
@@ -24,24 +8,29 @@ import android.content.Context
 import android.os.Build
 import android.os.LocaleList
 import android.widget.Toast
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -52,13 +41,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoFixHigh
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Info
-import androidx.compose.material.icons.rounded.Language
-import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material.icons.rounded.Security
+import androidx.compose.material.icons.rounded.LightMode
+import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -67,12 +59,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTopAppBarState
-import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -85,26 +77,33 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.luminatweaks.BuildConfig
 import com.luminatweaks.R
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.ui.component.TouchOriginDialog
 import com.luminatweaks.ui.component.appBarFade
 import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.component.rememberDialogOrigin
+import com.luminatweaks.ui.theme.ColorMode
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
+import com.luminatweaks.ui.theme.ThemeController
 import com.luminatweaks.util.LogUtil
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -121,6 +120,15 @@ private data class SettingsSheetOption<T>(
 )
 
 @Composable
+private fun settingsLocalizedLabel(id: String, en: String): String {
+    val isIndonesian = remember {
+        val lang = Locale.getDefault().language.lowercase(Locale.ROOT)
+        lang == "in" || lang == "id"
+    }
+    return if (isIndonesian) id else en
+}
+
+@Composable
 fun SettingsScreen(
     onNavigateToAbout: (() -> Unit)? = null,
     onNavigateToPersonalisasi: (() -> Unit)? = null,
@@ -129,12 +137,18 @@ fun SettingsScreen(
     onOpenSetupWizard: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+    val uriHandler = LocalUriHandler.current
     val coroutineScope = rememberCoroutineScope()
     val isFloating = LocalFloatingNavBar.current
 
     var currentLanguage by remember {
         val lang = getCurrentLanguage(context)
         mutableStateOf(if (lang.startsWith("en")) "en" else "id")
+    }
+
+    var currentColorMode by remember {
+        mutableStateOf(ThemeController.getAppSettings(context).colorMode)
     }
 
     var showLanguageSheet by remember { mutableStateOf(false) }
@@ -160,6 +174,7 @@ fun SettingsScreen(
 
     LaunchedEffect(Unit) {
         isToastNotifications = ConfigRepository.getToastNotifications()
+        currentColorMode = ThemeController.getAppSettings(context).colorMode
     }
 
     LuminaDrillTransition(
@@ -168,19 +183,87 @@ fun SettingsScreen(
     ) { route ->
         when (route) {
             "about" -> AboutScreen(onBackClick = { showAboutScreen = false })
-            "personalisasi" -> PersonalisasiScreen(onBackClick = { showPersonalisasiScreen = false })
+            "personalisasi" -> PersonalisasiScreen(
+                onBackClick = {
+                    currentColorMode = ThemeController.getAppSettings(context).colorMode
+                    showPersonalisasiScreen = false
+                }
+            )
             "compatibility" -> CompatibilityScreen(onBackClick = { showCompatibilityScreen = false })
             "tweaks" -> TweaksScreen(onBackClick = { showTweaksScreen = false })
             else -> {
+                val scheme = MaterialTheme.colorScheme
                 val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                 val bottomPadding = if (isFloating) 112.dp + navInset else 28.dp + navInset
                 val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
-                val fadeSurface = MaterialTheme.colorScheme.background
+                val fadeSurface = scheme.background
+                val cleanTextStyle = MaterialTheme.typography.labelLarge.copy(
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                )
+
+                val openPersonalisasi: () -> Unit = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    if (onNavigateToPersonalisasi != null) {
+                        onNavigateToPersonalisasi()
+                    } else {
+                        showPersonalisasiScreen = true
+                    }
+                }
+
+                val openCompatibility: () -> Unit = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    if (onNavigateToCompatibility != null) {
+                        onNavigateToCompatibility()
+                    } else {
+                        showCompatibilityScreen = true
+                    }
+                }
+
+                val openAbout: () -> Unit = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    if (onNavigateToAbout != null) {
+                        onNavigateToAbout()
+                    } else {
+                        showAboutScreen = true
+                    }
+                }
+
+                val cycleThemeMode: () -> Unit = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    val saved = ThemeController.getAppSettings(context)
+                    val nextMode = when (saved.colorMode) {
+                        ColorMode.SYSTEM -> ColorMode.DARK
+                        ColorMode.DARK -> ColorMode.DARKAMOLED
+                        ColorMode.DARKAMOLED -> ColorMode.LIGHT
+                        ColorMode.LIGHT -> ColorMode.SYSTEM
+                    }
+                    currentColorMode = nextMode
+                    ThemeController.saveTheme(
+                        context = context,
+                        mode = nextMode,
+                        key = saved.keyColor,
+                        spec = saved.colorSpec,
+                        intensity = saved.accentIntensity,
+                        cornerRadius = saved.cornerRadius,
+                        floatingNavBar = saved.floatingNavBar
+                    )
+                }
+
+                val selectLanguage: (String) -> Unit = { tag ->
+                    if (currentLanguage != tag) {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        currentLanguage = tag
+                        coroutineScope.launch {
+                            delay(90L)
+                            setAppLanguage(context, tag)
+                        }
+                    }
+                }
 
                 Scaffold(
                     modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
                     contentWindowInsets = WindowInsets(0.dp),
-                    containerColor = MaterialTheme.colorScheme.background,
+                    containerColor = scheme.background,
                     topBar = {
                         Box(
                             modifier = Modifier
@@ -210,140 +293,209 @@ fun SettingsScreen(
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
-                            top = innerPadding.calculateTopPadding(),
+                            top = innerPadding.calculateTopPadding() + 8.dp,
                             bottom = bottomPadding,
                             start = 16.dp,
                             end = 16.dp
-                        )
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        item(key = "personalization") {
-                            SettingsSectionHeader(title = stringResource(R.string.section_personalization))
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                SettingsActionRow(
-                                    index = 0,
-                                    count = 1,
-                                    icon = Icons.Rounded.Palette,
-                                    title = stringResource(R.string.personalization_title),
-                                    subtitle = stringResource(R.string.settings_personalization_desc),
-                                    onClick = {
-                                        if (onNavigateToPersonalisasi != null) {
-                                            onNavigateToPersonalisasi()
-                                        } else {
-                                            showPersonalisasiScreen = true
+                        item(key = "hero_bento") {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(IntrinsicSize.Max),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight(),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    MonetPersonalizationTile(
+                                        title = stringResource(R.string.personalization_title),
+                                        onClick = openPersonalisasi
+                                    )
+
+                                    ThemeAndLanguageTile(
+                                        colorMode = currentColorMode,
+                                        currentLanguage = currentLanguage,
+                                        languageTitle = stringResource(R.string.settings_language),
+                                        onCycleThemeMode = cycleThemeMode,
+                                        onSelectLanguage = selectLanguage,
+                                        onOpenLanguageSheet = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            showLanguageSheet = true
                                         }
-                                    }
+                                    )
+                                }
+
+                                CapabilityHeroTile(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight(),
+                                    title = stringResource(R.string.settings_compatibility),
+                                    onClick = openCompatibility
                                 )
                             }
                         }
 
-                        item(key = "others") {
-                            SettingsSectionHeader(title = stringResource(R.string.section_others))
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                SettingsActionRow(
-                                    index = 0,
-                                    count = 2,
+                        item(key = "quick_tools_pair") {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                SuiteMediumTile(
+                                    modifier = Modifier.weight(1f),
                                     icon = Icons.Rounded.Description,
-                                    title = stringResource(R.string.settings_save_log),
-                                    subtitle = if (isGeneratingLog) {
-                                        stringResource(R.string.settings_save_log_bundling)
+                                    title = if (isGeneratingLog) {
+                                        settingsLocalizedLabel("Menyimpan...", "Bundling...")
                                     } else {
-                                        stringResource(R.string.settings_save_log_desc)
+                                        stringResource(R.string.settings_save_log)
                                     },
                                     enabled = !isGeneratingLog,
-                                    onClick = { showLogBottomSheet = true }
-                                )
-
-                                SettingsActionRow(
-                                    index = 1,
-                                    count = 2,
-                                    icon = Icons.Rounded.Language,
-                                    title = stringResource(R.string.settings_language),
-                                    subtitle = if (currentLanguage == "en") {
-                                        stringResource(R.string.language_english)
-                                    } else {
-                                        stringResource(R.string.language_indonesian)
-                                    },
-                                    highlightSubtitle = true,
-                                    onClick = { showLanguageSheet = true }
-                                )
-                            }
-                        }
-
-                        item(key = "advanced") {
-                            SettingsSectionHeader(title = stringResource(R.string.section_advanced))
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                SettingsActionRow(
-                                    index = 0,
-                                    count = 3,
-                                    icon = Icons.Rounded.Security,
-                                    title = stringResource(R.string.settings_compatibility),
-                                    subtitle = stringResource(R.string.settings_compatibility_desc),
                                     onClick = {
-                                        if (onNavigateToCompatibility != null) {
-                                            onNavigateToCompatibility()
-                                        } else {
-                                            showCompatibilityScreen = true
-                                        }
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        showLogBottomSheet = true
                                     }
                                 )
 
-                                SettingsActionRow(
-                                    index = 1,
-                                    count = 3,
+                                SuiteMediumTile(
+                                    modifier = Modifier.weight(1f),
                                     icon = Icons.Rounded.AutoFixHigh,
                                     title = stringResource(R.string.settings_setup_wizard),
-                                    subtitle = stringResource(R.string.settings_setup_wizard_desc),
-                                    onClick = onOpenSetupWizard
-                                )
-
-                                SettingsSwitchRow(
-                                    index = 2,
-                                    count = 3,
-                                    icon = Icons.Rounded.Info,
-                                    title = stringResource(R.string.settings_toast_notifications),
-                                    subtitle = stringResource(R.string.settings_toast_notifications_desc),
-                                    checked = isToastNotifications,
-                                    onCheckedChange = { enabled ->
-                                        isToastNotifications = enabled
-                                        coroutineScope.launch {
-                                            ConfigRepository.setToastNotifications(enabled)
-                                        }
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onOpenSetupWizard()
                                     }
                                 )
                             }
                         }
 
-                        item(key = "about_and_module") {
-                            SettingsSectionHeader(title = stringResource(R.string.section_about))
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                SettingsActionRow(
-                                    index = 0,
-                                    count = 2,
-                                    icon = Icons.Rounded.Info,
-                                    title = stringResource(R.string.settings_about),
-                                    subtitle = stringResource(
-                                        R.string.settings_version_format,
-                                        com.luminatweaks.BuildConfig.VERSION_NAME.removeSuffix(".0")
-                                    ),
-                                    onClick = {
-                                        if (onNavigateToAbout != null) {
-                                            onNavigateToAbout()
+                        item(key = "toast_banner_tile") {
+                            val toggleToast: (Boolean) -> Unit = { enabled ->
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                isToastNotifications = enabled
+                                coroutineScope.launch {
+                                    ConfigRepository.setToastNotifications(enabled)
+                                }
+                            }
+                            val interactionSource = remember { MutableInteractionSource() }
+                            val scaleModifier = pressScale(interactionSource, 0.98f)
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .then(scaleModifier)
+                                    .clip(RoundedCornerShape(24.dp))
+                                    .background(scheme.surfaceContainerHigh)
+                                    .clickable(
+                                        interactionSource = interactionSource,
+                                        indication = null
+                                    ) { toggleToast(!isToastNotifications) }
+                                    .padding(horizontal = 18.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = stringResource(R.string.settings_toast_notifications),
+                                        style = MaterialTheme.typography.titleSmall.copy(
+                                            fontWeight = FontWeight.SemiBold,
+                                            platformStyle = PlatformTextStyle(includeFontPadding = false)
+                                        ),
+                                        color = scheme.onSurface,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Text(
+                                        text = settingsLocalizedLabel(
+                                            "Tampilkan info saat profil aktif berganti",
+                                            "Show alert when active profile switches"
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            platformStyle = PlatformTextStyle(includeFontPadding = false)
+                                        ),
+                                        color = scheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+
+                                Switch(
+                                    checked = isToastNotifications,
+                                    onCheckedChange = toggleToast,
+                                    interactionSource = interactionSource,
+                                    thumbContent = {
+                                        if (isToastNotifications) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Check,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(SwitchDefaults.IconSize)
+                                            )
                                         } else {
-                                            showAboutScreen = true
+                                            Icon(
+                                                imageVector = Icons.Rounded.Close,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(SwitchDefaults.IconSize)
+                                            )
                                         }
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = scheme.onPrimary,
+                                        checkedIconColor = scheme.primary,
+                                        checkedTrackColor = scheme.primary,
+                                        uncheckedThumbColor = scheme.outline,
+                                        uncheckedIconColor = scheme.surfaceContainerHighest,
+                                        uncheckedTrackColor = scheme.surfaceContainerHighest
+                                    )
+                                )
+                            }
+                        }
+
+                        item(key = "bottom_icon_grid") {
+                            val versionClean = remember {
+                                "v" + BuildConfig.VERSION_NAME.removeSuffix(".0")
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                SuiteSquareIconTile(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Rounded.Info,
+                                    label = stringResource(R.string.settings_about),
+                                    badge = versionClean,
+                                    textStyle = cleanTextStyle,
+                                    onClick = openAbout
+                                )
+
+                                SuiteSquareIconTile(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Rounded.Code,
+                                    label = "GitHub",
+                                    textStyle = cleanTextStyle,
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        uriHandler.openUri("https://github.com/kimal404/LuminaTweaks")
                                     }
                                 )
 
-                                SettingsActionRow(
-                                    index = 1,
-                                    count = 2,
+                                SuiteSquareIconTile(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .then(uninstallOrigin.trackedModifier()),
                                     icon = Icons.Rounded.DeleteForever,
-                                    title = stringResource(R.string.settings_module_uninstall_title),
-                                    subtitle = stringResource(R.string.settings_module_uninstall_desc),
+                                    label = settingsLocalizedLabel("Hapus", "Uninstall"),
+                                    isDestructive = true,
                                     enabled = !isUninstalling,
-                                    accentColor = MaterialTheme.colorScheme.error,
-                                    modifier = uninstallOrigin.trackedModifier(),
+                                    textStyle = cleanTextStyle,
                                     onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                         uninstallOriginPoint = uninstallOrigin.origin
                                         showUninstallDialog = true
                                     }
@@ -365,7 +517,7 @@ fun SettingsScreen(
                         Icon(
                             imageVector = Icons.Rounded.DeleteForever,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
+                            tint = scheme.error,
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.height(12.dp))
@@ -379,7 +531,7 @@ fun SettingsScreen(
                         Text(
                             text = stringResource(R.string.settings_module_uninstall_dialog_desc),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = scheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(20.dp))
                         Row(
@@ -410,7 +562,7 @@ fun SettingsScreen(
                                     } else {
                                         stringResource(R.string.settings_module_uninstall_confirm)
                                     },
-                                    color = MaterialTheme.colorScheme.error,
+                                    color = scheme.error,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -500,202 +652,442 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun SettingsSectionHeader(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.padding(
-            start = 12.dp,
-            end = 12.dp,
-            top = 16.dp,
-            bottom = 8.dp
-        )
-    )
-}
-
-@Composable
-private fun SettingsSwitchRow(
-    index: Int,
-    count: Int,
-    icon: ImageVector,
+private fun MonetPersonalizationTile(
     title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    enabled: Boolean = true
+    onClick: () -> Unit
 ) {
-    val haptic = LocalHapticFeedback.current
-    val shape = connectedContainerShape(index = index, count = count)
+    val scheme = MaterialTheme.colorScheme
     val interactionSource = remember { MutableInteractionSource() }
-    val pressScaleModifier = pressScale(interactionSource, 0.975f, enabled)
-    Row(
+    val scaleModifier = pressScale(interactionSource, 0.97f)
+    val swatchColors = listOf(
+        scheme.inversePrimary,
+        scheme.primary,
+        scheme.tertiary,
+        scheme.primaryContainer
+    )
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .then(pressScaleModifier)
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .then(scaleModifier)
+            .clip(RoundedCornerShape(26.dp))
+            .background(scheme.surfaceContainerHigh)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
-                enabled = enabled
-            ) {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onCheckedChange(!checked)
-            }
-            .alpha(if (enabled) 1f else 0.55f)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+                onClick = onClick
+            )
+            .padding(horizontal = 14.dp, vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall.copy(
+                fontWeight = FontWeight.SemiBold,
+                platformStyle = PlatformTextStyle(includeFontPadding = false)
+            ),
+            color = scheme.onSurface,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis
+        )
+
         Box(
-            modifier = Modifier.padding(end = 16.dp),
-            contentAlignment = Alignment.Center
+            modifier = Modifier
+                .width(106.dp)
+                .height(34.dp),
+            contentAlignment = Alignment.CenterStart
         ) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(22.dp)
+            swatchColors.forEachIndexed { idx, color ->
+                Box(
+                    modifier = Modifier
+                        .offset(x = (idx * 24).dp)
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(color)
                 )
             }
-        }
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(vertical = 8.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        Box(
-            modifier = Modifier.padding(start = 16.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Switch(
-                checked = checked,
-                onCheckedChange = onCheckedChange,
-                enabled = enabled,
-                interactionSource = interactionSource
-            )
         }
     }
 }
 
 @Composable
-private fun SettingsActionRow(
-    index: Int,
-    count: Int,
+private fun ThemeAndLanguageTile(
+    colorMode: ColorMode,
+    currentLanguage: String,
+    languageTitle: String,
+    onCycleThemeMode: () -> Unit,
+    onSelectLanguage: (String) -> Unit,
+    onOpenLanguageSheet: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val themeInteraction = remember { MutableInteractionSource() }
+    val themeScale = pressScale(themeInteraction, 0.96f)
+
+    val modeLabel = when (colorMode) {
+        ColorMode.SYSTEM -> settingsLocalizedLabel("Tema Sistem", "System Theme")
+        ColorMode.LIGHT -> settingsLocalizedLabel("Tema Terang", "Light Theme")
+        ColorMode.DARK -> settingsLocalizedLabel("Tema Gelap", "Dark Theme")
+        ColorMode.DARKAMOLED -> settingsLocalizedLabel("AMOLED Hitam", "AMOLED Pitch")
+    }
+    val modeIcon = when (colorMode) {
+        ColorMode.LIGHT -> Icons.Rounded.LightMode
+        else -> Icons.Rounded.DarkMode
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(26.dp))
+            .background(scheme.surfaceContainerHigh)
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(themeScale)
+                .clip(RoundedCornerShape(18.dp))
+                .background(scheme.surfaceContainerLowest)
+                .clickable(
+                    interactionSource = themeInteraction,
+                    indication = null,
+                    onClick = onCycleThemeMode
+                )
+                .padding(horizontal = 12.dp, vertical = 13.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = modeIcon,
+                contentDescription = null,
+                tint = scheme.primary,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = modeLabel,
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = scheme.onSurface,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = languageTitle,
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = FontWeight.Medium,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = scheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.clickable(onClick = onOpenLanguageSheet)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                LanguageMiniPill(
+                    modifier = Modifier.weight(1f),
+                    label = "ID",
+                    selected = currentLanguage != "en",
+                    onClick = { onSelectLanguage("id") }
+                )
+                LanguageMiniPill(
+                    modifier = Modifier.weight(1f),
+                    label = "EN",
+                    selected = currentLanguage == "en",
+                    onClick = { onSelectLanguage("en") }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LanguageMiniPill(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    val interactionSource = remember { MutableInteractionSource() }
+    val scaleModifier = pressScale(interactionSource, 0.94f)
+    val bgColor by animateColorAsState(
+        targetValue = if (selected) scheme.primary else scheme.surfaceContainerLowest,
+        label = "langPillBg"
+    )
+    val fgColor by animateColorAsState(
+        targetValue = if (selected) scheme.onPrimary else scheme.onSurface,
+        label = "langPillFg"
+    )
+
+    Box(
+        modifier = modifier
+            .height(34.dp)
+            .then(scaleModifier)
+            .clip(RoundedCornerShape(12.dp))
+            .background(bgColor)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontWeight = FontWeight.Bold,
+                platformStyle = PlatformTextStyle(includeFontPadding = false)
+            ),
+            color = fgColor,
+            maxLines = 1,
+            softWrap = false
+        )
+    }
+}
+
+@Composable
+private fun CapabilityHeroTile(
+    title: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    val interactionSource = remember { MutableInteractionSource() }
+    val scaleModifier = pressScale(interactionSource, 0.97f)
+    val accentStroke = scheme.primary.copy(alpha = 0.22f)
+    val secondaryStroke = scheme.tertiary.copy(alpha = 0.16f)
+
+    Box(
+        modifier = modifier
+            .then(scaleModifier)
+            .clip(RoundedCornerShape(26.dp))
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        scheme.primaryContainer.copy(alpha = 0.65f),
+                        scheme.surfaceContainerHighest
+                    )
+                )
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            drawCircle(
+                color = accentStroke,
+                radius = size.minDimension * 0.56f,
+                center = Offset(size.width * 0.85f, size.height * 0.28f),
+                style = Stroke(width = 18.dp.toPx())
+            )
+            drawCircle(
+                color = secondaryStroke,
+                radius = size.minDimension * 0.42f,
+                center = Offset(size.width * 0.18f, size.height * 0.78f),
+                style = Stroke(width = 12.dp.toPx())
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 14.dp, vertical = 18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = scheme.onSurface,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "SAFE",
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 1.sp,
+                        lineHeight = 30.sp,
+                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                    ),
+                    color = scheme.onPrimaryContainer,
+                    maxLines = 1,
+                    softWrap = false
+                )
+                Text(
+                    text = "GUARD",
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 1.sp,
+                        lineHeight = 30.sp,
+                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                    ),
+                    color = scheme.primary,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .clip(CircleShape)
+                    .background(scheme.surfaceContainerLowest.copy(alpha = 0.72f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Shield,
+                    contentDescription = null,
+                    tint = scheme.primary,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SuiteMediumTile(
     icon: ImageVector,
     title: String,
-    subtitle: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    highlightSubtitle: Boolean = false,
-    accentColor: Color = MaterialTheme.colorScheme.primary
+    enabled: Boolean = true
 ) {
-    val haptic = LocalHapticFeedback.current
-    val shape = connectedContainerShape(index = index, count = count)
+    val scheme = MaterialTheme.colorScheme
     val interactionSource = remember { MutableInteractionSource() }
-    val pressScaleModifier = pressScale(interactionSource, 0.975f, enabled)
-    val titleColor = if (accentColor == MaterialTheme.colorScheme.error) {
-        MaterialTheme.colorScheme.error
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
+    val scaleModifier = pressScale(interactionSource, 0.97f, enabled)
 
     Row(
         modifier = modifier
-            .fillMaxWidth()
-            .then(pressScaleModifier)
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .height(64.dp)
+            .then(scaleModifier)
+            .clip(RoundedCornerShape(22.dp))
+            .background(scheme.surfaceContainerHigh)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
-                enabled = enabled
-            ) {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onClick()
-            }
-            .alpha(if (enabled) 1f else 0.55f)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier.padding(end = 16.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(accentColor.copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = accentColor,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-        }
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(vertical = 8.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = titleColor
+                enabled = enabled,
+                onClick = onClick
             )
+            .alpha(if (enabled) 1f else 0.55f)
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = scheme.primary,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall.copy(
+                fontWeight = FontWeight.Medium,
+                platformStyle = PlatformTextStyle(includeFontPadding = false)
+            ),
+            color = scheme.onSurface,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun SuiteSquareIconTile(
+    icon: ImageVector,
+    label: String,
+    textStyle: androidx.compose.ui.text.TextStyle,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    badge: String? = null,
+    isDestructive: Boolean = false,
+    enabled: Boolean = true
+) {
+    val scheme = MaterialTheme.colorScheme
+    val interactionSource = remember { MutableInteractionSource() }
+    val scaleModifier = pressScale(interactionSource, 0.95f, enabled)
+    val bgColor = if (isDestructive) {
+        scheme.errorContainer.copy(alpha = 0.42f)
+    } else {
+        scheme.surfaceContainerHigh
+    }
+    val fgColor = if (isDestructive) scheme.error else scheme.onSurface
+    val iconColor = if (isDestructive) scheme.error else scheme.primary
+
+    Column(
+        modifier = modifier
+            .height(92.dp)
+            .then(scaleModifier)
+            .clip(RoundedCornerShape(24.dp))
+            .background(bgColor)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = enabled,
+                onClick = onClick
+            )
+            .alpha(if (enabled) 1f else 0.55f)
+            .padding(horizontal = 8.dp, vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = iconColor,
+            modifier = Modifier.size(22.dp)
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = label,
+            style = textStyle.copy(fontWeight = FontWeight.Medium),
+            color = fgColor,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
+        if (badge != null) {
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (highlightSubtitle) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        Box(
-            modifier = Modifier.padding(start = 16.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.ChevronRight,
-                contentDescription = null,
-                tint = if (accentColor == MaterialTheme.colorScheme.error) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                }
+                text = badge,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = scheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false
             )
         }
     }
