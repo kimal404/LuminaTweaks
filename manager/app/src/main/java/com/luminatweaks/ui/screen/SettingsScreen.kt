@@ -109,6 +109,7 @@ import androidx.compose.ui.unit.sp
 import com.luminatweaks.BuildConfig
 import com.luminatweaks.R
 import com.luminatweaks.data.ConfigRepository
+import com.luminatweaks.ui.component.ExpressiveInfoTile
 import com.luminatweaks.ui.component.TouchOriginDialog
 import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.component.rememberDialogOrigin
@@ -365,7 +366,7 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    SuiteMediumTile(
+                    ExpressiveInfoTile(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Rounded.Description,
                         title = if (isGeneratingLog) {
@@ -373,6 +374,12 @@ fun SettingsScreen(
                         } else {
                             stringResource(R.string.settings_save_log)
                         },
+                        subtitle = if (isGeneratingLog) {
+                            settingsLocalizedLabel("Mengemas log", "Packing logs")
+                        } else {
+                            settingsLocalizedLabel("Ekspor diagnostik", "Export diagnostics")
+                        },
+                        accentColor = scheme.primary,
                         enabled = !isGeneratingLog,
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -380,10 +387,12 @@ fun SettingsScreen(
                         }
                     )
 
-                    SuiteMediumTile(
+                    ExpressiveInfoTile(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Rounded.AutoFixHigh,
                         title = stringResource(R.string.settings_setup_wizard),
+                        subtitle = settingsLocalizedLabel("Panduan awal", "Initial guide"),
+                        accentColor = scheme.tertiary,
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onOpenSetupWizard()
@@ -923,56 +932,6 @@ private fun LockscreenHeroTile(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun SuiteMediumTile(
-    icon: ImageVector,
-    title: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true
-) {
-    val scheme = MaterialTheme.colorScheme
-    val interactionSource = remember { MutableInteractionSource() }
-    val scaleModifier = pressScale(interactionSource, 0.97f, enabled)
-
-    Row(
-        modifier = modifier
-            .height(64.dp)
-            .then(scaleModifier)
-            .clip(RoundedCornerShape(22.dp))
-            .background(scheme.surfaceContainerHigh)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                enabled = enabled,
-                onClick = onClick
-            )
-            .alpha(if (enabled) 1f else 0.55f)
-            .padding(horizontal = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = scheme.primary,
-            modifier = Modifier.size(18.dp)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleSmall.copy(
-                fontWeight = FontWeight.Medium,
-                platformStyle = PlatformTextStyle(includeFontPadding = false)
-            ),
-            color = scheme.onSurface,
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Ellipsis
-        )
     }
 }
 
