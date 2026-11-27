@@ -75,6 +75,7 @@ import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Thermostat
@@ -104,7 +105,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -786,23 +789,20 @@ fun HomeDashboardContent(
     var showPowerDialog by remember { mutableStateOf(false) }
     val isRunning = daemonPid != null
 
-    val hardwareSummary = remember {
-        val soc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+    val socModel = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             Build.SOC_MODEL.takeIf { it.isNotBlank() && it != Build.UNKNOWN }
         } else {
             null
         } ?: Build.HARDWARE
-        val cores = Runtime.getRuntime().availableProcessors()
-        "$soc • $cores Core"
     }
+    val cpuCores = remember { Runtime.getRuntime().availableProcessors() }
 
     var telemetry by remember { mutableStateOf(readSystemTelemetry(context)) }
-    var uptimeText by remember { mutableStateOf(formatHomeUptime()) }
 
     LaunchedEffect(Unit) {
         while (isActive) {
             telemetry = readSystemTelemetry(context)
-            uptimeText = formatHomeUptime()
             delay(3000L)
         }
     }
@@ -1025,12 +1025,20 @@ fun HomeDashboardContent(
                     deviceLabel = homeLocalizedLabel("Model perangkat", "Device model"),
                     deviceValue = deviceModel,
                     hardwareLabel = homeLocalizedLabel("Platform & prosesor", "Platform & processor"),
-                    hardwareValue = hardwareSummary,
+                    socModel = socModel,
+                    cpuCores = cpuCores,
                     kernelLabel = homeLocalizedLabel("Versi kernel", "Kernel version"),
                     kernelValue = kernelVersion,
-                    managerLabel = homeLocalizedLabel("Versi manajer & waktu aktif", "Manager version & uptime"),
-                    managerValue = "${BuildConfig.VERSION_NAME.removeSuffix(".0")} • $uptimeText"
+                    managerLabel = homeLocalizedLabel("Versi manajer", "Manager version"),
+                    managerValue = stringResource(
+                        R.string.home_version_release_format,
+                        BuildConfig.VERSION_NAME.removeSuffix(".0")
+                    )
                 )
+            }
+
+            item(key = "uptime_bento_card") {
+                UptimeBentoCard()
             }
 
             item(key = "telegram_channel_card") {
@@ -1598,6 +1606,102 @@ private fun BatteryBentoTile(
 }
 
 @Composable
+private fun UptimeBentoCard(
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    var uptimeText by remember { mutableStateOf(formatHomeUptime()) }
+
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            uptimeText = formatHomeUptime()
+            delay(1000L)
+        }
+    }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(26.dp))
+            .background(scheme.surfaceContainerHigh)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(scheme.secondary.copy(alpha = 0.16f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Schedule,
+                contentDescription = null,
+                tint = scheme.secondary,
+                modifier = Modifier.size(21.dp)
+            )
+        }
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = homeLocalizedLabel("Waktu aktif", "Device uptime"),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Medium,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = scheme.secondary,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Text(
+                text = uptimeText,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontFeatureSettings = "tnum",
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = scheme.onSurface,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        Row(
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(scheme.secondaryContainer)
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(scheme.secondary)
+            )
+            Text(
+                text = homeLocalizedLabel("Aktif", "Online"),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = scheme.onSecondaryContainer,
+                maxLines = 1,
+                softWrap = false
+            )
+        }
+    }
+}
+
+@Composable
 private fun TelegramChannelBentoCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -1745,11 +1849,76 @@ private fun ExpressiveWavyThermalBar(
 }
 
 @Composable
+private fun CpuChipSvgIcon(
+    tint: Color,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val stroke = 1.4.dp.toPx()
+        val pad = w * 0.22f
+        val bodySize = w - pad * 2f
+
+        drawRoundRect(
+            color = tint,
+            topLeft = Offset(pad, pad),
+            size = Size(bodySize, bodySize),
+            cornerRadius = CornerRadius(2.2.dp.toPx(), 2.2.dp.toPx()),
+            style = Stroke(width = stroke)
+        )
+
+        val innerPad = w * 0.36f
+        val innerSize = w - innerPad * 2f
+        drawRoundRect(
+            color = tint.copy(alpha = 0.35f),
+            topLeft = Offset(innerPad, innerPad),
+            size = Size(innerSize, innerSize),
+            cornerRadius = CornerRadius(1.dp.toPx(), 1.dp.toPx())
+        )
+
+        val pinPositions = listOf(0.35f, 0.5f, 0.65f)
+        val pinLen = pad * 0.65f
+        pinPositions.forEach { frac ->
+            val pos = w * frac
+            drawLine(
+                color = tint,
+                start = Offset(pos, pad - pinLen),
+                end = Offset(pos, pad),
+                strokeWidth = stroke,
+                cap = StrokeCap.Round
+            )
+            drawLine(
+                color = tint,
+                start = Offset(pos, pad + bodySize),
+                end = Offset(pos, pad + bodySize + pinLen),
+                strokeWidth = stroke,
+                cap = StrokeCap.Round
+            )
+            drawLine(
+                color = tint,
+                start = Offset(pad - pinLen, pos),
+                end = Offset(pad, pos),
+                strokeWidth = stroke,
+                cap = StrokeCap.Round
+            )
+            drawLine(
+                color = tint,
+                start = Offset(pad + bodySize, pos),
+                end = Offset(pad + bodySize + pinLen, pos),
+                strokeWidth = stroke,
+                cap = StrokeCap.Round
+            )
+        }
+    }
+}
+
+@Composable
 private fun DeviceSpecsBentoCard(
     deviceLabel: String,
     deviceValue: String,
     hardwareLabel: String,
-    hardwareValue: String,
+    socModel: String,
+    cpuCores: Int,
     kernelLabel: String,
     kernelValue: String,
     managerLabel: String,
@@ -1769,14 +1938,67 @@ private fun DeviceSpecsBentoCard(
             label = deviceLabel,
             value = deviceValue
         )
-        HomeEditorialSpecItem(
-            label = hardwareLabel,
-            value = hardwareValue
-        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(
+                text = hardwareLabel,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Medium,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = scheme.primary,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = socModel,
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                    ),
+                    color = scheme.onSurface,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(scheme.primary.copy(alpha = 0.14f))
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    CpuChipSvgIcon(
+                        tint = scheme.primary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "$cpuCores Core",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            platformStyle = PlatformTextStyle(includeFontPadding = false)
+                        ),
+                        color = scheme.primary,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+            }
+        }
+
         HomeEditorialSpecItem(
             label = kernelLabel,
             value = kernelValue
         )
+
         HomeEditorialSpecItem(
             label = managerLabel,
             value = managerValue
@@ -1858,7 +2080,8 @@ private fun formatHomeUptime(): String {
     val totalSec = (SystemClock.elapsedRealtime() / 1000L).coerceAtLeast(0L)
     val hours = totalSec / 3600L
     val minutes = (totalSec % 3600L) / 60L
-    return "${hours}h ${minutes}m"
+    val seconds = totalSec % 60L
+    return "${hours}h ${minutes}m ${seconds}s"
 }
 
 private suspend fun rootReboot(mode: String) {
