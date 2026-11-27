@@ -12,7 +12,6 @@ import android.util.LruCache
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -69,8 +68,8 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -84,6 +83,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
@@ -91,6 +91,9 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -101,6 +104,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luminatweaks.R
@@ -303,19 +307,73 @@ fun AppsScreen(
             val expandedHeaderHeight = statusBarTop + titleRowHeight + searchPillHeight + headerBottomGap
             val collapseRangePx = with(density) { titleRowHeight.toPx() }
 
-            val scrollCollapse by remember(collapseRangePx) {
-                derivedStateOf {
-                    if (listState.firstVisibleItemIndex > 0) {
-                        1f
-                    } else {
-                        (listState.firstVisibleItemScrollOffset / collapseRangePx).coerceIn(0f, 1f)
+            var targetCollapsePx by remember { mutableFloatStateOf(0f) }
+
+            val nestedScrollConnection = remember(collapseRangePx) {
+                object : NestedScrollConnection {
+                    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                        if (isSearchFocused || searchQuery.isNotEmpty()) return Offset.Zero
+                        val dy = available.y
+                        if (dy < 0f && targetCollapsePx < collapseRangePx) {
+                            val consumedY = maxOf(dy, -(collapseRangePx - targetCollapsePx))
+                            targetCollapsePx = (targetCollapsePx - consumedY).coerceIn(0f, collapseRangePx)
+                            return Offset(0f, consumedY)
+                        }
+                        if (dy > 0f && targetCollapsePx > 0f) {
+                            val consumedY = minOf(dy, targetCollapsePx)
+                            targetCollapsePx = (targetCollapsePx - consumedY).coerceIn(0f, collapseRangePx)
+                            return Offset(0f, consumedY)
+                        }
+                        return Offset.Zero
+                    }
+
+                    override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                        if (!isSearchFocused && searchQuery.isEmpty() &&
+                            targetCollapsePx > 0f && targetCollapsePx < collapseRangePx
+                        ) {
+                            targetCollapsePx = if (targetCollapsePx >= collapseRangePx * 0.45f) {
+                                collapseRangePx
+                            } else {
+                                0f
+                            }
+                        }
+                        return Velocity.Zero
                     }
                 }
             }
 
+            LaunchedEffect(
+                listState.firstVisibleItemIndex,
+                listState.firstVisibleItemScrollOffset,
+                isSearchFocused,
+                searchQuery
+            ) {
+                if (listState.firstVisibleItemIndex == 0 &&
+                    listState.firstVisibleItemScrollOffset == 0 &&
+                    !isSearchFocused &&
+                    searchQuery.isEmpty()
+                ) {
+                    targetCollapsePx = 0f
+                }
+            }
+
+            val animatedScrollCollapsePx by animateFloatAsState(
+                targetValue = targetCollapsePx,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = 650f
+                ),
+                label = "appsScrollCollapse"
+            )
+
+            val scrollCollapse = (animatedScrollCollapsePx / collapseRangePx).coerceIn(0f, 1f)
+
             val focusCollapse by animateFloatAsState(
                 targetValue = if (isSearchFocused || searchQuery.isNotEmpty()) 1f else 0f,
-                animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = 500f
+                ),
                 label = "appsSearchFocusCollapse"
             )
 
@@ -347,6 +405,7 @@ fun AppsScreen(
                         state = listState,
                         modifier = Modifier
                             .fillMaxSize()
+                            .nestedScroll(nestedScrollConnection)
                             .hazeSource(state = hazeState),
                         contentPadding = PaddingValues(
                             start = 16.dp,
@@ -467,9 +526,9 @@ fun AppsScreen(
                                 .height(titleRowHeight)
                                 .padding(start = 20.dp, end = 8.dp)
                                 .graphicsLayer {
-                                    alpha = (1f - collapseProgress * 1.45f).coerceIn(0f, 1f)
-                                    translationY = -size.height * 0.35f * collapseProgress
-                                    val s = 1f - 0.04f * collapseProgress
+                                    alpha = (1f - collapseProgress * 1.15f).coerceIn(0f, 1f)
+                                    translationY = -size.height * 0.65f * collapseProgress
+                                    val s = 1f - 0.03f * collapseProgress
                                     scaleX = s
                                     scaleY = s
                                     transformOrigin = TransformOrigin(0f, 0.5f)
