@@ -1,19 +1,3 @@
-/*
- * Copyright (C) 2026 kimal
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 @file:OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 
 package com.luminatweaks.ui.screen
@@ -27,7 +11,6 @@ import android.provider.Settings
 import android.util.LruCache
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -49,11 +32,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.PagerState
@@ -73,7 +53,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -82,7 +61,6 @@ import androidx.compose.material3.TopAppBarState
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.pullToRefresh
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
-import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -110,26 +88,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
-import com.luminatweaks.ui.component.luminaHazeHeader
 import com.luminatweaks.R
 import com.luminatweaks.data.AppProfileConfig
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.model.AppItem
 import com.luminatweaks.ui.component.AospStatusPill
+import com.luminatweaks.ui.component.luminaHazeHeader
 import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-private enum class AppListFilter {
-    ALL, ACTIVE, GAMES
-}
 
 private object LuminaAppIconCache {
     private val cache = LruCache<String, ImageBitmap>(150)
@@ -191,7 +165,6 @@ fun AppsScreen(
     var isRefreshing by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var hideSystemApps by remember { mutableStateOf(true) }
-    var selectedFilter by remember { mutableStateOf(AppListFilter.GAMES) }
     var showMoreMenu by remember { mutableStateOf(false) }
 
     val appConfigs = remember { mutableStateMapOf<String, AppProfileConfig>() }
@@ -233,50 +206,26 @@ fun AppsScreen(
         }
     }
 
-    LaunchedEffect(selectedFilter, searchQuery) {
+    LaunchedEffect(searchQuery) {
         if (listState.firstVisibleItemIndex > 0) {
             listState.scrollToItem(0)
         }
     }
 
     val activeApp = rawApps.find { it.packageName == selectedPackageName }
-    val screenTitle = if (selectedFilter == AppListFilter.GAMES) {
-        R.string.apps_title_games
-    } else {
-        R.string.apps_title
-    }
 
     val visibleBaseApps = remember(rawApps, hideSystemApps) {
         rawApps.filter { app -> if (hideSystemApps) !app.isSystemApp else true }
     }
 
-    val activeCount = remember(visibleBaseApps, appConfigs.toMap()) {
-        visibleBaseApps.count { app ->
-            val cfg = appConfigs[app.packageName]
-            if (cfg != null) (!cfg.disabled && cfg.saklarUtama) else ConfigRepository.isAppActive(app.packageName)
-        }
-    }
-
-    val gameCount = remember(visibleBaseApps) {
-        visibleBaseApps.count { it.isGame }
-    }
-
-    val filteredApps = remember(visibleBaseApps, searchQuery, selectedFilter, appConfigs.toMap()) {
-        val filtered = visibleBaseApps.filter { app ->
-            val isEnabled = appConfigs[app.packageName]?.let { !it.disabled && it.saklarUtama }
-                ?: ConfigRepository.isAppActive(app.packageName)
-
-            val matchesFilter = when (selectedFilter) {
-                AppListFilter.ALL -> true
-                AppListFilter.ACTIVE -> isEnabled
-                AppListFilter.GAMES -> app.isGame
-            }
-
-            val matchesSearch = if (searchQuery.isBlank()) true else {
+    val filteredApps = remember(visibleBaseApps, searchQuery, appConfigs.toMap()) {
+        val filtered = if (searchQuery.isBlank()) {
+            visibleBaseApps
+        } else {
+            visibleBaseApps.filter { app ->
                 app.name.contains(searchQuery, ignoreCase = true) ||
                     app.packageName.contains(searchQuery, ignoreCase = true)
             }
-            matchesFilter && matchesSearch
         }
 
         filtered.sortedWith(
@@ -284,7 +233,6 @@ fun AppsScreen(
                 appConfigs[app.packageName]?.let { !it.disabled && it.saklarUtama }
                     ?: ConfigRepository.isAppActive(app.packageName)
             }
-                .thenByDescending { it.isGame }
                 .thenBy { it.name.lowercase() }
         )
     }
@@ -328,17 +276,16 @@ fun AppsScreen(
                 containerColor = MaterialTheme.colorScheme.background,
                 topBar = {
                     Box(
-                        modifier = Modifier
-                            .luminaHazeHeader(
-                                hazeState = hazeState,
-                                surfaceColor = fadeSurface,
-                                overlappedFraction = scrollBehavior.state.overlappedFraction
-                            )
+                        modifier = Modifier.luminaHazeHeader(
+                            hazeState = hazeState,
+                            surfaceColor = fadeSurface,
+                            overlappedFraction = scrollBehavior.state.overlappedFraction
+                        )
                     ) {
                         LargeFlexibleTopAppBar(
                             title = {
                                 Text(
-                                    text = stringResource(screenTitle),
+                                    text = stringResource(R.string.apps_title),
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -396,16 +343,6 @@ fun AppsScreen(
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
                 } else {
-                    val allLabel = appsLocalizedLabel("Semua", "All")
-                    val activeLabel = appsLocalizedLabel("Aktif", "Active")
-                    val gamesLabel = appsLocalizedLabel("Game", "Games")
-
-                    val filterChips = listOf(
-                        AppListFilter.ALL to "$allLabel (${visibleBaseApps.size})",
-                        AppListFilter.ACTIVE to "$activeLabel ($activeCount)",
-                        AppListFilter.GAMES to "$gamesLabel ($gameCount)"
-                    )
-
                     Box(
                         modifier = modifier
                             .fillMaxSize()
@@ -418,7 +355,9 @@ fun AppsScreen(
                     ) {
                         LazyColumn(
                             state = listState,
-                            modifier = Modifier.fillMaxSize().hazeSource(state = hazeState),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .hazeSource(state = hazeState),
                             contentPadding = PaddingValues(
                                 start = 16.dp,
                                 end = 16.dp,
@@ -427,98 +366,48 @@ fun AppsScreen(
                             ),
                             verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            item(key = "search_and_filters") {
-                                Column(modifier = Modifier.padding(bottom = 12.dp)) {
-                                    TextField(
-                                        value = searchQuery,
-                                        onValueChange = { searchQuery = it },
-                                        placeholder = {
-                                            Text(
-                                                text = stringResource(R.string.apps_search_placeholder),
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        },
-                                        leadingIcon = {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Search,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        },
-                                        trailingIcon = {
-                                            if (searchQuery.isNotEmpty()) {
-                                                IconButton(onClick = { searchQuery = "" }) {
-                                                    Icon(
-                                                        imageVector = Icons.Rounded.Clear,
-                                                        contentDescription = stringResource(R.string.action_clear),
-                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                            }
-                                        },
-                                        singleLine = true,
-                                        shape = CircleShape,
-                                        colors = TextFieldDefaults.colors(
-                                            focusedContainerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
-                                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
-                                            focusedIndicatorColor = Color.Transparent,
-                                            unfocusedIndicatorColor = Color.Transparent,
-                                            disabledIndicatorColor = Color.Transparent
-                                        ),
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-
-                                    LazyRow(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(top = 12.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        items(filterChips, key = { it.first }) { (filter, label) ->
-                                            val isSelected = selectedFilter == filter
-                                            val chipBg by animateColorAsState(
-                                                targetValue = if (isSelected) {
-                                                    MaterialTheme.colorScheme.primary
-                                                } else {
-                                                    MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
-                                                },
-                                                label = "filterChipBg"
-                                            )
-                                            val chipContent by animateColorAsState(
-                                                targetValue = if (isSelected) {
-                                                    MaterialTheme.colorScheme.onPrimary
-                                                } else {
-                                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                                },
-                                                label = "filterChipText"
-                                            )
-                                            val chipSource = remember { MutableInteractionSource() }
-                                            val chipPress = pressScale(chipSource, 0.92f)
-
-                                            Surface(
-                                                onClick = {
-                                                    if (!isSelected) {
-                                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                        selectedFilter = filter
-                                                    }
-                                                },
-                                                interactionSource = chipSource,
-                                                shape = CircleShape,
-                                                color = chipBg,
-                                                modifier = chipPress
-                                            ) {
-                                                Text(
-                                                    text = label,
-                                                    style = MaterialTheme.typography.labelMedium,
-                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                                    color = chipContent,
-                                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp)
+                            item(key = "search_bar") {
+                                TextField(
+                                    value = searchQuery,
+                                    onValueChange = { searchQuery = it },
+                                    placeholder = {
+                                        Text(
+                                            text = stringResource(R.string.apps_search_placeholder),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Search,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        if (searchQuery.isNotEmpty()) {
+                                            IconButton(onClick = { searchQuery = "" }) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Clear,
+                                                    contentDescription = stringResource(R.string.action_clear),
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             }
                                         }
-                                    }
-                                }
+                                    },
+                                    singleLine = true,
+                                    shape = CircleShape,
+                                    colors = TextFieldDefaults.colors(
+                                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        focusedIndicatorColor = Color.Transparent,
+                                        unfocusedIndicatorColor = Color.Transparent,
+                                        disabledIndicatorColor = Color.Transparent
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 12.dp)
+                                )
                             }
 
                             if (filteredApps.isEmpty() && !isRefreshing) {
@@ -527,7 +416,7 @@ fun AppsScreen(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clip(RoundedCornerShape(26.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+                                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                                             .padding(vertical = 40.dp, horizontal = 20.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
@@ -617,7 +506,7 @@ fun AppsScreen(
 private fun AppIconImage(
     packageName: String,
     contentDescription: String,
-    size: Dp = 60.dp
+    size: Dp = 54.dp
 ) {
     val context = LocalContext.current
     val pm = remember(context) { context.packageManager }
@@ -648,7 +537,7 @@ private fun AppIconImage(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(14.dp))
                         .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f))
                 )
             } else {
@@ -657,7 +546,7 @@ private fun AppIconImage(
                     contentDescription = contentDescription,
                     modifier = Modifier
                         .fillMaxSize()
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(14.dp))
                 )
             }
         }
@@ -674,7 +563,6 @@ fun AppRowCard(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(26.dp)
 ) {
-    val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     var showRowMenu by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
@@ -685,7 +573,7 @@ fun AppRowCard(
             .fillMaxWidth()
             .then(pressScaleModifier)
             .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null
@@ -693,24 +581,24 @@ fun AppRowCard(
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onClick()
             }
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
-            modifier = Modifier.padding(end = 16.dp),
+            modifier = Modifier.padding(end = 14.dp),
             contentAlignment = Alignment.Center
         ) {
             AppIconImage(
                 packageName = app.packageName,
                 contentDescription = app.name,
-                size = 60.dp
+                size = 54.dp
             )
         }
 
         Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(vertical = 8.dp)
+                .padding(vertical = 4.dp)
         ) {
             Text(
                 text = app.name,

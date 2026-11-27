@@ -1,19 +1,3 @@
-/*
- * Copyright (C) 2026 kimal
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 @file:OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 
 package com.luminatweaks.ui.screen
@@ -41,6 +25,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -48,25 +33,19 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
-import com.luminatweaks.ui.component.luminaHazeHeader
-import com.luminatweaks.gamedeck.GameDeckSettingsScreen
-import com.luminatweaks.gamedeck.GameDeckPrefs
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DeveloperBoard
-import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Speed
@@ -90,7 +69,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.rememberTopAppBarState
-import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -105,32 +83,41 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.luminatweaks.R
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DisplayRrMode
+import com.luminatweaks.gamedeck.GameDeckPrefs
+import com.luminatweaks.gamedeck.GameDeckSettingsScreen
 import com.luminatweaks.service.FloatingFpsService
+import com.luminatweaks.ui.component.ExpressiveInfoTile
 import com.luminatweaks.ui.component.LuminaBackButton
 import com.luminatweaks.ui.component.TouchOriginDialog
+import com.luminatweaks.ui.component.luminaHazeHeader
 import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.component.rememberDialogOrigin
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.DeviceUtil
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
 import java.util.Locale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
@@ -271,7 +258,6 @@ fun TweaksScreen(
         }
     }
 
-
     var showRefreshRateDialog by rememberSaveable { mutableStateOf(false) }
     var showRenderDialog by rememberSaveable { mutableStateOf(false) }
     var showIoSchedulerDialog by rememberSaveable { mutableStateOf(false) }
@@ -288,7 +274,6 @@ fun TweaksScreen(
     var inMemoryZramSubpage by rememberSaveable { mutableStateOf(false) }
     var inHardwareDiagnosticSubpage by rememberSaveable { mutableStateOf(false) }
     var inUtilitySubpage by rememberSaveable { mutableStateOf(false) }
-
 
     val defaultDynamicLabel = stringResource(R.string.tweaks_rr_default_dynamic)
     val defaultRendererLabel = stringResource(R.string.tweaks_renderer_system_default)
@@ -324,15 +309,15 @@ fun TweaksScreen(
         }
     }
 
-    val currentRrText = remember(liveRefreshRate, currentRrId, rrModes, defaultDynamicLabel) {
+    val rrModeSubtitle = remember(liveRefreshRate, currentRrId, rrModes, defaultDynamicLabel) {
         val targetMode = rrModes.find { it.id == currentRrId }
         when {
             targetMode != null && targetMode.hz != liveRefreshRate ->
-                "${liveRefreshRate} Hz (${targetMode.hz} Hz)"
+                localizedLabel("Target ${targetMode.hz} Hz", "Target ${targetMode.hz} Hz")
             currentRrId == null ->
-                "${liveRefreshRate} Hz · $defaultDynamicLabel"
+                defaultDynamicLabel
             else ->
-                "${liveRefreshRate} Hz"
+                localizedLabel("Terkunci ${targetMode?.hz ?: liveRefreshRate} Hz", "Locked ${targetMode?.hz ?: liveRefreshRate} Hz")
         }
     }
 
@@ -393,7 +378,7 @@ fun TweaksScreen(
         return
     }
 
-    val rrSubtitle = if (currentRrId == null) {
+    val rrDialogSubtitle = if (currentRrId == null) {
         "$liveRefreshRate Hz · $defaultDynamicLabel"
     } else {
         localizedLabel(
@@ -408,7 +393,7 @@ fun TweaksScreen(
         origin = refreshRateOrigin.origin,
         icon = Icons.Rounded.Speed,
         title = stringResource(R.string.tweaks_dialog_select_rr),
-        subtitle = rrSubtitle,
+        subtitle = rrDialogSubtitle,
         options = rrModes.map { TweakDialogOption(it.id, "${it.hz} Hz") },
         isSelected = { it == currentRrId },
         onSelect = { id ->
@@ -473,20 +458,17 @@ fun TweaksScreen(
         }
     )
 
+    val scheme = MaterialTheme.colorScheme
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val hazeState = remember { HazeState() }
-
     val isFloating = LocalFloatingNavBar.current
-    val bottomPadding = if (isFloating) {
-        112.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    } else {
-        28.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    }
+    val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomPadding = if (isFloating) 112.dp + navInset else 28.dp + navInset
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         contentWindowInsets = WindowInsets(0.dp),
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = scheme.background,
         topBar = {
             TweaksFlexibleTopBar(
                 title = stringResource(R.string.tweaks_title),
@@ -503,155 +485,120 @@ fun TweaksScreen(
                 Snackbar(
                     snackbarData = data,
                     shape = RoundedCornerShape(18.dp),
-                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    containerColor = scheme.errorContainer,
+                    contentColor = scheme.onErrorContainer
                 )
             }
         }
     ) { innerPadding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().hazeSource(state = hazeState),
+            modifier = Modifier
+                .fillMaxSize()
+                .hazeSource(state = hazeState),
             contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding(),
+                top = innerPadding.calculateTopPadding() + 6.dp,
                 bottom = bottomPadding,
                 start = 16.dp,
                 end = 16.dp
-            )
+            ),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item(key = "info_banner") {
-                Spacer(modifier = Modifier.height(12.dp))
-                TweaksInfoBanner(
-                    text = localizedLabel(
-                        "Refresh rate dan Lite Mode dapat disesuaikan terpisah tiap aplikasi, sedangkan renderer berlaku global saat aplikasi dibuka ulang",
-                        "Refresh rate and Lite Mode can be customized per app, while renderer applies globally on app cold start"
-                    )
-                )
-            }
-
-            item(key = "header_performance") {
-                TweaksSectionHeader(
-                    title = localizedLabel("Performa", "Performance")
-                )
-            }
-
-            item(key = "group_performance") {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    ConnectedTweakSwitchRow(
-                        index = 0,
-                        count = 1,
-                        icon = Icons.Rounded.BatterySaver,
-                        title = stringResource(R.string.tweaks_lite_mode),
-                        subtitle = localizedLabel(
-                            "Batasi frekuensi maksimum CPU untuk suhu lebih adem dan hemat daya",
-                            "Limit maximum CPU frequency for cooler thermals and power saving"
-                        ),
-                        checked = isGlobalLiteMode,
-                        onCheckedChange = { newState ->
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            val previous = isGlobalLiteMode
-                            isGlobalLiteMode = newState
-                            coroutineScope.launch {
-                                applyTweakChange(
-                                    snackbarHostState = snackbarHostState,
-                                    errorMessage = applyFailedText,
-                                    revert = { isGlobalLiteMode = previous }
-                                ) { ConfigRepository.setGlobalLiteMode(newState) }
-                            }
-                        }
-                    )
-                }
-            }
-
-            item(key = "display_tiles") {
-                Spacer(modifier = Modifier.height(16.dp))
+            item(key = "hero_tweaks_bento") {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(228.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    ExpressiveTweakTile(
+                    Column(
                         modifier = Modifier
                             .weight(1f)
-                            .then(refreshRateOrigin.trackedModifier()),
-                        icon = Icons.Rounded.Speed,
-                        label = stringResource(R.string.tweaks_refresh_rate),
-                        value = currentRrText,
-                        highlight = true,
-                        onClick = { showRefreshRateDialog = true }
-                    )
+                            .fillMaxHeight(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        RefreshRateHeroBentoTile(
+                            modifier = Modifier
+                                .weight(0.60f)
+                                .then(refreshRateOrigin.trackedModifier()),
+                            label = stringResource(R.string.tweaks_refresh_rate),
+                            hzValue = "$liveRefreshRate Hz",
+                            subtitle = rrModeSubtitle,
+                            onClick = { showRefreshRateDialog = true }
+                        )
 
-                    ExpressiveTweakTile(
-                        modifier = Modifier
-                            .weight(1f)
-                            .then(rendererOrigin.trackedModifier()),
-                        icon = if (isGlobalTextureEnabled) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
-                        label = stringResource(R.string.tweaks_renderer),
-                        value = effectiveRendererText,
-                        highlight = !isGlobalTextureEnabled,
-                        enabled = !isGlobalTextureEnabled,
-                        onClick = { showRenderDialog = true }
-                    )
-                }
-            }
-
-            item(key = "header_additional") {
-                TweaksSectionHeader(
-                    title = stringResource(R.string.section_additional_tweaks)
-                )
-            }
-
-            item(key = "group_additional") {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    ConnectedTweakActionRow(
-                        index = 0,
-                        count = 2,
-                        icon = Icons.Rounded.Memory,
-                        title = stringResource(R.string.tweak_memory_zram),
-                        subtitle = stringResource(R.string.tweak_memory_zram_desc),
-                        onClick = { inMemoryZramSubpage = true }
-                    )
-
-                    Box(modifier = ioSchedulerOrigin.trackedModifier()) {
-                        ConnectedTweakActionRow(
-                            index = 1,
-                            count = 2,
+                        CompactSelectorBentoTile(
+                            modifier = Modifier
+                                .weight(0.40f)
+                                .then(ioSchedulerOrigin.trackedModifier()),
                             icon = Icons.Rounded.Storage,
-                            title = stringResource(R.string.tweak_io_scheduler),
-                            subtitle = currentIoScheduler,
-                            highlightSubtitle = true,
+                            label = stringResource(R.string.tweak_io_scheduler),
+                            value = currentIoScheduler,
                             onClick = { showIoSchedulerDialog = true }
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        RendererBentoTile(
+                            modifier = Modifier
+                                .weight(0.50f)
+                                .then(rendererOrigin.trackedModifier()),
+                            label = stringResource(R.string.tweaks_renderer),
+                            value = effectiveRendererText,
+                            locked = isGlobalTextureEnabled,
+                            onClick = { showRenderDialog = true }
+                        )
+
+                        LiteModeBentoTile(
+                            modifier = Modifier.weight(0.50f),
+                            title = stringResource(R.string.tweaks_lite_mode),
+                            subtitle = localizedLabel("Hemat daya CPU", "CPU power limit"),
+                            checked = isGlobalLiteMode,
+                            onCheckedChange = { newState ->
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                val previous = isGlobalLiteMode
+                                isGlobalLiteMode = newState
+                                coroutineScope.launch {
+                                    applyTweakChange(
+                                        snackbarHostState = snackbarHostState,
+                                        errorMessage = applyFailedText,
+                                        revert = { isGlobalLiteMode = previous }
+                                    ) { ConfigRepository.setGlobalLiteMode(newState) }
+                                }
+                            }
                         )
                     }
                 }
             }
 
-            item(key = "header_utility") {
-                TweaksSectionHeader(
-                    title = stringResource(R.string.section_utility_diagnostics)
-                )
-            }
-
-            item(key = "group_utility") {
+            item(key = "overlay_bento_pair") {
                 val telemetrySubtitle = if (fpsConfig.enabled) {
                     val count = fpsConfig.activeModuleCount.coerceAtLeast(1)
-                    localizedLabel(
-                        "Aktif · $count metrik",
-                        "Active · $count metrics"
-                    )
+                    localizedLabel("Aktif · $count metrik", "Active · $count metrics")
                 } else {
-                    localizedLabel(
-                        "Overlay metrik sistem dan performa real-time",
-                        "Real-time system and performance metrics overlay"
-                    )
+                    localizedLabel("Metrik real-time", "Real-time metrics")
                 }
 
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    ConnectedTweakActionRow(
-                        index = 0,
-                        count = 4,
+                val gameBarSubtitle = if (gameBarEnabled) {
+                    localizedLabel("Aktif · DockRail", "Active · DockRail")
+                } else {
+                    localizedLabel("Panel game cepat", "Quick game dock")
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    ExpressiveInfoTile(
+                        modifier = Modifier.weight(1f),
                         icon = Icons.Rounded.Speed,
                         title = "Floating HUD",
                         subtitle = telemetrySubtitle,
-                        highlightSubtitle = fpsConfig.enabled,
+                        accentColor = if (fpsConfig.enabled) scheme.primary else scheme.secondary,
                         onClick = {
                             if (onOpenFloatingHud != null) {
                                 onOpenFloatingHud()
@@ -661,29 +608,31 @@ fun TweaksScreen(
                         }
                     )
 
-                    ConnectedTweakActionRow(
-                        index = 1,
-                        count = 4,
+                    ExpressiveInfoTile(
+                        modifier = Modifier.weight(1f),
                         icon = Icons.Rounded.SportsEsports,
                         title = "Game Bar",
-                        subtitle = if (gameBarEnabled) {
-                            localizedLabel(
-                                "Aktif · DockRail, profil, FPS, CPU/GPU & freeform apps",
-                                "Active · DockRail, profile, FPS, CPU/GPU & freeform apps"
-                            )
-                        } else {
-                            localizedLabel(
-                                "DockRail & DeckCard untuk profil, FPS, CPU/GPU & freeform apps",
-                                "DockRail & DeckCard for profile, FPS, CPU/GPU & freeform apps"
-                            )
-                        },
-                        highlightSubtitle = gameBarEnabled,
+                        subtitle = gameBarSubtitle,
+                        accentColor = if (gameBarEnabled) scheme.tertiary else scheme.primary,
                         onClick = { inGameBarSubpage = true }
+                    )
+                }
+            }
+
+            item(key = "system_modules_group") {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    ConnectedTweakActionRow(
+                        index = 0,
+                        count = 3,
+                        icon = Icons.Rounded.Memory,
+                        title = stringResource(R.string.tweak_memory_zram),
+                        subtitle = stringResource(R.string.tweak_memory_zram_desc),
+                        onClick = { inMemoryZramSubpage = true }
                     )
 
                     ConnectedTweakActionRow(
-                        index = 2,
-                        count = 4,
+                        index = 1,
+                        count = 3,
                         icon = Icons.Rounded.DeveloperBoard,
                         title = stringResource(R.string.hardware_diag_title),
                         subtitle = stringResource(R.string.hardware_diag_desc),
@@ -691,8 +640,8 @@ fun TweaksScreen(
                     )
 
                     ConnectedTweakActionRow(
-                        index = 3,
-                        count = 4,
+                        index = 2,
+                        count = 3,
                         icon = Icons.Rounded.Widgets,
                         title = stringResource(R.string.utility_screen_title),
                         subtitle = stringResource(R.string.utility_screen_desc),
@@ -700,6 +649,380 @@ fun TweaksScreen(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun RefreshRateHeroBentoTile(
+    label: String,
+    hzValue: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    val haptic = LocalHapticFeedback.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val scaleModifier = pressScale(interactionSource, 0.965f)
+
+    Surface(
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onClick()
+        },
+        interactionSource = interactionSource,
+        shape = RoundedCornerShape(26.dp),
+        color = scheme.secondaryContainer,
+        contentColor = scheme.onSecondaryContainer,
+        modifier = modifier
+            .fillMaxWidth()
+            .then(scaleModifier)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                    ),
+                    color = scheme.onSecondaryContainer.copy(alpha = 0.85f),
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(scheme.onSecondaryContainer.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.ChevronRight,
+                        contentDescription = null,
+                        tint = scheme.onSecondaryContainer,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = hzValue,
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontFamily = FontFamily.SansSerif,
+                        fontSize = 28.sp,
+                        lineHeight = 30.sp,
+                        fontWeight = FontWeight.Black,
+                        fontFeatureSettings = "tnum",
+                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                    ),
+                    color = scheme.onSecondaryContainer,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Medium,
+                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                    ),
+                    color = scheme.onSecondaryContainer.copy(alpha = 0.8f),
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactSelectorBentoTile(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    val haptic = LocalHapticFeedback.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val scaleModifier = pressScale(interactionSource, 0.965f)
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .then(scaleModifier)
+            .clip(RoundedCornerShape(26.dp))
+            .background(scheme.surfaceContainerHigh)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null
+            ) {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClick()
+            }
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(11.dp))
+                .background(scheme.primary.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = scheme.primary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Medium,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = scheme.primary,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = scheme.onSurface,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun RendererBentoTile(
+    label: String,
+    value: String,
+    locked: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    val haptic = LocalHapticFeedback.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val enabled = !locked
+    val scaleModifier = pressScale(interactionSource, 0.965f, enabled)
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .then(scaleModifier)
+            .clip(RoundedCornerShape(26.dp))
+            .background(scheme.surfaceContainerHigh)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = enabled
+            ) {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClick()
+            }
+            .alpha(if (enabled) 1f else 0.58f)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(scheme.primary.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (locked) Icons.Rounded.Lock else Icons.Rounded.DeveloperBoard,
+                    contentDescription = null,
+                    tint = scheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+
+            Icon(
+                imageVector = if (locked) Icons.Rounded.Lock else Icons.Rounded.ChevronRight,
+                contentDescription = null,
+                tint = scheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Medium,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = scheme.primary,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = scheme.onSurface,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun LiteModeBentoTile(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    val interactionSource = remember { MutableInteractionSource() }
+    val scaleModifier = pressScale(interactionSource, 0.965f)
+    val containerColor by animateColorAsState(
+        targetValue = if (checked) scheme.tertiaryContainer else scheme.surfaceContainerHigh,
+        animationSpec = tween(220),
+        label = "liteModeBentoContainer"
+    )
+    val iconTint = if (checked) scheme.onTertiaryContainer else scheme.primary
+    val titleColor = if (checked) scheme.onTertiaryContainer else scheme.onSurface
+    val subColor = if (checked) scheme.onTertiaryContainer.copy(alpha = 0.8f) else scheme.onSurfaceVariant
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .then(scaleModifier)
+            .clip(RoundedCornerShape(26.dp))
+            .background(containerColor)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null
+            ) {
+                onCheckedChange(!checked)
+            }
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(iconTint.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.BatterySaver,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                interactionSource = interactionSource,
+                thumbContent = {
+                    if (checked) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(SwitchDefaults.IconSize)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = null,
+                            modifier = Modifier.size(SwitchDefaults.IconSize)
+                        )
+                    }
+                },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = scheme.onTertiary,
+                    checkedIconColor = scheme.tertiary,
+                    checkedTrackColor = scheme.tertiary,
+                    uncheckedThumbColor = scheme.outline,
+                    uncheckedIconColor = scheme.surfaceContainerHighest,
+                    uncheckedTrackColor = scheme.surfaceContainerHighest
+                )
+            )
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = titleColor,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = subColor,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -744,27 +1067,6 @@ private fun TweaksFlexibleTopBar(
 }
 
 @Composable
-private fun TweaksInfoBanner(text: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(26.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerLow)
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        TweakSquircleIcon(icon = Icons.Rounded.Info)
-        Spacer(modifier = Modifier.width(16.dp))
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f)
-        )
-    }
-}
-
-@Composable
 private fun TweaksSectionHeader(title: String) {
     Text(
         text = title,
@@ -775,8 +1077,8 @@ private fun TweaksSectionHeader(title: String) {
         modifier = Modifier.padding(
             start = 12.dp,
             end = 12.dp,
-            top = 16.dp,
-            bottom = 8.dp
+            top = 12.dp,
+            bottom = 6.dp
         )
     )
 }
@@ -796,7 +1098,7 @@ private fun TweakSquircleIcon(
         modifier = Modifier
             .size(36.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
         contentAlignment = Alignment.Center
     ) {
         Icon(
@@ -859,7 +1161,7 @@ private fun ExpressiveTweakTile(
         enabled = enabled,
         interactionSource = interactionSource,
         shape = RoundedCornerShape(26.dp),
-        color = colorScheme.surfaceColorAtElevation(1.dp),
+        color = colorScheme.surfaceContainerHigh,
         modifier = modifier
             .alpha(if (enabled) 1f else 0.55f)
             .graphicsLayer {
@@ -1158,7 +1460,7 @@ internal fun ConnectedTweakSwitchRow(
             .fillMaxWidth()
             .then(pressScaleModifier)
             .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null
@@ -1240,7 +1542,7 @@ internal fun ConnectedTweakActionRow(
             .fillMaxWidth()
             .then(pressScaleModifier)
             .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
