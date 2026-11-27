@@ -66,6 +66,7 @@ const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 const CONFIG_FALLBACK_INTERVAL: Duration = Duration::from_secs(2);
 const PERFORMANCE_GUARD_RECOVER_AFTER: Duration = Duration::from_secs(10);
 const FOCUS_RELEASE_GRACE: Duration = Duration::from_secs(5);
+const TRANSIENT_FOCUS_GRACE: Duration = Duration::from_secs(12);
 const LEGACY_PROFILE_STATE_PATH: &str = "/data/adb/.config/lumina/profile.conf";
 
 extern "C" fn handle_signal(_: i32) {
@@ -894,26 +895,28 @@ fn main() {
                         runtime.target_game_pid = 0;
                         runtime.left_foreground_at = None;
                         None
-                    } else if transient_focus {
-                        runtime.left_foreground_at = None;
-                        Some(saved_pkg.clone())
                     } else {
+                        let grace = if transient_focus {
+                            TRANSIENT_FOCUS_GRACE
+                        } else {
+                            FOCUS_RELEASE_GRACE
+                        };
                         if runtime.left_foreground_at.is_none() {
-                            log!("[SYSTEM] Focus lost -> {} grace {:?}", saved_pkg, FOCUS_RELEASE_GRACE);
+                            log!("[SYSTEM] Focus lost -> {} grace {:?}", saved_pkg, grace);
                             runtime.left_foreground_at = Some(Instant::now());
                         }
-                        if let Some(left_time) = runtime.left_foreground_at {
-                            if left_time.elapsed() < FOCUS_RELEASE_GRACE {
-                                Some(saved_pkg.clone())
-                            } else {
-                                log!("[SYSTEM] Grace expired -> {}", saved_pkg);
-                                runtime.active_target_pkg = None;
-                                runtime.target_game_pid = 0;
-                                runtime.left_foreground_at = None;
-                                None
-                            }
-                        } else {
+                        let expired = runtime
+                            .left_foreground_at
+                            .map(|left_time| left_time.elapsed() >= grace)
+                            .unwrap_or(true);
+                        if expired {
+                            log!("[SYSTEM] Grace expired -> {} BALANCED", saved_pkg);
+                            runtime.active_target_pkg = None;
+                            runtime.target_game_pid = 0;
+                            runtime.left_foreground_at = None;
                             None
+                        } else {
+                            Some(saved_pkg.clone())
                         }
                     }
                 } else {
