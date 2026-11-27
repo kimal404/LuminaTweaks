@@ -14,6 +14,10 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -270,16 +274,23 @@ fun AppsScreen(
             val fadeSurface = MaterialTheme.colorScheme.background
             val hazeState = remember { HazeState() }
             val pullToRefreshState = rememberPullToRefreshState()
+            val headerBlurFraction = if (
+                listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0
+            ) {
+                1f
+            } else {
+                scrollBehavior.state.overlappedFraction
+            }
 
             Scaffold(
                 contentWindowInsets = WindowInsets(0.dp),
                 containerColor = MaterialTheme.colorScheme.background,
                 topBar = {
-                    Box(
+                    Column(
                         modifier = Modifier.luminaHazeHeader(
                             hazeState = hazeState,
                             surfaceColor = fadeSurface,
-                            overlappedFraction = scrollBehavior.state.overlappedFraction
+                            overlappedFraction = headerBlurFraction
                         )
                     ) {
                         LargeFlexibleTopAppBar(
@@ -330,6 +341,55 @@ fun AppsScreen(
                             scrollBehavior = scrollBehavior,
                             windowInsets = WindowInsets(0, 0, 0, 0)
                         )
+
+                        TextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = {
+                                Text(
+                                    text = stringResource(R.string.apps_search_placeholder),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Rounded.Search,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            trailingIcon = {
+                                AnimatedVisibility(
+                                    visible = searchQuery.isNotEmpty(),
+                                    enter = fadeIn(tween(150)) + scaleIn(initialScale = 0.8f),
+                                    exit = fadeOut(tween(120)) + scaleOut(targetScale = 0.8f)
+                                ) {
+                                    IconButton(onClick = { searchQuery = "" }) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Clear,
+                                            contentDescription = stringResource(R.string.action_clear),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            },
+                            singleLine = true,
+                            shape = CircleShape,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
+                                disabledIndicatorColor = Color.Transparent
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                                .padding(top = 2.dp, bottom = 10.dp)
+                        )
                     }
                 }
             ) { innerPadding ->
@@ -361,55 +421,11 @@ fun AppsScreen(
                             contentPadding = PaddingValues(
                                 start = 16.dp,
                                 end = 16.dp,
-                                top = innerPadding.calculateTopPadding() + 8.dp,
+                                top = innerPadding.calculateTopPadding() + 4.dp,
                                 bottom = if (isFloating) 112.dp + navBottomInset else 28.dp + navBottomInset
                             ),
                             verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            item(key = "search_bar") {
-                                TextField(
-                                    value = searchQuery,
-                                    onValueChange = { searchQuery = it },
-                                    placeholder = {
-                                        Text(
-                                            text = stringResource(R.string.apps_search_placeholder),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Search,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    },
-                                    trailingIcon = {
-                                        if (searchQuery.isNotEmpty()) {
-                                            IconButton(onClick = { searchQuery = "" }) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.Clear,
-                                                    contentDescription = stringResource(R.string.action_clear),
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                        }
-                                    },
-                                    singleLine = true,
-                                    shape = CircleShape,
-                                    colors = TextFieldDefaults.colors(
-                                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                        focusedIndicatorColor = Color.Transparent,
-                                        unfocusedIndicatorColor = Color.Transparent,
-                                        disabledIndicatorColor = Color.Transparent
-                                    ),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(bottom = 12.dp)
-                                )
-                            }
-
                             if (filteredApps.isEmpty() && !isRefreshing) {
                                 item(key = "empty_state") {
                                     Box(

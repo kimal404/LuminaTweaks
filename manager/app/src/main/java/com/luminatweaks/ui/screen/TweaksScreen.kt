@@ -65,7 +65,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.rememberTopAppBarState
@@ -97,7 +96,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -109,8 +107,9 @@ import com.luminatweaks.gamedeck.GameDeckPrefs
 import com.luminatweaks.gamedeck.GameDeckSettingsScreen
 import com.luminatweaks.service.FloatingFpsService
 import com.luminatweaks.ui.component.ExpressiveInfoTile
+import com.luminatweaks.ui.component.LuminaAnchoredSheet
 import com.luminatweaks.ui.component.LuminaBackButton
-import com.luminatweaks.ui.component.TouchOriginDialog
+import com.luminatweaks.ui.component.OdometerNumber
 import com.luminatweaks.ui.component.luminaHazeHeader
 import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.component.rememberDialogOrigin
@@ -309,14 +308,16 @@ fun TweaksScreen(
         }
     }
 
-    val targetRrMode = rrModes.find { it.id == currentRrId }
-    val rrModeSubtitle = when {
-        targetRrMode != null && targetRrMode.hz != liveRefreshRate ->
-            localizedLabel("Target ${targetRrMode.hz} Hz", "Target ${targetRrMode.hz} Hz")
-        currentRrId == null ->
-            defaultDynamicLabel
-        else ->
-            localizedLabel("Terkunci ${targetRrMode?.hz ?: liveRefreshRate} Hz", "Locked ${targetRrMode?.hz ?: liveRefreshRate} Hz")
+    val rrModeSubtitle = remember(liveRefreshRate, currentRrId, rrModes, defaultDynamicLabel) {
+        val targetMode = rrModes.find { it.id == currentRrId }
+        when {
+            targetMode != null && targetMode.hz != liveRefreshRate ->
+                localizedLabel("Target ${targetMode.hz} Hz", "Target ${targetMode.hz} Hz")
+            currentRrId == null ->
+                defaultDynamicLabel
+            else ->
+                localizedLabel("Terkunci ${targetMode?.hz ?: liveRefreshRate} Hz", "Locked ${targetMode?.hz ?: liveRefreshRate} Hz")
+        }
     }
 
     val currentRendererShortText = remember(currentRendererId, defaultRendererLabel) {
@@ -385,10 +386,9 @@ fun TweaksScreen(
         )
     }
 
-    TweakOptionDialog(
+    TweakOptionSheet(
         visible = showRefreshRateDialog,
         onDismiss = { showRefreshRateDialog = false },
-        origin = refreshRateOrigin.origin,
         icon = Icons.Rounded.Speed,
         title = stringResource(R.string.tweaks_dialog_select_rr),
         subtitle = rrDialogSubtitle,
@@ -408,10 +408,9 @@ fun TweaksScreen(
         }
     )
 
-    TweakOptionDialog(
+    TweakOptionSheet(
         visible = showRenderDialog,
         onDismiss = { showRenderDialog = false },
-        origin = rendererOrigin.origin,
         icon = Icons.Rounded.DeveloperBoard,
         title = stringResource(R.string.tweaks_dialog_select_renderer),
         subtitle = localizedLabel(
@@ -434,10 +433,9 @@ fun TweaksScreen(
         }
     )
 
-    TweakOptionDialog(
+    TweakOptionSheet(
         visible = showIoSchedulerDialog,
         onDismiss = { showIoSchedulerDialog = false },
-        origin = ioSchedulerOrigin.origin,
         icon = Icons.Rounded.Storage,
         title = stringResource(R.string.dialog_select_io_scheduler),
         options = ioSchedulerOptions.map { TweakDialogOption(it, it) },
@@ -717,20 +715,16 @@ private fun RefreshRateHeroBentoTile(
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    text = hzValue,
+                OdometerNumber(
+                    value = hzValue,
                     style = MaterialTheme.typography.headlineMedium.copy(
                         fontFamily = FontFamily.SansSerif,
-                        fontSize = 28.sp,
+                        fontSize = 26.sp,
                         lineHeight = 30.sp,
                         fontWeight = FontWeight.Black,
-                        fontFeatureSettings = "tnum",
-                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                        letterSpacing = (-0.8).sp
                     ),
-                    color = scheme.onSecondaryContainer,
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Ellipsis
+                    color = scheme.onSecondaryContainer
                 )
 
                 Text(
@@ -1224,10 +1218,9 @@ private fun ExpressiveTweakTile(
 }
 
 @Composable
-private fun <T> TweakOptionDialog(
+private fun <T> TweakOptionSheet(
     visible: Boolean,
     onDismiss: () -> Unit,
-    origin: Offset,
     icon: ImageVector,
     title: String,
     options: List<TweakDialogOption<T>>,
@@ -1238,122 +1231,127 @@ private fun <T> TweakOptionDialog(
     val haptic = LocalHapticFeedback.current
     val scheme = MaterialTheme.colorScheme
 
-    TouchOriginDialog(
+    LuminaAnchoredSheet(
         visible = visible,
-        onDismiss = onDismiss,
-        origin = origin
+        step = title,
+        onDismiss = onDismiss
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = scheme.primary,
-                modifier = Modifier.size(28.dp)
-            )
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMediumEmphasized,
-                textAlign = TextAlign.Center
-            )
-            if (subtitle != null) {
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = scheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        if (options.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 20.dp),
-                contentAlignment = Alignment.Center
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = localizedLabel(
-                        "Belum ada opsi tersedia",
-                        "No options available yet"
-                    ),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = scheme.onSurfaceVariant
-                )
-            }
-        } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 360.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                options.forEachIndexed { index, option ->
-                    val selected = isSelected(option.value)
-                    val rowShape = connectedContainerShape(
-                        index = index,
-                        count = options.size,
-                        outerRadius = 20.dp,
-                        innerRadius = 4.dp
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(13.dp))
+                        .background(scheme.primary.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = scheme.primary,
+                        modifier = Modifier.size(21.dp)
                     )
-                    val fillColor by animateColorAsState(
-                        targetValue = if (selected) scheme.secondaryContainer else scheme.surfaceContainer,
-                        animationSpec = tween(200),
-                        label = "tweakOptionFill"
-                    )
-                    val textColor by animateColorAsState(
-                        targetValue = if (selected) scheme.onSecondaryContainer else scheme.onSurface,
-                        animationSpec = tween(200),
-                        label = "tweakOptionText"
-                    )
+                }
 
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(rowShape)
-                            .background(fillColor, rowShape)
-                            .clickable {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                onSelect(option.value)
-                            }
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleLargeEmphasized,
+                        color = scheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (!subtitle.isNullOrBlank()) {
                         Text(
-                            text = option.label,
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
-                            ),
-                            color = textColor,
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = scheme.onSurfaceVariant,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
+                            overflow = TextOverflow.Ellipsis
                         )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        DialogRadioRing(selected = selected)
                     }
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.height(8.dp))
+            if (options.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = localizedLabel(
+                            "Belum ada opsi tersedia",
+                            "No options available yet"
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = scheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 380.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    options.forEachIndexed { index, option ->
+                        val selected = isSelected(option.value)
+                        val rowShape = connectedContainerShape(
+                            index = index,
+                            count = options.size,
+                            outerRadius = 22.dp,
+                            innerRadius = 4.dp
+                        )
+                        val fillColor by animateColorAsState(
+                            targetValue = if (selected) scheme.secondaryContainer else scheme.surfaceContainerLow,
+                            animationSpec = tween(200),
+                            label = "tweakOptionFill"
+                        )
+                        val textColor by animateColorAsState(
+                            targetValue = if (selected) scheme.onSecondaryContainer else scheme.onSurface,
+                            animationSpec = tween(200),
+                            label = "tweakOptionText"
+                        )
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-            TextButton(onClick = onDismiss) {
-                Text(
-                    text = stringResource(R.string.action_cancel),
-                    fontWeight = FontWeight.SemiBold
-                )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(rowShape)
+                                .background(fillColor, rowShape)
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onSelect(option.value)
+                                }
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = option.label,
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+                                ),
+                                color = textColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            DialogRadioRing(selected = selected)
+                        }
+                    }
+                }
             }
         }
     }
