@@ -1,8 +1,33 @@
-@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+/*
+ * Copyright (C) 2026 kimal
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+@file:OptIn(
+    ExperimentalMaterial3Api::class,
+    ExperimentalMaterial3ExpressiveApi::class,
+    ExperimentalSharedTransitionApi::class
+)
 
 package com.luminatweaks.ui.component
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.BoundsTransform
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.spring
@@ -15,10 +40,12 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.width
@@ -32,6 +59,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -43,6 +71,71 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+
+val LocalSharedTransitionScope = staticCompositionLocalOf<SharedTransitionScope?> { null }
+
+val LuminaContainerBoundsTransform = BoundsTransform { _, _ ->
+    spring(dampingRatio = 0.88f, stiffness = 360f)
+}
+
+@Composable
+fun LuminaSharedContainerSource(
+    sharedKey: String,
+    isExpanded: Boolean,
+    modifier: Modifier = Modifier,
+    minHeight: Dp = 0.dp,
+    cornerRadius: Dp = 26.dp,
+    content: @Composable () -> Unit
+) {
+    val sharedScope = LocalSharedTransitionScope.current
+    if (sharedScope == null) {
+        Box(modifier = modifier.defaultMinSize(minHeight = minHeight)) {
+            content()
+        }
+        return
+    }
+
+    Box(modifier = modifier.defaultMinSize(minHeight = minHeight)) {
+        with(sharedScope) {
+            AnimatedVisibility(
+                visible = !isExpanded,
+                enter = fadeIn(tween(180)),
+                exit = fadeOut(tween(110)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(
+                    modifier = Modifier.sharedBounds(
+                        sharedContentState = rememberSharedContentState(key = sharedKey),
+                        animatedVisibilityScope = this@AnimatedVisibility,
+                        boundsTransform = LuminaContainerBoundsTransform,
+                        resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
+                        clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(cornerRadius))
+                    )
+                ) {
+                    content()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun Modifier.luminaSharedContainerTarget(
+    sharedKey: String,
+    animatedVisibilityScope: AnimatedVisibilityScope,
+    cornerRadius: Dp = 26.dp
+): Modifier {
+    val sharedScope = LocalSharedTransitionScope.current ?: return this
+    return with(sharedScope) {
+        this@luminaSharedContainerTarget.sharedBounds(
+            sharedContentState = rememberSharedContentState(key = sharedKey),
+            animatedVisibilityScope = animatedVisibilityScope,
+            boundsTransform = LuminaContainerBoundsTransform,
+            resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
+            clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(cornerRadius))
+        )
+    }
+}
 
 fun dampOverscrollPull(pullPx: Float, maxReachPx: Float): Float {
     if (pullPx <= 0f || maxReachPx <= 0f) return 0f

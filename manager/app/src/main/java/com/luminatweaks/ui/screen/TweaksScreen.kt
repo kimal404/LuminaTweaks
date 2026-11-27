@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 kimal
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 @file:OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 
 package com.luminatweaks.ui.screen
@@ -82,7 +98,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -109,6 +124,7 @@ import com.luminatweaks.service.FloatingFpsService
 import com.luminatweaks.ui.component.ExpressiveInfoTile
 import com.luminatweaks.ui.component.LuminaAnchoredSheet
 import com.luminatweaks.ui.component.LuminaBackButton
+import com.luminatweaks.ui.component.LuminaSharedContainerSource
 import com.luminatweaks.ui.component.OdometerNumber
 import com.luminatweaks.ui.component.luminaHazeHeader
 import com.luminatweaks.ui.component.pressScale
@@ -125,6 +141,14 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+enum class TweaksSubpage(val key: String) {
+    FLOATING_HUD("tweaks_floating_hud"),
+    GAME_BAR("tweaks_game_bar"),
+    MEMORY_ZRAM("tweaks_memory_zram"),
+    HARDWARE("tweaks_hardware"),
+    UTILITY("tweaks_utility")
+}
 
 data class RendererItem(
     val id: String,
@@ -207,6 +231,8 @@ private suspend fun awaitPagerSettled(pagerState: PagerState?) {
 @Composable
 fun TweaksScreen(
     pagerState: PagerState? = null,
+    activeSubpage: TweaksSubpage? = null,
+    onOpenSubpage: ((TweaksSubpage, Int) -> Unit)? = null,
     onOpenFloatingHud: (() -> Unit)? = null,
     onBackClick: (() -> Unit)? = null
 ) {
@@ -263,16 +289,26 @@ fun TweaksScreen(
     val refreshRateOrigin = rememberDialogOrigin()
     val rendererOrigin = rememberDialogOrigin()
     val ioSchedulerOrigin = rememberDialogOrigin()
-    var inFloatingFpsSubpage by rememberSaveable { mutableStateOf(false) }
-    var inGameBarSubpage by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(inGameBarSubpage) {
-        if (!inGameBarSubpage) {
+
+    var fallbackSubpage by rememberSaveable { mutableStateOf<TweaksSubpage?>(null) }
+    val resolvedActiveSubpage = if (onOpenSubpage != null) activeSubpage else fallbackSubpage
+
+    LaunchedEffect(resolvedActiveSubpage) {
+        if (resolvedActiveSubpage == null) {
             gameBarEnabled = GameDeckPrefs.load(context).enabled
+            fpsConfig = FloatingFpsPrefs.load(context)
         }
     }
-    var inMemoryZramSubpage by rememberSaveable { mutableStateOf(false) }
-    var inHardwareDiagnosticSubpage by rememberSaveable { mutableStateOf(false) }
-    var inUtilitySubpage by rememberSaveable { mutableStateOf(false) }
+
+    val openSubpage: (TweaksSubpage) -> Unit = { target ->
+        if (onOpenSubpage != null) {
+            onOpenSubpage(target, liveRefreshRate)
+        } else if (target == TweaksSubpage.FLOATING_HUD && onOpenFloatingHud != null) {
+            onOpenFloatingHud()
+        } else {
+            fallbackSubpage = target
+        }
+    }
 
     val defaultDynamicLabel = stringResource(R.string.tweaks_rr_default_dynamic)
     val defaultRendererLabel = stringResource(R.string.tweaks_renderer_system_default)
@@ -308,14 +344,16 @@ fun TweaksScreen(
         }
     }
 
-    val targetRrMode = rrModes.find { it.id == currentRrId }
-    val rrModeSubtitle = when {
-        targetRrMode != null && targetRrMode.hz != liveRefreshRate ->
-            localizedLabel("Target ${targetRrMode.hz} Hz", "Target ${targetRrMode.hz} Hz")
-        currentRrId == null ->
-            defaultDynamicLabel
-        else ->
-            localizedLabel("Terkunci ${targetRrMode?.hz ?: liveRefreshRate} Hz", "Locked ${targetRrMode?.hz ?: liveRefreshRate} Hz")
+    val rrModeSubtitle = remember(liveRefreshRate, currentRrId, rrModes, defaultDynamicLabel) {
+        val targetMode = rrModes.find { it.id == currentRrId }
+        when {
+            targetMode != null && targetMode.hz != liveRefreshRate ->
+                localizedLabel("Target ${targetMode.hz} Hz", "Target ${targetMode.hz} Hz")
+            currentRrId == null ->
+                defaultDynamicLabel
+            else ->
+                localizedLabel("Terkunci ${targetMode?.hz ?: liveRefreshRate} Hz", "Locked ${targetMode?.hz ?: liveRefreshRate} Hz")
+        }
     }
 
     val currentRendererShortText = remember(currentRendererId, defaultRendererLabel) {
@@ -338,41 +376,6 @@ fun TweaksScreen(
         (availableIoSchedulers + currentIoScheduler)
             .filter { it.isNotBlank() }
             .distinct()
-    }
-
-    if (inGameBarSubpage) {
-        BackHandler { inGameBarSubpage = false }
-        GameDeckSettingsScreen(onBack = { inGameBarSubpage = false })
-        return
-    }
-
-    if (inFloatingFpsSubpage) {
-        BackHandler { inFloatingFpsSubpage = false }
-        TelemetryOverlayScreen(
-            config = fpsConfig,
-            targetHz = liveRefreshRate,
-            onConfigChange = updateFpsConfig,
-            onBack = { inFloatingFpsSubpage = false }
-        )
-        return
-    }
-
-    if (inHardwareDiagnosticSubpage) {
-        BackHandler { inHardwareDiagnosticSubpage = false }
-        HardwareDiagnosticScreen(onBack = { inHardwareDiagnosticSubpage = false })
-        return
-    }
-
-    if (inUtilitySubpage) {
-        BackHandler { inUtilitySubpage = false }
-        UtilityScreen(onBack = { inUtilitySubpage = false })
-        return
-    }
-
-    if (inMemoryZramSubpage) {
-        BackHandler { inMemoryZramSubpage = false }
-        MemoryZramScreen(onBack = { inMemoryZramSubpage = false })
-        return
     }
 
     val rrDialogSubtitle = if (currentRrId == null) {
@@ -459,189 +462,263 @@ fun TweaksScreen(
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val bottomPadding = if (isFloating) 112.dp + navInset else 28.dp + navInset
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        contentWindowInsets = WindowInsets(0.dp),
-        containerColor = scheme.background,
-        topBar = {
-            TweaksFlexibleTopBar(
-                title = stringResource(R.string.tweaks_title),
-                scrollBehavior = scrollBehavior,
-                hazeState = hazeState,
-                onBackClick = onBackClick
-            )
-        },
-        snackbarHost = {
-            SnackbarHost(
-                hostState = snackbarHostState,
-                modifier = Modifier.padding(bottom = if (isFloating) 92.dp else 12.dp)
-            ) { data ->
-                Snackbar(
-                    snackbarData = data,
-                    shape = RoundedCornerShape(18.dp),
-                    containerColor = scheme.errorContainer,
-                    contentColor = scheme.onErrorContainer
+    val tweaksMainContent: @Composable () -> Unit = {
+        Scaffold(
+            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+            contentWindowInsets = WindowInsets(0.dp),
+            containerColor = scheme.background,
+            topBar = {
+                TweaksFlexibleTopBar(
+                    title = stringResource(R.string.tweaks_title),
+                    scrollBehavior = scrollBehavior,
+                    hazeState = hazeState,
+                    onBackClick = onBackClick
                 )
+            },
+            snackbarHost = {
+                SnackbarHost(
+                    hostState = snackbarHostState,
+                    modifier = Modifier.padding(bottom = if (isFloating) 92.dp else 12.dp)
+                ) { data ->
+                    Snackbar(
+                        snackbarData = data,
+                        shape = RoundedCornerShape(18.dp),
+                        containerColor = scheme.errorContainer,
+                        contentColor = scheme.onErrorContainer
+                    )
+                }
+            }
+        ) { innerPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .hazeSource(state = hazeState),
+                contentPadding = PaddingValues(
+                    top = innerPadding.calculateTopPadding() + 6.dp,
+                    bottom = bottomPadding,
+                    start = 16.dp,
+                    end = 16.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item(key = "hero_tweaks_bento") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(228.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            RefreshRateHeroBentoTile(
+                                modifier = Modifier
+                                    .weight(0.60f)
+                                    .then(refreshRateOrigin.trackedModifier()),
+                                label = stringResource(R.string.tweaks_refresh_rate),
+                                hzValue = "$liveRefreshRate Hz",
+                                subtitle = rrModeSubtitle,
+                                onClick = { showRefreshRateDialog = true }
+                            )
+
+                            CompactSelectorBentoTile(
+                                modifier = Modifier
+                                    .weight(0.40f)
+                                    .then(ioSchedulerOrigin.trackedModifier()),
+                                icon = Icons.Rounded.Storage,
+                                label = stringResource(R.string.tweak_io_scheduler),
+                                value = currentIoScheduler,
+                                onClick = { showIoSchedulerDialog = true }
+                            )
+                        }
+
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            RendererBentoTile(
+                                modifier = Modifier
+                                    .weight(0.50f)
+                                    .then(rendererOrigin.trackedModifier()),
+                                label = stringResource(R.string.tweaks_renderer),
+                                value = effectiveRendererText,
+                                locked = isGlobalTextureEnabled,
+                                onClick = { showRenderDialog = true }
+                            )
+
+                            LiteModeBentoTile(
+                                modifier = Modifier.weight(0.50f),
+                                title = stringResource(R.string.tweaks_lite_mode),
+                                subtitle = localizedLabel("Hemat daya CPU", "CPU power limit"),
+                                checked = isGlobalLiteMode,
+                                onCheckedChange = { newState ->
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    val previous = isGlobalLiteMode
+                                    isGlobalLiteMode = newState
+                                    coroutineScope.launch {
+                                        applyTweakChange(
+                                            snackbarHostState = snackbarHostState,
+                                            errorMessage = applyFailedText,
+                                            revert = { isGlobalLiteMode = previous }
+                                        ) { ConfigRepository.setGlobalLiteMode(newState) }
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+
+                item(key = "overlay_bento_pair") {
+                    val telemetrySubtitle = if (fpsConfig.enabled) {
+                        val count = fpsConfig.activeModuleCount.coerceAtLeast(1)
+                        localizedLabel("Aktif · $count metrik", "Active · $count metrics")
+                    } else {
+                        localizedLabel("Metrik real-time", "Real-time metrics")
+                    }
+
+                    val gameBarSubtitle = if (gameBarEnabled) {
+                        localizedLabel("Aktif · DockRail", "Active · DockRail")
+                    } else {
+                        localizedLabel("Panel game cepat", "Quick game dock")
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        LuminaSharedContainerSource(
+                            sharedKey = TweaksSubpage.FLOATING_HUD.key,
+                            isExpanded = resolvedActiveSubpage == TweaksSubpage.FLOATING_HUD,
+                            minHeight = 112.dp,
+                            cornerRadius = 26.dp,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            ExpressiveInfoTile(
+                                modifier = Modifier.fillMaxWidth(),
+                                icon = Icons.Rounded.Speed,
+                                title = "Floating HUD",
+                                subtitle = telemetrySubtitle,
+                                accentColor = if (fpsConfig.enabled) scheme.primary else scheme.secondary,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    openSubpage(TweaksSubpage.FLOATING_HUD)
+                                }
+                            )
+                        }
+
+                        LuminaSharedContainerSource(
+                            sharedKey = TweaksSubpage.GAME_BAR.key,
+                            isExpanded = resolvedActiveSubpage == TweaksSubpage.GAME_BAR,
+                            minHeight = 112.dp,
+                            cornerRadius = 26.dp,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            ExpressiveInfoTile(
+                                modifier = Modifier.fillMaxWidth(),
+                                icon = Icons.Rounded.SportsEsports,
+                                title = "Game Bar",
+                                subtitle = gameBarSubtitle,
+                                accentColor = if (gameBarEnabled) scheme.tertiary else scheme.primary,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    openSubpage(TweaksSubpage.GAME_BAR)
+                                }
+                            )
+                        }
+                    }
+                }
+
+                item(key = "system_modules_group") {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        LuminaSharedContainerSource(
+                            sharedKey = TweaksSubpage.MEMORY_ZRAM.key,
+                            isExpanded = resolvedActiveSubpage == TweaksSubpage.MEMORY_ZRAM,
+                            minHeight = 64.dp,
+                            cornerRadius = 26.dp
+                        ) {
+                            ConnectedTweakActionRow(
+                                index = 0,
+                                count = 3,
+                                icon = Icons.Rounded.Memory,
+                                title = stringResource(R.string.tweak_memory_zram),
+                                subtitle = stringResource(R.string.tweak_memory_zram_desc),
+                                onClick = { openSubpage(TweaksSubpage.MEMORY_ZRAM) }
+                            )
+                        }
+
+                        LuminaSharedContainerSource(
+                            sharedKey = TweaksSubpage.HARDWARE.key,
+                            isExpanded = resolvedActiveSubpage == TweaksSubpage.HARDWARE,
+                            minHeight = 64.dp,
+                            cornerRadius = 12.dp
+                        ) {
+                            ConnectedTweakActionRow(
+                                index = 1,
+                                count = 3,
+                                icon = Icons.Rounded.DeveloperBoard,
+                                title = stringResource(R.string.hardware_diag_title),
+                                subtitle = stringResource(R.string.hardware_diag_desc),
+                                onClick = { openSubpage(TweaksSubpage.HARDWARE) }
+                            )
+                        }
+
+                        LuminaSharedContainerSource(
+                            sharedKey = TweaksSubpage.UTILITY.key,
+                            isExpanded = resolvedActiveSubpage == TweaksSubpage.UTILITY,
+                            minHeight = 64.dp,
+                            cornerRadius = 26.dp
+                        ) {
+                            ConnectedTweakActionRow(
+                                index = 2,
+                                count = 3,
+                                icon = Icons.Rounded.Widgets,
+                                title = stringResource(R.string.utility_screen_title),
+                                subtitle = stringResource(R.string.utility_screen_desc),
+                                onClick = { openSubpage(TweaksSubpage.UTILITY) }
+                            )
+                        }
+                    }
+                }
             }
         }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .hazeSource(state = hazeState),
-            contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding() + 6.dp,
-                bottom = bottomPadding,
-                start = 16.dp,
-                end = 16.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item(key = "hero_tweaks_bento") {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(228.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        RefreshRateHeroBentoTile(
-                            modifier = Modifier
-                                .weight(0.60f)
-                                .then(refreshRateOrigin.trackedModifier()),
-                            label = stringResource(R.string.tweaks_refresh_rate),
-                            hzValue = "$liveRefreshRate Hz",
-                            subtitle = rrModeSubtitle,
-                            onClick = { showRefreshRateDialog = true }
-                        )
+    }
 
-                        CompactSelectorBentoTile(
-                            modifier = Modifier
-                                .weight(0.40f)
-                                .then(ioSchedulerOrigin.trackedModifier()),
-                            icon = Icons.Rounded.Storage,
-                            label = stringResource(R.string.tweak_io_scheduler),
-                            value = currentIoScheduler,
-                            onClick = { showIoSchedulerDialog = true }
-                        )
-                    }
-
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        RendererBentoTile(
-                            modifier = Modifier
-                                .weight(0.50f)
-                                .then(rendererOrigin.trackedModifier()),
-                            label = stringResource(R.string.tweaks_renderer),
-                            value = effectiveRendererText,
-                            locked = isGlobalTextureEnabled,
-                            onClick = { showRenderDialog = true }
-                        )
-
-                        LiteModeBentoTile(
-                            modifier = Modifier.weight(0.50f),
-                            title = stringResource(R.string.tweaks_lite_mode),
-                            subtitle = localizedLabel("Hemat daya CPU", "CPU power limit"),
-                            checked = isGlobalLiteMode,
-                            onCheckedChange = { newState ->
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                val previous = isGlobalLiteMode
-                                isGlobalLiteMode = newState
-                                coroutineScope.launch {
-                                    applyTweakChange(
-                                        snackbarHostState = snackbarHostState,
-                                        errorMessage = applyFailedText,
-                                        revert = { isGlobalLiteMode = previous }
-                                    ) { ConfigRepository.setGlobalLiteMode(newState) }
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-
-            item(key = "overlay_bento_pair") {
-                val telemetrySubtitle = if (fpsConfig.enabled) {
-                    val count = fpsConfig.activeModuleCount.coerceAtLeast(1)
-                    localizedLabel("Aktif · $count metrik", "Active · $count metrics")
-                } else {
-                    localizedLabel("Metrik real-time", "Real-time metrics")
-                }
-
-                val gameBarSubtitle = if (gameBarEnabled) {
-                    localizedLabel("Aktif · DockRail", "Active · DockRail")
-                } else {
-                    localizedLabel("Panel game cepat", "Quick game dock")
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    ExpressiveInfoTile(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Rounded.Speed,
-                        title = "Floating HUD",
-                        subtitle = telemetrySubtitle,
-                        accentColor = if (fpsConfig.enabled) scheme.primary else scheme.secondary,
-                        onClick = {
-                            if (onOpenFloatingHud != null) {
-                                onOpenFloatingHud()
-                            } else {
-                                inFloatingFpsSubpage = true
-                            }
-                        }
-                    )
-
-                    ExpressiveInfoTile(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Rounded.SportsEsports,
-                        title = "Game Bar",
-                        subtitle = gameBarSubtitle,
-                        accentColor = if (gameBarEnabled) scheme.tertiary else scheme.primary,
-                        onClick = { inGameBarSubpage = true }
-                    )
-                }
-            }
-
-            item(key = "system_modules_group") {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    ConnectedTweakActionRow(
-                        index = 0,
-                        count = 3,
-                        icon = Icons.Rounded.Memory,
-                        title = stringResource(R.string.tweak_memory_zram),
-                        subtitle = stringResource(R.string.tweak_memory_zram_desc),
-                        onClick = { inMemoryZramSubpage = true }
-                    )
-
-                    ConnectedTweakActionRow(
-                        index = 1,
-                        count = 3,
-                        icon = Icons.Rounded.DeveloperBoard,
-                        title = stringResource(R.string.hardware_diag_title),
-                        subtitle = stringResource(R.string.hardware_diag_desc),
-                        onClick = { inHardwareDiagnosticSubpage = true }
-                    )
-
-                    ConnectedTweakActionRow(
-                        index = 2,
-                        count = 3,
-                        icon = Icons.Rounded.Widgets,
-                        title = stringResource(R.string.utility_screen_title),
-                        subtitle = stringResource(R.string.utility_screen_desc),
-                        onClick = { inUtilitySubpage = true }
-                    )
-                }
+    if (onOpenSubpage != null) {
+        tweaksMainContent()
+    } else {
+        BackHandler(enabled = fallbackSubpage != null) {
+            fallbackSubpage = null
+        }
+        LuminaDrillTransition(
+            targetState = fallbackSubpage,
+            isForward = { _, target -> target != null },
+            contentKey = { it?.key ?: "tweaks_root" }
+        ) { targetSubpage ->
+            when (targetSubpage) {
+                null -> tweaksMainContent()
+                TweaksSubpage.FLOATING_HUD -> TelemetryOverlayScreen(
+                    config = fpsConfig,
+                    targetHz = liveRefreshRate,
+                    onConfigChange = updateFpsConfig,
+                    onBack = { fallbackSubpage = null }
+                )
+                TweaksSubpage.GAME_BAR -> GameDeckSettingsScreen(
+                    onBack = { fallbackSubpage = null }
+                )
+                TweaksSubpage.MEMORY_ZRAM -> MemoryZramScreen(
+                    onBack = { fallbackSubpage = null }
+                )
+                TweaksSubpage.HARDWARE -> HardwareDiagnosticScreen(
+                    onBack = { fallbackSubpage = null }
+                )
+                TweaksSubpage.UTILITY -> UtilityScreen(
+                    onBack = { fallbackSubpage = null }
+                )
             }
         }
     }

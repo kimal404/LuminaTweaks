@@ -1,7 +1,8 @@
 @file:OptIn(
     androidx.compose.foundation.ExperimentalFoundationApi::class,
     ExperimentalMaterial3ExpressiveApi::class,
-    ExperimentalMaterial3Api::class
+    ExperimentalMaterial3Api::class,
+    androidx.compose.animation.ExperimentalSharedTransitionApi::class
 )
 
 package com.luminatweaks.ui.screen
@@ -19,6 +20,8 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
@@ -98,6 +101,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -106,6 +110,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -147,15 +152,18 @@ import androidx.lifecycle.LifecycleOwner
 import com.luminatweaks.BuildConfig
 import com.luminatweaks.R
 import com.luminatweaks.data.DaemonManager
+import com.luminatweaks.gamedeck.GameDeckSettingsScreen
 import com.luminatweaks.service.FloatingFpsService
 import com.luminatweaks.ui.component.ExpressiveInfoTile
+import com.luminatweaks.ui.component.LocalSharedTransitionScope
 import com.luminatweaks.ui.component.LuminaBottomBar
 import com.luminatweaks.ui.component.LuminaMicroTicker
 import com.luminatweaks.ui.component.OdometerNumber
 import com.luminatweaks.ui.component.TouchOriginDialog
 import com.luminatweaks.ui.component.bouncyClickable
-import com.luminatweaks.ui.component.luminaHazeHeader
 import com.luminatweaks.ui.component.dampOverscrollPull
+import com.luminatweaks.ui.component.luminaHazeHeader
+import com.luminatweaks.ui.component.luminaSharedContainerTarget
 import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.component.rememberDialogOrigin
 import com.luminatweaks.ui.theme.LocalCornerRadius
@@ -274,6 +282,7 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
     LaunchedEffect(pagerState.currentPage) {
         if (!isNavigating) targetTab = pagerState.currentPage
     }
+
     var currentSubscreen by remember { mutableStateOf<String?>(null) }
     var renderedSubscreen by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(currentSubscreen) {
@@ -281,6 +290,10 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
             renderedSubscreen = currentSubscreen
         }
     }
+
+    var activeTweaksSubpage by rememberSaveable { mutableStateOf<TweaksSubpage?>(null) }
+    var tweaksTargetHz by rememberSaveable { mutableIntStateOf(120) }
+    val isAnyOverlayOpen = currentSubscreen != null || activeTweaksSubpage != null
 
     val unknownLabel = stringResource(R.string.status_unknown)
     val kernelVersion = remember(unknownLabel) { System.getProperty("os.version") ?: unknownLabel }
@@ -347,8 +360,8 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
         }
     }
 
-    LaunchedEffect(pagerState.currentPage, isScreenResumed, currentSubscreen, resumeToken) {
-        if (pagerState.currentPage != 0 || !isScreenResumed || currentSubscreen != null) {
+    LaunchedEffect(pagerState.currentPage, isScreenResumed, isAnyOverlayOpen, resumeToken) {
+        if (pagerState.currentPage != 0 || !isScreenResumed || isAnyOverlayOpen) {
             return@LaunchedEffect
         }
 
@@ -365,8 +378,8 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
         }
     }
 
-    LaunchedEffect(pagerState.currentPage, isScreenResumed, currentSubscreen, resumeToken) {
-        if (pagerState.currentPage != 0 || !isScreenResumed || currentSubscreen != null) {
+    LaunchedEffect(pagerState.currentPage, isScreenResumed, isAnyOverlayOpen, resumeToken) {
+        if (pagerState.currentPage != 0 || !isScreenResumed || isAnyOverlayOpen) {
             return@LaunchedEffect
         }
 
@@ -489,190 +502,262 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
     var overlayConfig by remember { mutableStateOf(FloatingFpsPrefs.load(context)) }
     val homeScope = rememberCoroutineScope()
 
-    Box(
+    val containerDepthScale by animateFloatAsState(
+        targetValue = if (activeTweaksSubpage != null) 0.95f else 1f,
+        animationSpec = spring(dampingRatio = 0.88f, stiffness = 360f),
+        label = "tweaksContainerDepthScale"
+    )
+    val containerScrimAlpha by animateFloatAsState(
+        targetValue = if (activeTweaksSubpage != null) 0.35f else 0f,
+        animationSpec = tween(220),
+        label = "tweaksContainerScrimAlpha"
+    )
+
+    BackHandler(enabled = activeTweaksSubpage != null) {
+        activeTweaksSubpage = null
+    }
+
+    SharedTransitionLayout(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        val pagerScaleModifier = Modifier.graphicsLayer {
-            val s = tabFadeScale.value
-            scaleX = s
-            scaleY = s
-            alpha = ((s - 0.94f) / 0.06f).coerceIn(0f, 1f)
-        }
-
-        if (isFloating) {
+        CompositionLocalProvider(LocalSharedTransitionScope provides this) {
             Box(modifier = Modifier.fillMaxSize()) {
-                LuminaTabPager(
-                    pagerState = pagerState,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .then(pagerScaleModifier),
-                    userScrollEnabled = currentSubscreen == null
-                ) { tab ->
-                    when (tab) {
-                        0 -> HomeDashboardContent(
-                            batteryTemp = batteryTemp,
-                            daemonPid = daemonPid,
-                            isChecking = isChecking,
-                            isModuleInstalled = isModuleInstalled,
-                            isRebootRequired = isRebootRequired,
-                            currentProfile = currentProfile,
-                            kernelVersion = kernelVersion,
-                            deviceModel = deviceModel,
-                            onRequestRebootDialog = { showRebootDialog = true },
-                            onRestartDaemon = restartAction
-                        )
-                        1 -> AppsScreen(
-                            pagerState = pagerState
-                        )
-                        2 -> TweaksScreen(
-                            pagerState = pagerState,
-                            onOpenFloatingHud = {
-                                overlayConfig = FloatingFpsPrefs.load(context)
-                                currentSubscreen = "telemetry_overlay"
-                            }
-                        )
-                        3 -> SettingsScreen(
-                            onNavigateToAbout = { currentSubscreen = "about" },
-                            onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" },
-                            onNavigateToCompatibility = { currentSubscreen = "compatibility" },
-                            onNavigateToTweaks = { onTabSelected(2) },
-                            onOpenSetupWizard = onOpenSetupWizard
-                        )
-                    }
+                val pagerScaleModifier = Modifier.graphicsLayer {
+                    val s = tabFadeScale.value * containerDepthScale
+                    scaleX = s
+                    scaleY = s
+                    alpha = ((tabFadeScale.value - 0.94f) / 0.06f).coerceIn(0f, 1f)
                 }
 
-                val barSpatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
-                val barEffects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
-                AnimatedVisibility(
-                    visible = currentSubscreen == null,
-                    enter = slideInVertically(animationSpec = barSpatial) { it } + fadeIn(animationSpec = barEffects),
-                    exit = slideOutVertically(animationSpec = barSpatial) { it } + fadeOut(animationSpec = barEffects),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.BottomCenter)
-                ) {
-                    LuminaBottomBar(
-                        selectedTab = targetTab,
-                        onTabSelected = onTabSelected
-                    )
-                }
-            }
-        } else {
-            Scaffold(
-                contentWindowInsets = WindowInsets(0.dp),
-                bottomBar = {
-                    val barSpatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
-                    val barEffects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
-                    AnimatedVisibility(
-                        visible = currentSubscreen == null,
-                        enter = slideInVertically(animationSpec = barSpatial) { it } + fadeIn(animationSpec = barEffects),
-                        exit = slideOutVertically(animationSpec = barSpatial) { it } + fadeOut(animationSpec = barEffects)
-                    ) {
-                        LuminaBottomBar(
-                            selectedTab = targetTab,
-                            onTabSelected = onTabSelected
-                        )
-                    }
-                }
-            ) { innerPadding ->
-                LuminaTabPager(
-                    pagerState = pagerState,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .then(pagerScaleModifier),
-                    userScrollEnabled = currentSubscreen == null
-                ) { tab ->
-                    when (tab) {
-                        0 -> HomeDashboardContent(
-                            batteryTemp = batteryTemp,
-                            daemonPid = daemonPid,
-                            isChecking = isChecking,
-                            isModuleInstalled = isModuleInstalled,
-                            isRebootRequired = isRebootRequired,
-                            currentProfile = currentProfile,
-                            kernelVersion = kernelVersion,
-                            deviceModel = deviceModel,
-                            onRequestRebootDialog = { showRebootDialog = true },
-                            onRestartDaemon = restartAction
-                        )
-                        1 -> AppsScreen(
-                            pagerState = pagerState
-                        )
-                        2 -> TweaksScreen(
+                if (isFloating) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        LuminaTabPager(
                             pagerState = pagerState,
-                            onOpenFloatingHud = {
-                                overlayConfig = FloatingFpsPrefs.load(context)
-                                currentSubscreen = "telemetry_overlay"
-                            }
-                        )
-                        3 -> SettingsScreen(
-                            onNavigateToAbout = { currentSubscreen = "about" },
-                            onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" },
-                            onNavigateToCompatibility = { currentSubscreen = "compatibility" },
-                            onNavigateToTweaks = { onTabSelected(2) },
-                            onOpenSetupWizard = onOpenSetupWizard
-                        )
-                    }
-                }
-            }
-        }
-
-        AnimatedVisibility(
-            visible = currentSubscreen != null,
-            enter = slideInHorizontally(
-                animationSpec = tween(320, easing = DrillEmphasizedDecelerate)
-            ) { it } + fadeIn(animationSpec = tween(220)),
-            exit = slideOutHorizontally(
-                animationSpec = tween(280, easing = DrillEmphasizedAccelerate)
-            ) { it } + fadeOut(animationSpec = tween(220)),
-            modifier = Modifier
-                .fillMaxSize()
-                .zIndex(2f)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
-            ) {
-                when (renderedSubscreen) {
-                    "personalisasi" -> PersonalisasiScreen(
-                        onBackClick = { currentSubscreen = null }
-                    )
-                    "compatibility" -> CompatibilityScreen(
-                        onBackClick = { currentSubscreen = null }
-                    )
-                    "about" -> AboutScreen(
-                        onBackClick = { currentSubscreen = null }
-                    )
-                    "telemetry_overlay" -> {
-                        BackHandler { currentSubscreen = null }
-                        TelemetryOverlayScreen(
-                            config = overlayConfig,
-                            targetHz = 120,
-                            onConfigChange = { updated ->
-                                val wasEnabled = overlayConfig.enabled
-                                overlayConfig = updated
-                                FloatingFpsPrefs.save(context, updated)
-                                if (updated.enabled && !wasEnabled) {
-                                    homeScope.launch {
-                                        val granted = FloatingFpsService.ensureOverlayPermission(context)
-                                        if (granted) {
-                                            FloatingFpsService.sync(context, updated)
-                                        } else {
-                                            val reverted = updated.copy(enabled = false)
-                                            overlayConfig = reverted
-                                            FloatingFpsPrefs.save(context, reverted)
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .then(pagerScaleModifier),
+                            userScrollEnabled = !isAnyOverlayOpen
+                        ) { tab ->
+                            when (tab) {
+                                0 -> HomeDashboardContent(
+                                    batteryTemp = batteryTemp,
+                                    daemonPid = daemonPid,
+                                    isChecking = isChecking,
+                                    isModuleInstalled = isModuleInstalled,
+                                    isRebootRequired = isRebootRequired,
+                                    currentProfile = currentProfile,
+                                    kernelVersion = kernelVersion,
+                                    deviceModel = deviceModel,
+                                    onRequestRebootDialog = { showRebootDialog = true },
+                                    onRestartDaemon = restartAction
+                                )
+                                1 -> AppsScreen(
+                                    pagerState = pagerState
+                                )
+                                2 -> TweaksScreen(
+                                    pagerState = pagerState,
+                                    activeSubpage = activeTweaksSubpage,
+                                    onOpenSubpage = { subpage, hz ->
+                                        if (subpage == TweaksSubpage.FLOATING_HUD) {
+                                            overlayConfig = FloatingFpsPrefs.load(context)
                                         }
+                                        tweaksTargetHz = hz
+                                        activeTweaksSubpage = subpage
                                     }
-                                } else {
-                                    FloatingFpsService.sync(context, updated)
-                                }
-                            },
-                            onBack = { currentSubscreen = null }
-                        )
+                                )
+                                3 -> SettingsScreen(
+                                    onNavigateToAbout = { currentSubscreen = "about" },
+                                    onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" },
+                                    onNavigateToCompatibility = { currentSubscreen = "compatibility" },
+                                    onNavigateToTweaks = { onTabSelected(2) },
+                                    onOpenSetupWizard = onOpenSetupWizard
+                                )
+                            }
+                        }
+
+                        val barSpatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
+                        val barEffects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+                        AnimatedVisibility(
+                            visible = !isAnyOverlayOpen,
+                            enter = slideInVertically(animationSpec = barSpatial) { it } + fadeIn(animationSpec = barEffects),
+                            exit = slideOutVertically(animationSpec = barSpatial) { it } + fadeOut(animationSpec = barEffects),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .align(Alignment.BottomCenter)
+                        ) {
+                            LuminaBottomBar(
+                                selectedTab = targetTab,
+                                onTabSelected = onTabSelected
+                            )
+                        }
+                    }
+                } else {
+                    Scaffold(
+                        contentWindowInsets = WindowInsets(0.dp),
+                        bottomBar = {
+                            val barSpatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
+                            val barEffects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+                            AnimatedVisibility(
+                                visible = !isAnyOverlayOpen,
+                                enter = slideInVertically(animationSpec = barSpatial) { it } + fadeIn(animationSpec = barEffects),
+                                exit = slideOutVertically(animationSpec = barSpatial) { it } + fadeOut(animationSpec = barEffects)
+                            ) {
+                                LuminaBottomBar(
+                                    selectedTab = targetTab,
+                                    onTabSelected = onTabSelected
+                                )
+                            }
+                        }
+                    ) { innerPadding ->
+                        LuminaTabPager(
+                            pagerState = pagerState,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(innerPadding)
+                                .then(pagerScaleModifier),
+                            userScrollEnabled = !isAnyOverlayOpen
+                        ) { tab ->
+                            when (tab) {
+                                0 -> HomeDashboardContent(
+                                    batteryTemp = batteryTemp,
+                                    daemonPid = daemonPid,
+                                    isChecking = isChecking,
+                                    isModuleInstalled = isModuleInstalled,
+                                    isRebootRequired = isRebootRequired,
+                                    currentProfile = currentProfile,
+                                    kernelVersion = kernelVersion,
+                                    deviceModel = deviceModel,
+                                    onRequestRebootDialog = { showRebootDialog = true },
+                                    onRestartDaemon = restartAction
+                                )
+                                1 -> AppsScreen(
+                                    pagerState = pagerState
+                                )
+                                2 -> TweaksScreen(
+                                    pagerState = pagerState,
+                                    activeSubpage = activeTweaksSubpage,
+                                    onOpenSubpage = { subpage, hz ->
+                                        if (subpage == TweaksSubpage.FLOATING_HUD) {
+                                            overlayConfig = FloatingFpsPrefs.load(context)
+                                        }
+                                        tweaksTargetHz = hz
+                                        activeTweaksSubpage = subpage
+                                    }
+                                )
+                                3 -> SettingsScreen(
+                                    onNavigateToAbout = { currentSubscreen = "about" },
+                                    onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" },
+                                    onNavigateToCompatibility = { currentSubscreen = "compatibility" },
+                                    onNavigateToTweaks = { onTabSelected(2) },
+                                    onOpenSetupWizard = onOpenSetupWizard
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (containerScrimAlpha > 0.005f) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .zIndex(1f)
+                            .background(Color.Black.copy(alpha = containerScrimAlpha))
+                    )
+                }
+
+                AnimatedContent(
+                    targetState = activeTweaksSubpage,
+                    transitionSpec = {
+                        fadeIn(tween(200)) togetherWith fadeOut(tween(180))
+                    },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .zIndex(2f),
+                    label = "tweaksContainerTransform"
+                ) { subpage ->
+                    if (subpage != null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .luminaSharedContainerTarget(
+                                    sharedKey = subpage.key,
+                                    animatedVisibilityScope = this@AnimatedContent,
+                                    cornerRadius = 26.dp
+                                )
+                                .background(MaterialTheme.colorScheme.background)
+                        ) {
+                            when (subpage) {
+                                TweaksSubpage.FLOATING_HUD -> TelemetryOverlayScreen(
+                                    config = overlayConfig,
+                                    targetHz = tweaksTargetHz,
+                                    onConfigChange = { updated ->
+                                        val wasEnabled = overlayConfig.enabled
+                                        overlayConfig = updated
+                                        FloatingFpsPrefs.save(context, updated)
+                                        if (updated.enabled && !wasEnabled) {
+                                            homeScope.launch {
+                                                val granted = FloatingFpsService.ensureOverlayPermission(context)
+                                                if (granted) {
+                                                    FloatingFpsService.sync(context, updated)
+                                                } else {
+                                                    val reverted = updated.copy(enabled = false)
+                                                    overlayConfig = reverted
+                                                    FloatingFpsPrefs.save(context, reverted)
+                                                }
+                                            }
+                                        } else {
+                                            FloatingFpsService.sync(context, updated)
+                                        }
+                                    },
+                                    onBack = { activeTweaksSubpage = null }
+                                )
+                                TweaksSubpage.GAME_BAR -> GameDeckSettingsScreen(
+                                    onBack = { activeTweaksSubpage = null }
+                                )
+                                TweaksSubpage.MEMORY_ZRAM -> MemoryZramScreen(
+                                    onBack = { activeTweaksSubpage = null }
+                                )
+                                TweaksSubpage.HARDWARE -> HardwareDiagnosticScreen(
+                                    onBack = { activeTweaksSubpage = null }
+                                )
+                                TweaksSubpage.UTILITY -> UtilityScreen(
+                                    onBack = { activeTweaksSubpage = null }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                AnimatedVisibility(
+                    visible = currentSubscreen != null,
+                    enter = slideInHorizontally(
+                        animationSpec = tween(320, easing = DrillEmphasizedDecelerate)
+                    ) { it } + fadeIn(animationSpec = tween(220)),
+                    exit = slideOutHorizontally(
+                        animationSpec = tween(280, easing = DrillEmphasizedAccelerate)
+                    ) { it } + fadeOut(animationSpec = tween(220)),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .zIndex(3f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.background)
+                    ) {
+                        when (renderedSubscreen) {
+                            "personalisasi" -> PersonalisasiScreen(
+                                onBackClick = { currentSubscreen = null }
+                            )
+                            "compatibility" -> CompatibilityScreen(
+                                onBackClick = { currentSubscreen = null }
+                            )
+                            "about" -> AboutScreen(
+                                onBackClick = { currentSubscreen = null }
+                            )
+                        }
                     }
                 }
             }
