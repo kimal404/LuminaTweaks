@@ -63,13 +63,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
 import com.luminatweaks.R
 import com.luminatweaks.ui.component.AospConnectedGroup
 import com.luminatweaks.ui.component.AospPreferenceSwitch
 import com.luminatweaks.ui.component.AospSectionHeader
 import com.luminatweaks.ui.component.LuminaBackButton
 import com.luminatweaks.ui.component.AospTopBar
-import com.luminatweaks.ui.component.rememberHeaderScrolled
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -109,8 +110,8 @@ fun UtilityScreen(
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val bottomPadding = if (isFloating) 100.dp + navInset else 24.dp + navInset
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val hazeState = remember { HazeState() }
     val listState = rememberLazyListState()
-    val headerScrolled by rememberHeaderScrolled(listState)
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -119,16 +120,15 @@ fun UtilityScreen(
         topBar = {
             AospTopBar(
                 title = stringResource(R.string.utility_screen_title),
-                subtitle = localizedLabel("Manajemen daya & standby", "Power and standby management"),
                 scrollBehavior = scrollBehavior,
-                navigationIcon = { LuminaBackButton(onBack = onBack) },
-                scrolled = headerScrolled
+                hazeState = hazeState,
+                navigationIcon = { LuminaBackButton(onBack = onBack) }
             )
         }
     ) { innerPadding ->
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().hazeSource(state = hazeState),
             contentPadding = PaddingValues(
                 top = innerPadding.calculateTopPadding() + 4.dp,
                 bottom = bottomPadding,

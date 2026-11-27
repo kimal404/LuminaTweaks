@@ -50,6 +50,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -70,11 +71,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.model.AppItem
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
 import com.luminatweaks.ui.component.LuminaBackButton
-import com.luminatweaks.ui.component.rememberHeaderScrolled
-import com.luminatweaks.ui.component.scrolledHeader
+import com.luminatweaks.ui.component.luminaHazeHeader
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -88,7 +91,8 @@ fun GameDeckSettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
-    val headerScrolled by rememberHeaderScrolled(listState)
+    val hazeState = remember { HazeState() }
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     var config by remember { mutableStateOf(GameDeckPrefs.load(context)) }
     var showAppPicker by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
@@ -141,10 +145,11 @@ fun GameDeckSettingsScreen(onBack: () -> Unit) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .scrolledHeader(headerScrolled, MaterialTheme.colorScheme.background)
-                    .statusBarsPadding()
+                modifier = Modifier.luminaHazeHeader(
+                    hazeState = hazeState,
+                    surfaceColor = MaterialTheme.colorScheme.background,
+                    overlappedFraction = scrollBehavior.state.overlappedFraction
+                )
             ) {
                 TopAppBar(
                     title = {
@@ -159,14 +164,18 @@ fun GameDeckSettingsScreen(onBack: () -> Unit) {
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Transparent,
                         scrolledContainerColor = Color.Transparent
-                    )
+                    ),
+                    scrollBehavior = scrollBehavior
                 )
             }
         }
     ) { innerPadding ->
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .hazeSource(state = hazeState)
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
             contentPadding = PaddingValues(
                 top = innerPadding.calculateTopPadding() + 8.dp,
                 bottom = 110.dp,

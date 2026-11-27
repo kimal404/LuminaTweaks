@@ -73,7 +73,6 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -106,6 +105,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.luminatweaks.ui.component.luminaHazeHeader
 import com.luminatweaks.BuildConfig
 import com.luminatweaks.R
 import com.luminatweaks.data.ConfigRepository
@@ -116,11 +116,7 @@ import com.luminatweaks.ui.component.rememberDialogOrigin
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.util.DeviceUtil
 import com.luminatweaks.util.LogUtil
-import dev.chrisbanes.haze.HazeProgressive
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -217,11 +213,6 @@ fun SettingsScreen(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val fadeSurface = scheme.background
     val hazeState = remember { HazeState() }
-    val blurProgress by remember {
-        derivedStateOf {
-            (scrollBehavior.state.overlappedFraction * 1.35f).coerceIn(0f, 1f)
-        }
-    }
 
     val openPersonalisasi: () -> Unit = {
         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -255,40 +246,13 @@ fun SettingsScreen(
         contentWindowInsets = WindowInsets(0.dp),
         containerColor = scheme.background,
         topBar = {
-            val topBarModifier = if (blurProgress > 0.01f) {
-                Modifier
-                    .fillMaxWidth()
-                    .hazeEffect(
-                        state = hazeState,
-                        style = HazeStyle(
-                            backgroundColor = fadeSurface,
-                            tints = listOf(
-                                HazeTint(fadeSurface.copy(alpha = 0.62f * blurProgress))
-                            ),
-                            blurRadius = (24f * blurProgress).dp,
-                            noiseFactor = 0f
-                        )
-                    ) {
-                        progressive = HazeProgressive.verticalGradient(
-                            startIntensity = 1f,
-                            endIntensity = 0f
-                        )
-                    }
-                    .background(
-                        brush = Brush.verticalGradient(
-                            0.0f to fadeSurface.copy(alpha = 0.90f * blurProgress),
-                            0.65f to fadeSurface.copy(alpha = 0.65f * blurProgress),
-                            1.0f to Color.Transparent
-                        )
-                    )
-                    .statusBarsPadding()
-            } else {
-                Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-            }
-
-            Box(modifier = topBarModifier) {
+            Box(
+                modifier = Modifier.luminaHazeHeader(
+                    hazeState = hazeState,
+                    surfaceColor = fadeSurface,
+                    overlappedFraction = scrollBehavior.state.overlappedFraction
+                )
+            ) {
                 LargeFlexibleTopAppBar(
                     title = {
                         Text(

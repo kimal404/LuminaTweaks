@@ -76,6 +76,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
 import com.luminatweaks.R
 import com.luminatweaks.data.CapabilityEntry
 import com.luminatweaks.data.CapabilityReport
@@ -91,6 +93,7 @@ fun CompatibilityScreen(onBackClick: () -> Unit = {}) {
     BackHandler(onBack = onBackClick)
     val scope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val hazeState = remember { HazeState() }
     var report by remember { mutableStateOf<CapabilityReport?>(null) }
     var strictMode by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
@@ -131,7 +134,7 @@ fun CompatibilityScreen(onBackClick: () -> Unit = {}) {
         topBar = {
             AospTopBar(
                 title = stringResource(R.string.compatibility_title),
-                subtitle = stringResource(R.string.compatibility_subtitle),
+                hazeState = hazeState,
                 scrollBehavior = scrollBehavior,
                 navigationIcon = { LuminaBackButton(onBack = onBackClick) },
                 actions = {
@@ -175,7 +178,7 @@ fun CompatibilityScreen(onBackClick: () -> Unit = {}) {
             }
         } else {
             LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().hazeSource(state = hazeState),
             contentPadding = PaddingValues(
                 top = innerPadding.calculateTopPadding() + 4.dp,
                 bottom = 32.dp,

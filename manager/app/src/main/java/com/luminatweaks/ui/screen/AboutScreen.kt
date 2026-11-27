@@ -70,6 +70,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
 import com.luminatweaks.R
 import com.luminatweaks.ui.component.LuminaBackButton
 import com.luminatweaks.ui.component.AospTopBar
@@ -85,6 +87,7 @@ fun AboutScreen(
     var showLicenseDialog by remember { mutableStateOf(false) }
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val hazeState = remember { HazeState() }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -93,14 +96,14 @@ fun AboutScreen(
         topBar = {
             AospTopBar(
                 title = stringResource(R.string.about_title),
-                subtitle = stringResource(R.string.app_name),
+                hazeState = hazeState,
                 scrollBehavior = scrollBehavior,
                 navigationIcon = { LuminaBackButton(onBack = onBackClick) }
             )
         }
     ) { innerPadding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().hazeSource(state = hazeState),
             contentPadding = PaddingValues(
                 top = innerPadding.calculateTopPadding() + 4.dp,
                 bottom = 24.dp,

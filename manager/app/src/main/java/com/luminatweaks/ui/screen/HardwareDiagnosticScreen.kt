@@ -54,6 +54,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,6 +64,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
 import com.luminatweaks.R
 import com.luminatweaks.data.HardwareDiagnosticRepository
 import com.luminatweaks.ui.component.LuminaBackButton
@@ -81,6 +84,7 @@ fun HardwareDiagnosticScreen(
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val bottomPadding = if (isFloating) 100.dp + navInset else 24.dp + navInset
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val hazeState = remember { HazeState() }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -89,7 +93,7 @@ fun HardwareDiagnosticScreen(
         topBar = {
             AospTopBar(
                 title = stringResource(R.string.hardware_diag_screen_title),
-                subtitle = localizedLabel("Pemeriksaan integritas perangkat", "Device integrity check"),
+                hazeState = hazeState,
                 scrollBehavior = scrollBehavior,
                 navigationIcon = { LuminaBackButton(onBack = onBack) }
             )
@@ -162,7 +166,8 @@ fun HardwareDiagnosticScreen(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .fillMaxHeight(),
+                            .fillMaxHeight()
+                            .hazeSource(state = hazeState),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         items(state.logs) { entry ->

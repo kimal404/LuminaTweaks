@@ -113,12 +113,14 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
+import com.luminatweaks.ui.component.luminaHazeHeader
 import com.luminatweaks.R
 import com.luminatweaks.data.DaemonManager
 import com.luminatweaks.service.FloatingFpsService
 import com.luminatweaks.ui.component.LuminaBottomBar
 import com.luminatweaks.ui.component.TouchOriginDialog
-import com.luminatweaks.ui.component.appBarFade
 import com.luminatweaks.ui.component.bouncyClickable
 import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.component.rememberDialogOrigin
@@ -828,6 +830,7 @@ fun HomeDashboardContent(
     }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val fadeSurface = MaterialTheme.colorScheme.background
+    val hazeState = remember { HazeState() }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -836,9 +839,11 @@ fun HomeDashboardContent(
         topBar = {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .appBarFade(fadeSurface) { scrollBehavior.state.overlappedFraction }
-                    .statusBarsPadding()
+                    .luminaHazeHeader(
+                        hazeState = hazeState,
+                        surfaceColor = fadeSurface,
+                        overlappedFraction = scrollBehavior.state.overlappedFraction
+                    )
             ) {
                 LargeFlexibleTopAppBar(
                     title = {
@@ -875,7 +880,7 @@ fun HomeDashboardContent(
         }
     ) { innerPadding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().hazeSource(state = hazeState),
             contentPadding = PaddingValues(
                 top = innerPadding.calculateTopPadding(),
                 bottom = bottomPadding,

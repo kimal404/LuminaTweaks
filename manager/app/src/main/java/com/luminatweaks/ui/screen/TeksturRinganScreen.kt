@@ -92,6 +92,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
 import com.luminatweaks.R
 import com.luminatweaks.ui.component.LuminaBackButton
 import com.luminatweaks.ui.component.AospTopBar
@@ -402,6 +404,7 @@ fun TeksturRinganScreen(
     val bottomPadding = if (isFloating) 100.dp + navInset else 24.dp + navInset
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val hazeState = remember { HazeState() }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -410,14 +413,14 @@ fun TeksturRinganScreen(
         topBar = {
             AospTopBar(
                 title = stringResource(R.string.texture_quality_title),
-                subtitle = appName,
+                hazeState = hazeState,
                 scrollBehavior = scrollBehavior,
                 navigationIcon = { LuminaBackButton(onBack = onBack) }
             )
         }
     ) { innerPadding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().hazeSource(state = hazeState),
             contentPadding = PaddingValues(
                 top = innerPadding.calculateTopPadding() + 8.dp,
                 bottom = bottomPadding,

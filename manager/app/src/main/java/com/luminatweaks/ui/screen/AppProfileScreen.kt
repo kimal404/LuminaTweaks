@@ -107,13 +107,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
+import com.luminatweaks.ui.component.luminaHazeHeader
 import com.luminatweaks.R
 import com.luminatweaks.data.AppProfileConfig
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.data.DisplayRrMode
 import com.luminatweaks.model.AppItem
 import com.luminatweaks.ui.component.LuminaBackButton
-import com.luminatweaks.ui.component.appBarFade
 import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import kotlinx.coroutines.CancellationException
@@ -224,6 +226,7 @@ fun AppProfileScreen(
             val bottomPadding = if (isFloating) 112.dp + navInset else 28.dp + navInset
             val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
             val fadeSurface = MaterialTheme.colorScheme.background
+            val hazeState = remember { HazeState() }
 
             fun toggleMaster(nextEnabled: Boolean) {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -251,9 +254,11 @@ fun AppProfileScreen(
                 topBar = {
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .appBarFade(fadeSurface) { scrollBehavior.state.overlappedFraction }
-                            .statusBarsPadding()
+                            .luminaHazeHeader(
+                                hazeState = hazeState,
+                                surfaceColor = fadeSurface,
+                                overlappedFraction = scrollBehavior.state.overlappedFraction
+                            )
                     ) {
                         LargeFlexibleTopAppBar(
                             navigationIcon = {
@@ -298,7 +303,7 @@ fun AppProfileScreen(
                 }
             ) { innerPadding ->
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().hazeSource(state = hazeState),
                     contentPadding = PaddingValues(
                         top = innerPadding.calculateTopPadding(),
                         bottom = bottomPadding,

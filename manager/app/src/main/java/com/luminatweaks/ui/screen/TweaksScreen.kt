@@ -56,6 +56,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
+import com.luminatweaks.ui.component.luminaHazeHeader
 import com.luminatweaks.gamedeck.GameDeckSettingsScreen
 import com.luminatweaks.gamedeck.GameDeckPrefs
 import androidx.compose.material.icons.filled.Check
@@ -124,7 +127,6 @@ import com.luminatweaks.data.DisplayRrMode
 import com.luminatweaks.service.FloatingFpsService
 import com.luminatweaks.ui.component.LuminaBackButton
 import com.luminatweaks.ui.component.TouchOriginDialog
-import com.luminatweaks.ui.component.appBarFade
 import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.component.rememberDialogOrigin
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
@@ -472,6 +474,7 @@ fun TweaksScreen(
     )
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    val hazeState = remember { HazeState() }
 
     val isFloating = LocalFloatingNavBar.current
     val bottomPadding = if (isFloating) {
@@ -488,6 +491,7 @@ fun TweaksScreen(
             TweaksFlexibleTopBar(
                 title = stringResource(R.string.tweaks_title),
                 scrollBehavior = scrollBehavior,
+                hazeState = hazeState,
                 onBackClick = onBackClick
             )
         },
@@ -506,7 +510,7 @@ fun TweaksScreen(
         }
     ) { innerPadding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().hazeSource(state = hazeState),
             contentPadding = PaddingValues(
                 top = innerPadding.calculateTopPadding(),
                 bottom = bottomPadding,
@@ -704,14 +708,16 @@ fun TweaksScreen(
 private fun TweaksFlexibleTopBar(
     title: String,
     scrollBehavior: TopAppBarScrollBehavior,
+    hazeState: HazeState,
     onBackClick: (() -> Unit)? = null
 ) {
     val fadeSurface = MaterialTheme.colorScheme.background
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .appBarFade(fadeSurface) { scrollBehavior.state.overlappedFraction }
-            .statusBarsPadding()
+        modifier = Modifier.luminaHazeHeader(
+            hazeState = hazeState,
+            surfaceColor = fadeSurface,
+            overlappedFraction = scrollBehavior.state.overlappedFraction
+        )
     ) {
         LargeFlexibleTopAppBar(
             title = {

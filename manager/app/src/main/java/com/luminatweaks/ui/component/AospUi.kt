@@ -82,6 +82,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.chrisbanes.haze.HazeState
 import com.luminatweaks.R
 
 val AospItemTitleSize: TextUnit = 17.sp
@@ -484,72 +485,44 @@ fun AospStatusPill(
 fun AospTopBar(
     title: String,
     scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior,
+    hazeState: HazeState,
     modifier: Modifier = Modifier,
-    subtitle: String? = null,
     navigationIcon: (@Composable () -> Unit)? = null,
     actions: (@Composable RowScope.() -> Unit)? = null,
-    containerColor: Color = MaterialTheme.colorScheme.background,
-    scrolled: Boolean? = null
+    containerColor: Color = MaterialTheme.colorScheme.background
 ) {
-    val scrimSurface = if (containerColor == Color.Transparent) {
+    val surfaceColor = if (containerColor == Color.Transparent) {
         MaterialTheme.colorScheme.background
     } else {
         containerColor
     }
-    val autoScrolled by remember {
-        derivedStateOf { scrollBehavior.state.overlappedFraction > 0.01f }
-    }
-    val headerScrolled = scrolled ?: autoScrolled
     LargeTopAppBar(
         title = {
-            if (subtitle.isNullOrBlank()) {
-                Text(
-                    text = title,
-                    fontSize = 26.sp,
-                    letterSpacing = (-0.4).sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.graphicsLayer {
-                        val scale = 1f - 0.23f * scrollBehavior.state.collapsedFraction.coerceIn(0f, 1f)
-                        scaleX = scale
-                        scaleY = scale
-                        transformOrigin = TransformOrigin(0f, 0.5f)
-                    }
-                )
-            } else {
-                Column {
-                    Text(
-                        text = title,
-                        fontSize = 26.sp,
-                        letterSpacing = (-0.4).sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.graphicsLayer {
-                            val scale = 1f - 0.23f * scrollBehavior.state.collapsedFraction.coerceIn(0f, 1f)
-                            scaleX = scale
-                            scaleY = scale
-                            transformOrigin = TransformOrigin(0f, 0.5f)
-                        }
-                    )
-                    Text(
-                        text = subtitle,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Normal,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+            Text(
+                text = title,
+                fontSize = 26.sp,
+                letterSpacing = (-0.4).sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.graphicsLayer {
+                    val scale = 1f - 0.23f * scrollBehavior.state.collapsedFraction.coerceIn(0f, 1f)
+                    scaleX = scale
+                    scaleY = scale
+                    transformOrigin = TransformOrigin(0f, 0.5f)
                 }
-            }
+            )
         },
-        modifier = modifier.scrolledHeader(headerScrolled, scrimSurface),
+        modifier = modifier.luminaHazeHeader(
+            hazeState = hazeState,
+            surfaceColor = surfaceColor,
+            overlappedFraction = scrollBehavior.state.overlappedFraction
+        ),
         navigationIcon = navigationIcon ?: {},
         actions = actions ?: {},
         collapsedHeight = 56.dp,
-        expandedHeight = 104.dp,
-        windowInsets = WindowInsets.statusBars,
+        expandedHeight = 88.dp,
+        windowInsets = WindowInsets(0, 0, 0, 0),
         scrollBehavior = scrollBehavior,
         colors = TopAppBarDefaults.largeTopAppBarColors(
             containerColor = Color.Transparent,

@@ -94,10 +94,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
+import com.luminatweaks.ui.component.luminaHazeHeader
 import com.luminatweaks.R
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.ui.component.LuminaBackButton
-import com.luminatweaks.ui.component.appBarFade
 import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.component.rememberSliderHaptics
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
@@ -184,6 +186,7 @@ fun MemoryZramScreen(
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val bottomPadding = if (isFloating) 112.dp + navInset else 28.dp + navInset
     val fadeSurface = MaterialTheme.colorScheme.background
+    val hazeState = remember { HazeState() }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -192,9 +195,11 @@ fun MemoryZramScreen(
         topBar = {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .appBarFade(fadeSurface) { scrollBehavior.state.overlappedFraction }
-                    .statusBarsPadding()
+                    .luminaHazeHeader(
+                        hazeState = hazeState,
+                        surfaceColor = fadeSurface,
+                        overlappedFraction = scrollBehavior.state.overlappedFraction
+                    )
             ) {
                 LargeFlexibleTopAppBar(
                     navigationIcon = { LuminaBackButton(onBack = onBack) },
@@ -217,7 +222,7 @@ fun MemoryZramScreen(
         }
     ) { innerPadding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().hazeSource(state = hazeState),
             contentPadding = PaddingValues(
                 top = innerPadding.calculateTopPadding(),
                 bottom = bottomPadding,

@@ -110,12 +110,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
+import com.luminatweaks.ui.component.luminaHazeHeader
 import com.luminatweaks.R
 import com.luminatweaks.data.AppProfileConfig
 import com.luminatweaks.data.ConfigRepository
 import com.luminatweaks.model.AppItem
 import com.luminatweaks.ui.component.AospStatusPill
-import com.luminatweaks.ui.component.appBarFade
 import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import java.util.Locale
@@ -318,6 +320,7 @@ fun AppsScreen(
             }
             val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(topAppBarState)
             val fadeSurface = MaterialTheme.colorScheme.background
+            val hazeState = remember { HazeState() }
             val pullToRefreshState = rememberPullToRefreshState()
 
             Scaffold(
@@ -326,9 +329,11 @@ fun AppsScreen(
                 topBar = {
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .appBarFade(fadeSurface) { scrollBehavior.state.overlappedFraction }
-                            .statusBarsPadding()
+                            .luminaHazeHeader(
+                                hazeState = hazeState,
+                                surfaceColor = fadeSurface,
+                                overlappedFraction = scrollBehavior.state.overlappedFraction
+                            )
                     ) {
                         LargeFlexibleTopAppBar(
                             title = {
@@ -413,7 +418,7 @@ fun AppsScreen(
                     ) {
                         LazyColumn(
                             state = listState,
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier.fillMaxSize().hazeSource(state = hazeState),
                             contentPadding = PaddingValues(
                                 start = 16.dp,
                                 end = 16.dp,

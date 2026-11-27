@@ -72,6 +72,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -95,12 +96,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import com.luminatweaks.ui.component.luminaHazeHeader
 import com.luminatweaks.R
 import com.luminatweaks.ui.component.LuminaBackButton
 import com.luminatweaks.ui.component.pressScale
-import com.luminatweaks.ui.component.rememberHeaderScrolled
 import com.luminatweaks.ui.component.rememberSliderHaptics
-import com.luminatweaks.ui.component.scrolledHeader
 import java.util.Locale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -381,17 +384,19 @@ internal fun TelemetryOverlayScreen(
 
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val listState = rememberLazyListState()
-    val headerScrolled by rememberHeaderScrolled(listState)
+    val hazeState = remember { HazeState() }
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
 
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .scrolledHeader(headerScrolled, MaterialTheme.colorScheme.background)
-                    .statusBarsPadding()
+                modifier = Modifier.luminaHazeHeader(
+                    hazeState = hazeState,
+                    surfaceColor = MaterialTheme.colorScheme.background,
+                    overlappedFraction = scrollBehavior.state.overlappedFraction
+                )
             ) {
                 TopAppBar(
                     navigationIcon = {
@@ -412,6 +417,7 @@ internal fun TelemetryOverlayScreen(
                         containerColor = Color.Transparent,
                         scrolledContainerColor = Color.Transparent
                     ),
+                    scrollBehavior = scrollBehavior,
                     windowInsets = WindowInsets(0, 0, 0, 0)
                 )
             }
@@ -419,7 +425,10 @@ internal fun TelemetryOverlayScreen(
     ) { innerPadding ->
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .hazeSource(state = hazeState)
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
             contentPadding = PaddingValues(
                 top = innerPadding.calculateTopPadding() + 4.dp,
                 bottom = 28.dp + navInset,
