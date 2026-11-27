@@ -246,7 +246,7 @@ fun PersonalisasiScreen(
                 end = 16.dp
             )
         ) {
-            item(key = "azenith_color_section") {
+            item(key = "accent_color_section") {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -329,7 +329,7 @@ fun PersonalisasiScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         item(key = "dynamic") {
-                            AZenithColorButton(
+                            AccentColorButton(
                                 color = Color.Unspecified,
                                 isSelected = currentKeyColor == 0,
                                 isDark = isDark,
@@ -343,7 +343,7 @@ fun PersonalisasiScreen(
                             )
                         }
                         items(keyColorOptions, key = { it }) { colorInt ->
-                            AZenithColorButton(
+                            AccentColorButton(
                                 color = Color(colorInt),
                                 isSelected = currentKeyColor == colorInt,
                                 isDark = isDark,
@@ -403,7 +403,7 @@ fun PersonalisasiScreen(
                         }
                     }
 
-                    AZenithAccentIntensityCard(
+                    AccentIntensityCard(
                         currentIntensity = currentIntensity,
                         onIntensityChange = { newIntensity ->
                             if (newIntensity != currentIntensity) {
@@ -448,7 +448,7 @@ fun PersonalisasiScreen(
 }
 
 @Composable
-private fun AZenithColorButton(
+private fun AccentColorButton(
     color: Color,
     isSelected: Boolean,
     isDark: Boolean,
@@ -577,7 +577,7 @@ private fun AZenithColorButton(
 }
 
 @Composable
-private fun AZenithAccentIntensityCard(
+private fun AccentIntensityCard(
     currentIntensity: AccentIntensity,
     onIntensityChange: (AccentIntensity) -> Unit
 ) {

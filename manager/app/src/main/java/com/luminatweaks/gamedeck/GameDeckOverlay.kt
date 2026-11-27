@@ -217,8 +217,8 @@ internal const val DECK_RAIL_GAP_DP = 10f
 internal const val DECK_CARD_WIDTH_DP = 354f
 internal const val DECK_TOTAL_WIDTH_DP = DECK_RAIL_WIDTH_DP + DECK_RAIL_GAP_DP + DECK_CARD_WIDTH_DP
 internal const val MAX_DECK_QUICK_APPS = 8
-private val ZENITH_THUMB_RADIUS = 22.dp
-private val ZENITH_TAP_SLOP = 12.dp
+private val DECK_SLIDER_THUMB_RADIUS = 22.dp
+private val DECK_TAP_SLOP = 12.dp
 
 private data class DeckProfileOption(
     val shortLabel: String,
@@ -3442,7 +3442,7 @@ private fun RefreshRateCard(
 }
 
 @Composable
-private fun DeckZenithSlider(
+private fun DeckExpressiveSlider(
     value: Int,
     min: Int,
     max: Int,
@@ -3468,12 +3468,12 @@ private fun DeckZenithSlider(
                         requireUnconsumed = false,
                         pass = PointerEventPass.Main
                     )
-                    val reach = ZENITH_THUMB_RADIUS.toPx()
+                    val reach = DECK_SLIDER_THUMB_RADIUS.toPx()
                     val usable = size.width - reach * 2f
                     if (usable <= 0f) return@awaitEachGesture
                     val fraction = ((down.position.x - reach) / usable).coerceIn(0f, 1f)
                     val tapped = (min + fraction * span).roundToInt().coerceIn(min, max)
-                    val slop = ZENITH_TAP_SLOP.toPx()
+                    val slop = DECK_TAP_SLOP.toPx()
                     var dragged = false
                     while (true) {
                         val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id }
@@ -3614,7 +3614,7 @@ private fun BrightnessVolumeCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                DeckZenithSlider(
+                DeckExpressiveSlider(
                     value = brightnessLocal,
                     min = 5,
                     max = 100,
@@ -3677,7 +3677,7 @@ private fun BrightnessVolumeCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                DeckZenithSlider(
+                DeckExpressiveSlider(
                     value = volumeLocal,
                     min = 0,
                     max = 100,
