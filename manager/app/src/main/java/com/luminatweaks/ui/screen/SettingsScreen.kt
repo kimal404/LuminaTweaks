@@ -51,12 +51,10 @@ import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Language
-import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -91,6 +89,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -99,6 +98,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -111,9 +111,7 @@ import com.luminatweaks.ui.component.TouchOriginDialog
 import com.luminatweaks.ui.component.appBarFade
 import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.component.rememberDialogOrigin
-import com.luminatweaks.ui.theme.ColorMode
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
-import com.luminatweaks.ui.theme.ThemeController
 import com.luminatweaks.util.DeviceUtil
 import com.luminatweaks.util.LogUtil
 import java.text.SimpleDateFormat
@@ -161,11 +159,13 @@ fun SettingsScreen(
         mutableStateOf(if (lang.startsWith("en")) "en" else "id")
     }
 
-    var currentColorMode by remember {
-        mutableStateOf(ThemeController.getAppSettings(context).colorMode)
+    val deviceModel = remember { DeviceUtil.getMarketDeviceName(context) }
+    val packageName = remember { context.packageName }
+    val versionSummary = remember {
+        "${BuildConfig.VERSION_NAME.removeSuffix(".0")} (${BuildConfig.VERSION_CODE})"
     }
 
-    val deviceModel = remember { DeviceUtil.getMarketDeviceName(context) }
+    var tickMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var uptimeText by remember { mutableStateOf(formatDeviceUptime()) }
     var systemWallpaperBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
     var showLanguageSheet by remember { mutableStateOf(false) }
@@ -191,14 +191,16 @@ fun SettingsScreen(
 
     LaunchedEffect(Unit) {
         isToastNotifications = ConfigRepository.getToastNotifications()
-        currentColorMode = ThemeController.getAppSettings(context).colorMode
         systemWallpaperBitmap = loadSystemWallpaperBitmap(context)
     }
 
     LaunchedEffect(Unit) {
         while (isActive) {
+            val now = System.currentTimeMillis()
+            tickMs = now
             uptimeText = formatDeviceUptime()
-            delay(30_000L)
+            val remainder = 1000L - (now % 1000L)
+            delay(remainder.coerceIn(250L, 1000L))
         }
     }
 
@@ -208,12 +210,7 @@ fun SettingsScreen(
     ) { route ->
         when (route) {
             "about" -> AboutScreen(onBackClick = { showAboutScreen = false })
-            "personalisasi" -> PersonalisasiScreen(
-                onBackClick = {
-                    currentColorMode = ThemeController.getAppSettings(context).colorMode
-                    showPersonalisasiScreen = false
-                }
-            )
+            "personalisasi" -> PersonalisasiScreen(onBackClick = { showPersonalisasiScreen = false })
             "compatibility" -> CompatibilityScreen(onBackClick = { showCompatibilityScreen = false })
             "tweaks" -> TweaksScreen(onBackClick = { showTweaksScreen = false })
             else -> {
@@ -249,27 +246,6 @@ fun SettingsScreen(
                     } else {
                         showAboutScreen = true
                     }
-                }
-
-                val cycleThemeMode: () -> Unit = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    val saved = ThemeController.getAppSettings(context)
-                    val nextMode = when (saved.colorMode) {
-                        ColorMode.SYSTEM -> ColorMode.DARK
-                        ColorMode.DARK -> ColorMode.DARKAMOLED
-                        ColorMode.DARKAMOLED -> ColorMode.LIGHT
-                        ColorMode.LIGHT -> ColorMode.SYSTEM
-                    }
-                    currentColorMode = nextMode
-                    ThemeController.saveTheme(
-                        context = context,
-                        mode = nextMode,
-                        key = saved.keyColor,
-                        spec = saved.colorSpec,
-                        intensity = saved.accentIntensity,
-                        cornerRadius = saved.cornerRadius,
-                        floatingNavBar = saved.floatingNavBar
-                    )
                 }
 
                 Scaffold(
@@ -317,7 +293,7 @@ fun SettingsScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(312.dp),
+                                    .height(332.dp),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 Column(
@@ -327,19 +303,21 @@ fun SettingsScreen(
                                     verticalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
                                     MonetPersonalizationTile(
-                                        modifier = Modifier.weight(0.41f),
+                                        modifier = Modifier.weight(0.35f),
                                         title = stringResource(R.string.personalization_title),
                                         onClick = openPersonalisasi
                                     )
 
-                                    ThemeAndDeviceOverviewTile(
-                                        modifier = Modifier.weight(0.59f),
-                                        colorMode = currentColorMode,
-                                        deviceLabel = settingsLocalizedLabel("Perangkat", "Device"),
+                                    DeviceSpecsOverviewTile(
+                                        modifier = Modifier.weight(0.65f),
+                                        deviceLabel = settingsLocalizedLabel("Model perangkat", "Device model"),
                                         deviceValue = deviceModel,
-                                        uptimeLabel = settingsLocalizedLabel("Waktu aktif", "Device uptime"),
-                                        uptimeValue = uptimeText,
-                                        onCycleThemeMode = cycleThemeMode
+                                        packageLabel = settingsLocalizedLabel("Nama paket", "Package name"),
+                                        packageValue = packageName,
+                                        versionLabel = settingsLocalizedLabel("Versi manajer", "Manager version"),
+                                        versionValue = versionSummary,
+                                        uptimeLabel = settingsLocalizedLabel("Waktu aktif perangkat", "Device uptime"),
+                                        uptimeValue = uptimeText
                                     )
                                 }
 
@@ -349,6 +327,7 @@ fun SettingsScreen(
                                         .fillMaxHeight(),
                                     title = stringResource(R.string.app_name),
                                     wallpaper = systemWallpaperBitmap,
+                                    clockTickMs = tickMs,
                                     languageTag = currentLanguage
                                 )
                             }
@@ -699,7 +678,7 @@ private fun MonetPersonalizationTile(
                 indication = null,
                 onClick = onClick
             )
-            .padding(horizontal = 14.dp, vertical = 14.dp),
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -715,7 +694,7 @@ private fun MonetPersonalizationTile(
             overflow = TextOverflow.Ellipsis
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         Box(
             modifier = Modifier
@@ -737,89 +716,43 @@ private fun MonetPersonalizationTile(
 }
 
 @Composable
-private fun ThemeAndDeviceOverviewTile(
-    colorMode: ColorMode,
+private fun DeviceSpecsOverviewTile(
     deviceLabel: String,
     deviceValue: String,
+    packageLabel: String,
+    packageValue: String,
+    versionLabel: String,
+    versionValue: String,
     uptimeLabel: String,
     uptimeValue: String,
-    onCycleThemeMode: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val scheme = MaterialTheme.colorScheme
-    val themeInteraction = remember { MutableInteractionSource() }
-    val themeScale = pressScale(themeInteraction, 0.96f)
-
-    val modeLabel = when (colorMode) {
-        ColorMode.SYSTEM -> settingsLocalizedLabel("Tema Sistem", "System Theme")
-        ColorMode.LIGHT -> settingsLocalizedLabel("Tema Terang", "Light Theme")
-        ColorMode.DARK -> settingsLocalizedLabel("Tema Gelap", "Dark Theme")
-        ColorMode.DARKAMOLED -> settingsLocalizedLabel("AMOLED Hitam", "AMOLED Pitch")
-    }
-    val modeIcon = when (colorMode) {
-        ColorMode.LIGHT -> Icons.Rounded.LightMode
-        else -> Icons.Rounded.DarkMode
-    }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(26.dp))
             .background(scheme.surfaceContainerHigh)
-            .padding(10.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(44.dp)
-                .then(themeScale)
-                .clip(RoundedCornerShape(16.dp))
-                .background(scheme.secondaryContainer)
-                .clickable(
-                    interactionSource = themeInteraction,
-                    indication = null,
-                    onClick = onCycleThemeMode
-                )
-                .padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                imageVector = modeIcon,
-                contentDescription = null,
-                tint = scheme.onSecondaryContainer,
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = modeLabel,
-                style = MaterialTheme.typography.labelLarge.copy(
-                    fontWeight = FontWeight.SemiBold,
-                    platformStyle = PlatformTextStyle(includeFontPadding = false)
-                ),
-                color = scheme.onSecondaryContainer,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 6.dp, vertical = 2.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            EditorialSpecItem(
-                label = deviceLabel,
-                value = deviceValue
-            )
-            EditorialSpecItem(
-                label = uptimeLabel,
-                value = uptimeValue
-            )
-        }
+        EditorialSpecItem(
+            label = deviceLabel,
+            value = deviceValue
+        )
+        EditorialSpecItem(
+            label = packageLabel,
+            value = packageValue
+        )
+        EditorialSpecItem(
+            label = versionLabel,
+            value = versionValue
+        )
+        EditorialSpecItem(
+            label = uptimeLabel,
+            value = uptimeValue
+        )
     }
 }
 
@@ -859,20 +792,12 @@ private fun EditorialSpecItem(
 private fun LockscreenHeroTile(
     title: String,
     wallpaper: ImageBitmap?,
+    clockTickMs: Long,
     languageTag: String,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val scheme = MaterialTheme.colorScheme
-    var clockTickMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
-
-    LaunchedEffect(Unit) {
-        while (isActive) {
-            clockTickMs = System.currentTimeMillis()
-            val remainder = 1000L - (clockTickMs % 1000L)
-            delay(remainder.coerceIn(250L, 1000L))
-        }
-    }
 
     val clockParts = remember(clockTickMs, context, languageTag) {
         val now = Date(clockTickMs)
@@ -943,11 +868,11 @@ private fun LockscreenHeroTile(
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 8.dp, vertical = 22.dp)
+                .padding(horizontal = 4.dp, vertical = 22.dp)
         ) {
-            val digitSize = (maxWidth.value * 0.36f).coerceIn(42f, 64f).sp
-            val daySize = (digitSize.value * 0.45f).sp
-            val dateSize = (digitSize.value * 0.21f).sp
+            val digitSize = (maxWidth.value * 0.41f).coerceIn(54f, 74f).sp
+            val daySize = (digitSize.value * 0.50f).sp
+            val dateSize = (digitSize.value * 0.215f).coerceIn(12f, 15f).sp
 
             Text(
                 text = title,
@@ -966,37 +891,42 @@ private fun LockscreenHeroTile(
             Column(
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .padding(top = 8.dp),
+                    .padding(top = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.graphicsLayer { scaleY = 1.12f },
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = clockParts[0],
                             style = MaterialTheme.typography.displayLarge.copy(
+                                fontFamily = FontFamily.SansSerif,
                                 fontSize = digitSize,
                                 lineHeight = digitSize,
-                                fontWeight = FontWeight.Bold,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = (-2.5).sp,
                                 fontFeatureSettings = "tnum",
                                 platformStyle = PlatformTextStyle(includeFontPadding = false)
                             ),
-                            color = Color.White.copy(alpha = 0.56f),
+                            color = Color.White.copy(alpha = 0.58f),
                             maxLines = 1,
                             softWrap = false
                         )
                         Text(
                             text = clockParts[1],
                             style = MaterialTheme.typography.displayLarge.copy(
+                                fontFamily = FontFamily.SansSerif,
                                 fontSize = digitSize,
                                 lineHeight = digitSize,
-                                fontWeight = FontWeight.Bold,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = (-2.5).sp,
                                 fontFeatureSettings = "tnum",
                                 platformStyle = PlatformTextStyle(includeFontPadding = false)
                             ),
-                            color = Color.White.copy(alpha = 0.56f),
+                            color = Color.White.copy(alpha = 0.58f),
                             maxLines = 1,
                             softWrap = false
                         )
@@ -1004,11 +934,13 @@ private fun LockscreenHeroTile(
 
                     Text(
                         text = clockParts[2],
-                        style = MaterialTheme.typography.headlineSmall.copy(
+                        modifier = Modifier.offset(y = 2.dp),
+                        style = MaterialTheme.typography.headlineMedium.copy(
+                            fontFamily = FontFamily.SansSerif,
                             fontSize = daySize,
                             lineHeight = daySize,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = (-0.3).sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = (-0.4).sp,
                             platformStyle = PlatformTextStyle(includeFontPadding = false)
                         ),
                         color = Color.White,
@@ -1023,6 +955,7 @@ private fun LockscreenHeroTile(
                 Text(
                     text = clockParts[3],
                     style = MaterialTheme.typography.labelLarge.copy(
+                        fontFamily = FontFamily.SansSerif,
                         fontSize = dateSize,
                         lineHeight = dateSize,
                         fontWeight = FontWeight.Bold,
@@ -1370,7 +1303,8 @@ private fun formatDeviceUptime(): String {
     val totalSec = (SystemClock.elapsedRealtime() / 1000L).coerceAtLeast(0L)
     val hours = totalSec / 3600L
     val minutes = (totalSec % 3600L) / 60L
-    return "${hours}h ${minutes}m"
+    val seconds = totalSec % 60L
+    return "${hours}h ${minutes}m ${seconds}s"
 }
 
 @SuppressLint("MissingPermission")
