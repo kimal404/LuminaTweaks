@@ -39,13 +39,13 @@ Compatible with **Android 11+** on the following root solutions:
 
 ---
 
-## Credits & Acknowledgements
+## Credits
 
-- **Author:** [@kimal404](https://github.com/kimal404)
-- **[Encore Tweaks](https://github.com/Rem01Gaming/encore)** by [@Rem01Gaming](https://github.com/Rem01Gaming) — System performance tweak references and binder process-observer logic.
-- **[AZenith](https://github.com/Liliya2727/AZenith)** by [@Liliya2727](https://github.com/Liliya2727) — ColorEngine theme system and UI/UX feature design references.
+- Maintained by [@kimal404](https://github.com/kimal404).
+- [Encore Tweaks](https://github.com/Rem01Gaming/encore) — performance tuning references and binder process-observer logic.
+- [AZenith](https://github.com/Liliya2727/AZenith) — ColorEngine theme system and UI/UX references.
 
-For complete third-party copyrights, component attributions, and license notices, see **[NOTICE.md](NOTICE.md)**.
+See [NOTICE.md](NOTICE.md) for full third-party licenses and attributions.
 
 ---
 
