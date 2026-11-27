@@ -66,7 +66,7 @@ const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 const CONFIG_FALLBACK_INTERVAL: Duration = Duration::from_secs(2);
 const PERFORMANCE_GUARD_RECOVER_AFTER: Duration = Duration::from_secs(10);
 const FOCUS_RELEASE_GRACE: Duration = Duration::from_secs(5);
-const TRANSIENT_FOCUS_GRACE: Duration = Duration::from_secs(12);
+const TRANSIENT_FOCUS_GRACE: Duration = Duration::from_secs(20);
 const FOCUS_VERIFY_INTERVAL: Duration = Duration::from_secs(2);
 const LEGACY_PROFILE_STATE_PATH: &str = "/data/adb/.config/lumina/profile.conf";
 
@@ -906,6 +906,12 @@ fn main() {
                 if let Some(pid) = verified_pid {
                     runtime.target_game_pid = pid;
                     if !is_app_enabled(saved_pkg) {
+                        runtime.active_target_pkg = None;
+                        runtime.target_game_pid = 0;
+                        runtime.left_foreground_at = None;
+                        None
+                    } else if !detector::package_has_task(saved_pkg) {
+                        log!("[SYSTEM] Task removed -> {} BALANCED", saved_pkg);
                         runtime.active_target_pkg = None;
                         runtime.target_game_pid = 0;
                         runtime.left_foreground_at = None;

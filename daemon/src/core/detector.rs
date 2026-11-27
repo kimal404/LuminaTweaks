@@ -1160,6 +1160,42 @@ fn parse_top_resumed_package(output: &str) -> Option<String> {
     None
 }
 
+static TASK_CACHE: Mutex<Option<(Instant, String, bool)>> = Mutex::new(None);
+
+pub fn package_has_task(pkg: &str) -> bool {
+    let clean = sanitize_pkg_name(pkg).to_string();
+    if clean.is_empty() {
+        return false;
+    }
+    if let Ok(guard) = TASK_CACHE.lock() {
+        if let Some((at, cached, value)) = guard.as_ref() {
+            if cached == &clean && at.elapsed() < Duration::from_millis(1000) {
+                return *value;
+            }
+        }
+    }
+
+    let output = Command::new("sh")
+        .args([
+            "-c",
+            "timeout 1 dumpsys activity recents 2>/dev/null || true",
+        ])
+        .output()
+        .ok()
+        .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
+        .unwrap_or_default();
+    let present = if output.trim().is_empty() {
+        true
+    } else {
+        output.contains(&clean)
+    };
+
+    if let Ok(mut guard) = TASK_CACHE.lock() {
+        *guard = Some((Instant::now(), clean, present));
+    }
+    present
+}
+
 pub fn get_top_resumed_package_cached() -> Option<String> {
     if let Ok(guard) = TOP_RESUMED_CACHE.lock() {
         if let Some((at, pkg)) = guard.as_ref() {
