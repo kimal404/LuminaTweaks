@@ -910,7 +910,15 @@ fn main() {
                         runtime.target_game_pid = 0;
                         runtime.left_foreground_at = None;
                         None
-                    } else if !detector::package_has_task(saved_pkg) {
+                    } else if focused.is_none() {
+                        runtime.left_foreground_at = None;
+                        Some(saved_pkg.clone())
+                    } else if focused
+                        .as_deref()
+                        .map(detector::is_launcher_package)
+                        .unwrap_or(false)
+                        && !detector::package_has_task(saved_pkg)
+                    {
                         log!("[SYSTEM] Task removed -> {} BALANCED", saved_pkg);
                         runtime.active_target_pkg = None;
                         runtime.target_game_pid = 0;
