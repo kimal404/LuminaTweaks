@@ -1,6 +1,7 @@
 package com.luminatweaks
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -15,17 +16,20 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.LocalHapticFeedback
 import androidx.lifecycle.lifecycleScope
 import com.luminatweaks.data.LuminaBridge
 import com.luminatweaks.ui.screen.HomeScreen
 import com.luminatweaks.ui.screen.SetupWizardScreen
 import com.luminatweaks.ui.theme.HapticSettings
 import com.luminatweaks.ui.theme.LocalHapticConfig
+import com.luminatweaks.ui.theme.LuminaHapticFeedback
 import com.luminatweaks.ui.theme.LuminaTheme
 import com.luminatweaks.ui.theme.ThemeController
 import java.io.DataOutputStream
@@ -74,14 +78,42 @@ class MainActivity : ComponentActivity() {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
         setContent {
-            val appSettings = remember { ThemeController.getAppSettings(this@MainActivity) }
-            val hapticSettings = remember(appSettings.hapticEnabled, appSettings.hapticIntensity) {
-                HapticSettings(
-                    enabled = appSettings.hapticEnabled,
-                    intensity = appSettings.hapticIntensity
+            val context = this@MainActivity
+            var hapticSettings by remember {
+                val stored = ThemeController.getAppSettings(context)
+                mutableStateOf(
+                    HapticSettings(
+                        enabled = stored.hapticEnabled,
+                        intensity = stored.hapticIntensity
+                    )
                 )
             }
-            CompositionLocalProvider(LocalHapticConfig provides hapticSettings) {
+            DisposableEffect(context) {
+                val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+                val listener = SharedPreferences.OnSharedPreferenceChangeListener { p, key ->
+                    if (key == "haptic_feedback_enabled" || key == "haptic_feedback_intensity") {
+                        hapticSettings = HapticSettings(
+                            enabled = p.getBoolean("haptic_feedback_enabled", true),
+                            intensity = p.getFloat(
+                                "haptic_feedback_intensity",
+                                ThemeController.DEFAULT_HAPTIC_INTENSITY
+                            ).coerceIn(
+                                ThemeController.MIN_HAPTIC_INTENSITY,
+                                ThemeController.MAX_HAPTIC_INTENSITY
+                            )
+                        )
+                    }
+                }
+                prefs.registerOnSharedPreferenceChangeListener(listener)
+                onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+            }
+            val hapticFeedback = remember(hapticSettings) {
+                LuminaHapticFeedback(context, hapticSettings)
+            }
+            CompositionLocalProvider(
+                LocalHapticConfig provides hapticSettings,
+                LocalHapticFeedback provides hapticFeedback
+            ) {
             LuminaTheme {
                 var isSetupFinished by remember {
                     mutableStateOf(prefs.getBoolean(KEY_SETUP_WIZARD_V2_COMPLETED, false))

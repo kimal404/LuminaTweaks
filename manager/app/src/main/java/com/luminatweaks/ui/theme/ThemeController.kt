@@ -35,6 +35,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.graphics.toArgb
 import kotlin.math.roundToInt
 
@@ -151,6 +153,20 @@ object LuminaHapticEngine {
                 vibrator.vibrate(pulse.baseDurationMs)
             }
         }
+    }
+}
+
+class LuminaHapticFeedback(
+    private val context: Context,
+    private val settings: HapticSettings
+) : HapticFeedback {
+    override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) {
+        val pulse = when (hapticFeedbackType) {
+            HapticFeedbackType.LongPress -> LuminaHapticPulse.Heavy
+            HapticFeedbackType.TextHandleMove -> LuminaHapticPulse.Tick
+            else -> LuminaHapticPulse.Click
+        }
+        LuminaHapticEngine.perform(context, settings, pulse)
     }
 }
 
