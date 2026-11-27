@@ -6,6 +6,13 @@
 
 package com.luminatweaks.ui.screen
 
+import android.app.ActivityManager
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
+import android.os.Build
+import android.os.SystemClock
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -53,10 +60,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.rounded.BatteryChargingFull
+import androidx.compose.material.icons.rounded.BatteryStd
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Favorite
@@ -65,6 +75,7 @@ import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material3.CircularWavyProgressIndicator
@@ -151,6 +162,15 @@ import kotlinx.coroutines.withContext
 enum class ContainerPosition {
     Top, Middle, Bottom, Single
 }
+
+private data class SystemTelemetrySnapshot(
+    val ramUsedGb: Float,
+    val ramTotalGb: Float,
+    val ramPercent: Float,
+    val batteryPercent: Int,
+    val batteryVoltageV: Float,
+    val isCharging: Boolean
+)
 
 @Composable
 fun getConnectedContainerShape(
@@ -766,6 +786,27 @@ fun HomeDashboardContent(
     var showPowerDialog by remember { mutableStateOf(false) }
     val isRunning = daemonPid != null
 
+    val hardwareSummary = remember {
+        val soc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            Build.SOC_MODEL.takeIf { it.isNotBlank() && it != Build.UNKNOWN }
+        } else {
+            null
+        } ?: Build.HARDWARE
+        val cores = Runtime.getRuntime().availableProcessors()
+        "$soc • $cores Core"
+    }
+
+    var telemetry by remember { mutableStateOf(readSystemTelemetry(context)) }
+    var uptimeText by remember { mutableStateOf(formatHomeUptime()) }
+
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            telemetry = readSystemTelemetry(context)
+            uptimeText = formatHomeUptime()
+            delay(3000L)
+        }
+    }
+
     val restartScope = rememberCoroutineScope()
     val launchRestart: () -> Unit = {
         if (!isRestarting) {
@@ -902,7 +943,7 @@ fun HomeDashboardContent(
                 .fillMaxSize()
                 .hazeSource(state = hazeState),
             contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding() + 8.dp,
+                top = innerPadding.calculateTopPadding() + 6.dp,
                 bottom = bottomPadding,
                 start = 16.dp,
                 end = 16.dp
@@ -913,7 +954,7 @@ fun HomeDashboardContent(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(248.dp),
+                        .height(220.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Column(
@@ -924,7 +965,7 @@ fun HomeDashboardContent(
                     ) {
                         DaemonStatusBentoTile(
                             modifier = Modifier
-                                .weight(0.55f)
+                                .weight(0.58f)
                                 .then(heroOrigin.trackedModifier()),
                             isChecking = isChecking,
                             isRestarting = isRestarting,
@@ -947,8 +988,8 @@ fun HomeDashboardContent(
                         )
 
                         ActiveProfileBentoTile(
-                            modifier = Modifier.weight(0.45f),
-                            label = stringResource(R.string.home_profile),
+                            modifier = Modifier.weight(0.42f),
+                            label = homeLocalizedLabel("Profil aktif", "Active profile"),
                             profileName = currentProfile
                         )
                     }
@@ -962,17 +1003,42 @@ fun HomeDashboardContent(
                 }
             }
 
+            item(key = "telemetry_bento_pair") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    MemoryBentoTile(
+                        modifier = Modifier.weight(1f),
+                        telemetry = telemetry
+                    )
+
+                    BatteryBentoTile(
+                        modifier = Modifier.weight(1f),
+                        telemetry = telemetry
+                    )
+                }
+            }
+
             item(key = "device_specs_card") {
                 DeviceSpecsBentoCard(
-                    deviceLabel = stringResource(R.string.home_device_model),
+                    deviceLabel = homeLocalizedLabel("Model perangkat", "Device model"),
                     deviceValue = deviceModel,
-                    kernelLabel = stringResource(R.string.home_kernel_version),
+                    hardwareLabel = homeLocalizedLabel("Platform & prosesor", "Platform & processor"),
+                    hardwareValue = hardwareSummary,
+                    kernelLabel = homeLocalizedLabel("Versi kernel", "Kernel version"),
                     kernelValue = kernelVersion,
-                    managerLabel = stringResource(R.string.home_manager_version),
-                    managerValue = stringResource(
-                        R.string.home_version_release_format,
-                        BuildConfig.VERSION_NAME.removeSuffix(".0")
-                    )
+                    managerLabel = homeLocalizedLabel("Versi manajer & waktu aktif", "Manager version & uptime"),
+                    managerValue = "${BuildConfig.VERSION_NAME.removeSuffix(".0")} • $uptimeText"
+                )
+            }
+
+            item(key = "telegram_channel_card") {
+                TelegramChannelBentoCard(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        uriHandler.openUri("https://t.me/MallArchiven")
+                    }
                 )
             }
 
@@ -985,7 +1051,7 @@ fun HomeDashboardContent(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Rounded.Favorite,
                         title = stringResource(R.string.home_support_us),
-                        subtitle = stringResource(R.string.home_support_us_desc),
+                        subtitle = homeLocalizedLabel("Dukung proyek", "Support project"),
                         accentColor = scheme.tertiary,
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -996,8 +1062,8 @@ fun HomeDashboardContent(
                     ExpressiveInfoTile(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Rounded.MenuBook,
-                        title = stringResource(R.string.home_learn_more),
-                        subtitle = stringResource(R.string.home_learn_more_desc),
+                        title = homeLocalizedLabel("Dokumentasi", "Documentation"),
+                        subtitle = homeLocalizedLabel("Panduan & GitHub", "Guides & GitHub"),
                         accentColor = scheme.primary,
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -1069,12 +1135,12 @@ private fun DaemonStatusBentoTile(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             when {
                 isChecking || isRestarting -> CircularWavyProgressIndicator(
-                    modifier = Modifier.size(30.dp),
+                    modifier = Modifier.size(28.dp),
                     color = contentColor,
                     trackColor = contentColor.copy(alpha = 0.24f)
                 )
@@ -1082,25 +1148,25 @@ private fun DaemonStatusBentoTile(
                     imageVector = Icons.Outlined.CheckCircle,
                     contentDescription = null,
                     tint = contentColor,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(30.dp)
                 )
                 isRebootRequired -> Icon(
                     imageVector = Icons.Rounded.Refresh,
                     contentDescription = null,
                     tint = contentColor,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(30.dp)
                 )
                 !isModuleInstalled -> Icon(
                     imageVector = Icons.Rounded.ErrorOutline,
                     contentDescription = null,
                     tint = contentColor,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(30.dp)
                 )
                 else -> Icon(
                     imageVector = Icons.Rounded.HourglassEmpty,
                     contentDescription = null,
                     tint = contentColor,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(30.dp)
                 )
             }
 
@@ -1150,14 +1216,14 @@ private fun ActiveProfileBentoTile(
             .fillMaxWidth()
             .clip(RoundedCornerShape(26.dp))
             .background(scheme.surfaceContainerHigh)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Box(
             modifier = Modifier
-                .size(38.dp)
-                .clip(RoundedCornerShape(13.dp))
+                .size(36.dp)
+                .clip(RoundedCornerShape(12.dp))
                 .background(scheme.primary.copy(alpha = 0.14f)),
             contentAlignment = Alignment.Center
         ) {
@@ -1165,7 +1231,7 @@ private fun ActiveProfileBentoTile(
                 imageVector = Icons.Rounded.Speed,
                 contentDescription = null,
                 tint = scheme.primary,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(19.dp)
             )
         }
 
@@ -1243,7 +1309,7 @@ private fun TemperatureHeroTile(
         modifier = modifier
             .clip(RoundedCornerShape(26.dp))
             .background(scheme.surfaceContainerHigh)
-            .padding(horizontal = 16.dp, vertical = 16.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         Row(
@@ -1279,7 +1345,7 @@ private fun TemperatureHeroTile(
             }
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(
                 text = batteryTemp,
                 style = MaterialTheme.typography.displaySmall.copy(
@@ -1316,6 +1382,306 @@ private fun TemperatureHeroTile(
                 .fillMaxWidth()
                 .height(12.dp)
         )
+    }
+}
+
+@Composable
+private fun MemoryBentoTile(
+    telemetry: SystemTelemetrySnapshot,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    val animatedRam by animateFloatAsState(
+        targetValue = telemetry.ramPercent.coerceIn(0.05f, 1f),
+        animationSpec = spring(stiffness = 320f),
+        label = "ramProgress"
+    )
+    val ramValueText = remember(telemetry.ramUsedGb, telemetry.ramTotalGb) {
+        String.format(Locale.US, "%.1f / %.1f GB", telemetry.ramUsedGb, telemetry.ramTotalGb)
+    }
+    val usedPct = (telemetry.ramPercent * 100f).toInt().coerceIn(0, 100)
+
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(26.dp))
+            .background(scheme.surfaceContainerHigh)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = homeLocalizedLabel("Memori RAM", "RAM Memory"),
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = scheme.primary,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(scheme.primary.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Memory,
+                    contentDescription = null,
+                    tint = scheme.primary,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+
+        Text(
+            text = ramValueText,
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontWeight = FontWeight.Bold,
+                fontFeatureSettings = "tnum",
+                platformStyle = PlatformTextStyle(includeFontPadding = false)
+            ),
+            color = scheme.onSurface,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(CircleShape)
+                    .background(scheme.primary.copy(alpha = 0.16f))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(animatedRam)
+                        .fillMaxHeight()
+                        .clip(CircleShape)
+                        .background(scheme.primary)
+                )
+            }
+
+            Text(
+                text = homeLocalizedLabel("$usedPct% terpakai", "$usedPct% in use"),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = scheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false
+            )
+        }
+    }
+}
+
+@Composable
+private fun BatteryBentoTile(
+    telemetry: SystemTelemetrySnapshot,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    val animatedLevel by animateFloatAsState(
+        targetValue = (telemetry.batteryPercent / 100f).coerceIn(0.05f, 1f),
+        animationSpec = spring(stiffness = 320f),
+        label = "batteryProgress"
+    )
+    val accent = when {
+        telemetry.isCharging -> scheme.tertiary
+        telemetry.batteryPercent <= 20 -> scheme.error
+        else -> scheme.secondary
+    }
+    val statusSub = remember(telemetry.isCharging, telemetry.batteryVoltageV) {
+        val stateLabel = if (telemetry.isCharging) "Charging" else "Discharging"
+        if (telemetry.batteryVoltageV > 0f) {
+            String.format(Locale.US, "%s • %.2f V", stateLabel, telemetry.batteryVoltageV)
+        } else {
+            stateLabel
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(26.dp))
+            .background(scheme.surfaceContainerHigh)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = homeLocalizedLabel("Baterai", "Battery"),
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = accent,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(accent.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (telemetry.isCharging) {
+                        Icons.Rounded.BatteryChargingFull
+                    } else {
+                        Icons.Rounded.BatteryStd
+                    },
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+
+        Text(
+            text = "${telemetry.batteryPercent}%",
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontWeight = FontWeight.Bold,
+                fontFeatureSettings = "tnum",
+                platformStyle = PlatformTextStyle(includeFontPadding = false)
+            ),
+            color = scheme.onSurface,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(CircleShape)
+                    .background(accent.copy(alpha = 0.16f))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(animatedLevel)
+                        .fillMaxHeight()
+                        .clip(CircleShape)
+                        .background(accent)
+                )
+            }
+
+            Text(
+                text = statusSub,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = scheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun TelegramChannelBentoCard(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    val interactionSource = remember { MutableInteractionSource() }
+    val scaleModifier = pressScale(interactionSource, 0.975f)
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .then(scaleModifier)
+            .clip(RoundedCornerShape(26.dp))
+            .background(scheme.surfaceContainerHigh)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(scheme.primary.copy(alpha = 0.16f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Send,
+                contentDescription = null,
+                tint = scheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = homeLocalizedLabel("Channel Telegram", "Telegram Channel"),
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = scheme.onSurface,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Text(
+                text = "@MallArchiven • ${homeLocalizedLabel("Rilis & info pembaruan", "Releases & updates")}",
+                style = MaterialTheme.typography.bodySmall.copy(
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = scheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(scheme.secondaryContainer)
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = homeLocalizedLabel("Gabung", "Join"),
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false)
+                ),
+                color = scheme.onSecondaryContainer,
+                maxLines = 1,
+                softWrap = false
+            )
+        }
     }
 }
 
@@ -1382,6 +1748,8 @@ private fun ExpressiveWavyThermalBar(
 private fun DeviceSpecsBentoCard(
     deviceLabel: String,
     deviceValue: String,
+    hardwareLabel: String,
+    hardwareValue: String,
     kernelLabel: String,
     kernelValue: String,
     managerLabel: String,
@@ -1394,12 +1762,16 @@ private fun DeviceSpecsBentoCard(
             .fillMaxWidth()
             .clip(RoundedCornerShape(26.dp))
             .background(scheme.surfaceContainerHigh)
-            .padding(horizontal = 18.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(horizontal = 18.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         HomeEditorialSpecItem(
             label = deviceLabel,
             value = deviceValue
+        )
+        HomeEditorialSpecItem(
+            label = hardwareLabel,
+            value = hardwareValue
         )
         HomeEditorialSpecItem(
             label = kernelLabel,
@@ -1442,6 +1814,51 @@ private fun HomeEditorialSpecItem(
             overflow = TextOverflow.Ellipsis
         )
     }
+}
+
+private fun readSystemTelemetry(context: Context): SystemTelemetrySnapshot {
+    val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+    val memInfo = ActivityManager.MemoryInfo()
+    am?.getMemoryInfo(memInfo)
+    val totalBytes = memInfo.totalMem.coerceAtLeast(1L)
+    val availBytes = memInfo.availMem.coerceIn(0L, totalBytes)
+    val usedBytes = totalBytes - availBytes
+    val bytesPerGb = 1024f * 1024f * 1024f
+    val ramTotalGb = totalBytes / bytesPerGb
+    val ramUsedGb = usedBytes / bytesPerGb
+    val ramPercent = (usedBytes.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f)
+
+    val batteryIntent = runCatching {
+        context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+    }.getOrNull()
+    val level = batteryIntent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+    val scale = batteryIntent?.getIntExtra(BatteryManager.EXTRA_SCALE, 100) ?: 100
+    val batteryPercent = if (level >= 0 && scale > 0) {
+        ((level * 100f) / scale.toFloat()).toInt().coerceIn(0, 100)
+    } else {
+        0
+    }
+    val voltageMv = batteryIntent?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, 0) ?: 0
+    val batteryVoltageV = if (voltageMv > 100) voltageMv / 1000f else voltageMv.toFloat()
+    val status = batteryIntent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+    val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+        status == BatteryManager.BATTERY_STATUS_FULL
+
+    return SystemTelemetrySnapshot(
+        ramUsedGb = ramUsedGb,
+        ramTotalGb = ramTotalGb,
+        ramPercent = ramPercent,
+        batteryPercent = batteryPercent,
+        batteryVoltageV = batteryVoltageV,
+        isCharging = isCharging
+    )
+}
+
+private fun formatHomeUptime(): String {
+    val totalSec = (SystemClock.elapsedRealtime() / 1000L).coerceAtLeast(0L)
+    val hours = totalSec / 3600L
+    val minutes = (totalSec % 3600L) / 60L
+    return "${hours}h ${minutes}m"
 }
 
 private suspend fun rootReboot(mode: String) {
