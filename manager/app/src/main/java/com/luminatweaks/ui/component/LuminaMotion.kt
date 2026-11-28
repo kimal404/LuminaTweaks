@@ -47,7 +47,12 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -62,6 +67,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 
 fun <T> Modifier.trackSubpageBounds(
     key: T,
@@ -87,6 +93,7 @@ fun OdometerNumber(
     style: TextStyle = MaterialTheme.typography.displaySmall,
     color: Color = MaterialTheme.colorScheme.onSurface,
     digitWidthMultiplier: Float = 0.64f,
+    spinOnEnter: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val cleanStyle = remember(style) {
@@ -99,10 +106,14 @@ fun OdometerNumber(
             animationSpec = spring(dampingRatio = 0.86f, stiffness = 420f)
         )
     ) {
+        var digitColumnIndex = 0
         value.forEach { char ->
             if (char.isDigit()) {
+                val colIndex = digitColumnIndex++
                 SingleOdometerDigit(
                     targetDigit = char.digitToInt(),
+                    columnIndex = colIndex,
+                    spinOnEnter = spinOnEnter,
                     style = cleanStyle,
                     color = color,
                     digitWidthMultiplier = digitWidthMultiplier
@@ -123,6 +134,8 @@ fun OdometerNumber(
 @Composable
 private fun SingleOdometerDigit(
     targetDigit: Int,
+    columnIndex: Int,
+    spinOnEnter: Boolean,
     style: TextStyle,
     color: Color,
     digitWidthMultiplier: Float
@@ -135,16 +148,37 @@ private fun SingleOdometerDigit(
     }
     val digitWidthDp: Dp = with(density) { resolvedFontSize.toDp() * digitWidthMultiplier }
 
+    val spinSteps = 4
+    var hasSpun by remember { mutableStateOf(!spinOnEnter) }
+    var displayedDigit by remember {
+        mutableIntStateOf(
+            if (spinOnEnter) (targetDigit + 10 - spinSteps) % 10 else targetDigit
+        )
+    }
+
+    LaunchedEffect(targetDigit) {
+        if (!hasSpun) {
+            delay((columnIndex * 32L).coerceAtMost(160L))
+            for (step in (spinSteps - 1) downTo 0) {
+                displayedDigit = (targetDigit + 10 - step) % 10
+                if (step > 0) delay(48L)
+            }
+            hasSpun = true
+        } else {
+            displayedDigit = targetDigit
+        }
+    }
+
     AnimatedContent(
-        targetState = targetDigit,
+        targetState = displayedDigit,
         transitionSpec = {
-            val rollingUp = targetState >= initialState
+            val rollingUp = !hasSpun || targetState >= initialState
             val enter = slideInVertically(
-                animationSpec = spring(dampingRatio = 0.85f, stiffness = 420f)
-            ) { height -> if (rollingUp) height else -height } + fadeIn(tween(180))
+                animationSpec = spring(dampingRatio = 0.86f, stiffness = 480f)
+            ) { height -> if (rollingUp) height else -height } + fadeIn(tween(150))
             val exit = slideOutVertically(
-                animationSpec = spring(dampingRatio = 0.85f, stiffness = 420f)
-            ) { height -> if (rollingUp) -height else height } + fadeOut(tween(140))
+                animationSpec = spring(dampingRatio = 0.86f, stiffness = 480f)
+            ) { height -> if (rollingUp) -height else height } + fadeOut(tween(120))
             enter togetherWith exit
         },
         contentAlignment = Alignment.Center,
