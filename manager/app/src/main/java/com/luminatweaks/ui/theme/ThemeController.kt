@@ -92,18 +92,26 @@ enum class AccentIntensity(val label: String) {
 
     val saturationFactor: Float
         get() = when (this) {
-            Neutral -> 0.76f
-            Balanced -> 1.0f
-            Bright -> 1.18f
-            Vibrant -> 1.34f
+            Neutral -> 0.78f
+            Balanced -> 1.12f
+            Bright -> 1.30f
+            Vibrant -> 1.48f
         }
 
-    val lightnessLift: Float
+    val minAccentSaturation: Float
+        get() = when (this) {
+            Neutral -> 0.42f
+            Balanced -> 0.68f
+            Bright -> 0.80f
+            Vibrant -> 0.90f
+        }
+
+    val lightnessShift: Float
         get() = when (this) {
             Neutral -> 0.02f
-            Balanced -> 0.04f
-            Bright -> 0.065f
-            Vibrant -> 0.08f
+            Balanced -> 0.0f
+            Bright -> 0.03f
+            Vibrant -> 0.015f
         }
 
     companion object {
@@ -349,21 +357,21 @@ object ThemeController {
 }
 
 val keyColorOptions = listOf(
-    Color(0xFFF44336).toArgb(),
-    Color(0xFFE91E63).toArgb(),
-    Color(0xFF9C27B0).toArgb(),
-    Color(0xFF673AB7).toArgb(),
-    Color(0xFF3F51B5).toArgb(),
-    Color(0xFF2196F3).toArgb(),
-    Color(0xFF00BCD4).toArgb(),
-    Color(0xFF009688).toArgb(),
-    Color(0xFF4FAF50).toArgb(),
-    Color(0xFFFFEB3B).toArgb(),
-    Color(0xFFFFC107).toArgb(),
-    Color(0xFFFF9800).toArgb(),
-    Color(0xFF795548).toArgb(),
-    Color(0xFF607D8F).toArgb(),
-    Color(0xFFFF9CA8).toArgb()
+    Color(0xFFFF3B6B).toArgb(),
+    Color(0xFFFF5252).toArgb(),
+    Color(0xFFE040FB).toArgb(),
+    Color(0xFF7C4DFF).toArgb(),
+    Color(0xFF448AFF).toArgb(),
+    Color(0xFF00B0FF).toArgb(),
+    Color(0xFF00E5FF).toArgb(),
+    Color(0xFF1DE9B6).toArgb(),
+    Color(0xFF00E676).toArgb(),
+    Color(0xFFC6FF00).toArgb(),
+    Color(0xFFFFD740).toArgb(),
+    Color(0xFFFF9100).toArgb(),
+    Color(0xFFFF6E40).toArgb(),
+    Color(0xFF536DFE).toArgb(),
+    Color(0xFFFF80AB).toArgb()
 )
 
 fun ColorScheme.withAccentIntensity(
@@ -372,44 +380,47 @@ fun ColorScheme.withAccentIntensity(
     isAmoled: Boolean = false
 ): ColorScheme {
     val satFactor = intensity.saturationFactor
-    val lift = intensity.lightnessLift
+    val minSat = intensity.minAccentSaturation
+    val lift = intensity.lightnessShift
 
-    val accentMinL = if (isDark) 0.76f else 0.38f
-    val accentMaxL = if (isDark) 0.89f else 0.54f
-    val accentShift = if (isDark) lift else -lift * 0.45f
+    val accentMinL = if (isDark) 0.66f else 0.36f
+    val accentMaxL = if (isDark) 0.78f else 0.50f
+    val accentShift = if (isDark) lift else -lift * 0.4f
 
-    val containerMinL = if (isDark) 0.28f else 0.87f
-    val containerMaxL = if (isDark) 0.38f else 0.94f
-    val containerShift = if (isDark) lift * 0.9f else lift * 0.25f
+    val containerMinL = if (isDark) 0.27f else 0.85f
+    val containerMaxL = if (isDark) 0.37f else 0.93f
+    val containerShift = if (isDark) lift * 0.8f else lift * 0.2f
+    val containerMinSat = (minSat * 0.78f).coerceIn(0.32f, 0.86f)
 
     return copy(
-        primary = primary.withLuminousTone(satFactor, accentMinL, accentMaxL, accentShift),
-        onPrimary = onPrimary.withLuminousTone(satFactor, if (isDark) 0.14f else 0.96f, if (isDark) 0.24f else 1f, 0f),
-        primaryContainer = primaryContainer.withLuminousTone(satFactor, containerMinL, containerMaxL, containerShift),
-        onPrimaryContainer = onPrimaryContainer.withLuminousTone(satFactor, if (isDark) 0.88f else 0.12f, if (isDark) 0.96f else 0.22f, 0f),
-        secondary = secondary.withLuminousTone(satFactor * 0.92f, accentMinL - 0.03f, accentMaxL - 0.02f, accentShift * 0.8f),
-        onSecondary = onSecondary.withLuminousTone(satFactor * 0.92f, if (isDark) 0.14f else 0.96f, if (isDark) 0.24f else 1f, 0f),
-        secondaryContainer = secondaryContainer.withLuminousTone(satFactor * 0.92f, containerMinL - 0.02f, containerMaxL - 0.02f, containerShift * 0.8f),
-        onSecondaryContainer = onSecondaryContainer.withLuminousTone(satFactor * 0.92f, if (isDark) 0.88f else 0.12f, if (isDark) 0.96f else 0.22f, 0f),
-        tertiary = tertiary.withLuminousTone(satFactor, accentMinL, accentMaxL, accentShift),
-        onTertiary = onTertiary.withLuminousTone(satFactor, if (isDark) 0.14f else 0.96f, if (isDark) 0.24f else 1f, 0f),
-        tertiaryContainer = tertiaryContainer.withLuminousTone(satFactor, containerMinL, containerMaxL, containerShift),
-        onTertiaryContainer = onTertiaryContainer.withLuminousTone(satFactor, if (isDark) 0.88f else 0.12f, if (isDark) 0.96f else 0.22f, 0f)
+        primary = primary.withVividTone(satFactor, minSat, accentMinL, accentMaxL, accentShift),
+        onPrimary = onPrimary.withVividTone(satFactor, 0.25f, if (isDark) 0.10f else 0.97f, if (isDark) 0.20f else 1f, 0f),
+        primaryContainer = primaryContainer.withVividTone(satFactor, containerMinSat, containerMinL, containerMaxL, containerShift),
+        onPrimaryContainer = onPrimaryContainer.withVividTone(satFactor, 0.45f, if (isDark) 0.91f else 0.10f, if (isDark) 0.97f else 0.20f, 0f),
+        secondary = secondary.withVividTone(satFactor * 0.96f, minSat * 0.88f, accentMinL - 0.02f, accentMaxL - 0.01f, accentShift * 0.85f),
+        onSecondary = onSecondary.withVividTone(satFactor * 0.96f, 0.25f, if (isDark) 0.10f else 0.97f, if (isDark) 0.20f else 1f, 0f),
+        secondaryContainer = secondaryContainer.withVividTone(satFactor * 0.96f, containerMinSat * 0.92f, containerMinL - 0.01f, containerMaxL - 0.01f, containerShift * 0.85f),
+        onSecondaryContainer = onSecondaryContainer.withVividTone(satFactor * 0.96f, 0.45f, if (isDark) 0.91f else 0.10f, if (isDark) 0.97f else 0.20f, 0f),
+        tertiary = tertiary.withVividTone(satFactor * 1.04f, minSat, accentMinL, accentMaxL + 0.01f, accentShift),
+        onTertiary = onTertiary.withVividTone(satFactor * 1.04f, 0.25f, if (isDark) 0.10f else 0.97f, if (isDark) 0.20f else 1f, 0f),
+        tertiaryContainer = tertiaryContainer.withVividTone(satFactor * 1.04f, containerMinSat, containerMinL, containerMaxL, containerShift),
+        onTertiaryContainer = onTertiaryContainer.withVividTone(satFactor * 1.04f, 0.45f, if (isDark) 0.91f else 0.10f, if (isDark) 0.97f else 0.20f, 0f)
     )
 }
 
 internal fun Color.asTintedNeutral(targetLightness: Float, targetSaturation: Float): Color {
     val hsl = FloatArray(3)
     colorToHSL(this, hsl)
-    val effectiveSat = if (hsl[1] < 0.05f) 0f else targetSaturation.coerceIn(0f, 0.28f)
+    val effectiveSat = if (hsl[1] < 0.05f) 0f else targetSaturation.coerceIn(0f, 0.34f)
     return hslToColor(
         floatArrayOf(hsl[0], effectiveSat, targetLightness.coerceIn(0f, 1f)),
         this.alpha
     )
 }
 
-private fun Color.withLuminousTone(
+private fun Color.withVividTone(
     satFactor: Float,
+    minSaturation: Float,
     minLightness: Float,
     maxLightness: Float,
     lightnessShift: Float
@@ -417,7 +428,7 @@ private fun Color.withLuminousTone(
     val hsl = FloatArray(3)
     colorToHSL(this, hsl)
     if (hsl[1] >= 0.04f) {
-        hsl[1] = (hsl[1] * satFactor).coerceIn(0.18f, 0.94f)
+        hsl[1] = (hsl[1] * satFactor).coerceIn(minSaturation, 0.98f)
     }
     hsl[2] = (hsl[2] + lightnessShift).coerceIn(minLightness, maxLightness)
     return hslToColor(hsl, this.alpha)
@@ -432,7 +443,7 @@ data class OverlayPalette(
     val error: Int
 )
 
-private const val OVERLAY_FALLBACK_SEED = 0xFFE91E63.toInt()
+private const val OVERLAY_FALLBACK_SEED = 0xFFFF3B6B.toInt()
 
 fun ThemeController.overlayPalette(context: Context): OverlayPalette {
     val settings = getAppSettings(context)
@@ -462,13 +473,13 @@ fun ThemeController.overlayPalette(context: Context): OverlayPalette {
         AndroidColor.BLACK
     } else {
         blendOverlayColor(
-            if (dark) 0xFF1A181F.toInt() else 0xFFF8F9FB.toInt(),
+            if (dark) 0xFF18151E.toInt() else 0xFFF8F9FB.toInt(),
             seed,
-            if (dark) 0.09f else 0.05f
+            if (dark) 0.11f else 0.06f
         )
     }
-    val onSurface = if (dark) 0xFFF2F4F7.toInt() else 0xFF11161B.toInt()
-    val onSurfaceVariant = blendOverlayColor(onSurface, background, if (dark) 0.38f else 0.48f)
+    val onSurface = if (dark) 0xFFF4F6FA.toInt() else 0xFF11161B.toInt()
+    val onSurfaceVariant = blendOverlayColor(onSurface, background, if (dark) 0.36f else 0.46f)
     val error = if (dark) 0xFFFFB4AB.toInt() else 0xFFB3261E.toInt()
 
     return OverlayPalette(

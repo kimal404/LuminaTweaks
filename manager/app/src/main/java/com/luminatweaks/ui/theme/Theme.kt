@@ -48,6 +48,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -107,13 +108,7 @@ fun LuminaTheme(
             seedColor = baseScheme.primary,
             isDark = isDark,
             isAmoled = amoledMode,
-            specVersion = colorSpec,
-            primary = baseScheme.primary,
-            secondary = baseScheme.secondary,
-            tertiary = baseScheme.tertiary,
-            neutral = baseScheme.surface,
-            neutralVariant = baseScheme.surfaceVariant,
-            error = baseScheme.error
+            specVersion = colorSpec
         )
     } else {
         rememberDynamicColorScheme(
@@ -194,45 +189,45 @@ private fun ColorScheme.withLuminousSurfaceLadder(
     isDark: Boolean,
     isAmoled: Boolean
 ): ColorScheme {
-    val hueAnchor = primary
+    val cardAnchor = lerp(primary, tertiary, 0.22f)
     return when {
         isAmoled -> copy(
             background = Color.Black,
             surface = Color.Black,
             surfaceDim = Color.Black,
-            surfaceBright = hueAnchor.asTintedNeutral(0.18f, 0.14f),
+            surfaceBright = cardAnchor.asTintedNeutral(0.18f, 0.20f),
             surfaceContainerLowest = Color.Black,
-            surfaceContainerLow = hueAnchor.asTintedNeutral(0.085f, 0.12f),
-            surfaceContainer = hueAnchor.asTintedNeutral(0.12f, 0.14f),
-            surfaceContainerHigh = hueAnchor.asTintedNeutral(0.16f, 0.16f),
-            surfaceContainerHighest = hueAnchor.asTintedNeutral(0.205f, 0.18f),
-            outlineVariant = hueAnchor.asTintedNeutral(0.28f, 0.14f)
+            surfaceContainerLow = primary.asTintedNeutral(0.085f, 0.16f),
+            surfaceContainer = primary.asTintedNeutral(0.125f, 0.19f),
+            surfaceContainerHigh = cardAnchor.asTintedNeutral(0.17f, 0.22f),
+            surfaceContainerHighest = cardAnchor.asTintedNeutral(0.22f, 0.25f),
+            outlineVariant = cardAnchor.asTintedNeutral(0.30f, 0.20f)
         )
         isDark -> copy(
-            background = hueAnchor.asTintedNeutral(0.115f, 0.15f),
-            surface = hueAnchor.asTintedNeutral(0.115f, 0.15f),
-            surfaceDim = hueAnchor.asTintedNeutral(0.095f, 0.14f),
-            surfaceBright = hueAnchor.asTintedNeutral(0.255f, 0.18f),
-            surfaceContainerLowest = hueAnchor.asTintedNeutral(0.085f, 0.13f),
-            surfaceContainerLow = hueAnchor.asTintedNeutral(0.138f, 0.15f),
-            surfaceContainer = hueAnchor.asTintedNeutral(0.168f, 0.16f),
-            surfaceContainerHigh = hueAnchor.asTintedNeutral(0.205f, 0.18f),
-            surfaceContainerHighest = hueAnchor.asTintedNeutral(0.248f, 0.19f),
-            surfaceVariant = hueAnchor.asTintedNeutral(0.225f, 0.19f),
-            outlineVariant = hueAnchor.asTintedNeutral(0.34f, 0.15f)
+            background = primary.asTintedNeutral(0.095f, 0.18f),
+            surface = primary.asTintedNeutral(0.095f, 0.18f),
+            surfaceDim = primary.asTintedNeutral(0.078f, 0.16f),
+            surfaceBright = cardAnchor.asTintedNeutral(0.26f, 0.24f),
+            surfaceContainerLowest = primary.asTintedNeutral(0.07f, 0.16f),
+            surfaceContainerLow = primary.asTintedNeutral(0.125f, 0.19f),
+            surfaceContainer = primary.asTintedNeutral(0.155f, 0.21f),
+            surfaceContainerHigh = cardAnchor.asTintedNeutral(0.192f, 0.24f),
+            surfaceContainerHighest = cardAnchor.asTintedNeutral(0.238f, 0.26f),
+            surfaceVariant = cardAnchor.asTintedNeutral(0.215f, 0.25f),
+            outlineVariant = cardAnchor.asTintedNeutral(0.35f, 0.22f)
         )
         else -> copy(
-            background = hueAnchor.asTintedNeutral(0.975f, 0.16f),
-            surface = hueAnchor.asTintedNeutral(0.975f, 0.16f),
-            surfaceDim = hueAnchor.asTintedNeutral(0.92f, 0.18f),
-            surfaceBright = hueAnchor.asTintedNeutral(0.992f, 0.12f),
+            background = primary.asTintedNeutral(0.972f, 0.20f),
+            surface = primary.asTintedNeutral(0.972f, 0.20f),
+            surfaceDim = primary.asTintedNeutral(0.915f, 0.22f),
+            surfaceBright = primary.asTintedNeutral(0.992f, 0.14f),
             surfaceContainerLowest = Color.White,
-            surfaceContainerLow = hueAnchor.asTintedNeutral(0.955f, 0.18f),
-            surfaceContainer = hueAnchor.asTintedNeutral(0.93f, 0.20f),
-            surfaceContainerHigh = hueAnchor.asTintedNeutral(0.90f, 0.22f),
-            surfaceContainerHighest = hueAnchor.asTintedNeutral(0.868f, 0.24f),
-            surfaceVariant = hueAnchor.asTintedNeutral(0.89f, 0.22f),
-            outlineVariant = hueAnchor.asTintedNeutral(0.78f, 0.16f)
+            surfaceContainerLow = primary.asTintedNeutral(0.948f, 0.22f),
+            surfaceContainer = primary.asTintedNeutral(0.92f, 0.25f),
+            surfaceContainerHigh = cardAnchor.asTintedNeutral(0.888f, 0.28f),
+            surfaceContainerHighest = cardAnchor.asTintedNeutral(0.852f, 0.30f),
+            surfaceVariant = cardAnchor.asTintedNeutral(0.878f, 0.28f),
+            outlineVariant = cardAnchor.asTintedNeutral(0.76f, 0.20f)
         )
     }
 }
@@ -245,8 +240,8 @@ fun Modifier.luminaAmbientBackdrop(
     val isPureBlack = scheme.background == Color.Black
     if (isPureBlack) return@composed this
 
-    val topGlow = scheme.primary.copy(alpha = 0.085f)
-    val sideGlow = scheme.tertiary.copy(alpha = 0.055f)
+    val topGlow = scheme.primary.copy(alpha = 0.13f)
+    val sideGlow = scheme.tertiary.copy(alpha = 0.09f)
 
     this.drawBehind {
         val maxDim = maxOf(size.width, size.height).coerceAtLeast(1f)
