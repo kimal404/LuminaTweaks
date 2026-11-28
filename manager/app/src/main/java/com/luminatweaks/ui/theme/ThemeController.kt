@@ -111,9 +111,9 @@ data class HapticSettings(
 val LocalHapticConfig = staticCompositionLocalOf { HapticSettings() }
 
 enum class LuminaHapticPulse(val baseDurationMs: Long, val baseAmplitude: Int) {
-    Tick(12L, 70),
-    Click(18L, 140),
-    Heavy(30L, 235)
+    Tick(16L, 120),
+    Click(24L, 200),
+    Heavy(40L, 255)
 }
 
 object LuminaHapticEngine {
@@ -127,7 +127,7 @@ object LuminaHapticEngine {
             ThemeController.MIN_HAPTIC_INTENSITY,
             ThemeController.MAX_HAPTIC_INTENSITY
         )
-        val scaledAmplitude = (pulse.baseAmplitude * clampedIntensity)
+        val scaledAmplitude = (pulse.baseAmplitude * (0.6f + 0.4f * clampedIntensity))
             .roundToInt()
             .coerceIn(1, 255)
 
@@ -140,6 +140,26 @@ object LuminaHapticEngine {
                 context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
             }
             if (vibrator == null || !vibrator.hasVibrator()) return
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val primitive = when (pulse) {
+                    LuminaHapticPulse.Tick -> VibrationEffect.Composition.PRIMITIVE_TICK
+                    LuminaHapticPulse.Click -> VibrationEffect.Composition.PRIMITIVE_CLICK
+                    LuminaHapticPulse.Heavy -> VibrationEffect.Composition.PRIMITIVE_THUD
+                }
+                val supported = runCatching {
+                    vibrator.areAllPrimitivesSupported(primitive)
+                }.getOrDefault(false)
+                if (supported) {
+                    val scale = (0.45f + 0.55f * clampedIntensity).coerceIn(0.05f, 1f)
+                    vibrator.vibrate(
+                        VibrationEffect.startComposition()
+                            .addPrimitive(primitive, scale)
+                            .compose()
+                    )
+                    return
+                }
+            }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val effect = if (vibrator.hasAmplitudeControl()) {
@@ -163,7 +183,9 @@ class LuminaHapticFeedback(
     override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) {
         val pulse = when (hapticFeedbackType) {
             HapticFeedbackType.LongPress -> LuminaHapticPulse.Heavy
-            HapticFeedbackType.TextHandleMove -> LuminaHapticPulse.Tick
+            HapticFeedbackType.ToggleOn,
+            HapticFeedbackType.ToggleOff,
+            HapticFeedbackType.SegmentTick -> LuminaHapticPulse.Tick
             else -> LuminaHapticPulse.Click
         }
         LuminaHapticEngine.perform(context, settings, pulse)
