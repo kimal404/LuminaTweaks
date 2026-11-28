@@ -118,7 +118,6 @@ import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -188,7 +187,6 @@ import com.luminatweaks.ui.component.OdometerNumber
 import com.luminatweaks.ui.component.TouchOriginDialog
 import com.luminatweaks.ui.component.bouncyClickable
 import com.luminatweaks.ui.component.dampOverscrollPull
-import com.luminatweaks.ui.component.luminaHazeHeader
 import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.component.rememberDialogOrigin
 import com.luminatweaks.ui.theme.LocalCornerRadius
@@ -200,8 +198,6 @@ import com.luminatweaks.ui.theme.PageTransition
 import com.luminatweaks.ui.theme.rememberLuminaArtworkState
 import com.luminatweaks.util.DeviceUtil
 import com.luminatweaks.util.RootUtil
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
 import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.abs
@@ -1113,19 +1109,7 @@ fun HomeDashboardContent(
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val bottomPadding = if (isFloating) 112.dp + navInset else 28.dp + navInset
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
-    val fadeSurface = scheme.background
-    val hazeState = remember { HazeState() }
     val listState = rememberLazyListState()
-
-    val scrollOffsetPx by remember {
-        derivedStateOf {
-            if (listState.firstVisibleItemIndex > 0) {
-                600f
-            } else {
-                listState.firstVisibleItemScrollOffset.toFloat()
-            }
-        }
-    }
 
     val maxRevealPx = with(density) { 148.dp.toPx() }
     val pullAnim = remember { Animatable(0f) }
@@ -1184,25 +1168,6 @@ fun HomeDashboardContent(
     }
 
     val hasHeaderArtwork = headerBitmap != null
-    val rawHeaderScrimFraction by remember(hasHeaderArtwork) {
-        derivedStateOf {
-            if (!hasHeaderArtwork) {
-                scrollBehavior.state.overlappedFraction
-            } else {
-                val offset = if (listState.firstVisibleItemIndex > 0) {
-                    320f
-                } else {
-                    listState.firstVisibleItemScrollOffset.toFloat()
-                }
-                ((offset - 170f) / 100f).coerceIn(0f, 1f)
-            }
-        }
-    }
-    val headerScrimFraction by animateFloatAsState(
-        targetValue = rawHeaderScrimFraction,
-        animationSpec = tween(durationMillis = 120),
-        label = "homeHeaderScrim"
-    )
 
     Box(
         modifier = Modifier
@@ -1213,8 +1178,6 @@ fun HomeDashboardContent(
             HomeHeaderArtworkBackdrop(
                 bitmap = headerBitmap!!,
                 artwork = artworkState,
-                collapseFraction = scrollBehavior.state.collapsedFraction,
-                scrollOffsetPx = scrollOffsetPx,
                 surfaceColor = scheme.background
             )
         }
@@ -1224,58 +1187,44 @@ fun HomeDashboardContent(
             contentWindowInsets = WindowInsets(0.dp),
             containerColor = if (hasHeaderArtwork) Color.Transparent else scheme.background,
             topBar = {
-                val applyHaze = !hasHeaderArtwork || headerScrimFraction > 0.01f
-                Box(
-                    modifier = if (applyHaze) {
-                        Modifier.luminaHazeHeader(
-                            hazeState = hazeState,
-                            surfaceColor = fadeSurface,
-                            overlappedFraction = headerScrimFraction
+                LargeFlexibleTopAppBar(
+                    title = {
+                        Text(
+                            text = stringResource(R.string.app_name),
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
-                    } else {
-                        Modifier
-                    }
-                ) {
-                    LargeFlexibleTopAppBar(
-                        title = {
-                            Text(
-                                text = stringResource(R.string.app_name),
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        },
-                        actions = {
-                            IconButton(
-                                modifier = topBarPowerOrigin.trackedModifier(),
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    powerDialogOriginPoint = topBarPowerOrigin.origin
-                                    showPowerDialog = true
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.PowerSettingsNew,
-                                    contentDescription = stringResource(R.string.power_menu_title)
-                                )
+                    },
+                    actions = {
+                        IconButton(
+                            modifier = topBarPowerOrigin.trackedModifier(),
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                powerDialogOriginPoint = topBarPowerOrigin.origin
+                                showPowerDialog = true
                             }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color.Transparent,
-                            scrolledContainerColor = Color.Transparent
-                        ),
-                        scrollBehavior = scrollBehavior,
-                        windowInsets = TopAppBarDefaults.windowInsets
-                    )
-                }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.PowerSettingsNew,
+                                contentDescription = stringResource(R.string.power_menu_title)
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent
+                    ),
+                    scrollBehavior = scrollBehavior,
+                    windowInsets = TopAppBarDefaults.windowInsets
+                )
             }
         ) { innerPadding ->
             LazyColumn(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .nestedScroll(elasticRevealConnection)
-                    .hazeSource(state = hazeState),
+                    .nestedScroll(elasticRevealConnection),
                 contentPadding = PaddingValues(
                     top = innerPadding.calculateTopPadding() + 6.dp,
                     bottom = bottomPadding,
@@ -1449,14 +1398,10 @@ fun HomeDashboardContent(
 private fun HomeHeaderArtworkBackdrop(
     bitmap: ImageBitmap,
     artwork: LuminaArtworkState,
-    collapseFraction: Float,
-    scrollOffsetPx: Float,
     surfaceColor: Color
 ) {
     val isDark = surfaceColor.luminance() < 0.5f
-    val distanceFade = (1f - (scrollOffsetPx / 210f)).coerceIn(0f, 1f)
-    val collapseFade = (1f - collapseFraction * 0.35f).coerceIn(0.35f, 1f)
-    val effectiveAlpha = (if (isDark) artwork.alpha * 0.88f else artwork.alpha) * distanceFade * collapseFade
+    val effectiveAlpha = if (isDark) artwork.alpha * 0.88f else artwork.alpha
     val fade = artwork.fadeStrength.coerceIn(0.2f, 1.0f)
 
     val clearStop = (0.48f - fade * 0.28f).coerceIn(0.15f, 0.45f)
@@ -1488,7 +1433,7 @@ private fun HomeHeaderArtworkBackdrop(
                     scaleX = artwork.zoom
                     scaleY = artwork.zoom
                     translationX = artwork.offsetX * size.width * 0.35f
-                    translationY = (artwork.offsetY * size.height * 0.40f) - (scrollOffsetPx * 0.22f)
+                    translationY = artwork.offsetY * size.height * 0.40f
                 }
         )
 
@@ -1497,7 +1442,7 @@ private fun HomeHeaderArtworkBackdrop(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        0.0f to surfaceColor.copy(alpha = 0.22f),
+                        0.0f to surfaceColor.copy(alpha = 0.32f),
                         clearStop to Color.Transparent,
                         midStop to surfaceColor.copy(alpha = 0.58f),
                         endStop to surfaceColor.copy(alpha = 0.94f),
