@@ -1182,13 +1182,13 @@ fun HomeDashboardContent(
             }
         }
     }
-    val headerBlurAlpha by remember(hasHeaderArtwork) {
+    val headerOverlayAlpha by remember(hasHeaderArtwork) {
         derivedStateOf {
             if (!hasHeaderArtwork) {
                 scrollBehavior.state.overlappedFraction.coerceIn(0f, 1f)
             } else {
                 val c = scrollBehavior.state.collapsedFraction
-                ((c - 0.45f) / 0.55f).coerceIn(0f, 1f)
+                ((c - 0.55f) / 0.45f).coerceIn(0f, 1f)
             }
         }
     }
@@ -1199,17 +1199,28 @@ fun HomeDashboardContent(
         containerColor = scheme.background,
         topBar = {
             Box(modifier = Modifier.fillMaxWidth()) {
-                if (headerBlurAlpha > 0.005f) {
+                if (!hasHeaderArtwork) {
                     Box(
                         modifier = Modifier
                             .matchParentSize()
-                            .graphicsLayer { alpha = headerBlurAlpha }
                             .luminaHazeHeader(
                                 hazeState = hazeState,
                                 surfaceColor = scheme.background,
-                                overlappedFraction = headerBlurAlpha
+                                overlappedFraction = headerOverlayAlpha
                             )
-                            .background(scheme.background.copy(alpha = 0.68f * headerBlurAlpha))
+                    )
+                } else if (headerOverlayAlpha > 0.005f) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .graphicsLayer { alpha = headerOverlayAlpha }
+                            .background(
+                                Brush.verticalGradient(
+                                    0.0f to scheme.background,
+                                    0.82f to scheme.background.copy(alpha = 0.96f),
+                                    1.0f to Color.Transparent
+                                )
+                            )
                     )
                 }
                 LargeFlexibleTopAppBar(
@@ -1250,7 +1261,13 @@ fun HomeDashboardContent(
             modifier = Modifier
                 .fillMaxSize()
                 .background(scheme.background)
-                .hazeSource(state = hazeState)
+                .then(
+                    if (!hasHeaderArtwork) {
+                        Modifier.hazeSource(state = hazeState)
+                    } else {
+                        Modifier
+                    }
+                )
         ) {
             if (headerBitmap != null) {
                 HomeHeaderArtworkBackdrop(
