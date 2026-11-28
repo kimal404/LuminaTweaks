@@ -28,6 +28,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialExpressiveTheme
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -41,9 +42,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsControllerCompat
@@ -117,37 +124,29 @@ fun LuminaTheme(
         )
     }
 
-    val colorScheme = if (amoledMode) {
-        rawColorScheme.copy(
-            background = Color.Black,
-            surface = Color.Black,
-            surfaceDim = Color.Black,
-            surfaceContainerLowest = Color.Black,
-            surfaceContainerLow = Color(0xFF0A0A0A)
+    val tonedScheme = rawColorScheme
+        .withLuminousSurfaceLadder(isDark = isDark, isAmoled = amoledMode)
+        .withAccentIntensity(
+            intensity = themeState.accentIntensity,
+            isDark = isDark,
+            isAmoled = amoledMode
         )
-    } else {
-        if (darkTheme && (rawColorScheme.surfaceContainerLowest == Color.Black || rawColorScheme.surface == Color.Black || rawColorScheme.background == Color.Black)) {
-            val safeSurface = if (rawColorScheme.surface == Color.Black) Color(0xFF141218) else rawColorScheme.surface
-            val safeLowest = if (rawColorScheme.surfaceContainerLowest == Color.Black) Color(0xFF0F0D13) else rawColorScheme.surfaceContainerLowest
-            val safeBackground = if (rawColorScheme.background == Color.Black) safeSurface else rawColorScheme.background
-            val safeDim = if (rawColorScheme.surfaceDim == Color.Black) safeSurface else rawColorScheme.surfaceDim
-            rawColorScheme.copy(
-                background = safeBackground,
-                surface = safeSurface,
-                surfaceDim = safeDim,
-                surfaceContainerLowest = safeLowest
-            )
-        } else {
-            rawColorScheme
-        }
-    }
 
-    val animatedColorScheme = animateColorSchemeAsState(
-        targetColorScheme = colorScheme.withAccentIntensity(themeState.accentIntensity)
-    )
+    val animatedColorScheme = animateColorSchemeAsState(targetColorScheme = tonedScheme)
 
     val dynamicShapes = remember(themeState.cornerRadius) {
         createLuminaShapes(themeState.cornerRadius)
+    }
+
+    val hapticSettings = remember(themeState.hapticEnabled, themeState.hapticIntensity) {
+        HapticSettings(
+            enabled = themeState.hapticEnabled,
+            intensity = themeState.hapticIntensity
+        )
+    }
+    val systemHaptic = LocalHapticFeedback.current
+    val luminaHaptic = remember(context, systemHaptic, hapticSettings) {
+        LuminaHapticFeedback(context, systemHaptic, hapticSettings)
     }
 
     val view = LocalView.current
@@ -184,7 +183,86 @@ fun LuminaTheme(
             LocalScrollAnimation provides themeState.scrollAnimation,
             LocalEdgeSwipeBack provides themeState.edgeSwipeBack,
             LocalPageTransition provides themeState.pageTransition,
+            LocalHapticConfig provides hapticSettings,
+            LocalHapticFeedback provides luminaHaptic,
             content = content
+        )
+    }
+}
+
+private fun ColorScheme.withLuminousSurfaceLadder(
+    isDark: Boolean,
+    isAmoled: Boolean
+): ColorScheme {
+    val hueAnchor = primary
+    return when {
+        isAmoled -> copy(
+            background = Color.Black,
+            surface = Color.Black,
+            surfaceDim = Color.Black,
+            surfaceBright = hueAnchor.asTintedNeutral(0.18f, 0.14f),
+            surfaceContainerLowest = Color.Black,
+            surfaceContainerLow = hueAnchor.asTintedNeutral(0.085f, 0.12f),
+            surfaceContainer = hueAnchor.asTintedNeutral(0.12f, 0.14f),
+            surfaceContainerHigh = hueAnchor.asTintedNeutral(0.16f, 0.16f),
+            surfaceContainerHighest = hueAnchor.asTintedNeutral(0.205f, 0.18f),
+            outlineVariant = hueAnchor.asTintedNeutral(0.28f, 0.14f)
+        )
+        isDark -> copy(
+            background = hueAnchor.asTintedNeutral(0.115f, 0.15f),
+            surface = hueAnchor.asTintedNeutral(0.115f, 0.15f),
+            surfaceDim = hueAnchor.asTintedNeutral(0.095f, 0.14f),
+            surfaceBright = hueAnchor.asTintedNeutral(0.255f, 0.18f),
+            surfaceContainerLowest = hueAnchor.asTintedNeutral(0.085f, 0.13f),
+            surfaceContainerLow = hueAnchor.asTintedNeutral(0.138f, 0.15f),
+            surfaceContainer = hueAnchor.asTintedNeutral(0.168f, 0.16f),
+            surfaceContainerHigh = hueAnchor.asTintedNeutral(0.205f, 0.18f),
+            surfaceContainerHighest = hueAnchor.asTintedNeutral(0.248f, 0.19f),
+            surfaceVariant = hueAnchor.asTintedNeutral(0.225f, 0.19f),
+            outlineVariant = hueAnchor.asTintedNeutral(0.34f, 0.15f)
+        )
+        else -> copy(
+            background = hueAnchor.asTintedNeutral(0.975f, 0.16f),
+            surface = hueAnchor.asTintedNeutral(0.975f, 0.16f),
+            surfaceDim = hueAnchor.asTintedNeutral(0.92f, 0.18f),
+            surfaceBright = hueAnchor.asTintedNeutral(0.992f, 0.12f),
+            surfaceContainerLowest = Color.White,
+            surfaceContainerLow = hueAnchor.asTintedNeutral(0.955f, 0.18f),
+            surfaceContainer = hueAnchor.asTintedNeutral(0.93f, 0.20f),
+            surfaceContainerHigh = hueAnchor.asTintedNeutral(0.90f, 0.22f),
+            surfaceContainerHighest = hueAnchor.asTintedNeutral(0.868f, 0.24f),
+            surfaceVariant = hueAnchor.asTintedNeutral(0.89f, 0.22f),
+            outlineVariant = hueAnchor.asTintedNeutral(0.78f, 0.16f)
+        )
+    }
+}
+
+fun Modifier.luminaAmbientBackdrop(
+    enabled: Boolean = true
+): Modifier = composed {
+    if (!enabled) return@composed this
+    val scheme = MaterialTheme.colorScheme
+    val isPureBlack = scheme.background == Color.Black
+    if (isPureBlack) return@composed this
+
+    val topGlow = scheme.primary.copy(alpha = 0.085f)
+    val sideGlow = scheme.tertiary.copy(alpha = 0.055f)
+
+    this.drawBehind {
+        val maxDim = maxOf(size.width, size.height).coerceAtLeast(1f)
+        drawRect(
+            brush = Brush.radialGradient(
+                colors = listOf(topGlow, Color.Transparent),
+                center = Offset(size.width * 0.22f, size.height * 0.06f),
+                radius = maxDim * 0.72f
+            )
+        )
+        drawRect(
+            brush = Brush.radialGradient(
+                colors = listOf(sideGlow, Color.Transparent),
+                center = Offset(size.width * 0.88f, size.height * 0.28f),
+                radius = maxDim * 0.62f
+            )
         )
     }
 }

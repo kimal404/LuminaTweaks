@@ -35,9 +35,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.graphics.toArgb
 import kotlin.math.roundToInt
 
 enum class ColorMode(val value: Int) {
@@ -92,10 +92,18 @@ enum class AccentIntensity(val label: String) {
 
     val saturationFactor: Float
         get() = when (this) {
-            Neutral -> 0.72f
-            Balanced -> 1f
-            Bright -> 1.28f
-            Vibrant -> 1.55f
+            Neutral -> 0.76f
+            Balanced -> 1.0f
+            Bright -> 1.18f
+            Vibrant -> 1.34f
+        }
+
+    val lightnessLift: Float
+        get() = when (this) {
+            Neutral -> 0.02f
+            Balanced -> 0.04f
+            Bright -> 0.065f
+            Vibrant -> 0.08f
         }
 
     companion object {
@@ -363,19 +371,56 @@ fun ColorScheme.withAccentIntensity(
     isDark: Boolean = true,
     isAmoled: Boolean = false
 ): ColorScheme {
-    if (intensity == AccentIntensity.Balanced) return this
-    val f = intensity.saturationFactor
+    val satFactor = intensity.saturationFactor
+    val lift = intensity.lightnessLift
+
+    val accentMinL = if (isDark) 0.76f else 0.38f
+    val accentMaxL = if (isDark) 0.89f else 0.54f
+    val accentShift = if (isDark) lift else -lift * 0.45f
+
+    val containerMinL = if (isDark) 0.28f else 0.87f
+    val containerMaxL = if (isDark) 0.38f else 0.94f
+    val containerShift = if (isDark) lift * 0.9f else lift * 0.25f
+
     return copy(
-        primary = primary.scaledSaturation(f),
-        onPrimary = onPrimary.scaledSaturation(f),
-        primaryContainer = primaryContainer.scaledSaturation(f),
-        onPrimaryContainer = onPrimaryContainer.scaledSaturation(f),
-        secondary = secondary.scaledSaturation(f),
-        onSecondary = onSecondary.scaledSaturation(f),
-        secondaryContainer = secondaryContainer.scaledSaturation(f),
-        tertiary = tertiary.scaledSaturation(f),
-        tertiaryContainer = tertiaryContainer.scaledSaturation(f)
+        primary = primary.withLuminousTone(satFactor, accentMinL, accentMaxL, accentShift),
+        onPrimary = onPrimary.withLuminousTone(satFactor, if (isDark) 0.14f else 0.96f, if (isDark) 0.24f else 1f, 0f),
+        primaryContainer = primaryContainer.withLuminousTone(satFactor, containerMinL, containerMaxL, containerShift),
+        onPrimaryContainer = onPrimaryContainer.withLuminousTone(satFactor, if (isDark) 0.88f else 0.12f, if (isDark) 0.96f else 0.22f, 0f),
+        secondary = secondary.withLuminousTone(satFactor * 0.92f, accentMinL - 0.03f, accentMaxL - 0.02f, accentShift * 0.8f),
+        onSecondary = onSecondary.withLuminousTone(satFactor * 0.92f, if (isDark) 0.14f else 0.96f, if (isDark) 0.24f else 1f, 0f),
+        secondaryContainer = secondaryContainer.withLuminousTone(satFactor * 0.92f, containerMinL - 0.02f, containerMaxL - 0.02f, containerShift * 0.8f),
+        onSecondaryContainer = onSecondaryContainer.withLuminousTone(satFactor * 0.92f, if (isDark) 0.88f else 0.12f, if (isDark) 0.96f else 0.22f, 0f),
+        tertiary = tertiary.withLuminousTone(satFactor, accentMinL, accentMaxL, accentShift),
+        onTertiary = onTertiary.withLuminousTone(satFactor, if (isDark) 0.14f else 0.96f, if (isDark) 0.24f else 1f, 0f),
+        tertiaryContainer = tertiaryContainer.withLuminousTone(satFactor, containerMinL, containerMaxL, containerShift),
+        onTertiaryContainer = onTertiaryContainer.withLuminousTone(satFactor, if (isDark) 0.88f else 0.12f, if (isDark) 0.96f else 0.22f, 0f)
     )
+}
+
+internal fun Color.asTintedNeutral(targetLightness: Float, targetSaturation: Float): Color {
+    val hsl = FloatArray(3)
+    colorToHSL(this, hsl)
+    val effectiveSat = if (hsl[1] < 0.05f) 0f else targetSaturation.coerceIn(0f, 0.28f)
+    return hslToColor(
+        floatArrayOf(hsl[0], effectiveSat, targetLightness.coerceIn(0f, 1f)),
+        this.alpha
+    )
+}
+
+private fun Color.withLuminousTone(
+    satFactor: Float,
+    minLightness: Float,
+    maxLightness: Float,
+    lightnessShift: Float
+): Color {
+    val hsl = FloatArray(3)
+    colorToHSL(this, hsl)
+    if (hsl[1] >= 0.04f) {
+        hsl[1] = (hsl[1] * satFactor).coerceIn(0.18f, 0.94f)
+    }
+    hsl[2] = (hsl[2] + lightnessShift).coerceIn(minLightness, maxLightness)
+    return hslToColor(hsl, this.alpha)
 }
 
 data class OverlayPalette(
@@ -417,13 +462,13 @@ fun ThemeController.overlayPalette(context: Context): OverlayPalette {
         AndroidColor.BLACK
     } else {
         blendOverlayColor(
-            if (dark) 0xFF141218.toInt() else 0xFFF5F7F9.toInt(),
+            if (dark) 0xFF1A181F.toInt() else 0xFFF8F9FB.toInt(),
             seed,
-            if (dark) 0.06f else 0.04f
+            if (dark) 0.09f else 0.05f
         )
     }
     val onSurface = if (dark) 0xFFF2F4F7.toInt() else 0xFF11161B.toInt()
-    val onSurfaceVariant = blendOverlayColor(onSurface, background, if (dark) 0.42f else 0.52f)
+    val onSurfaceVariant = blendOverlayColor(onSurface, background, if (dark) 0.38f else 0.48f)
     val error = if (dark) 0xFFFFB4AB.toInt() else 0xFFB3261E.toInt()
 
     return OverlayPalette(
@@ -460,13 +505,6 @@ private fun blendOverlayColor(base: Int, tint: Int, amount: Float): Int {
         channel(AndroidColor.green(base), AndroidColor.green(tint)),
         channel(AndroidColor.blue(base), AndroidColor.blue(tint))
     )
-}
-
-private fun Color.scaledSaturation(factor: Float): Color {
-    val hsl = FloatArray(3)
-    colorToHSL(this, hsl)
-    hsl[1] = (hsl[1] * factor).coerceIn(0f, 1f)
-    return hslToColor(hsl, this.alpha)
 }
 
 private fun colorToHSL(color: Color, out: FloatArray) {

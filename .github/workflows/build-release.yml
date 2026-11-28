@@ -2,7 +2,7 @@ name: Build & Sign Release
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, canary ]
     tags:
       - 'v*'
   workflow_dispatch:
@@ -17,6 +17,21 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Determine Build Variant
+        id: variant
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/canary" ]; then
+            echo "apk_dir=debug" >> $GITHUB_OUTPUT
+            echo "gradle_task=assembleDebug" >> $GITHUB_OUTPUT
+            echo "channel_tag=-canary" >> $GITHUB_OUTPUT
+            echo "badge=[CANARY • DEBUG]" >> $GITHUB_OUTPUT
+          else
+            echo "apk_dir=release" >> $GITHUB_OUTPUT
+            echo "gradle_task=assembleRelease" >> $GITHUB_OUTPUT
+            echo "channel_tag=" >> $GITHUB_OUTPUT
+            echo "badge=[RELEASE]" >> $GITHUB_OUTPUT
+          fi
 
       - name: Set up Java JDK 17
         uses: actions/setup-java@v4
@@ -53,9 +68,9 @@ jobs:
           fi
           echo "$KEYSTORE_BASE64" | base64 -d > lumina-release.jks
 
-      - name: Compile Release APK
+      - name: Compile APK (${{ steps.variant.outputs.apk_dir }})
         working-directory: manager
-        run: ./gradlew clean assembleRelease
+        run: ./gradlew clean ${{ steps.variant.outputs.gradle_task }}
 
       - name: Sign & Align APK
         env:
@@ -64,7 +79,7 @@ jobs:
         run: |
           BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | tail -n 1)
           mkdir -p dist
-          find manager/app/build/outputs/apk/release -name "*.apk" | while read -r apk; do
+          find "manager/app/build/outputs/apk/${{ steps.variant.outputs.apk_dir }}" -name "*.apk" | while read -r apk; do
             base_name=$(basename "$apk" .apk)
             aligned="dist/${base_name}-aligned.apk"
             signed="dist/${base_name}-signed.apk"
@@ -96,7 +111,7 @@ jobs:
             *) MOD_VER="v${MOD_VER}" ;;
           esac
 
-          ZIP_NAME="LuminaTweaks-${MOD_VER}-ci${{ github.run_number }}-${SHORT_SHA}.zip"
+          ZIP_NAME="LuminaTweaks-${MOD_VER}${{ steps.variant.outputs.channel_tag }}-ci${{ github.run_number }}-${SHORT_SHA}.zip"
           ZIP_TARGET="${GITHUB_WORKSPACE}/dist/${ZIP_NAME}"
 
           mkdir -p build_module
@@ -121,7 +136,7 @@ jobs:
 
           APK_FILE=$(ls dist/*-signed.apk 2>/dev/null | head -n 1)
           if [ -z "$APK_FILE" ]; then
-            APK_FILE=$(find manager/app/build/outputs/apk/release -name "*.apk" | head -n 1)
+            APK_FILE=$(find "manager/app/build/outputs/apk/${{ steps.variant.outputs.apk_dir }}" -name "*.apk" | head -n 1)
           fi
           echo "Mengemas APK ke dalam modul: $APK_FILE"
           cp "$APK_FILE" build_module/manager.apk
@@ -153,7 +168,7 @@ jobs:
           WORKFLOW_URL="${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
           SAFE_MSG=$(echo "$COMMIT_RAW_MSG" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
 
-          CAPTION="<b>LuminaTweaks</b>
+          CAPTION="<b>LuminaTweaks</b> ${{ steps.variant.outputs.badge }}
           #ci_${RUN_NUM}
 
           <pre>${SAFE_MSG}</pre>
