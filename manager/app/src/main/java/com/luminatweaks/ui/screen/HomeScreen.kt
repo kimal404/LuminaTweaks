@@ -133,6 +133,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -1173,25 +1176,6 @@ fun HomeDashboardContent(
     }
 
     val hasHeaderArtwork = headerBitmap != null
-    val scrollOffsetPx by remember {
-        derivedStateOf {
-            if (listState.firstVisibleItemIndex > 0) {
-                600f
-            } else {
-                listState.firstVisibleItemScrollOffset.toFloat()
-            }
-        }
-    }
-    val headerOverlayAlpha by remember(hasHeaderArtwork) {
-        derivedStateOf {
-            if (!hasHeaderArtwork) {
-                scrollBehavior.state.overlappedFraction.coerceIn(0f, 1f)
-            } else {
-                val c = scrollBehavior.state.collapsedFraction
-                ((c - 0.55f) / 0.45f).coerceIn(0f, 1f)
-            }
-        }
-    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -1206,20 +1190,7 @@ fun HomeDashboardContent(
                             .luminaHazeHeader(
                                 hazeState = hazeState,
                                 surfaceColor = scheme.background,
-                                overlappedFraction = headerOverlayAlpha
-                            )
-                    )
-                } else if (headerOverlayAlpha > 0.005f) {
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .graphicsLayer { alpha = headerOverlayAlpha }
-                            .background(
-                                Brush.verticalGradient(
-                                    0.0f to scheme.background,
-                                    0.82f to scheme.background.copy(alpha = 0.96f),
-                                    1.0f to Color.Transparent
-                                )
+                                overlappedFraction = scrollBehavior.state.overlappedFraction
                             )
                     )
                 }
@@ -1257,6 +1228,9 @@ fun HomeDashboardContent(
             }
         }
     ) { innerPadding ->
+        val topBarCutoffPx = with(density) { innerPadding.calculateTopPadding().toPx() }
+        val fadeBandPx = with(density) { 18.dp.toPx() }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1273,8 +1247,6 @@ fun HomeDashboardContent(
                 HomeHeaderArtworkBackdrop(
                     bitmap = headerBitmap!!,
                     artwork = artworkState,
-                    collapseFraction = scrollBehavior.state.collapsedFraction,
-                    scrollOffsetPx = scrollOffsetPx,
                     surfaceColor = scheme.background
                 )
             }
@@ -1283,7 +1255,32 @@ fun HomeDashboardContent(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .nestedScroll(elasticRevealConnection),
+                    .nestedScroll(elasticRevealConnection)
+                    .then(
+                        if (hasHeaderArtwork) {
+                            Modifier
+                                .graphicsLayer {
+                                    compositingStrategy = CompositingStrategy.Offscreen
+                                }
+                                .drawWithContent {
+                                    drawContent()
+                                    val h = size.height.coerceAtLeast(1f)
+                                    val clearStop = ((topBarCutoffPx - fadeBandPx * 0.6f) / h).coerceIn(0f, 0.95f)
+                                    val solidStop = ((topBarCutoffPx + fadeBandPx * 0.4f) / h).coerceIn(clearStop + 0.005f, 1f)
+                                    drawRect(
+                                        brush = Brush.verticalGradient(
+                                            0.0f to Color.Transparent,
+                                            clearStop to Color.Transparent,
+                                            solidStop to Color.Black,
+                                            1.0f to Color.Black
+                                        ),
+                                        blendMode = BlendMode.DstIn
+                                    )
+                                }
+                        } else {
+                            Modifier
+                        }
+                    ),
                 contentPadding = PaddingValues(
                     top = innerPadding.calculateTopPadding() + 6.dp,
                     bottom = bottomPadding,
@@ -1457,13 +1454,10 @@ fun HomeDashboardContent(
 private fun HomeHeaderArtworkBackdrop(
     bitmap: ImageBitmap,
     artwork: LuminaArtworkState,
-    collapseFraction: Float,
-    scrollOffsetPx: Float,
     surfaceColor: Color
 ) {
     val isDark = surfaceColor.luminance() < 0.5f
-    val collapseFade = (1f - collapseFraction * 1.15f).coerceIn(0f, 1f)
-    val effectiveAlpha = (if (isDark) artwork.alpha * 0.88f else artwork.alpha) * collapseFade
+    val effectiveAlpha = if (isDark) artwork.alpha * 0.88f else artwork.alpha
     val fade = artwork.fadeStrength.coerceIn(0.2f, 1.0f)
 
     val clearStop = (0.48f - fade * 0.28f).coerceIn(0.15f, 0.45f)
@@ -1474,10 +1468,6 @@ private fun HomeHeaderArtworkBackdrop(
         modifier = Modifier
             .fillMaxWidth()
             .height(artwork.bannerHeightDp.dp)
-            .graphicsLayer {
-                alpha = collapseFade
-                translationY = -scrollOffsetPx * 0.45f
-            }
             .clipToBounds()
     ) {
         Image(
