@@ -134,10 +134,11 @@ fun GameDeckSettingsScreen(onBack: () -> Unit) {
     val hazeState = remember { HazeState() }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
+    val emptyPreviewIcons: Map<String, ImageBitmap> = emptyMap()
     var config by remember { mutableStateOf(GameDeckPrefs.load(context)) }
     var showAppPicker by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
-    var selectedIcons by remember { mutableStateOf>(emptyMap()) }
+    var selectedIcons by remember { mutableStateOf(emptyPreviewIcons) }
 
     fun save(updated: GameDeckConfig) {
         config = updated
@@ -168,12 +169,12 @@ fun GameDeckSettingsScreen(onBack: () -> Unit) {
 
     LaunchedEffect(config.quickApps) {
         if (config.quickApps.isEmpty()) {
-            selectedIcons = emptyMap()
+            selectedIcons = emptyPreviewIcons
             return@LaunchedEffect
         }
         selectedIcons = withContext(Dispatchers.IO) {
             val pm = context.packageManager
-            val map = mutableMapOf<String, ImageBitmap>()
+            val map = LinkedHashMap<String, ImageBitmap>()
             config.quickApps.take(4).forEach { pkg ->
                 val drawable = deckIconCache.getOrPut(pkg) {
                     runCatching { pm.getApplicationIcon(pkg) }.getOrNull()
@@ -1056,9 +1057,11 @@ private fun DeckAppsPickerSheet(
     val context = LocalContext.current
     val scheme = MaterialTheme.colorScheme
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var apps by remember { mutableStateOf<List<AppItem>>(emptyList()) }
+    val emptyApps: List<AppItem> = emptyList()
+    val emptyIcons: Map<String, ImageBitmap> = emptyMap()
+    var apps by remember { mutableStateOf(emptyApps) }
     var loading by remember { mutableStateOf(true) }
-    var icons by remember { mutableStateOf>(emptyMap()) }
+    var icons by remember { mutableStateOf(emptyIcons) }
     var searchQuery by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
@@ -1094,7 +1097,7 @@ private fun DeckAppsPickerSheet(
         if (apps.isEmpty()) return@LaunchedEffect
         icons = withContext(Dispatchers.IO) {
             val pm = context.packageManager
-            val result = mutableMapOf<String, ImageBitmap>()
+            val result = LinkedHashMap<String, ImageBitmap>()
             apps.forEach { app ->
                 val drawable = deckIconCache.getOrPut(app.packageName) {
                     runCatching { pm.getApplicationIcon(app.packageName) }.getOrNull()
