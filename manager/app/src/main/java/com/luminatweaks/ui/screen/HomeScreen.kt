@@ -1172,15 +1172,24 @@ fun HomeDashboardContent(
         }
     }
 
-    val blurRampPx = with(density) { 40.dp.toPx() }
-    val headerBlurAlpha by remember(blurRampPx) {
+    val hasHeaderArtwork = headerBitmap != null
+    val scrollOffsetPx by remember {
         derivedStateOf {
-            val offsetPx = if (listState.firstVisibleItemIndex > 0) {
-                blurRampPx
+            if (listState.firstVisibleItemIndex > 0) {
+                600f
             } else {
                 listState.firstVisibleItemScrollOffset.toFloat()
             }
-            (offsetPx / blurRampPx).coerceIn(0f, 1f)
+        }
+    }
+    val headerBlurAlpha by remember(hasHeaderArtwork) {
+        derivedStateOf {
+            if (!hasHeaderArtwork) {
+                scrollBehavior.state.overlappedFraction.coerceIn(0f, 1f)
+            } else {
+                val c = scrollBehavior.state.collapsedFraction
+                ((c - 0.45f) / 0.55f).coerceIn(0f, 1f)
+            }
         }
     }
 
@@ -1190,16 +1199,19 @@ fun HomeDashboardContent(
         containerColor = scheme.background,
         topBar = {
             Box(modifier = Modifier.fillMaxWidth()) {
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .graphicsLayer { alpha = headerBlurAlpha }
-                        .luminaHazeHeader(
-                            hazeState = hazeState,
-                            surfaceColor = scheme.background,
-                            overlappedFraction = headerBlurAlpha
-                        )
-                )
+                if (headerBlurAlpha > 0.005f) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .graphicsLayer { alpha = headerBlurAlpha }
+                            .luminaHazeHeader(
+                                hazeState = hazeState,
+                                surfaceColor = scheme.background,
+                                overlappedFraction = headerBlurAlpha
+                            )
+                            .background(scheme.background.copy(alpha = 0.68f * headerBlurAlpha))
+                    )
+                }
                 LargeFlexibleTopAppBar(
                     title = {
                         Text(
@@ -1244,6 +1256,8 @@ fun HomeDashboardContent(
                 HomeHeaderArtworkBackdrop(
                     bitmap = headerBitmap!!,
                     artwork = artworkState,
+                    collapseFraction = scrollBehavior.state.collapsedFraction,
+                    scrollOffsetPx = scrollOffsetPx,
                     surfaceColor = scheme.background
                 )
             }
@@ -1426,10 +1440,13 @@ fun HomeDashboardContent(
 private fun HomeHeaderArtworkBackdrop(
     bitmap: ImageBitmap,
     artwork: LuminaArtworkState,
+    collapseFraction: Float,
+    scrollOffsetPx: Float,
     surfaceColor: Color
 ) {
     val isDark = surfaceColor.luminance() < 0.5f
-    val effectiveAlpha = if (isDark) artwork.alpha * 0.88f else artwork.alpha
+    val collapseFade = (1f - collapseFraction * 1.15f).coerceIn(0f, 1f)
+    val effectiveAlpha = (if (isDark) artwork.alpha * 0.88f else artwork.alpha) * collapseFade
     val fade = artwork.fadeStrength.coerceIn(0.2f, 1.0f)
 
     val clearStop = (0.48f - fade * 0.28f).coerceIn(0.15f, 0.45f)
@@ -1440,6 +1457,10 @@ private fun HomeHeaderArtworkBackdrop(
         modifier = Modifier
             .fillMaxWidth()
             .height(artwork.bannerHeightDp.dp)
+            .graphicsLayer {
+                alpha = collapseFade
+                translationY = -scrollOffsetPx * 0.45f
+            }
             .clipToBounds()
     ) {
         Image(
