@@ -1190,11 +1190,11 @@ fun HomeDashboardContent(
                 scrollBehavior.state.overlappedFraction
             } else {
                 val offset = if (listState.firstVisibleItemIndex > 0) {
-                    200f
+                    320f
                 } else {
                     listState.firstVisibleItemScrollOffset.toFloat()
                 }
-                (offset / 140f).coerceIn(0f, 1f)
+                ((offset - 170f) / 100f).coerceIn(0f, 1f)
             }
         }
     }
@@ -1265,7 +1265,7 @@ fun HomeDashboardContent(
                             scrolledContainerColor = Color.Transparent
                         ),
                         scrollBehavior = scrollBehavior,
-                        windowInsets = WindowInsets(0, 0, 0, 0)
+                        windowInsets = TopAppBarDefaults.windowInsets
                     )
                 }
             }
@@ -1454,8 +1454,8 @@ private fun HomeHeaderArtworkBackdrop(
     surfaceColor: Color
 ) {
     val isDark = surfaceColor.luminance() < 0.5f
-    val distanceFade = (1f - (scrollOffsetPx / 420f)).coerceIn(0f, 1f)
-    val collapseFade = (1f - collapseFraction * 0.45f).coerceIn(0.25f, 1f)
+    val distanceFade = (1f - (scrollOffsetPx / 210f)).coerceIn(0f, 1f)
+    val collapseFade = (1f - collapseFraction * 0.35f).coerceIn(0.35f, 1f)
     val effectiveAlpha = (if (isDark) artwork.alpha * 0.88f else artwork.alpha) * distanceFade * collapseFade
     val fade = artwork.fadeStrength.coerceIn(0.2f, 1.0f)
 
