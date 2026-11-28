@@ -36,86 +36,141 @@ import androidx.compose.ui.platform.LocalContext
 import java.io.File
 import java.io.FileOutputStream
 
-enum class LuminaArtworkSlot(
-    val fileName: String,
-    val maxDimensionPx: Int
-) {
-    HEADER("header_banner.webp", 1440),
-    CARD("card_watermark.webp", 1080)
-}
-
 data class LuminaArtworkState(
-    val headerEnabled: Boolean = false,
-    val headerAlpha: Float = 0.42f,
-    val hasHeaderFile: Boolean = false,
-    val cardEnabled: Boolean = false,
-    val cardAlpha: Float = 0.26f,
-    val hasCardFile: Boolean = false,
+    val enabled: Boolean = false,
+    val hasImage: Boolean = false,
+    val alpha: Float = LuminaArtworkManager.DEFAULT_ALPHA,
+    val offsetX: Float = 0f,
+    val offsetY: Float = 0f,
+    val zoom: Float = LuminaArtworkManager.DEFAULT_ZOOM,
+    val bannerHeightDp: Float = LuminaArtworkManager.DEFAULT_HEIGHT_DP,
+    val fadeStrength: Float = LuminaArtworkManager.DEFAULT_FADE,
+    val blurDp: Float = 0f,
     val revision: Int = 0
 )
 
 object LuminaArtworkManager {
     private const val PREFS_NAME = "settings"
-    private const val KEY_HEADER_ENABLED = "artwork_header_enabled"
-    private const val KEY_HEADER_ALPHA = "artwork_header_alpha"
-    private const val KEY_CARD_ENABLED = "artwork_card_enabled"
-    private const val KEY_CARD_ALPHA = "artwork_card_alpha"
+    private const val HEADER_FILE_NAME = "header_banner.webp"
+    private const val LEGACY_CARD_FILE_NAME = "card_watermark.webp"
+    private const val MAX_DIMENSION_PX = 1440
+
+    private const val KEY_ENABLED = "artwork_header_enabled"
+    private const val KEY_ALPHA = "artwork_header_alpha"
+    private const val KEY_OFFSET_X = "artwork_header_offset_x"
+    private const val KEY_OFFSET_Y = "artwork_header_offset_y"
+    private const val KEY_ZOOM = "artwork_header_zoom"
+    private const val KEY_HEIGHT_DP = "artwork_header_height_dp"
+    private const val KEY_FADE = "artwork_header_fade"
+    private const val KEY_BLUR_DP = "artwork_header_blur_dp"
     private const val KEY_REVISION = "artwork_revision"
 
-    const val DEFAULT_HEADER_ALPHA = 0.42f
-    const val MIN_HEADER_ALPHA = 0.15f
-    const val MAX_HEADER_ALPHA = 0.78f
+    const val DEFAULT_ALPHA = 0.46f
+    const val MIN_ALPHA = 0.15f
+    const val MAX_ALPHA = 0.85f
 
-    const val DEFAULT_CARD_ALPHA = 0.26f
-    const val MIN_CARD_ALPHA = 0.10f
-    const val MAX_CARD_ALPHA = 0.55f
+    const val DEFAULT_ZOOM = 1.0f
+    const val MIN_ZOOM = 1.0f
+    const val MAX_ZOOM = 2.4f
 
-    private fun artworkFile(context: Context, slot: LuminaArtworkSlot): File {
+    const val DEFAULT_HEIGHT_DP = 268f
+    const val MIN_HEIGHT_DP = 200f
+    const val MAX_HEIGHT_DP = 340f
+
+    const val DEFAULT_FADE = 0.65f
+    const val MIN_FADE = 0.20f
+    const val MAX_FADE = 1.0f
+
+    const val MIN_BLUR_DP = 0f
+    const val MAX_BLUR_DP = 20f
+
+    private fun artworkDir(context: Context): File {
         val dir = File(context.filesDir, "artwork")
         if (!dir.exists()) dir.mkdirs()
-        return File(dir, slot.fileName)
+        return dir
     }
+
+    private fun headerFile(context: Context): File =
+        File(artworkDir(context), HEADER_FILE_NAME)
 
     fun getState(context: Context): LuminaArtworkState {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val headerFile = artworkFile(context, LuminaArtworkSlot.HEADER)
-        val cardFile = artworkFile(context, LuminaArtworkSlot.CARD)
+        val file = headerFile(context)
+        val exists = file.exists() && file.length() > 0L
         return LuminaArtworkState(
-            headerEnabled = prefs.getBoolean(KEY_HEADER_ENABLED, false) && headerFile.exists(),
-            headerAlpha = prefs.getFloat(KEY_HEADER_ALPHA, DEFAULT_HEADER_ALPHA)
-                .coerceIn(MIN_HEADER_ALPHA, MAX_HEADER_ALPHA),
-            hasHeaderFile = headerFile.exists() && headerFile.length() > 0L,
-            cardEnabled = prefs.getBoolean(KEY_CARD_ENABLED, false) && cardFile.exists(),
-            cardAlpha = prefs.getFloat(KEY_CARD_ALPHA, DEFAULT_CARD_ALPHA)
-                .coerceIn(MIN_CARD_ALPHA, MAX_CARD_ALPHA),
-            hasCardFile = cardFile.exists() && cardFile.length() > 0L,
+            enabled = prefs.getBoolean(KEY_ENABLED, false) && exists,
+            hasImage = exists,
+            alpha = prefs.getFloat(KEY_ALPHA, DEFAULT_ALPHA).coerceIn(MIN_ALPHA, MAX_ALPHA),
+            offsetX = prefs.getFloat(KEY_OFFSET_X, 0f).coerceIn(-1f, 1f),
+            offsetY = prefs.getFloat(KEY_OFFSET_Y, 0f).coerceIn(-1f, 1f),
+            zoom = prefs.getFloat(KEY_ZOOM, DEFAULT_ZOOM).coerceIn(MIN_ZOOM, MAX_ZOOM),
+            bannerHeightDp = prefs.getFloat(KEY_HEIGHT_DP, DEFAULT_HEIGHT_DP)
+                .coerceIn(MIN_HEIGHT_DP, MAX_HEIGHT_DP),
+            fadeStrength = prefs.getFloat(KEY_FADE, DEFAULT_FADE).coerceIn(MIN_FADE, MAX_FADE),
+            blurDp = prefs.getFloat(KEY_BLUR_DP, 0f).coerceIn(MIN_BLUR_DP, MAX_BLUR_DP),
             revision = prefs.getInt(KEY_REVISION, 0)
         )
     }
 
-    fun setSlotEnabled(context: Context, slot: LuminaArtworkSlot, enabled: Boolean) {
+    fun setEnabled(context: Context, enabled: Boolean) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val key = if (slot == LuminaArtworkSlot.HEADER) KEY_HEADER_ENABLED else KEY_CARD_ENABLED
         val nextRev = prefs.getInt(KEY_REVISION, 0) + 1
         prefs.edit()
-            .putBoolean(key, enabled)
+            .putBoolean(KEY_ENABLED, enabled)
             .putInt(KEY_REVISION, nextRev)
             .apply()
     }
 
-    fun setSlotAlpha(context: Context, slot: LuminaArtworkSlot, alpha: Float) {
+    fun setAlpha(context: Context, alpha: Float) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val (key, clamped) = if (slot == LuminaArtworkSlot.HEADER) {
-            KEY_HEADER_ALPHA to alpha.coerceIn(MIN_HEADER_ALPHA, MAX_HEADER_ALPHA)
-        } else {
-            KEY_CARD_ALPHA to alpha.coerceIn(MIN_CARD_ALPHA, MAX_CARD_ALPHA)
-        }
         prefs.edit()
-            .putFloat(key, clamped)
+            .putFloat(KEY_ALPHA, alpha.coerceIn(MIN_ALPHA, MAX_ALPHA))
             .apply()
     }
 
-    fun saveFromUri(context: Context, uri: Uri, slot: LuminaArtworkSlot): Boolean {
+    fun updateTransform(context: Context, offsetX: Float, offsetY: Float, zoom: Float) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putFloat(KEY_OFFSET_X, offsetX.coerceIn(-1f, 1f))
+            .putFloat(KEY_OFFSET_Y, offsetY.coerceIn(-1f, 1f))
+            .putFloat(KEY_ZOOM, zoom.coerceIn(MIN_ZOOM, MAX_ZOOM))
+            .apply()
+    }
+
+    fun setBannerHeight(context: Context, heightDp: Float) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putFloat(KEY_HEIGHT_DP, heightDp.coerceIn(MIN_HEIGHT_DP, MAX_HEIGHT_DP))
+            .apply()
+    }
+
+    fun setFadeStrength(context: Context, fade: Float) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putFloat(KEY_FADE, fade.coerceIn(MIN_FADE, MAX_FADE))
+            .apply()
+    }
+
+    fun setBlurDp(context: Context, blurDp: Float) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putFloat(KEY_BLUR_DP, blurDp.coerceIn(MIN_BLUR_DP, MAX_BLUR_DP))
+            .apply()
+    }
+
+    fun resetTransform(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putFloat(KEY_OFFSET_X, 0f)
+            .putFloat(KEY_OFFSET_Y, 0f)
+            .putFloat(KEY_ZOOM, DEFAULT_ZOOM)
+            .putFloat(KEY_HEIGHT_DP, DEFAULT_HEIGHT_DP)
+            .putFloat(KEY_FADE, DEFAULT_FADE)
+            .putFloat(KEY_BLUR_DP, 0f)
+            .apply()
+    }
+
+    fun saveFromUri(context: Context, uri: Uri): Boolean {
         return runCatching {
             val resolver = context.contentResolver
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -126,7 +181,7 @@ object LuminaArtworkManager {
 
             var sampleSize = 1
             val longest = maxOf(bounds.outWidth, bounds.outHeight)
-            while (longest / sampleSize > slot.maxDimensionPx * 2) {
+            while (longest / sampleSize > MAX_DIMENSION_PX * 2) {
                 sampleSize *= 2
             }
 
@@ -170,8 +225,8 @@ object LuminaArtworkManager {
                 rawBitmap
             }
 
-            val finalBitmap = if (maxOf(oriented.width, oriented.height) > slot.maxDimensionPx) {
-                val scale = slot.maxDimensionPx.toFloat() / maxOf(oriented.width, oriented.height).toFloat()
+            val finalBitmap = if (maxOf(oriented.width, oriented.height) > MAX_DIMENSION_PX) {
+                val scale = MAX_DIMENSION_PX.toFloat() / maxOf(oriented.width, oriented.height).toFloat()
                 val targetW = (oriented.width * scale).toInt().coerceAtLeast(1)
                 val targetH = (oriented.height * scale).toInt().coerceAtLeast(1)
                 Bitmap.createScaledBitmap(oriented, targetW, targetH, true).also {
@@ -181,7 +236,7 @@ object LuminaArtworkManager {
                 oriented
             }
 
-            val outFile = artworkFile(context, slot)
+            val outFile = headerFile(context)
             val compressFormat = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 Bitmap.CompressFormat.WEBP_LOSSY
             } else {
@@ -189,53 +244,39 @@ object LuminaArtworkManager {
                 Bitmap.CompressFormat.WEBP
             }
             FileOutputStream(outFile).use { out ->
-                finalBitmap.compress(compressFormat, 90, out)
+                finalBitmap.compress(compressFormat, 92, out)
             }
             finalBitmap.recycle()
 
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val enabledKey = if (slot == LuminaArtworkSlot.HEADER) KEY_HEADER_ENABLED else KEY_CARD_ENABLED
             val nextRev = prefs.getInt(KEY_REVISION, 0) + 1
             prefs.edit()
-                .putBoolean(enabledKey, true)
+                .putBoolean(KEY_ENABLED, true)
+                .putFloat(KEY_OFFSET_X, 0f)
+                .putFloat(KEY_OFFSET_Y, 0f)
+                .putFloat(KEY_ZOOM, DEFAULT_ZOOM)
                 .putInt(KEY_REVISION, nextRev)
                 .apply()
             true
         }.getOrDefault(false)
     }
 
-    fun copyHeaderToCard(context: Context): Boolean {
-        return runCatching {
-            val src = artworkFile(context, LuminaArtworkSlot.HEADER)
-            if (!src.exists() || src.length() == 0L) return false
-            val dst = artworkFile(context, LuminaArtworkSlot.CARD)
-            src.copyTo(dst, overwrite = true)
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val nextRev = prefs.getInt(KEY_REVISION, 0) + 1
-            prefs.edit()
-                .putBoolean(KEY_CARD_ENABLED, true)
-                .putInt(KEY_REVISION, nextRev)
-                .apply()
-            true
-        }.getOrDefault(false)
-    }
+    fun clear(context: Context) {
+        val file = headerFile(context)
+        if (file.exists()) runCatching { file.delete() }
+        val legacyCard = File(artworkDir(context), LEGACY_CARD_FILE_NAME)
+        if (legacyCard.exists()) runCatching { legacyCard.delete() }
 
-    fun clearSlot(context: Context, slot: LuminaArtworkSlot) {
-        val file = artworkFile(context, slot)
-        if (file.exists()) {
-            runCatching { file.delete() }
-        }
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val enabledKey = if (slot == LuminaArtworkSlot.HEADER) KEY_HEADER_ENABLED else KEY_CARD_ENABLED
         val nextRev = prefs.getInt(KEY_REVISION, 0) + 1
         prefs.edit()
-            .putBoolean(enabledKey, false)
+            .putBoolean(KEY_ENABLED, false)
             .putInt(KEY_REVISION, nextRev)
             .apply()
     }
 
-    fun loadBitmap(context: Context, slot: LuminaArtworkSlot): ImageBitmap? {
-        val file = artworkFile(context, slot)
+    fun loadBitmap(context: Context): ImageBitmap? {
+        val file = headerFile(context)
         if (!file.exists() || file.length() == 0L) return null
         return runCatching {
             BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap()

@@ -34,6 +34,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -44,6 +45,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -64,14 +66,16 @@ import androidx.compose.material.icons.filled.Brightness7
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ColorLens
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DeleteOutline
-import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.OpenWith
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.RoundedCorner
+import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material.icons.rounded.Wallpaper
 import androidx.compose.material.icons.rounded.Waves
@@ -105,21 +109,27 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -128,7 +138,9 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.luminatweaks.R
 import com.luminatweaks.ui.component.LuminaBackButton
 import com.luminatweaks.ui.component.luminaHazeHeader
@@ -139,7 +151,7 @@ import com.luminatweaks.ui.theme.ColorMode
 import com.luminatweaks.ui.theme.HapticSettings
 import com.luminatweaks.ui.theme.LocalHapticConfig
 import com.luminatweaks.ui.theme.LuminaArtworkManager
-import com.luminatweaks.ui.theme.LuminaArtworkSlot
+import com.luminatweaks.ui.theme.LuminaArtworkState
 import com.luminatweaks.ui.theme.LuminaHapticEngine
 import com.luminatweaks.ui.theme.LuminaHapticPulse
 import com.luminatweaks.ui.theme.ThemeController
@@ -200,23 +212,12 @@ fun PersonalisasiScreen(
     var hapticEnabled by remember { mutableStateOf(savedSettings.hapticEnabled) }
     var hapticIntensity by remember { mutableFloatStateOf(savedSettings.hapticIntensity) }
 
-    var headerThumb by remember { mutableStateOf<ImageBitmap?>(null) }
-    var cardThumb by remember { mutableStateOf<ImageBitmap?>(null) }
+    var headerPreviewBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
 
-    LaunchedEffect(artworkState.revision, artworkState.hasHeaderFile) {
-        headerThumb = if (artworkState.hasHeaderFile) {
+    LaunchedEffect(artworkState.revision, artworkState.hasImage) {
+        headerPreviewBitmap = if (artworkState.hasImage) {
             withContext(Dispatchers.IO) {
-                LuminaArtworkManager.loadBitmap(context, LuminaArtworkSlot.HEADER)
-            }
-        } else {
-            null
-        }
-    }
-
-    LaunchedEffect(artworkState.revision, artworkState.hasCardFile) {
-        cardThumb = if (artworkState.hasCardFile) {
-            withContext(Dispatchers.IO) {
-                LuminaArtworkManager.loadBitmap(context, LuminaArtworkSlot.CARD)
+                LuminaArtworkManager.loadBitmap(context)
             }
         } else {
             null
@@ -228,17 +229,7 @@ fun PersonalisasiScreen(
     ) { uri ->
         if (uri != null) {
             scope.launch(Dispatchers.IO) {
-                LuminaArtworkManager.saveFromUri(context, uri, LuminaArtworkSlot.HEADER)
-            }
-        }
-    }
-
-    val cardPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri ->
-        if (uri != null) {
-            scope.launch(Dispatchers.IO) {
-                LuminaArtworkManager.saveFromUri(context, uri, LuminaArtworkSlot.CARD)
+                LuminaArtworkManager.saveFromUri(context, uri)
             }
         }
     }
@@ -491,115 +482,46 @@ fun PersonalisasiScreen(
 
             item(key = "custom_artwork_section") {
                 Text(
-                    text = persLocalizedLabel("Ilustrasi & Latar", "Artwork & Backdrop"),
+                    text = persLocalizedLabel("Ilustrasi Header", "Header Artwork"),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 20.dp, bottom = 8.dp)
                 )
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    PersArtworkSlotCard(
-                        index = 0,
-                        count = 2,
-                        icon = Icons.Rounded.Wallpaper,
-                        title = persLocalizedLabel("Banner Header Beranda", "Home Header Banner"),
-                        subtitle = persLocalizedLabel(
-                            "Ilustrasi lembut di balik area atas beranda",
-                            "Soft illustration behind the home top header"
-                        ),
-                        enabled = artworkState.headerEnabled,
-                        hasImage = artworkState.hasHeaderFile,
-                        thumbnail = headerThumb,
-                        alpha = artworkState.headerAlpha,
-                        minAlpha = LuminaArtworkManager.MIN_HEADER_ALPHA,
-                        maxAlpha = LuminaArtworkManager.MAX_HEADER_ALPHA,
-                        onToggle = { checked ->
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            if (checked && !artworkState.hasHeaderFile) {
-                                headerPicker.launch(
-                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                )
-                            } else {
-                                LuminaArtworkManager.setSlotEnabled(
-                                    context,
-                                    LuminaArtworkSlot.HEADER,
-                                    checked
-                                )
-                            }
-                        },
-                        onPickImage = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                HeaderBannerStudioCard(
+                    state = artworkState,
+                    bitmap = headerPreviewBitmap,
+                    onToggle = { checked ->
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        if (checked && !artworkState.hasImage) {
                             headerPicker.launch(
                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                             )
-                        },
-                        onClearImage = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            LuminaArtworkManager.clearSlot(context, LuminaArtworkSlot.HEADER)
-                        },
-                        onAlphaChange = { newAlpha ->
-                            LuminaArtworkManager.setSlotAlpha(
-                                context,
-                                LuminaArtworkSlot.HEADER,
-                                newAlpha
-                            )
+                        } else {
+                            LuminaArtworkManager.setEnabled(context, checked)
                         }
-                    )
-
-                    PersArtworkSlotCard(
-                        index = 1,
-                        count = 2,
-                        icon = Icons.Rounded.Image,
-                        title = persLocalizedLabel("Ilustrasi Kartu Perangkat", "Device Card Artwork"),
-                        subtitle = persLocalizedLabel(
-                            "Watermark di kartu informasi perangkat",
-                            "Watermark inside the device info card"
-                        ),
-                        enabled = artworkState.cardEnabled,
-                        hasImage = artworkState.hasCardFile,
-                        thumbnail = cardThumb,
-                        alpha = artworkState.cardAlpha,
-                        minAlpha = LuminaArtworkManager.MIN_CARD_ALPHA,
-                        maxAlpha = LuminaArtworkManager.MAX_CARD_ALPHA,
-                        canCopyFromHeader = artworkState.hasHeaderFile,
-                        onCopyFromHeader = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            scope.launch(Dispatchers.IO) {
-                                LuminaArtworkManager.copyHeaderToCard(context)
-                            }
-                        },
-                        onToggle = { checked ->
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            if (checked && !artworkState.hasCardFile) {
-                                cardPicker.launch(
-                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                )
-                            } else {
-                                LuminaArtworkManager.setSlotEnabled(
-                                    context,
-                                    LuminaArtworkSlot.CARD,
-                                    checked
-                                )
-                            }
-                        },
-                        onPickImage = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            cardPicker.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                            )
-                        },
-                        onClearImage = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            LuminaArtworkManager.clearSlot(context, LuminaArtworkSlot.CARD)
-                        },
-                        onAlphaChange = { newAlpha ->
-                            LuminaArtworkManager.setSlotAlpha(
-                                context,
-                                LuminaArtworkSlot.CARD,
-                                newAlpha
-                            )
-                        }
-                    )
-                }
+                    },
+                    onPickImage = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        headerPicker.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    },
+                    onClearImage = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        LuminaArtworkManager.clear(context)
+                    },
+                    onAlphaChange = { LuminaArtworkManager.setAlpha(context, it) },
+                    onTransformChange = { x, y, z ->
+                        LuminaArtworkManager.updateTransform(context, x, y, z)
+                    },
+                    onHeightChange = { LuminaArtworkManager.setBannerHeight(context, it) },
+                    onFadeChange = { LuminaArtworkManager.setFadeStrength(context, it) },
+                    onBlurChange = { LuminaArtworkManager.setBlurDp(context, it) },
+                    onResetTransform = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        LuminaArtworkManager.resetTransform(context)
+                    }
+                )
             }
 
             item(key = "haptic_feedback_section") {
@@ -671,40 +593,39 @@ fun PersonalisasiScreen(
 }
 
 @Composable
-private fun PersArtworkSlotCard(
-    index: Int,
-    count: Int,
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    enabled: Boolean,
-    hasImage: Boolean,
-    thumbnail: ImageBitmap?,
-    alpha: Float,
-    minAlpha: Float,
-    maxAlpha: Float,
-    canCopyFromHeader: Boolean = false,
-    onCopyFromHeader: () -> Unit = {},
+private fun HeaderBannerStudioCard(
+    state: LuminaArtworkState,
+    bitmap: ImageBitmap?,
     onToggle: (Boolean) -> Unit,
     onPickImage: () -> Unit,
     onClearImage: () -> Unit,
-    onAlphaChange: (Float) -> Unit
+    onAlphaChange: (Float) -> Unit,
+    onTransformChange: (Float, Float, Float) -> Unit,
+    onHeightChange: (Float) -> Unit,
+    onFadeChange: (Float) -> Unit,
+    onBlurChange: (Float) -> Unit,
+    onResetTransform: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
     val haptic = LocalHapticFeedback.current
-    val shape = connectedContainerShape(index = index, count = count)
     val interactionSource = remember { MutableInteractionSource() }
-    val scaleModifier = pressScale(interactionSource, 0.98f)
-    var sliderVal by remember(alpha) { mutableFloatStateOf(alpha.coerceIn(minAlpha, maxAlpha)) }
-    val pct = (sliderVal * 100f).roundToInt()
+    val scaleModifier = pressScale(interactionSource, 0.985f)
+
+    var alphaVal by remember(state.alpha) { mutableFloatStateOf(state.alpha) }
+    var zoomVal by remember(state.zoom) { mutableFloatStateOf(state.zoom) }
+    var offsetXVal by remember(state.offsetX) { mutableFloatStateOf(state.offsetX) }
+    var offsetYVal by remember(state.offsetY) { mutableFloatStateOf(state.offsetY) }
+    var heightVal by remember(state.bannerHeightDp) { mutableFloatStateOf(state.bannerHeightDp) }
+    var fadeVal by remember(state.fadeStrength) { mutableFloatStateOf(state.fadeStrength) }
+    var blurVal by remember(state.blurDp) { mutableFloatStateOf(state.blurDp) }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(shape)
+            .clip(RoundedCornerShape(26.dp))
             .background(scheme.surfaceColorAtElevation(1.dp))
-            .padding(vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+            .padding(vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(
             modifier = Modifier
@@ -714,13 +635,13 @@ private fun PersArtworkSlotCard(
                 .clickable(
                     interactionSource = interactionSource,
                     indication = null
-                ) { onToggle(!enabled) }
+                ) { onToggle(!state.enabled) }
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (thumbnail != null) {
+            if (bitmap != null) {
                 Image(
-                    bitmap = thumbnail,
+                    bitmap = bitmap,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
@@ -729,18 +650,14 @@ private fun PersArtworkSlotCard(
                         .border(1.dp, scheme.primary.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
                 )
             } else {
-                PersSquircleIcon(icon = icon)
+                PersSquircleIcon(icon = Icons.Rounded.Wallpaper)
             }
 
             Spacer(modifier = Modifier.width(14.dp))
 
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(vertical = 2.dp)
-            ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = title,
+                    text = persLocalizedLabel("Banner Header Beranda", "Home Header Banner"),
                     style = MaterialTheme.typography.bodyLarge,
                     color = scheme.onSurface,
                     maxLines = 1,
@@ -748,7 +665,10 @@ private fun PersArtworkSlotCard(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = subtitle,
+                    text = persLocalizedLabel(
+                        "Ilustrasi lembut di balik area atas beranda",
+                        "Soft illustration behind the home top header"
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant,
                     maxLines = 2,
@@ -759,11 +679,11 @@ private fun PersArtworkSlotCard(
             Spacer(modifier = Modifier.width(10.dp))
 
             Switch(
-                checked = enabled,
+                checked = state.enabled,
                 onCheckedChange = onToggle,
                 interactionSource = interactionSource,
                 thumbContent = {
-                    if (enabled) {
+                    if (state.enabled) {
                         Icon(
                             imageVector = Icons.Filled.Check,
                             contentDescription = null,
@@ -782,6 +702,170 @@ private fun PersArtworkSlotCard(
             )
         }
 
+        AnimatedVisibility(visible = state.enabled && bitmap != null) {
+            if (bitmap != null) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    HeaderBannerLivePreview(
+                        bitmap = bitmap,
+                        alpha = alphaVal,
+                        offsetX = offsetXVal,
+                        offsetY = offsetYVal,
+                        zoom = zoomVal,
+                        bannerHeightDp = heightVal,
+                        fadeStrength = fadeVal,
+                        blurDp = blurVal,
+                        onGestureTransform = { newX, newY, newZoom ->
+                            offsetXVal = newX
+                            offsetYVal = newY
+                            zoomVal = newZoom
+                            onTransformChange(newX, newY, newZoom)
+                        }
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.OpenWith,
+                                contentDescription = null,
+                                tint = scheme.primary,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = persLocalizedLabel(
+                                    "Geser & cubit preview untuk atur posisi",
+                                    "Drag & pinch preview to adjust framing"
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = scheme.onSurfaceVariant
+                            )
+                        }
+
+                        IconButton(
+                            onClick = {
+                                offsetXVal = 0f
+                                offsetYVal = 0f
+                                zoomVal = LuminaArtworkManager.DEFAULT_ZOOM
+                                heightVal = LuminaArtworkManager.DEFAULT_HEIGHT_DP
+                                fadeVal = LuminaArtworkManager.DEFAULT_FADE
+                                blurVal = 0f
+                                onResetTransform()
+                            },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Restore,
+                                contentDescription = stringResource(R.string.action_reset),
+                                tint = scheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+
+                    BannerSliderControl(
+                        label = persLocalizedLabel("Intensitas gambar", "Image opacity"),
+                        valueText = "${(alphaVal * 100f).roundToInt()}%",
+                        value = alphaVal,
+                        range = LuminaArtworkManager.MIN_ALPHA..LuminaArtworkManager.MAX_ALPHA,
+                        onValueChange = { raw ->
+                            val prev = (alphaVal * 100f).roundToInt()
+                            val next = (raw * 100f).roundToInt()
+                            if (next != prev && next % 5 == 0) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            }
+                            alphaVal = raw
+                            onAlphaChange(raw)
+                        }
+                    )
+
+                    BannerSliderControl(
+                        label = persLocalizedLabel("Perbesaran (Zoom)", "Zoom scale"),
+                        valueText = String.format(Locale.US, "%.2fx", zoomVal),
+                        value = zoomVal,
+                        range = LuminaArtworkManager.MIN_ZOOM..LuminaArtworkManager.MAX_ZOOM,
+                        onValueChange = { raw ->
+                            zoomVal = raw
+                            onTransformChange(offsetXVal, offsetYVal, raw)
+                        }
+                    )
+
+                    BannerSliderControl(
+                        label = persLocalizedLabel("Posisi Horizontal (X)", "Horizontal position (X)"),
+                        valueText = "${(offsetXVal * 100f).roundToInt()}%",
+                        value = offsetXVal,
+                        range = -1f..1f,
+                        onValueChange = { raw ->
+                            val snapped = if (raw in -0.04f..0.04f) 0f else raw
+                            if (snapped == 0f && offsetXVal != 0f) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            }
+                            offsetXVal = snapped
+                            onTransformChange(snapped, offsetYVal, zoomVal)
+                        }
+                    )
+
+                    BannerSliderControl(
+                        label = persLocalizedLabel("Posisi Vertikal (Y)", "Vertical position (Y)"),
+                        valueText = "${(offsetYVal * 100f).roundToInt()}%",
+                        value = offsetYVal,
+                        range = -1f..1f,
+                        onValueChange = { raw ->
+                            val snapped = if (raw in -0.04f..0.04f) 0f else raw
+                            if (snapped == 0f && offsetYVal != 0f) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            }
+                            offsetYVal = snapped
+                            onTransformChange(offsetXVal, snapped, zoomVal)
+                        }
+                    )
+
+                    BannerSliderControl(
+                        label = persLocalizedLabel("Tinggi area banner", "Banner height"),
+                        valueText = "${heightVal.roundToInt()} dp",
+                        value = heightVal,
+                        range = LuminaArtworkManager.MIN_HEIGHT_DP..LuminaArtworkManager.MAX_HEIGHT_DP,
+                        onValueChange = { raw ->
+                            heightVal = raw
+                            onHeightChange(raw)
+                        }
+                    )
+
+                    BannerSliderControl(
+                        label = persLocalizedLabel("Kehalusan pudar", "Bottom fade"),
+                        valueText = "${(fadeVal * 100f).roundToInt()}%",
+                        value = fadeVal,
+                        range = LuminaArtworkManager.MIN_FADE..LuminaArtworkManager.MAX_FADE,
+                        onValueChange = { raw ->
+                            fadeVal = raw
+                            onFadeChange(raw)
+                        }
+                    )
+
+                    BannerSliderControl(
+                        label = persLocalizedLabel("Blur latar", "Backdrop blur"),
+                        valueText = "${blurVal.roundToInt()} dp",
+                        value = blurVal,
+                        range = LuminaArtworkManager.MIN_BLUR_DP..LuminaArtworkManager.MAX_BLUR_DP,
+                        onValueChange = { raw ->
+                            blurVal = raw
+                            onBlurChange(raw)
+                        }
+                    )
+                }
+            }
+        }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -794,7 +878,7 @@ private fun PersArtworkSlotCard(
                     .clip(CircleShape)
                     .background(scheme.secondaryContainer)
                     .clickable(onClick = onPickImage)
-                    .padding(horizontal = 12.dp, vertical = 7.dp),
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -805,7 +889,7 @@ private fun PersArtworkSlotCard(
                     modifier = Modifier.size(16.dp)
                 )
                 Text(
-                    text = if (hasImage) {
+                    text = if (state.hasImage) {
                         persLocalizedLabel("Ganti gambar", "Change image")
                     } else {
                         persLocalizedLabel("Pilih dari galeri", "Pick from gallery")
@@ -816,87 +900,231 @@ private fun PersArtworkSlotCard(
                 )
             }
 
-            if (canCopyFromHeader) {
-                Row(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(scheme.surfaceContainerHighest)
-                        .clickable(onClick = onCopyFromHeader)
-                        .padding(horizontal = 11.dp, vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.ContentCopy,
-                        contentDescription = null,
-                        tint = scheme.onSurfaceVariant,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(
-                        text = persLocalizedLabel("Samakan", "Match header"),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = scheme.onSurfaceVariant
-                    )
-                }
-            }
-
             Spacer(modifier = Modifier.weight(1f))
 
-            if (hasImage) {
+            if (state.hasImage) {
                 IconButton(
                     onClick = onClearImage,
-                    modifier = Modifier.size(30.dp)
+                    modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.DeleteOutline,
                         contentDescription = persLocalizedLabel("Hapus gambar", "Remove image"),
                         tint = scheme.error,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(19.dp)
                     )
                 }
             }
         }
+    }
+}
 
-        AnimatedVisibility(visible = enabled && hasImage) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = persLocalizedLabel("Intensitas gambar", "Image opacity"),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = scheme.onSurface,
-                        modifier = Modifier.weight(1f)
+@Composable
+private fun HeaderBannerLivePreview(
+    bitmap: ImageBitmap,
+    alpha: Float,
+    offsetX: Float,
+    offsetY: Float,
+    zoom: Float,
+    bannerHeightDp: Float,
+    fadeStrength: Float,
+    blurDp: Float,
+    onGestureTransform: (Float, Float, Float) -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val surfaceColor = scheme.background
+    val isDark = surfaceColor.luminance() < 0.5f
+    val effectiveAlpha = if (isDark) alpha * 0.88f else alpha
+    val fade = fadeStrength.coerceIn(0.2f, 1.0f)
+    val clearStop = (0.48f - fade * 0.28f).coerceIn(0.15f, 0.45f)
+    val midStop = (0.78f - fade * 0.20f).coerceIn(clearStop + 0.12f, 0.76f)
+    val endStop = (0.98f - fade * 0.10f).coerceIn(midStop + 0.10f, 0.98f)
+
+    val previewHeightDp = (bannerHeightDp * 0.74f).coerceIn(154f, 240f).dp
+    var boxSize by remember { mutableStateOf(IntSize.Zero) }
+    val curX by rememberUpdatedState(offsetX)
+    val curY by rememberUpdatedState(offsetY)
+    val curZoom by rememberUpdatedState(zoom)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(previewHeightDp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(surfaceColor)
+            .border(1.dp, scheme.outlineVariant.copy(alpha = 0.45f), RoundedCornerShape(20.dp))
+            .onSizeChanged { boxSize = it }
+            .pointerInput(Unit) {
+                detectTransformGestures { _, pan, zoomChange, _ ->
+                    val w = boxSize.width.coerceAtLeast(1).toFloat()
+                    val h = boxSize.height.coerceAtLeast(1).toFloat()
+                    val nextZoom = (curZoom * zoomChange).coerceIn(
+                        LuminaArtworkManager.MIN_ZOOM,
+                        LuminaArtworkManager.MAX_ZOOM
                     )
-                    Text(
-                        text = "$pct%",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = scheme.primary
-                    )
+                    val nextX = (curX + pan.x / (w * 0.35f)).coerceIn(-1f, 1f)
+                    val nextY = (curY + pan.y / (h * 0.40f)).coerceIn(-1f, 1f)
+                    onGestureTransform(nextX, nextY, nextZoom)
                 }
+            }
+            .clipToBounds()
+    ) {
+        Image(
+            bitmap = bitmap,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            alignment = Alignment.Center,
+            alpha = effectiveAlpha,
+            modifier = Modifier
+                .fillMaxSize()
+                .then(
+                    if (blurDp > 0.5f) {
+                        Modifier.blur((blurDp * 0.75f).dp)
+                    } else {
+                        Modifier
+                    }
+                )
+                .graphicsLayer {
+                    scaleX = zoom
+                    scaleY = zoom
+                    translationX = offsetX * size.width * 0.35f
+                    translationY = offsetY * size.height * 0.40f
+                }
+        )
 
-                Slider(
-                    value = sliderVal,
-                    onValueChange = { raw ->
-                        val nextPct = (raw * 100f).roundToInt()
-                        if (nextPct != pct && nextPct % 5 == 0) {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        }
-                        sliderVal = raw
-                        onAlphaChange(raw)
-                    },
-                    valueRange = minAlpha..maxAlpha,
-                    modifier = Modifier.fillMaxWidth()
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        0.0f to surfaceColor.copy(alpha = 0.22f),
+                        clearStop to Color.Transparent,
+                        midStop to surfaceColor.copy(alpha = 0.58f),
+                        endStop to surfaceColor.copy(alpha = 0.94f),
+                        1.0f to surfaceColor
+                    )
+                )
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "LuminaTweaks",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = scheme.onSurface
+                )
+                Icon(
+                    imageVector = Icons.Filled.PowerSettingsNew,
+                    contentDescription = null,
+                    tint = scheme.onSurface,
+                    modifier = Modifier.size(18.dp)
                 )
             }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(scheme.secondaryContainer.copy(alpha = 0.94f))
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.CheckCircle,
+                        contentDescription = null,
+                        tint = scheme.onSecondaryContainer,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "ALIVE",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = scheme.onSecondaryContainer
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(scheme.surfaceContainerHigh.copy(alpha = 0.94f))
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "41.3°C",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = scheme.onSurface
+                    )
+                    Icon(
+                        imageVector = Icons.Rounded.Thermostat,
+                        contentDescription = null,
+                        tint = scheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun BannerSliderControl(
+    label: String,
+    valueText: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    onValueChange: (Float) -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = valueText,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = scheme.primary
+            )
+        }
+        Slider(
+            value = value.coerceIn(range.start, range.endInclusive),
+            onValueChange = onValueChange,
+            valueRange = range,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 

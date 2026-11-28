@@ -118,6 +118,7 @@ import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -129,6 +130,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
@@ -193,7 +195,7 @@ import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.ui.theme.LocalPageTransition
 import com.luminatweaks.ui.theme.LuminaArtworkManager
-import com.luminatweaks.ui.theme.LuminaArtworkSlot
+import com.luminatweaks.ui.theme.LuminaArtworkState
 import com.luminatweaks.ui.theme.PageTransition
 import com.luminatweaks.ui.theme.rememberLuminaArtworkState
 import com.luminatweaks.util.DeviceUtil
@@ -974,22 +976,11 @@ fun HomeDashboardContent(
 
     val artworkState = rememberLuminaArtworkState()
     var headerBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
-    var cardBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
 
-    LaunchedEffect(artworkState.revision, artworkState.headerEnabled) {
-        headerBitmap = if (artworkState.headerEnabled) {
+    LaunchedEffect(artworkState.revision, artworkState.enabled) {
+        headerBitmap = if (artworkState.enabled) {
             withContext(Dispatchers.IO) {
-                LuminaArtworkManager.loadBitmap(context, LuminaArtworkSlot.HEADER)
-            }
-        } else {
-            null
-        }
-    }
-
-    LaunchedEffect(artworkState.revision, artworkState.cardEnabled) {
-        cardBitmap = if (artworkState.cardEnabled) {
-            withContext(Dispatchers.IO) {
-                LuminaArtworkManager.loadBitmap(context, LuminaArtworkSlot.CARD)
+                LuminaArtworkManager.loadBitmap(context)
             }
         } else {
             null
@@ -1126,6 +1117,16 @@ fun HomeDashboardContent(
     val hazeState = remember { HazeState() }
     val listState = rememberLazyListState()
 
+    val scrollOffsetPx by remember {
+        derivedStateOf {
+            if (listState.firstVisibleItemIndex > 0) {
+                600f
+            } else {
+                listState.firstVisibleItemScrollOffset.toFloat()
+            }
+        }
+    }
+
     val maxRevealPx = with(density) { 148.dp.toPx() }
     val pullAnim = remember { Animatable(0f) }
     var rawPullPx by remember { mutableFloatStateOf(0f) }
@@ -1182,6 +1183,13 @@ fun HomeDashboardContent(
         }
     }
 
+    val hasHeaderArtwork = headerBitmap != null
+    val headerScrimFraction = if (hasHeaderArtwork) {
+        scrollBehavior.state.collapsedFraction.coerceIn(0f, 1f)
+    } else {
+        scrollBehavior.state.overlappedFraction
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -1190,8 +1198,9 @@ fun HomeDashboardContent(
         if (headerBitmap != null) {
             HomeHeaderArtworkBackdrop(
                 bitmap = headerBitmap!!,
-                alpha = artworkState.headerAlpha,
+                artwork = artworkState,
                 collapseFraction = scrollBehavior.state.collapsedFraction,
+                scrollOffsetPx = scrollOffsetPx,
                 surfaceColor = scheme.background
             )
         }
@@ -1199,13 +1208,13 @@ fun HomeDashboardContent(
         Scaffold(
             modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
             contentWindowInsets = WindowInsets(0.dp),
-            containerColor = if (headerBitmap != null) Color.Transparent else scheme.background,
+            containerColor = if (hasHeaderArtwork) Color.Transparent else scheme.background,
             topBar = {
                 Box(
                     modifier = Modifier.luminaHazeHeader(
                         hazeState = hazeState,
                         surfaceColor = fadeSurface,
-                        overlappedFraction = scrollBehavior.state.overlappedFraction
+                        overlappedFraction = headerScrimFraction
                     )
                 ) {
                     LargeFlexibleTopAppBar(
@@ -1365,9 +1374,7 @@ fun HomeDashboardContent(
                         managerValue = stringResource(
                             R.string.home_version_release_format,
                             BuildConfig.VERSION_NAME.removeSuffix(".0")
-                        ),
-                        artworkBitmap = cardBitmap,
-                        artworkAlpha = artworkState.cardAlpha
+                        )
                     )
                 }
 
@@ -1422,30 +1429,47 @@ fun HomeDashboardContent(
 @Composable
 private fun HomeHeaderArtworkBackdrop(
     bitmap: ImageBitmap,
-    alpha: Float,
+    artwork: LuminaArtworkState,
     collapseFraction: Float,
+    scrollOffsetPx: Float,
     surfaceColor: Color
 ) {
     val isDark = surfaceColor.luminance() < 0.5f
-    val scrollFade = (1f - collapseFraction * 0.72f).coerceIn(0.18f, 1f)
-    val effectiveAlpha = (if (isDark) alpha * 0.86f else alpha) * scrollFade
+    val distanceFade = (1f - (scrollOffsetPx / 420f)).coerceIn(0f, 1f)
+    val collapseFade = (1f - collapseFraction * 0.45f).coerceIn(0.25f, 1f)
+    val effectiveAlpha = (if (isDark) artwork.alpha * 0.88f else artwork.alpha) * distanceFade * collapseFade
+    val fade = artwork.fadeStrength.coerceIn(0.2f, 1.0f)
+
+    val clearStop = (0.48f - fade * 0.28f).coerceIn(0.15f, 0.45f)
+    val midStop = (0.78f - fade * 0.20f).coerceIn(clearStop + 0.12f, 0.76f)
+    val endStop = (0.98f - fade * 0.10f).coerceIn(midStop + 0.10f, 0.98f)
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(265.dp)
+            .height(artwork.bannerHeightDp.dp)
             .clipToBounds()
     ) {
         Image(
             bitmap = bitmap,
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            alignment = Alignment.TopCenter,
+            alignment = Alignment.Center,
             alpha = effectiveAlpha,
             modifier = Modifier
                 .fillMaxSize()
+                .then(
+                    if (artwork.blurDp > 0.5f) {
+                        Modifier.blur(artwork.blurDp.dp)
+                    } else {
+                        Modifier
+                    }
+                )
                 .graphicsLayer {
-                    translationY = -collapseFraction * 28f
+                    scaleX = artwork.zoom
+                    scaleY = artwork.zoom
+                    translationX = artwork.offsetX * size.width * 0.35f
+                    translationY = (artwork.offsetY * size.height * 0.40f) - (scrollOffsetPx * 0.22f)
                 }
         )
 
@@ -1454,10 +1478,10 @@ private fun HomeHeaderArtworkBackdrop(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        0.0f to surfaceColor.copy(alpha = 0.24f),
-                        0.28f to Color.Transparent,
-                        0.66f to surfaceColor.copy(alpha = 0.62f),
-                        0.90f to surfaceColor.copy(alpha = 0.94f),
+                        0.0f to surfaceColor.copy(alpha = 0.22f),
+                        clearStop to Color.Transparent,
+                        midStop to surfaceColor.copy(alpha = 0.58f),
+                        endStop to surfaceColor.copy(alpha = 0.94f),
                         1.0f to surfaceColor
                     )
                 )
@@ -2487,69 +2511,38 @@ private fun DeviceSpecsBentoCard(
     kernelLabel: String,
     kernelValue: String,
     managerLabel: String,
-    managerValue: String,
-    artworkBitmap: ImageBitmap? = null,
-    artworkAlpha: Float = 0.26f
+    managerValue: String
 ) {
     val scheme = MaterialTheme.colorScheme
-    val cardColor = scheme.surfaceContainerHigh
 
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(26.dp))
-            .background(cardColor)
+            .background(scheme.surfaceContainerHigh)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        if (artworkBitmap != null) {
-            Image(
-                bitmap = artworkBitmap,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                alignment = Alignment.CenterEnd,
-                alpha = artworkAlpha,
-                modifier = Modifier.matchParentSize()
-            )
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(
-                        Brush.horizontalGradient(
-                            0.0f to cardColor.copy(alpha = 0.94f),
-                            0.48f to cardColor.copy(alpha = 0.76f),
-                            0.82f to cardColor.copy(alpha = 0.36f),
-                            1.0f to cardColor.copy(alpha = 0.24f)
-                        )
-                    )
-            )
-        }
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            HomeSvgSpecRow(
-                label = deviceLabel,
-                value = deviceValue,
-                icon = { DevicePhoneSvgIcon(tint = scheme.primary, modifier = Modifier.size(18.dp)) }
-            )
-            HomeSvgSpecRow(
-                label = socLabel,
-                value = socValue,
-                icon = { SocChipSvgIcon(tint = scheme.primary, modifier = Modifier.size(18.dp)) }
-            )
-            HomeSvgSpecRow(
-                label = kernelLabel,
-                value = kernelValue,
-                icon = { KernelTerminalSvgIcon(tint = scheme.primary, modifier = Modifier.size(18.dp)) }
-            )
-            HomeSvgSpecRow(
-                label = managerLabel,
-                value = managerValue,
-                icon = { ManagerShieldSvgIcon(tint = scheme.primary, modifier = Modifier.size(18.dp)) }
-            )
-        }
+        HomeSvgSpecRow(
+            label = deviceLabel,
+            value = deviceValue,
+            icon = { DevicePhoneSvgIcon(tint = scheme.primary, modifier = Modifier.size(18.dp)) }
+        )
+        HomeSvgSpecRow(
+            label = socLabel,
+            value = socValue,
+            icon = { SocChipSvgIcon(tint = scheme.primary, modifier = Modifier.size(18.dp)) }
+        )
+        HomeSvgSpecRow(
+            label = kernelLabel,
+            value = kernelValue,
+            icon = { KernelTerminalSvgIcon(tint = scheme.primary, modifier = Modifier.size(18.dp)) }
+        )
+        HomeSvgSpecRow(
+            label = managerLabel,
+            value = managerValue,
+            icon = { ManagerShieldSvgIcon(tint = scheme.primary, modifier = Modifier.size(18.dp)) }
+        )
     }
 }
 
