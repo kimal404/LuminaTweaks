@@ -1184,11 +1184,25 @@ fun HomeDashboardContent(
     }
 
     val hasHeaderArtwork = headerBitmap != null
-    val headerScrimFraction = if (hasHeaderArtwork) {
-        scrollBehavior.state.collapsedFraction.coerceIn(0f, 1f)
-    } else {
-        scrollBehavior.state.overlappedFraction
+    val rawHeaderScrimFraction by remember(hasHeaderArtwork) {
+        derivedStateOf {
+            if (!hasHeaderArtwork) {
+                scrollBehavior.state.overlappedFraction
+            } else {
+                val offset = if (listState.firstVisibleItemIndex > 0) {
+                    200f
+                } else {
+                    listState.firstVisibleItemScrollOffset.toFloat()
+                }
+                (offset / 140f).coerceIn(0f, 1f)
+            }
+        }
     }
+    val headerScrimFraction by animateFloatAsState(
+        targetValue = rawHeaderScrimFraction,
+        animationSpec = tween(durationMillis = 120),
+        label = "homeHeaderScrim"
+    )
 
     Box(
         modifier = Modifier
@@ -1210,12 +1224,17 @@ fun HomeDashboardContent(
             contentWindowInsets = WindowInsets(0.dp),
             containerColor = if (hasHeaderArtwork) Color.Transparent else scheme.background,
             topBar = {
+                val applyHaze = !hasHeaderArtwork || headerScrimFraction > 0.01f
                 Box(
-                    modifier = Modifier.luminaHazeHeader(
-                        hazeState = hazeState,
-                        surfaceColor = fadeSurface,
-                        overlappedFraction = headerScrimFraction
-                    )
+                    modifier = if (applyHaze) {
+                        Modifier.luminaHazeHeader(
+                            hazeState = hazeState,
+                            surfaceColor = fadeSurface,
+                            overlappedFraction = headerScrimFraction
+                        )
+                    } else {
+                        Modifier
+                    }
                 ) {
                     LargeFlexibleTopAppBar(
                         title = {

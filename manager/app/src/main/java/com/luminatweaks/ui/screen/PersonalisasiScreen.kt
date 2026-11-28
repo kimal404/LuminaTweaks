@@ -45,11 +45,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -69,16 +69,15 @@ import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.OpenWith
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.RoundedCorner
-import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material.icons.rounded.Wallpaper
 import androidx.compose.material.icons.rounded.Waves
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -87,6 +86,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -99,6 +99,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.expressiveLightColorScheme
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
@@ -140,7 +141,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.luminatweaks.R
 import com.luminatweaks.ui.component.LuminaBackButton
 import com.luminatweaks.ui.component.luminaHazeHeader
@@ -611,6 +611,7 @@ private fun HeaderBannerStudioCard(
     val interactionSource = remember { MutableInteractionSource() }
     val scaleModifier = pressScale(interactionSource, 0.985f)
 
+    var showFineTuneSheet by remember { mutableStateOf(false) }
     var alphaVal by remember(state.alpha) { mutableFloatStateOf(state.alpha) }
     var zoomVal by remember(state.zoom) { mutableFloatStateOf(state.zoom) }
     var offsetXVal by remember(state.offsetX) { mutableFloatStateOf(state.offsetX) }
@@ -618,6 +619,41 @@ private fun HeaderBannerStudioCard(
     var heightVal by remember(state.bannerHeightDp) { mutableFloatStateOf(state.bannerHeightDp) }
     var fadeVal by remember(state.fadeStrength) { mutableFloatStateOf(state.fadeStrength) }
     var blurVal by remember(state.blurDp) { mutableFloatStateOf(state.blurDp) }
+
+    if (showFineTuneSheet && state.enabled && bitmap != null) {
+        BannerFineTuneSheet(
+            zoom = zoomVal,
+            bannerHeightDp = heightVal,
+            fadeStrength = fadeVal,
+            blurDp = blurVal,
+            onDismiss = { showFineTuneSheet = false },
+            onZoomChange = { raw ->
+                zoomVal = raw
+                onTransformChange(offsetXVal, offsetYVal, raw)
+            },
+            onHeightChange = { raw ->
+                heightVal = raw
+                onHeightChange(raw)
+            },
+            onFadeChange = { raw ->
+                fadeVal = raw
+                onFadeChange(raw)
+            },
+            onBlurChange = { raw ->
+                blurVal = raw
+                onBlurChange(raw)
+            },
+            onReset = {
+                offsetXVal = 0f
+                offsetYVal = 0f
+                zoomVal = LuminaArtworkManager.DEFAULT_ZOOM
+                heightVal = LuminaArtworkManager.DEFAULT_HEIGHT_DP
+                fadeVal = LuminaArtworkManager.DEFAULT_FADE
+                blurVal = 0f
+                onResetTransform()
+            }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -788,80 +824,6 @@ private fun HeaderBannerStudioCard(
                             onAlphaChange(raw)
                         }
                     )
-
-                    BannerSliderControl(
-                        label = persLocalizedLabel("Perbesaran (Zoom)", "Zoom scale"),
-                        valueText = String.format(Locale.US, "%.2fx", zoomVal),
-                        value = zoomVal,
-                        range = LuminaArtworkManager.MIN_ZOOM..LuminaArtworkManager.MAX_ZOOM,
-                        onValueChange = { raw ->
-                            zoomVal = raw
-                            onTransformChange(offsetXVal, offsetYVal, raw)
-                        }
-                    )
-
-                    BannerSliderControl(
-                        label = persLocalizedLabel("Posisi Horizontal (X)", "Horizontal position (X)"),
-                        valueText = "${(offsetXVal * 100f).roundToInt()}%",
-                        value = offsetXVal,
-                        range = -1f..1f,
-                        onValueChange = { raw ->
-                            val snapped = if (raw in -0.04f..0.04f) 0f else raw
-                            if (snapped == 0f && offsetXVal != 0f) {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            }
-                            offsetXVal = snapped
-                            onTransformChange(snapped, offsetYVal, zoomVal)
-                        }
-                    )
-
-                    BannerSliderControl(
-                        label = persLocalizedLabel("Posisi Vertikal (Y)", "Vertical position (Y)"),
-                        valueText = "${(offsetYVal * 100f).roundToInt()}%",
-                        value = offsetYVal,
-                        range = -1f..1f,
-                        onValueChange = { raw ->
-                            val snapped = if (raw in -0.04f..0.04f) 0f else raw
-                            if (snapped == 0f && offsetYVal != 0f) {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            }
-                            offsetYVal = snapped
-                            onTransformChange(offsetXVal, snapped, zoomVal)
-                        }
-                    )
-
-                    BannerSliderControl(
-                        label = persLocalizedLabel("Tinggi area banner", "Banner height"),
-                        valueText = "${heightVal.roundToInt()} dp",
-                        value = heightVal,
-                        range = LuminaArtworkManager.MIN_HEIGHT_DP..LuminaArtworkManager.MAX_HEIGHT_DP,
-                        onValueChange = { raw ->
-                            heightVal = raw
-                            onHeightChange(raw)
-                        }
-                    )
-
-                    BannerSliderControl(
-                        label = persLocalizedLabel("Kehalusan pudar", "Bottom fade"),
-                        valueText = "${(fadeVal * 100f).roundToInt()}%",
-                        value = fadeVal,
-                        range = LuminaArtworkManager.MIN_FADE..LuminaArtworkManager.MAX_FADE,
-                        onValueChange = { raw ->
-                            fadeVal = raw
-                            onFadeChange(raw)
-                        }
-                    )
-
-                    BannerSliderControl(
-                        label = persLocalizedLabel("Blur latar", "Backdrop blur"),
-                        valueText = "${blurVal.roundToInt()} dp",
-                        value = blurVal,
-                        range = LuminaArtworkManager.MIN_BLUR_DP..LuminaArtworkManager.MAX_BLUR_DP,
-                        onValueChange = { raw ->
-                            blurVal = raw
-                            onBlurChange(raw)
-                        }
-                    )
                 }
             }
         }
@@ -900,6 +862,34 @@ private fun HeaderBannerStudioCard(
                 )
             }
 
+            if (state.enabled && bitmap != null) {
+                Row(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(scheme.surfaceContainerHighest)
+                        .clickable {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            showFineTuneSheet = true
+                        }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Tune,
+                        contentDescription = null,
+                        tint = scheme.onSurface,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Text(
+                        text = persLocalizedLabel("Atur gaya", "Fine-tune"),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = scheme.onSurface
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.weight(1f))
 
             if (state.hasImage) {
@@ -915,6 +905,111 @@ private fun HeaderBannerStudioCard(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun BannerFineTuneSheet(
+    zoom: Float,
+    bannerHeightDp: Float,
+    fadeStrength: Float,
+    blurDp: Float,
+    onDismiss: () -> Unit,
+    onZoomChange: (Float) -> Unit,
+    onHeightChange: (Float) -> Unit,
+    onFadeChange: (Float) -> Unit,
+    onBlurChange: (Float) -> Unit,
+    onReset: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        containerColor = scheme.surfaceContainerHigh,
+        contentWindowInsets = { WindowInsets(0.dp) },
+        dragHandle = {
+            BottomSheetDefaults.DragHandle(
+                color = scheme.onSurfaceVariant.copy(alpha = 0.4f)
+            )
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = persLocalizedLabel("Atur Gaya Banner", "Banner Style & Scale"),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = scheme.onSurface
+                    )
+                    Text(
+                        text = persLocalizedLabel(
+                            "Posisi X/Y diatur langsung dengan menggeser preview",
+                            "Drag the preview directly to adjust X/Y framing"
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant
+                    )
+                }
+
+                IconButton(
+                    onClick = onReset,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Restore,
+                        contentDescription = stringResource(R.string.action_reset),
+                        tint = scheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            BannerSliderControl(
+                label = persLocalizedLabel("Perbesaran (Zoom)", "Zoom scale"),
+                valueText = String.format(Locale.US, "%.2fx", zoom),
+                value = zoom,
+                range = LuminaArtworkManager.MIN_ZOOM..LuminaArtworkManager.MAX_ZOOM,
+                onValueChange = onZoomChange
+            )
+
+            BannerSliderControl(
+                label = persLocalizedLabel("Tinggi area banner", "Banner height"),
+                valueText = "${bannerHeightDp.roundToInt()} dp",
+                value = bannerHeightDp,
+                range = LuminaArtworkManager.MIN_HEIGHT_DP..LuminaArtworkManager.MAX_HEIGHT_DP,
+                onValueChange = onHeightChange
+            )
+
+            BannerSliderControl(
+                label = persLocalizedLabel("Kehalusan pudar", "Bottom fade"),
+                valueText = "${(fadeStrength * 100f).roundToInt()}%",
+                value = fadeStrength,
+                range = LuminaArtworkManager.MIN_FADE..LuminaArtworkManager.MAX_FADE,
+                onValueChange = onFadeChange
+            )
+
+            BannerSliderControl(
+                label = persLocalizedLabel("Blur latar", "Backdrop blur"),
+                valueText = "${blurDp.roundToInt()} dp",
+                value = blurDp,
+                range = LuminaArtworkManager.MIN_BLUR_DP..LuminaArtworkManager.MAX_BLUR_DP,
+                onValueChange = onBlurChange
+            )
         }
     }
 }
@@ -940,7 +1035,7 @@ private fun HeaderBannerLivePreview(
     val midStop = (0.78f - fade * 0.20f).coerceIn(clearStop + 0.12f, 0.76f)
     val endStop = (0.98f - fade * 0.10f).coerceIn(midStop + 0.10f, 0.98f)
 
-    val previewHeightDp = (bannerHeightDp * 0.74f).coerceIn(154f, 240f).dp
+    val previewHeightDp = (bannerHeightDp * 0.68f).coerceIn(136f, 224f).dp
     var boxSize by remember { mutableStateOf(IntSize.Zero) }
     val curX by rememberUpdatedState(offsetX)
     val curY by rememberUpdatedState(offsetY)
@@ -1006,85 +1101,26 @@ private fun HeaderBannerLivePreview(
                 )
         )
 
-        Column(
+        Row(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
+                .align(Alignment.TopStart)
                 .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "LuminaTweaks",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = scheme.onSurface
-                )
-                Icon(
-                    imageVector = Icons.Filled.PowerSettingsNew,
-                    contentDescription = null,
-                    tint = scheme.onSurface,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(scheme.secondaryContainer.copy(alpha = 0.94f))
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.CheckCircle,
-                        contentDescription = null,
-                        tint = scheme.onSecondaryContainer,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Text(
-                        text = "ALIVE",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = scheme.onSecondaryContainer
-                    )
-                }
-
-                Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(scheme.surfaceContainerHigh.copy(alpha = 0.94f))
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "41.3°C",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = scheme.onSurface
-                    )
-                    Icon(
-                        imageVector = Icons.Rounded.Thermostat,
-                        contentDescription = null,
-                        tint = scheme.primary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
+            Text(
+                text = "LuminaTweaks",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = scheme.onSurface
+            )
+            Icon(
+                imageVector = Icons.Filled.PowerSettingsNew,
+                contentDescription = null,
+                tint = scheme.onSurface,
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }
