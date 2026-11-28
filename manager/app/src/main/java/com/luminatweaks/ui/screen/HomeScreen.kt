@@ -24,7 +24,6 @@ package com.luminatweaks.ui.screen
 
 import android.app.ActivityManager
 import android.content.Context
-import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
 import android.os.Build
@@ -56,7 +55,6 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -98,7 +96,6 @@ import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Send
-import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material3.CircularWavyProgressIndicator
@@ -118,9 +115,7 @@ import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -133,15 +128,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -152,8 +147,6 @@ import androidx.compose.ui.graphics.lerp as lerpGraphicsColor
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
@@ -170,7 +163,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
@@ -190,7 +182,6 @@ import com.luminatweaks.ui.component.LuminaMicroTicker
 import com.luminatweaks.ui.component.OdometerNumber
 import com.luminatweaks.ui.component.TouchOriginDialog
 import com.luminatweaks.ui.component.bouncyClickable
-import com.luminatweaks.ui.component.dampOverscrollPull
 import com.luminatweaks.ui.component.luminaHazeHeader
 import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.component.rememberDialogOrigin
@@ -227,13 +218,6 @@ private data class SystemTelemetrySnapshot(
     val batteryPercent: Int,
     val batteryVoltageV: Float,
     val isCharging: Boolean
-)
-
-private data class EnginePassInfo(
-    val rootProvider: String,
-    val ipcReachable: Boolean,
-    val binderReady: Boolean,
-    val capabilityMode: String
 )
 
 @Composable
@@ -999,38 +983,11 @@ fun HomeDashboardContent(
     }
 
     var telemetry by remember { mutableStateOf(readSystemTelemetry(context)) }
-    var enginePass by remember {
-        mutableStateOf(
-            EnginePassInfo(
-                rootProvider = if (isRootGranted) "Root" else "Checking",
-                ipcReachable = daemonPid != null,
-                binderReady = false,
-                capabilityMode = "observe"
-            )
-        )
-    }
 
     LaunchedEffect(Unit) {
         while (isActive) {
             telemetry = readSystemTelemetry(context)
             delay(3000L)
-        }
-    }
-
-    LaunchedEffect(daemonPid) {
-        withContext(Dispatchers.IO) {
-            val provider = RootUtil.detectRootProvider() ?: if (RootUtil.checkRootAccess()) "Root" else "None"
-            val ipc = DaemonManager.isIpcReachable()
-            val binder = DaemonManager.isBinderBridgeReady()
-            val mode = DaemonManager.getCapabilityMode()
-            withContext(Dispatchers.Main) {
-                enginePass = EnginePassInfo(
-                    rootProvider = provider,
-                    ipcReachable = ipc,
-                    binderReady = binder,
-                    capabilityMode = mode
-                )
-            }
         }
     }
 
@@ -1118,63 +1075,6 @@ fun HomeDashboardContent(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val hazeState = remember { HazeState() }
     val listState = rememberLazyListState()
-
-    val maxRevealPx = with(density) { 148.dp.toPx() }
-    val pullAnim = remember { Animatable(0f) }
-    var rawPullPx by remember { mutableFloatStateOf(0f) }
-    var thresholdHapticFired by remember { mutableStateOf(false) }
-
-    val elasticRevealConnection = remember(listState, scrollBehavior, maxRevealPx) {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (source == NestedScrollSource.UserInput && available.y < 0f && rawPullPx > 0f) {
-                    val consumedY = maxOf(available.y, -rawPullPx)
-                    rawPullPx = (rawPullPx + consumedY).coerceAtLeast(0f)
-                    restartScope.launch { pullAnim.snapTo(rawPullPx) }
-                    return Offset(0f, consumedY)
-                }
-                return Offset.Zero
-            }
-
-            override fun onPostScroll(
-                consumed: Offset,
-                available: Offset,
-                source: NestedScrollSource
-            ): Offset {
-                val atTop = listState.firstVisibleItemIndex == 0 &&
-                    listState.firstVisibleItemScrollOffset == 0 &&
-                    scrollBehavior.state.heightOffset >= -0.5f
-                if (source == NestedScrollSource.UserInput && available.y > 0f && atTop) {
-                    rawPullPx = (rawPullPx + available.y).coerceAtMost(840f)
-                    val damped = dampOverscrollPull(rawPullPx, maxRevealPx)
-                    if (damped >= maxRevealPx * 0.72f && !thresholdHapticFired) {
-                        thresholdHapticFired = true
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    } else if (damped < maxRevealPx * 0.5f) {
-                        thresholdHapticFired = false
-                    }
-                    restartScope.launch { pullAnim.snapTo(rawPullPx) }
-                    return Offset(0f, available.y)
-                }
-                return Offset.Zero
-            }
-
-            override suspend fun onPreFling(available: Velocity): Velocity {
-                if (rawPullPx > 0f) {
-                    rawPullPx = 0f
-                    thresholdHapticFired = false
-                    restartScope.launch {
-                        pullAnim.animateTo(
-                            targetValue = 0f,
-                            animationSpec = spring(dampingRatio = 0.78f, stiffness = 340f)
-                        )
-                    }
-                }
-                return Velocity.Zero
-            }
-        }
-    }
-
     val hasHeaderArtwork = headerBitmap != null
 
     Scaffold(
@@ -1228,18 +1128,8 @@ fun HomeDashboardContent(
             }
         }
     ) { innerPadding ->
-        val topInset = innerPadding.calculateTopPadding()
-        val scrolledPx by remember {
-            derivedStateOf {
-                if (listState.firstVisibleItemIndex > 0) {
-                    120f
-                } else {
-                    listState.firstVisibleItemScrollOffset.toFloat()
-                }
-            }
-        }
-        val fadeRatio = (scrolledPx / 48f).coerceIn(0f, 1f)
-        val dynamicFadePx = with(density) { (6.dp + 18.dp * fadeRatio).toPx() }
+        val topBarCutoffPx = with(density) { innerPadding.calculateTopPadding().toPx() }
+        val fadeBandPx = with(density) { 18.dp.toPx() }
 
         Box(
             modifier = Modifier
@@ -1267,14 +1157,6 @@ fun HomeDashboardContent(
                     .fillMaxSize()
                     .then(
                         if (hasHeaderArtwork) {
-                            Modifier.padding(top = topInset)
-                        } else {
-                            Modifier
-                        }
-                    )
-                    .nestedScroll(elasticRevealConnection)
-                    .then(
-                        if (hasHeaderArtwork) {
                             Modifier
                                 .graphicsLayer {
                                     compositingStrategy = CompositingStrategy.Offscreen
@@ -1282,10 +1164,12 @@ fun HomeDashboardContent(
                                 .drawWithContent {
                                     drawContent()
                                     val h = size.height.coerceAtLeast(1f)
-                                    val solidStop = (dynamicFadePx / h).coerceIn(0.005f, 0.25f)
+                                    val clearStop = ((topBarCutoffPx - fadeBandPx * 0.6f) / h).coerceIn(0f, 0.95f)
+                                    val solidStop = ((topBarCutoffPx + fadeBandPx * 0.4f) / h).coerceIn(clearStop + 0.005f, 1f)
                                     drawRect(
                                         brush = Brush.verticalGradient(
                                             0.0f to Color.Transparent,
+                                            clearStop to Color.Transparent,
                                             solidStop to Color.Black,
                                             1.0f to Color.Black
                                         ),
@@ -1297,40 +1181,13 @@ fun HomeDashboardContent(
                         }
                     ),
                 contentPadding = PaddingValues(
-                    top = if (hasHeaderArtwork) 6.dp else topInset + 6.dp,
+                    top = innerPadding.calculateTopPadding() + 6.dp,
                     bottom = bottomPadding,
                     start = 16.dp,
                     end = 16.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                item(key = "elastic_engine_reveal") {
-                    val dampedPx = dampOverscrollPull(pullAnim.value, maxRevealPx)
-                    val revealHeightDp = with(density) { dampedPx.toDp() }
-                    val progress = (dampedPx / (maxRevealPx * 0.85f)).coerceIn(0f, 1f)
-
-                    if (dampedPx > 0.5f) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(revealHeightDp)
-                                .clipToBounds(),
-                            contentAlignment = Alignment.BottomCenter
-                        ) {
-                            EngineDiagnosticPassCard(
-                                info = enginePass,
-                                daemonPid = daemonPid,
-                                modifier = Modifier.graphicsLayer {
-                                    alpha = progress
-                                    val s = 0.92f + 0.08f * progress
-                                    scaleX = s
-                                    scaleY = s
-                                }
-                            )
-                        }
-                    }
-                }
-
                 item(key = "hero_bento") {
                     Row(
                         modifier = Modifier
@@ -1520,123 +1377,6 @@ private fun HomeHeaderArtworkBackdrop(
                         1.0f to surfaceColor
                     )
                 )
-        )
-    }
-}
-
-@Composable
-private fun EngineDiagnosticPassCard(
-    info: EnginePassInfo,
-    daemonPid: String?,
-    modifier: Modifier = Modifier
-) {
-    val scheme = MaterialTheme.colorScheme
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
-            .background(scheme.surfaceContainerHighest)
-            .border(1.dp, scheme.outlineVariant.copy(alpha = 0.45f), RoundedCornerShape(24.dp))
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Shield,
-                    contentDescription = null,
-                    tint = scheme.primary,
-                    modifier = Modifier.size(16.dp)
-                )
-                Text(
-                    text = "LUMINA ENGINE // PASS",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        platformStyle = PlatformTextStyle(includeFontPadding = false)
-                    ),
-                    color = scheme.primary
-                )
-            }
-
-            Text(
-                text = "ROOT: ${info.rootProvider.uppercase(Locale.ROOT)}",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.SemiBold,
-                    platformStyle = PlatformTextStyle(includeFontPadding = false)
-                ),
-                color = scheme.onSurfaceVariant
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            EnginePassBadge(
-                label = "IPC",
-                value = if (info.ipcReachable || daemonPid != null) "ONLINE" else "OFFLINE",
-                active = info.ipcReachable || daemonPid != null,
-                modifier = Modifier.weight(1f)
-            )
-            EnginePassBadge(
-                label = "BINDER",
-                value = if (info.binderReady) "READY" else "STANDBY",
-                active = info.binderReady,
-                modifier = Modifier.weight(1f)
-            )
-            EnginePassBadge(
-                label = "MODE",
-                value = info.capabilityMode.uppercase(Locale.ROOT),
-                active = true,
-                modifier = Modifier.weight(1f)
-            )
-        }
-    }
-}
-
-@Composable
-private fun EnginePassBadge(
-    label: String,
-    value: String,
-    active: Boolean,
-    modifier: Modifier = Modifier
-) {
-    val scheme = MaterialTheme.colorScheme
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(scheme.surfaceContainer)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp)
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontFamily = FontFamily.Monospace,
-                fontSize = 10.sp,
-                platformStyle = PlatformTextStyle(includeFontPadding = false)
-            ),
-            color = scheme.onSurfaceVariant
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.labelMedium.copy(
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold,
-                platformStyle = PlatformTextStyle(includeFontPadding = false)
-            ),
-            color = if (active) scheme.primary else scheme.error,
-            maxLines = 1,
-            softWrap = false
         )
     }
 }
