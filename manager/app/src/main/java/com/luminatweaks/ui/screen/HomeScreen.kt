@@ -118,6 +118,7 @@ import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -187,6 +188,7 @@ import com.luminatweaks.ui.component.OdometerNumber
 import com.luminatweaks.ui.component.TouchOriginDialog
 import com.luminatweaks.ui.component.bouncyClickable
 import com.luminatweaks.ui.component.dampOverscrollPull
+import com.luminatweaks.ui.component.luminaHazeHeader
 import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.component.rememberDialogOrigin
 import com.luminatweaks.ui.theme.LocalCornerRadius
@@ -198,6 +200,8 @@ import com.luminatweaks.ui.theme.PageTransition
 import com.luminatweaks.ui.theme.rememberLuminaArtworkState
 import com.luminatweaks.util.DeviceUtil
 import com.luminatweaks.util.RootUtil
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
 import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.abs
@@ -1109,6 +1113,7 @@ fun HomeDashboardContent(
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val bottomPadding = if (isFloating) 112.dp + navInset else 28.dp + navInset
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    val hazeState = remember { HazeState() }
     val listState = rememberLazyListState()
 
     val maxRevealPx = with(density) { 148.dp.toPx() }
@@ -1167,26 +1172,34 @@ fun HomeDashboardContent(
         }
     }
 
-    val hasHeaderArtwork = headerBitmap != null
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(scheme.background)
-    ) {
-        if (headerBitmap != null) {
-            HomeHeaderArtworkBackdrop(
-                bitmap = headerBitmap!!,
-                artwork = artworkState,
-                surfaceColor = scheme.background
-            )
+    val blurRampPx = with(density) { 40.dp.toPx() }
+    val headerBlurAlpha by remember(blurRampPx) {
+        derivedStateOf {
+            val offsetPx = if (listState.firstVisibleItemIndex > 0) {
+                blurRampPx
+            } else {
+                listState.firstVisibleItemScrollOffset.toFloat()
+            }
+            (offsetPx / blurRampPx).coerceIn(0f, 1f)
         }
+    }
 
-        Scaffold(
-            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentWindowInsets = WindowInsets(0.dp),
-            containerColor = if (hasHeaderArtwork) Color.Transparent else scheme.background,
-            topBar = {
+    Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        contentWindowInsets = WindowInsets(0.dp),
+        containerColor = scheme.background,
+        topBar = {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .graphicsLayer { alpha = headerBlurAlpha }
+                        .luminaHazeHeader(
+                            hazeState = hazeState,
+                            surfaceColor = scheme.background,
+                            overlappedFraction = headerBlurAlpha
+                        )
+                )
                 LargeFlexibleTopAppBar(
                     title = {
                         Text(
@@ -1219,7 +1232,22 @@ fun HomeDashboardContent(
                     windowInsets = TopAppBarDefaults.windowInsets
                 )
             }
-        ) { innerPadding ->
+        }
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(scheme.background)
+                .hazeSource(state = hazeState)
+        ) {
+            if (headerBitmap != null) {
+                HomeHeaderArtworkBackdrop(
+                    bitmap = headerBitmap!!,
+                    artwork = artworkState,
+                    surfaceColor = scheme.background
+                )
+            }
+
             LazyColumn(
                 state = listState,
                 modifier = Modifier
