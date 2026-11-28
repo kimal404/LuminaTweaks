@@ -178,15 +178,25 @@ object LuminaHapticEngine {
 
 class LuminaHapticFeedback(
     private val context: Context,
+    private val systemHaptic: HapticFeedback,
     private val settings: HapticSettings
 ) : HapticFeedback {
     override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) {
+        if (!settings.enabled) return
+        if (settings.intensity >= 0.6f) {
+            val systemType = when (hapticFeedbackType) {
+                HapticFeedbackType.LongPress -> HapticFeedbackType.LongPress
+                else -> HapticFeedbackType.VirtualKey
+            }
+            systemHaptic.performHapticFeedback(systemType)
+            return
+        }
         val pulse = when (hapticFeedbackType) {
             HapticFeedbackType.LongPress -> LuminaHapticPulse.Heavy
             HapticFeedbackType.ToggleOn,
             HapticFeedbackType.ToggleOff,
             HapticFeedbackType.SegmentTick -> LuminaHapticPulse.Tick
-            else -> LuminaHapticPulse.Click
+            else -> LuminaHapticPulse.Tick
         }
         LuminaHapticEngine.perform(context, settings, pulse)
     }

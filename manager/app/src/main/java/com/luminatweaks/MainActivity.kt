@@ -107,8 +107,9 @@ class MainActivity : ComponentActivity() {
                 prefs.registerOnSharedPreferenceChangeListener(listener)
                 onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
             }
-            val hapticFeedback = remember(hapticSettings) {
-                LuminaHapticFeedback(context, hapticSettings)
+            val systemHaptic = LocalHapticFeedback.current
+            val hapticFeedback = remember(hapticSettings, systemHaptic) {
+                LuminaHapticFeedback(context, systemHaptic, hapticSettings)
             }
             CompositionLocalProvider(
                 LocalHapticConfig provides hapticSettings,
