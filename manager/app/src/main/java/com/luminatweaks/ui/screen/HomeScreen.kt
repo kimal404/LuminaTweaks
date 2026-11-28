@@ -1228,8 +1228,18 @@ fun HomeDashboardContent(
             }
         }
     ) { innerPadding ->
-        val topBarCutoffPx = with(density) { innerPadding.calculateTopPadding().toPx() }
-        val fadeBandPx = with(density) { 18.dp.toPx() }
+        val topInset = innerPadding.calculateTopPadding()
+        val scrolledPx by remember {
+            derivedStateOf {
+                if (listState.firstVisibleItemIndex > 0) {
+                    120f
+                } else {
+                    listState.firstVisibleItemScrollOffset.toFloat()
+                }
+            }
+        }
+        val fadeRatio = (scrolledPx / 48f).coerceIn(0f, 1f)
+        val dynamicFadePx = with(density) { (6.dp + 18.dp * fadeRatio).toPx() }
 
         Box(
             modifier = Modifier
@@ -1255,6 +1265,13 @@ fun HomeDashboardContent(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
+                    .then(
+                        if (hasHeaderArtwork) {
+                            Modifier.padding(top = topInset)
+                        } else {
+                            Modifier
+                        }
+                    )
                     .nestedScroll(elasticRevealConnection)
                     .then(
                         if (hasHeaderArtwork) {
@@ -1265,12 +1282,10 @@ fun HomeDashboardContent(
                                 .drawWithContent {
                                     drawContent()
                                     val h = size.height.coerceAtLeast(1f)
-                                    val clearStop = ((topBarCutoffPx - fadeBandPx * 0.6f) / h).coerceIn(0f, 0.95f)
-                                    val solidStop = ((topBarCutoffPx + fadeBandPx * 0.4f) / h).coerceIn(clearStop + 0.005f, 1f)
+                                    val solidStop = (dynamicFadePx / h).coerceIn(0.005f, 0.25f)
                                     drawRect(
                                         brush = Brush.verticalGradient(
                                             0.0f to Color.Transparent,
-                                            clearStop to Color.Transparent,
                                             solidStop to Color.Black,
                                             1.0f to Color.Black
                                         ),
@@ -1282,7 +1297,7 @@ fun HomeDashboardContent(
                         }
                     ),
                 contentPadding = PaddingValues(
-                    top = innerPadding.calculateTopPadding() + 6.dp,
+                    top = if (hasHeaderArtwork) 6.dp else topInset + 6.dp,
                     bottom = bottomPadding,
                     start = 16.dp,
                     end = 16.dp
