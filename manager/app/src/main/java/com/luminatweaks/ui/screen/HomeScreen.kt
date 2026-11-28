@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2026 kimal
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 @file:OptIn(
     androidx.compose.foundation.ExperimentalFoundationApi::class,
     ExperimentalMaterial3ExpressiveApi::class,
@@ -38,6 +54,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -118,18 +135,22 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp as lerpGraphicsColor
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp as lerpGraphicsColor
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -144,10 +165,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.util.lerp as lerpFloat
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -170,14 +192,16 @@ import com.luminatweaks.ui.component.rememberDialogOrigin
 import com.luminatweaks.ui.theme.LocalCornerRadius
 import com.luminatweaks.ui.theme.LocalFloatingNavBar
 import com.luminatweaks.ui.theme.LocalPageTransition
+import com.luminatweaks.ui.theme.LuminaArtworkManager
+import com.luminatweaks.ui.theme.LuminaArtworkSlot
 import com.luminatweaks.ui.theme.PageTransition
+import com.luminatweaks.ui.theme.rememberLuminaArtworkState
 import com.luminatweaks.util.DeviceUtil
 import com.luminatweaks.util.RootUtil
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import java.util.Locale
 import kotlin.math.PI
-import androidx.compose.ui.util.lerp as lerpFloat
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -540,263 +564,263 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
             .background(MaterialTheme.colorScheme.background)
             .onSizeChanged { rootSizePx = it }
     ) {
-                val pagerScaleModifier = Modifier.graphicsLayer {
-                    val s = tabFadeScale.value * containerDepthScale
-                    scaleX = s
-                    scaleY = s
-                    alpha = ((tabFadeScale.value - 0.94f) / 0.06f).coerceIn(0f, 1f)
-                }
+        val pagerScaleModifier = Modifier.graphicsLayer {
+            val s = tabFadeScale.value * containerDepthScale
+            scaleX = s
+            scaleY = s
+            alpha = ((tabFadeScale.value - 0.94f) / 0.06f).coerceIn(0f, 1f)
+        }
 
-                if (isFloating) {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        LuminaTabPager(
-                            pagerState = pagerState,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .then(pagerScaleModifier),
-                            userScrollEnabled = !isAnyOverlayOpen
-                        ) { tab ->
-                            when (tab) {
-                                0 -> HomeDashboardContent(
-                                    batteryTemp = batteryTemp,
-                                    daemonPid = daemonPid,
-                                    isChecking = isChecking,
-                                    isModuleInstalled = isModuleInstalled,
-                                    isRebootRequired = isRebootRequired,
-                                    currentProfile = currentProfile,
-                                    kernelVersion = kernelVersion,
-                                    deviceModel = deviceModel,
-                                    onRequestRebootDialog = { showRebootDialog = true },
-                                    onRestartDaemon = restartAction
-                                )
-                                1 -> AppsScreen(
-                                    pagerState = pagerState
-                                )
-                                2 -> TweaksScreen(
-                                    pagerState = pagerState,
-                                    onRegisterSubpageBounds = { subpage, rect ->
-                                        subpageBounds[subpage] = rect
-                                    },
-                                    onOpenSubpage = { subpage, hz ->
-                                        if (subpage == TweaksSubpage.FLOATING_HUD) {
-                                            overlayConfig = FloatingFpsPrefs.load(context)
-                                        }
-                                        tweaksTargetHz = hz
-                                        activeTweaksSubpage = subpage
-                                    }
-                                )
-                                3 -> SettingsScreen(
-                                    onNavigateToAbout = { currentSubscreen = "about" },
-                                    onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" },
-                                    onNavigateToCompatibility = { currentSubscreen = "compatibility" },
-                                    onNavigateToTweaks = { onTabSelected(2) },
-                                    onOpenSetupWizard = onOpenSetupWizard
-                                )
-                            }
-                        }
-
-                        val barSpatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
-                        val barEffects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
-                        AnimatedVisibility(
-                            visible = !isAnyOverlayOpen,
-                            enter = slideInVertically(animationSpec = barSpatial) { it } + fadeIn(animationSpec = barEffects),
-                            exit = slideOutVertically(animationSpec = barSpatial) { it } + fadeOut(animationSpec = barEffects),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .align(Alignment.BottomCenter)
-                        ) {
-                            LuminaBottomBar(
-                                selectedTab = targetTab,
-                                onTabSelected = onTabSelected
-                            )
-                        }
-                    }
-                } else {
-                    Scaffold(
-                        contentWindowInsets = WindowInsets(0.dp),
-                        bottomBar = {
-                            val barSpatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
-                            val barEffects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
-                            AnimatedVisibility(
-                                visible = !isAnyOverlayOpen,
-                                enter = slideInVertically(animationSpec = barSpatial) { it } + fadeIn(animationSpec = barEffects),
-                                exit = slideOutVertically(animationSpec = barSpatial) { it } + fadeOut(animationSpec = barEffects)
-                            ) {
-                                LuminaBottomBar(
-                                    selectedTab = targetTab,
-                                    onTabSelected = onTabSelected
-                                )
-                            }
-                        }
-                    ) { innerPadding ->
-                        LuminaTabPager(
-                            pagerState = pagerState,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(innerPadding)
-                                .then(pagerScaleModifier),
-                            userScrollEnabled = !isAnyOverlayOpen
-                        ) { tab ->
-                            when (tab) {
-                                0 -> HomeDashboardContent(
-                                    batteryTemp = batteryTemp,
-                                    daemonPid = daemonPid,
-                                    isChecking = isChecking,
-                                    isModuleInstalled = isModuleInstalled,
-                                    isRebootRequired = isRebootRequired,
-                                    currentProfile = currentProfile,
-                                    kernelVersion = kernelVersion,
-                                    deviceModel = deviceModel,
-                                    onRequestRebootDialog = { showRebootDialog = true },
-                                    onRestartDaemon = restartAction
-                                )
-                                1 -> AppsScreen(
-                                    pagerState = pagerState
-                                )
-                                2 -> TweaksScreen(
-                                    pagerState = pagerState,
-                                    onRegisterSubpageBounds = { subpage, rect ->
-                                        subpageBounds[subpage] = rect
-                                    },
-                                    onOpenSubpage = { subpage, hz ->
-                                        if (subpage == TweaksSubpage.FLOATING_HUD) {
-                                            overlayConfig = FloatingFpsPrefs.load(context)
-                                        }
-                                        tweaksTargetHz = hz
-                                        activeTweaksSubpage = subpage
-                                    }
-                                )
-                                3 -> SettingsScreen(
-                                    onNavigateToAbout = { currentSubscreen = "about" },
-                                    onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" },
-                                    onNavigateToCompatibility = { currentSubscreen = "compatibility" },
-                                    onNavigateToTweaks = { onTabSelected(2) },
-                                    onOpenSetupWizard = onOpenSetupWizard
-                                )
-                            }
-                        }
-                    }
-                }
-
-                if (containerScrimAlpha > 0.005f) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .zIndex(1f)
-                            .background(Color.Black.copy(alpha = containerScrimAlpha))
-                    )
-                }
-
-                val currentSubpage = displayedTweaksSubpage
-                if (currentSubpage != null && rootSizePx.width > 0 && rootSizePx.height > 0) {
-                    val density = LocalDensity.current
-                    val fullW = rootSizePx.width.toFloat()
-                    val fullH = rootSizePx.height.toFloat()
-                    val startRect = subpageBounds[currentSubpage] ?: Rect(
-                        left = fullW * 0.06f,
-                        top = fullH * 0.36f,
-                        right = fullW * 0.94f,
-                        bottom = fullH * 0.52f
-                    )
-                    val curLeft = lerpFloat(startRect.left, 0f, p)
-                    val curTop = lerpFloat(startRect.top, 0f, p)
-                    val curRight = lerpFloat(startRect.right, fullW, p)
-                    val curBottom = lerpFloat(startRect.bottom, fullH, p)
-                    val curWidthDp = with(density) { (curRight - curLeft).coerceAtLeast(1f).toDp() }
-                    val curHeightDp = with(density) { (curBottom - curTop).coerceAtLeast(1f).toDp() }
-                    val cornerDp = lerp(26.dp, 0.dp, p)
-                    val morphBg = lerpGraphicsColor(
-                        MaterialTheme.colorScheme.surfaceContainerHigh,
-                        MaterialTheme.colorScheme.background,
-                        p
-                    )
-                    val contentAlpha = ((p - 0.14f) / 0.46f).coerceIn(0f, 1f)
-
-                    Box(
-                        modifier = Modifier
-                            .zIndex(2f)
-                            .offset { IntOffset(curLeft.roundToInt(), curTop.roundToInt()) }
-                            .size(width = curWidthDp, height = curHeightDp)
-                            .clip(RoundedCornerShape(cornerDp))
-                            .background(morphBg)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .graphicsLayer { alpha = contentAlpha }
-                        ) {
-                            when (currentSubpage) {
-                                TweaksSubpage.FLOATING_HUD -> TelemetryOverlayScreen(
-                                    config = overlayConfig,
-                                    targetHz = tweaksTargetHz,
-                                    onConfigChange = { updated ->
-                                        val wasEnabled = overlayConfig.enabled
-                                        overlayConfig = updated
-                                        FloatingFpsPrefs.save(context, updated)
-                                        if (updated.enabled && !wasEnabled) {
-                                            homeScope.launch {
-                                                val granted = FloatingFpsService.ensureOverlayPermission(context)
-                                                if (granted) {
-                                                    FloatingFpsService.sync(context, updated)
-                                                } else {
-                                                    val reverted = updated.copy(enabled = false)
-                                                    overlayConfig = reverted
-                                                    FloatingFpsPrefs.save(context, reverted)
-                                                }
-                                            }
-                                        } else {
-                                            FloatingFpsService.sync(context, updated)
-                                        }
-                                    },
-                                    onBack = { activeTweaksSubpage = null }
-                                )
-                                TweaksSubpage.GAME_BAR -> GameDeckSettingsScreen(
-                                    onBack = { activeTweaksSubpage = null }
-                                )
-                                TweaksSubpage.MEMORY_ZRAM -> MemoryZramScreen(
-                                    onBack = { activeTweaksSubpage = null }
-                                )
-                                TweaksSubpage.HARDWARE -> HardwareDiagnosticScreen(
-                                    onBack = { activeTweaksSubpage = null }
-                                )
-                                TweaksSubpage.UTILITY -> UtilityScreen(
-                                    onBack = { activeTweaksSubpage = null }
-                                )
-                            }
-                        }
-                    }
-                }
-
-                AnimatedVisibility(
-                    visible = currentSubscreen != null,
-                    enter = slideInHorizontally(
-                        animationSpec = tween(320, easing = DrillEmphasizedDecelerate)
-                    ) { it } + fadeIn(animationSpec = tween(220)),
-                    exit = slideOutHorizontally(
-                        animationSpec = tween(280, easing = DrillEmphasizedAccelerate)
-                    ) { it } + fadeOut(animationSpec = tween(220)),
+        if (isFloating) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                LuminaTabPager(
+                    pagerState = pagerState,
                     modifier = Modifier
                         .fillMaxSize()
-                        .zIndex(3f)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.background)
-                    ) {
-                        when (renderedSubscreen) {
-                            "personalisasi" -> PersonalisasiScreen(
-                                onBackClick = { currentSubscreen = null }
-                            )
-                            "compatibility" -> CompatibilityScreen(
-                                onBackClick = { currentSubscreen = null }
-                            )
-                            "about" -> AboutScreen(
-                                onBackClick = { currentSubscreen = null }
-                            )
-                        }
+                        .then(pagerScaleModifier),
+                    userScrollEnabled = !isAnyOverlayOpen
+                ) { tab ->
+                    when (tab) {
+                        0 -> HomeDashboardContent(
+                            batteryTemp = batteryTemp,
+                            daemonPid = daemonPid,
+                            isChecking = isChecking,
+                            isModuleInstalled = isModuleInstalled,
+                            isRebootRequired = isRebootRequired,
+                            currentProfile = currentProfile,
+                            kernelVersion = kernelVersion,
+                            deviceModel = deviceModel,
+                            onRequestRebootDialog = { showRebootDialog = true },
+                            onRestartDaemon = restartAction
+                        )
+                        1 -> AppsScreen(
+                            pagerState = pagerState
+                        )
+                        2 -> TweaksScreen(
+                            pagerState = pagerState,
+                            onRegisterSubpageBounds = { subpage, rect ->
+                                subpageBounds[subpage] = rect
+                            },
+                            onOpenSubpage = { subpage, hz ->
+                                if (subpage == TweaksSubpage.FLOATING_HUD) {
+                                    overlayConfig = FloatingFpsPrefs.load(context)
+                                }
+                                tweaksTargetHz = hz
+                                activeTweaksSubpage = subpage
+                            }
+                        )
+                        3 -> SettingsScreen(
+                            onNavigateToAbout = { currentSubscreen = "about" },
+                            onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" },
+                            onNavigateToCompatibility = { currentSubscreen = "compatibility" },
+                            onNavigateToTweaks = { onTabSelected(2) },
+                            onOpenSetupWizard = onOpenSetupWizard
+                        )
                     }
                 }
+
+                val barSpatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
+                val barEffects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+                AnimatedVisibility(
+                    visible = !isAnyOverlayOpen,
+                    enter = slideInVertically(animationSpec = barSpatial) { it } + fadeIn(animationSpec = barEffects),
+                    exit = slideOutVertically(animationSpec = barSpatial) { it } + fadeOut(animationSpec = barEffects),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                ) {
+                    LuminaBottomBar(
+                        selectedTab = targetTab,
+                        onTabSelected = onTabSelected
+                    )
+                }
+            }
+        } else {
+            Scaffold(
+                contentWindowInsets = WindowInsets(0.dp),
+                bottomBar = {
+                    val barSpatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
+                    val barEffects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+                    AnimatedVisibility(
+                        visible = !isAnyOverlayOpen,
+                        enter = slideInVertically(animationSpec = barSpatial) { it } + fadeIn(animationSpec = barEffects),
+                        exit = slideOutVertically(animationSpec = barSpatial) { it } + fadeOut(animationSpec = barEffects)
+                    ) {
+                        LuminaBottomBar(
+                            selectedTab = targetTab,
+                            onTabSelected = onTabSelected
+                        )
+                    }
+                }
+            ) { innerPadding ->
+                LuminaTabPager(
+                    pagerState = pagerState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .then(pagerScaleModifier),
+                    userScrollEnabled = !isAnyOverlayOpen
+                ) { tab ->
+                    when (tab) {
+                        0 -> HomeDashboardContent(
+                            batteryTemp = batteryTemp,
+                            daemonPid = daemonPid,
+                            isChecking = isChecking,
+                            isModuleInstalled = isModuleInstalled,
+                            isRebootRequired = isRebootRequired,
+                            currentProfile = currentProfile,
+                            kernelVersion = kernelVersion,
+                            deviceModel = deviceModel,
+                            onRequestRebootDialog = { showRebootDialog = true },
+                            onRestartDaemon = restartAction
+                        )
+                        1 -> AppsScreen(
+                            pagerState = pagerState
+                        )
+                        2 -> TweaksScreen(
+                            pagerState = pagerState,
+                            onRegisterSubpageBounds = { subpage, rect ->
+                                subpageBounds[subpage] = rect
+                            },
+                            onOpenSubpage = { subpage, hz ->
+                                if (subpage == TweaksSubpage.FLOATING_HUD) {
+                                    overlayConfig = FloatingFpsPrefs.load(context)
+                                }
+                                tweaksTargetHz = hz
+                                activeTweaksSubpage = subpage
+                            }
+                        )
+                        3 -> SettingsScreen(
+                            onNavigateToAbout = { currentSubscreen = "about" },
+                            onNavigateToPersonalisasi = { currentSubscreen = "personalisasi" },
+                            onNavigateToCompatibility = { currentSubscreen = "compatibility" },
+                            onNavigateToTweaks = { onTabSelected(2) },
+                            onOpenSetupWizard = onOpenSetupWizard
+                        )
+                    }
+                }
+            }
+        }
+
+        if (containerScrimAlpha > 0.005f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(1f)
+                    .background(Color.Black.copy(alpha = containerScrimAlpha))
+            )
+        }
+
+        val currentSubpage = displayedTweaksSubpage
+        if (currentSubpage != null && rootSizePx.width > 0 && rootSizePx.height > 0) {
+            val density = LocalDensity.current
+            val fullW = rootSizePx.width.toFloat()
+            val fullH = rootSizePx.height.toFloat()
+            val startRect = subpageBounds[currentSubpage] ?: Rect(
+                left = fullW * 0.06f,
+                top = fullH * 0.36f,
+                right = fullW * 0.94f,
+                bottom = fullH * 0.52f
+            )
+            val curLeft = lerpFloat(startRect.left, 0f, p)
+            val curTop = lerpFloat(startRect.top, 0f, p)
+            val curRight = lerpFloat(startRect.right, fullW, p)
+            val curBottom = lerpFloat(startRect.bottom, fullH, p)
+            val curWidthDp = with(density) { (curRight - curLeft).coerceAtLeast(1f).toDp() }
+            val curHeightDp = with(density) { (curBottom - curTop).coerceAtLeast(1f).toDp() }
+            val cornerDp = lerp(26.dp, 0.dp, p)
+            val morphBg = lerpGraphicsColor(
+                MaterialTheme.colorScheme.surfaceContainerHigh,
+                MaterialTheme.colorScheme.background,
+                p
+            )
+            val contentAlpha = ((p - 0.14f) / 0.46f).coerceIn(0f, 1f)
+
+            Box(
+                modifier = Modifier
+                    .zIndex(2f)
+                    .offset { IntOffset(curLeft.roundToInt(), curTop.roundToInt()) }
+                    .size(width = curWidthDp, height = curHeightDp)
+                    .clip(RoundedCornerShape(cornerDp))
+                    .background(morphBg)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = contentAlpha }
+                ) {
+                    when (currentSubpage) {
+                        TweaksSubpage.FLOATING_HUD -> TelemetryOverlayScreen(
+                            config = overlayConfig,
+                            targetHz = tweaksTargetHz,
+                            onConfigChange = { updated ->
+                                val wasEnabled = overlayConfig.enabled
+                                overlayConfig = updated
+                                FloatingFpsPrefs.save(context, updated)
+                                if (updated.enabled && !wasEnabled) {
+                                    homeScope.launch {
+                                        val granted = FloatingFpsService.ensureOverlayPermission(context)
+                                        if (granted) {
+                                            FloatingFpsService.sync(context, updated)
+                                        } else {
+                                            val reverted = updated.copy(enabled = false)
+                                            overlayConfig = reverted
+                                            FloatingFpsPrefs.save(context, reverted)
+                                        }
+                                    }
+                                } else {
+                                    FloatingFpsService.sync(context, updated)
+                                }
+                            },
+                            onBack = { activeTweaksSubpage = null }
+                        )
+                        TweaksSubpage.GAME_BAR -> GameDeckSettingsScreen(
+                            onBack = { activeTweaksSubpage = null }
+                        )
+                        TweaksSubpage.MEMORY_ZRAM -> MemoryZramScreen(
+                            onBack = { activeTweaksSubpage = null }
+                        )
+                        TweaksSubpage.HARDWARE -> HardwareDiagnosticScreen(
+                            onBack = { activeTweaksSubpage = null }
+                        )
+                        TweaksSubpage.UTILITY -> UtilityScreen(
+                            onBack = { activeTweaksSubpage = null }
+                        )
+                    }
+                }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = currentSubscreen != null,
+            enter = slideInHorizontally(
+                animationSpec = tween(320, easing = DrillEmphasizedDecelerate)
+            ) { it } + fadeIn(animationSpec = tween(220)),
+            exit = slideOutHorizontally(
+                animationSpec = tween(280, easing = DrillEmphasizedAccelerate)
+            ) { it } + fadeOut(animationSpec = tween(220)),
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(3f)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+            ) {
+                when (renderedSubscreen) {
+                    "personalisasi" -> PersonalisasiScreen(
+                        onBackClick = { currentSubscreen = null }
+                    )
+                    "compatibility" -> CompatibilityScreen(
+                        onBackClick = { currentSubscreen = null }
+                    )
+                    "about" -> AboutScreen(
+                        onBackClick = { currentSubscreen = null }
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -947,6 +971,30 @@ fun HomeDashboardContent(
     var isRestarting by remember { mutableStateOf(false) }
     var showPowerDialog by remember { mutableStateOf(false) }
     val isRunning = daemonPid != null
+
+    val artworkState = rememberLuminaArtworkState()
+    var headerBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
+    var cardBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
+
+    LaunchedEffect(artworkState.revision, artworkState.headerEnabled) {
+        headerBitmap = if (artworkState.headerEnabled) {
+            withContext(Dispatchers.IO) {
+                LuminaArtworkManager.loadBitmap(context, LuminaArtworkSlot.HEADER)
+            }
+        } else {
+            null
+        }
+    }
+
+    LaunchedEffect(artworkState.revision, artworkState.cardEnabled) {
+        cardBitmap = if (artworkState.cardEnabled) {
+            withContext(Dispatchers.IO) {
+                LuminaArtworkManager.loadBitmap(context, LuminaArtworkSlot.CARD)
+            }
+        } else {
+            null
+        }
+    }
 
     val socModel = remember {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -1134,223 +1182,286 @@ fun HomeDashboardContent(
         }
     }
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        contentWindowInsets = WindowInsets(0.dp),
-        containerColor = scheme.background,
-        topBar = {
-            Box(
-                modifier = Modifier.luminaHazeHeader(
-                    hazeState = hazeState,
-                    surfaceColor = fadeSurface,
-                    overlappedFraction = scrollBehavior.state.overlappedFraction
-                )
-            ) {
-                LargeFlexibleTopAppBar(
-                    title = {
-                        Text(
-                            text = stringResource(R.string.app_name),
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    actions = {
-                        IconButton(
-                            modifier = topBarPowerOrigin.trackedModifier(),
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                powerDialogOriginPoint = topBarPowerOrigin.origin
-                                showPowerDialog = true
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(scheme.background)
+    ) {
+        if (headerBitmap != null) {
+            HomeHeaderArtworkBackdrop(
+                bitmap = headerBitmap!!,
+                alpha = artworkState.headerAlpha,
+                collapseFraction = scrollBehavior.state.collapsedFraction,
+                surfaceColor = scheme.background
+            )
+        }
+
+        Scaffold(
+            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+            contentWindowInsets = WindowInsets(0.dp),
+            containerColor = if (headerBitmap != null) Color.Transparent else scheme.background,
+            topBar = {
+                Box(
+                    modifier = Modifier.luminaHazeHeader(
+                        hazeState = hazeState,
+                        surfaceColor = fadeSurface,
+                        overlappedFraction = scrollBehavior.state.overlappedFraction
+                    )
+                ) {
+                    LargeFlexibleTopAppBar(
+                        title = {
+                            Text(
+                                text = stringResource(R.string.app_name),
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
+                        actions = {
+                            IconButton(
+                                modifier = topBarPowerOrigin.trackedModifier(),
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    powerDialogOriginPoint = topBarPowerOrigin.origin
+                                    showPowerDialog = true
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.PowerSettingsNew,
+                                    contentDescription = stringResource(R.string.power_menu_title)
+                                )
                             }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent,
+                            scrolledContainerColor = Color.Transparent
+                        ),
+                        scrollBehavior = scrollBehavior,
+                        windowInsets = WindowInsets(0, 0, 0, 0)
+                    )
+                }
+            }
+        ) { innerPadding ->
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .nestedScroll(elasticRevealConnection)
+                    .hazeSource(state = hazeState),
+                contentPadding = PaddingValues(
+                    top = innerPadding.calculateTopPadding() + 6.dp,
+                    bottom = bottomPadding,
+                    start = 16.dp,
+                    end = 16.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item(key = "elastic_engine_reveal") {
+                    val dampedPx = dampOverscrollPull(pullAnim.value, maxRevealPx)
+                    val revealHeightDp = with(density) { dampedPx.toDp() }
+                    val progress = (dampedPx / (maxRevealPx * 0.85f)).coerceIn(0f, 1f)
+
+                    if (dampedPx > 0.5f) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(revealHeightDp)
+                                .clipToBounds(),
+                            contentAlignment = Alignment.BottomCenter
                         ) {
-                            Icon(
-                                imageVector = Icons.Filled.PowerSettingsNew,
-                                contentDescription = stringResource(R.string.power_menu_title)
+                            EngineDiagnosticPassCard(
+                                info = enginePass,
+                                daemonPid = daemonPid,
+                                modifier = Modifier.graphicsLayer {
+                                    alpha = progress
+                                    val s = 0.92f + 0.08f * progress
+                                    scaleX = s
+                                    scaleY = s
+                                }
                             )
                         }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent,
-                        scrolledContainerColor = Color.Transparent
-                    ),
-                    scrollBehavior = scrollBehavior,
-                    windowInsets = WindowInsets(0, 0, 0, 0)
-                )
-            }
-        }
-    ) { innerPadding ->
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .nestedScroll(elasticRevealConnection)
-                .hazeSource(state = hazeState),
-            contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding() + 6.dp,
-                bottom = bottomPadding,
-                start = 16.dp,
-                end = 16.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item(key = "elastic_engine_reveal") {
-                val dampedPx = dampOverscrollPull(pullAnim.value, maxRevealPx)
-                val revealHeightDp = with(density) { dampedPx.toDp() }
-                val progress = (dampedPx / (maxRevealPx * 0.85f)).coerceIn(0f, 1f)
+                    }
+                }
 
-                if (dampedPx > 0.5f) {
-                    Box(
+                item(key = "hero_bento") {
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(revealHeightDp)
-                            .clipToBounds(),
-                        contentAlignment = Alignment.BottomCenter
+                            .height(220.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        EngineDiagnosticPassCard(
-                            info = enginePass,
-                            daemonPid = daemonPid,
-                            modifier = Modifier.graphicsLayer {
-                                alpha = progress
-                                val s = 0.92f + 0.08f * progress
-                                scaleX = s
-                                scaleY = s
-                            }
-                        )
-                    }
-                }
-            }
-
-            item(key = "hero_bento") {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(220.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        DaemonStatusBentoTile(
+                        Column(
                             modifier = Modifier
-                                .weight(0.58f)
-                                .then(heroOrigin.trackedModifier()),
-                            isChecking = isChecking,
-                            isRestarting = isRestarting,
-                            isRunning = isRunning,
-                            isModuleInstalled = isModuleInstalled,
-                            isRebootRequired = isRebootRequired,
-                            daemonPid = daemonPid,
-                            onClick = {
-                                when {
-                                    isChecking || isRestarting -> Unit
-                                    isRunning -> {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        powerDialogOriginPoint = heroOrigin.origin
-                                        showPowerDialog = true
+                                .weight(1f)
+                                .fillMaxHeight(),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            DaemonStatusBentoTile(
+                                modifier = Modifier
+                                    .weight(0.58f)
+                                    .then(heroOrigin.trackedModifier()),
+                                isChecking = isChecking,
+                                isRestarting = isRestarting,
+                                isRunning = isRunning,
+                                isModuleInstalled = isModuleInstalled,
+                                isRebootRequired = isRebootRequired,
+                                daemonPid = daemonPid,
+                                onClick = {
+                                    when {
+                                        isChecking || isRestarting -> Unit
+                                        isRunning -> {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            powerDialogOriginPoint = heroOrigin.origin
+                                            showPowerDialog = true
+                                        }
+                                        isRebootRequired -> onRequestRebootDialog()
+                                        else -> launchRestart()
                                     }
-                                    isRebootRequired -> onRequestRebootDialog()
-                                    else -> launchRestart()
                                 }
+                            )
+
+                            ActiveProfileBentoTile(
+                                modifier = Modifier.weight(0.42f),
+                                label = homeLocalizedLabel("Profil aktif", "Active profile"),
+                                profileName = currentProfile
+                            )
+                        }
+
+                        TemperatureHeroTile(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                            batteryTemp = batteryTemp
+                        )
+                    }
+                }
+
+                item(key = "telemetry_bento_pair") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        MemoryBentoTile(
+                            modifier = Modifier.weight(1f),
+                            telemetry = telemetry
+                        )
+
+                        BatteryBentoTile(
+                            modifier = Modifier.weight(1f),
+                            telemetry = telemetry
+                        )
+                    }
+                }
+
+                item(key = "device_specs_card") {
+                    DeviceSpecsBentoCard(
+                        deviceLabel = homeLocalizedLabel("Model perangkat", "Device model"),
+                        deviceValue = deviceModel,
+                        socLabel = "SoC",
+                        socValue = socModel,
+                        kernelLabel = homeLocalizedLabel("Versi kernel", "Kernel version"),
+                        kernelValue = kernelVersion,
+                        managerLabel = homeLocalizedLabel("Versi manajer", "Manager version"),
+                        managerValue = stringResource(
+                            R.string.home_version_release_format,
+                            BuildConfig.VERSION_NAME.removeSuffix(".0")
+                        ),
+                        artworkBitmap = cardBitmap,
+                        artworkAlpha = artworkState.cardAlpha
+                    )
+                }
+
+                item(key = "uptime_bento_card") {
+                    UptimeBentoCard()
+                }
+
+                item(key = "telegram_channel_card") {
+                    TelegramChannelBentoCard(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            uriHandler.openUri("https://t.me/MallArchiven")
+                        }
+                    )
+                }
+
+                item(key = "support_tiles_pair") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        ExpressiveInfoTile(
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Rounded.Favorite,
+                            title = stringResource(R.string.home_support_us),
+                            subtitle = homeLocalizedLabel("Dukung proyek", "Support project"),
+                            accentColor = scheme.tertiary,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                uriHandler.openUri("https://sociabuzz.com/kimal404")
                             }
                         )
 
-                        ActiveProfileBentoTile(
-                            modifier = Modifier.weight(0.42f),
-                            label = homeLocalizedLabel("Profil aktif", "Active profile"),
-                            profileName = currentProfile
+                        ExpressiveInfoTile(
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Rounded.MenuBook,
+                            title = homeLocalizedLabel("Dokumentasi", "Documentation"),
+                            subtitle = homeLocalizedLabel("Panduan & GitHub", "Guides & GitHub"),
+                            accentColor = scheme.primary,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                uriHandler.openUri("https://github.com/kimal404/LuminaTweaks")
+                            }
                         )
                     }
-
-                    TemperatureHeroTile(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                        batteryTemp = batteryTemp
-                    )
-                }
-            }
-
-            item(key = "telemetry_bento_pair") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    MemoryBentoTile(
-                        modifier = Modifier.weight(1f),
-                        telemetry = telemetry
-                    )
-
-                    BatteryBentoTile(
-                        modifier = Modifier.weight(1f),
-                        telemetry = telemetry
-                    )
-                }
-            }
-
-            item(key = "device_specs_card") {
-                DeviceSpecsBentoCard(
-                    deviceLabel = homeLocalizedLabel("Model perangkat", "Device model"),
-                    deviceValue = deviceModel,
-                    socLabel = "SoC",
-                    socValue = socModel,
-                    kernelLabel = homeLocalizedLabel("Versi kernel", "Kernel version"),
-                    kernelValue = kernelVersion,
-                    managerLabel = homeLocalizedLabel("Versi manajer", "Manager version"),
-                    managerValue = stringResource(
-                        R.string.home_version_release_format,
-                        BuildConfig.VERSION_NAME.removeSuffix(".0")
-                    )
-                )
-            }
-
-            item(key = "uptime_bento_card") {
-                UptimeBentoCard()
-            }
-
-            item(key = "telegram_channel_card") {
-                TelegramChannelBentoCard(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        uriHandler.openUri("https://t.me/MallArchiven")
-                    }
-                )
-            }
-
-            item(key = "support_tiles_pair") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    ExpressiveInfoTile(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Rounded.Favorite,
-                        title = stringResource(R.string.home_support_us),
-                        subtitle = homeLocalizedLabel("Dukung proyek", "Support project"),
-                        accentColor = scheme.tertiary,
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            uriHandler.openUri("https://sociabuzz.com/kimal404")
-                        }
-                    )
-
-                    ExpressiveInfoTile(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Rounded.MenuBook,
-                        title = homeLocalizedLabel("Dokumentasi", "Documentation"),
-                        subtitle = homeLocalizedLabel("Panduan & GitHub", "Guides & GitHub"),
-                        accentColor = scheme.primary,
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            uriHandler.openUri("https://github.com/kimal404/LuminaTweaks")
-                        }
-                    )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun HomeHeaderArtworkBackdrop(
+    bitmap: ImageBitmap,
+    alpha: Float,
+    collapseFraction: Float,
+    surfaceColor: Color
+) {
+    val isDark = surfaceColor.luminance() < 0.5f
+    val scrollFade = (1f - collapseFraction * 0.72f).coerceIn(0.18f, 1f)
+    val effectiveAlpha = (if (isDark) alpha * 0.86f else alpha) * scrollFade
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(265.dp)
+            .clipToBounds()
+    ) {
+        Image(
+            bitmap = bitmap,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            alignment = Alignment.TopCenter,
+            alpha = effectiveAlpha,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    translationY = -collapseFraction * 28f
+                }
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        0.0f to surfaceColor.copy(alpha = 0.24f),
+                        0.28f to Color.Transparent,
+                        0.66f to surfaceColor.copy(alpha = 0.62f),
+                        0.90f to surfaceColor.copy(alpha = 0.94f),
+                        1.0f to surfaceColor
+                    )
+                )
+        )
     }
 }
 
@@ -2376,38 +2487,69 @@ private fun DeviceSpecsBentoCard(
     kernelLabel: String,
     kernelValue: String,
     managerLabel: String,
-    managerValue: String
+    managerValue: String,
+    artworkBitmap: ImageBitmap? = null,
+    artworkAlpha: Float = 0.26f
 ) {
     val scheme = MaterialTheme.colorScheme
+    val cardColor = scheme.surfaceContainerHigh
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(26.dp))
-            .background(scheme.surfaceContainerHigh)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .background(cardColor)
     ) {
-        HomeSvgSpecRow(
-            label = deviceLabel,
-            value = deviceValue,
-            icon = { DevicePhoneSvgIcon(tint = scheme.primary, modifier = Modifier.size(18.dp)) }
-        )
-        HomeSvgSpecRow(
-            label = socLabel,
-            value = socValue,
-            icon = { SocChipSvgIcon(tint = scheme.primary, modifier = Modifier.size(18.dp)) }
-        )
-        HomeSvgSpecRow(
-            label = kernelLabel,
-            value = kernelValue,
-            icon = { KernelTerminalSvgIcon(tint = scheme.primary, modifier = Modifier.size(18.dp)) }
-        )
-        HomeSvgSpecRow(
-            label = managerLabel,
-            value = managerValue,
-            icon = { ManagerShieldSvgIcon(tint = scheme.primary, modifier = Modifier.size(18.dp)) }
-        )
+        if (artworkBitmap != null) {
+            Image(
+                bitmap = artworkBitmap,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                alignment = Alignment.CenterEnd,
+                alpha = artworkAlpha,
+                modifier = Modifier.matchParentSize()
+            )
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            0.0f to cardColor.copy(alpha = 0.94f),
+                            0.48f to cardColor.copy(alpha = 0.76f),
+                            0.82f to cardColor.copy(alpha = 0.36f),
+                            1.0f to cardColor.copy(alpha = 0.24f)
+                        )
+                    )
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            HomeSvgSpecRow(
+                label = deviceLabel,
+                value = deviceValue,
+                icon = { DevicePhoneSvgIcon(tint = scheme.primary, modifier = Modifier.size(18.dp)) }
+            )
+            HomeSvgSpecRow(
+                label = socLabel,
+                value = socValue,
+                icon = { SocChipSvgIcon(tint = scheme.primary, modifier = Modifier.size(18.dp)) }
+            )
+            HomeSvgSpecRow(
+                label = kernelLabel,
+                value = kernelValue,
+                icon = { KernelTerminalSvgIcon(tint = scheme.primary, modifier = Modifier.size(18.dp)) }
+            )
+            HomeSvgSpecRow(
+                label = managerLabel,
+                value = managerValue,
+                icon = { ManagerShieldSvgIcon(tint = scheme.primary, modifier = Modifier.size(18.dp)) }
+            )
+        }
     }
 }
 

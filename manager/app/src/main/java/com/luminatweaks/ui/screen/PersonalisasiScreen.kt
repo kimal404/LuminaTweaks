@@ -20,6 +20,9 @@ package com.luminatweaks.ui.screen
 
 import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
@@ -27,9 +30,11 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,7 +50,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -63,8 +67,13 @@ import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.RoundedCorner
 import androidx.compose.material.icons.rounded.Vibration
+import androidx.compose.material.icons.rounded.Wallpaper
 import androidx.compose.material.icons.rounded.Waves
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ColorScheme
@@ -89,11 +98,13 @@ import androidx.compose.material3.expressiveLightColorScheme
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -102,12 +113,13 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -117,26 +129,32 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
-import com.luminatweaks.ui.component.luminaHazeHeader
 import com.luminatweaks.R
 import com.luminatweaks.ui.component.LuminaBackButton
+import com.luminatweaks.ui.component.luminaHazeHeader
 import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.theme.AccentIntensity
 import com.luminatweaks.ui.theme.ColorEngine
 import com.luminatweaks.ui.theme.ColorMode
 import com.luminatweaks.ui.theme.HapticSettings
 import com.luminatweaks.ui.theme.LocalHapticConfig
+import com.luminatweaks.ui.theme.LuminaArtworkManager
+import com.luminatweaks.ui.theme.LuminaArtworkSlot
 import com.luminatweaks.ui.theme.LuminaHapticEngine
 import com.luminatweaks.ui.theme.LuminaHapticPulse
 import com.luminatweaks.ui.theme.ThemeController
 import com.luminatweaks.ui.theme.animateColorSchemeAsState
 import com.luminatweaks.ui.theme.keyColorOptions
+import com.luminatweaks.ui.theme.rememberLuminaArtworkState
 import com.luminatweaks.ui.theme.withAccentIntensity
 import com.materialkolor.rememberDynamicColorScheme
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val DYNAMIC_SEED = 0
 
@@ -169,7 +187,9 @@ fun PersonalisasiScreen(
 
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
     val savedSettings = remember { ThemeController.getAppSettings(context) }
+    val artworkState = rememberLuminaArtworkState()
 
     var currentColorMode by remember { mutableStateOf(savedSettings.colorMode) }
     var currentKeyColor by remember { mutableIntStateOf(savedSettings.keyColor) }
@@ -179,6 +199,49 @@ fun PersonalisasiScreen(
     var isFloatingNavBar by remember { mutableStateOf(savedSettings.floatingNavBar) }
     var hapticEnabled by remember { mutableStateOf(savedSettings.hapticEnabled) }
     var hapticIntensity by remember { mutableFloatStateOf(savedSettings.hapticIntensity) }
+
+    var headerThumb by remember { mutableStateOf<ImageBitmap?>(null) }
+    var cardThumb by remember { mutableStateOf<ImageBitmap?>(null) }
+
+    LaunchedEffect(artworkState.revision, artworkState.hasHeaderFile) {
+        headerThumb = if (artworkState.hasHeaderFile) {
+            withContext(Dispatchers.IO) {
+                LuminaArtworkManager.loadBitmap(context, LuminaArtworkSlot.HEADER)
+            }
+        } else {
+            null
+        }
+    }
+
+    LaunchedEffect(artworkState.revision, artworkState.hasCardFile) {
+        cardThumb = if (artworkState.hasCardFile) {
+            withContext(Dispatchers.IO) {
+                LuminaArtworkManager.loadBitmap(context, LuminaArtworkSlot.CARD)
+            }
+        } else {
+            null
+        }
+    }
+
+    val headerPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                LuminaArtworkManager.saveFromUri(context, uri, LuminaArtworkSlot.HEADER)
+            }
+        }
+    }
+
+    val cardPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                LuminaArtworkManager.saveFromUri(context, uri, LuminaArtworkSlot.CARD)
+            }
+        }
+    }
 
     val isDark = currentColorMode.getDarkThemeValue(isSystemInDarkTheme())
     val swatchSchemeCache = remember(currentColorSpec) {
@@ -426,6 +489,119 @@ fun PersonalisasiScreen(
                 }
             }
 
+            item(key = "custom_artwork_section") {
+                Text(
+                    text = persLocalizedLabel("Ilustrasi & Latar", "Artwork & Backdrop"),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 20.dp, bottom = 8.dp)
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    PersArtworkSlotCard(
+                        index = 0,
+                        count = 2,
+                        icon = Icons.Rounded.Wallpaper,
+                        title = persLocalizedLabel("Banner Header Beranda", "Home Header Banner"),
+                        subtitle = persLocalizedLabel(
+                            "Ilustrasi lembut di balik area atas beranda",
+                            "Soft illustration behind the home top header"
+                        ),
+                        enabled = artworkState.headerEnabled,
+                        hasImage = artworkState.hasHeaderFile,
+                        thumbnail = headerThumb,
+                        alpha = artworkState.headerAlpha,
+                        minAlpha = LuminaArtworkManager.MIN_HEADER_ALPHA,
+                        maxAlpha = LuminaArtworkManager.MAX_HEADER_ALPHA,
+                        onToggle = { checked ->
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            if (checked && !artworkState.hasHeaderFile) {
+                                headerPicker.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            } else {
+                                LuminaArtworkManager.setSlotEnabled(
+                                    context,
+                                    LuminaArtworkSlot.HEADER,
+                                    checked
+                                )
+                            }
+                        },
+                        onPickImage = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            headerPicker.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        },
+                        onClearImage = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            LuminaArtworkManager.clearSlot(context, LuminaArtworkSlot.HEADER)
+                        },
+                        onAlphaChange = { newAlpha ->
+                            LuminaArtworkManager.setSlotAlpha(
+                                context,
+                                LuminaArtworkSlot.HEADER,
+                                newAlpha
+                            )
+                        }
+                    )
+
+                    PersArtworkSlotCard(
+                        index = 1,
+                        count = 2,
+                        icon = Icons.Rounded.Image,
+                        title = persLocalizedLabel("Ilustrasi Kartu Perangkat", "Device Card Artwork"),
+                        subtitle = persLocalizedLabel(
+                            "Watermark di kartu informasi perangkat",
+                            "Watermark inside the device info card"
+                        ),
+                        enabled = artworkState.cardEnabled,
+                        hasImage = artworkState.hasCardFile,
+                        thumbnail = cardThumb,
+                        alpha = artworkState.cardAlpha,
+                        minAlpha = LuminaArtworkManager.MIN_CARD_ALPHA,
+                        maxAlpha = LuminaArtworkManager.MAX_CARD_ALPHA,
+                        canCopyFromHeader = artworkState.hasHeaderFile,
+                        onCopyFromHeader = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            scope.launch(Dispatchers.IO) {
+                                LuminaArtworkManager.copyHeaderToCard(context)
+                            }
+                        },
+                        onToggle = { checked ->
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            if (checked && !artworkState.hasCardFile) {
+                                cardPicker.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            } else {
+                                LuminaArtworkManager.setSlotEnabled(
+                                    context,
+                                    LuminaArtworkSlot.CARD,
+                                    checked
+                                )
+                            }
+                        },
+                        onPickImage = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            cardPicker.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        },
+                        onClearImage = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            LuminaArtworkManager.clearSlot(context, LuminaArtworkSlot.CARD)
+                        },
+                        onAlphaChange = { newAlpha ->
+                            LuminaArtworkManager.setSlotAlpha(
+                                context,
+                                LuminaArtworkSlot.CARD,
+                                newAlpha
+                            )
+                        }
+                    )
+                }
+            }
+
             item(key = "haptic_feedback_section") {
                 Text(
                     text = persLocalizedLabel("Umpan Balik Haptik", "Haptic Feedback"),
@@ -495,6 +671,236 @@ fun PersonalisasiScreen(
 }
 
 @Composable
+private fun PersArtworkSlotCard(
+    index: Int,
+    count: Int,
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    enabled: Boolean,
+    hasImage: Boolean,
+    thumbnail: ImageBitmap?,
+    alpha: Float,
+    minAlpha: Float,
+    maxAlpha: Float,
+    canCopyFromHeader: Boolean = false,
+    onCopyFromHeader: () -> Unit = {},
+    onToggle: (Boolean) -> Unit,
+    onPickImage: () -> Unit,
+    onClearImage: () -> Unit,
+    onAlphaChange: (Float) -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val haptic = LocalHapticFeedback.current
+    val shape = connectedContainerShape(index = index, count = count)
+    val interactionSource = remember { MutableInteractionSource() }
+    val scaleModifier = pressScale(interactionSource, 0.98f)
+    var sliderVal by remember(alpha) { mutableFloatStateOf(alpha.coerceIn(minAlpha, maxAlpha)) }
+    val pct = (sliderVal * 100f).roundToInt()
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(scheme.surfaceColorAtElevation(1.dp))
+            .padding(vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(scaleModifier)
+                .clip(RoundedCornerShape(20.dp))
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null
+                ) { onToggle(!enabled) }
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (thumbnail != null) {
+                Image(
+                    bitmap = thumbnail,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .border(1.dp, scheme.primary.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                )
+            } else {
+                PersSquircleIcon(icon = icon)
+            }
+
+            Spacer(modifier = Modifier.width(14.dp))
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(vertical = 2.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = scheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            Switch(
+                checked = enabled,
+                onCheckedChange = onToggle,
+                interactionSource = interactionSource,
+                thumbContent = {
+                    if (enabled) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = null,
+                            tint = scheme.primary,
+                            modifier = Modifier.size(SwitchDefaults.IconSize)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = null,
+                            tint = scheme.surfaceContainerHighest,
+                            modifier = Modifier.size(SwitchDefaults.IconSize)
+                        )
+                    }
+                }
+            )
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(scheme.secondaryContainer)
+                    .clickable(onClick = onPickImage)
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.PhotoLibrary,
+                    contentDescription = null,
+                    tint = scheme.onSecondaryContainer,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = if (hasImage) {
+                        persLocalizedLabel("Ganti gambar", "Change image")
+                    } else {
+                        persLocalizedLabel("Pilih dari galeri", "Pick from gallery")
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = scheme.onSecondaryContainer
+                )
+            }
+
+            if (canCopyFromHeader) {
+                Row(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(scheme.surfaceContainerHighest)
+                        .clickable(onClick = onCopyFromHeader)
+                        .padding(horizontal = 11.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.ContentCopy,
+                        contentDescription = null,
+                        tint = scheme.onSurfaceVariant,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = persLocalizedLabel("Samakan", "Match header"),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = scheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            if (hasImage) {
+                IconButton(
+                    onClick = onClearImage,
+                    modifier = Modifier.size(30.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.DeleteOutline,
+                        contentDescription = persLocalizedLabel("Hapus gambar", "Remove image"),
+                        tint = scheme.error,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+
+        AnimatedVisibility(visible = enabled && hasImage) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = persLocalizedLabel("Intensitas gambar", "Image opacity"),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = scheme.onSurface,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = "$pct%",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = scheme.primary
+                    )
+                }
+
+                Slider(
+                    value = sliderVal,
+                    onValueChange = { raw ->
+                        val nextPct = (raw * 100f).roundToInt()
+                        if (nextPct != pct && nextPct % 5 == 0) {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        }
+                        sliderVal = raw
+                        onAlphaChange(raw)
+                    },
+                    valueRange = minAlpha..maxAlpha,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun AccentColorButton(
     color: Color,
     isSelected: Boolean,
@@ -517,13 +923,7 @@ private fun AccentColorButton(
             rememberDynamicColorScheme(
                 seedColor = baseScheme.primary,
                 isDark = isDark,
-                specVersion = colorSpec.librarySpec,
-                primary = baseScheme.primary,
-                secondary = baseScheme.secondary,
-                tertiary = baseScheme.tertiary,
-                neutral = baseScheme.surface,
-                neutralVariant = baseScheme.surfaceVariant,
-                error = baseScheme.error
+                specVersion = colorSpec.librarySpec
             )
         }
     } else {
