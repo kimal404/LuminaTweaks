@@ -14,20 +14,11 @@
  * limitations under the License.
  */
 
-@file:OptIn(
-    ExperimentalMaterial3Api::class,
-    ExperimentalMaterial3ExpressiveApi::class,
-    ExperimentalSharedTransitionApi::class
-)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 
 package com.luminatweaks.ui.component
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.BoundsTransform
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.spring
@@ -40,12 +31,10 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.basicMarquee
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.width
@@ -59,11 +48,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
@@ -72,68 +63,15 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-val LocalSharedTransitionScope = staticCompositionLocalOf<SharedTransitionScope?> { null }
-
-val LuminaContainerBoundsTransform = BoundsTransform { _, _ ->
-    spring(dampingRatio = 0.88f, stiffness = 360f)
-}
-
-@Composable
-fun LuminaSharedContainerSource(
-    sharedKey: String,
-    isExpanded: Boolean,
-    modifier: Modifier = Modifier,
-    minHeight: Dp = 0.dp,
-    cornerRadius: Dp = 26.dp,
-    content: @Composable () -> Unit
-) {
-    val sharedScope = LocalSharedTransitionScope.current
-    if (sharedScope == null) {
-        Box(modifier = modifier.defaultMinSize(minHeight = minHeight)) {
-            content()
+fun <T> Modifier.trackSubpageBounds(
+    key: T,
+    onBoundsUpdated: (T, Rect) -> Unit
+): Modifier = this.onGloballyPositioned { coordinates ->
+    if (coordinates.isAttached) {
+        val rect = coordinates.boundsInRoot()
+        if (rect.width > 0f && rect.height > 0f) {
+            onBoundsUpdated(key, rect)
         }
-        return
-    }
-
-    Box(modifier = modifier.defaultMinSize(minHeight = minHeight)) {
-        with(sharedScope) {
-            AnimatedVisibility(
-                visible = !isExpanded,
-                enter = fadeIn(tween(180)),
-                exit = fadeOut(tween(110)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Box(
-                    modifier = Modifier.sharedBounds(
-                        sharedContentState = rememberSharedContentState(key = sharedKey),
-                        animatedVisibilityScope = this@AnimatedVisibility,
-                        boundsTransform = LuminaContainerBoundsTransform,
-                        resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
-                        clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(cornerRadius))
-                    )
-                ) {
-                    content()
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun Modifier.luminaSharedContainerTarget(
-    sharedKey: String,
-    animatedVisibilityScope: AnimatedVisibilityScope,
-    cornerRadius: Dp = 26.dp
-): Modifier {
-    val sharedScope = LocalSharedTransitionScope.current ?: return this
-    return with(sharedScope) {
-        this@luminaSharedContainerTarget.sharedBounds(
-            sharedContentState = rememberSharedContentState(key = sharedKey),
-            animatedVisibilityScope = animatedVisibilityScope,
-            boundsTransform = LuminaContainerBoundsTransform,
-            resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
-            clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(cornerRadius))
-        )
     }
 }
 
@@ -148,7 +86,7 @@ fun OdometerNumber(
     value: String,
     style: TextStyle = MaterialTheme.typography.displaySmall,
     color: Color = MaterialTheme.colorScheme.onSurface,
-    digitWidthMultiplier: Float = 0.62f,
+    digitWidthMultiplier: Float = 0.64f,
     modifier: Modifier = Modifier
 ) {
     val cleanStyle = remember(style) {

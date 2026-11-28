@@ -2,7 +2,6 @@
     androidx.compose.foundation.ExperimentalFoundationApi::class,
     ExperimentalMaterial3ExpressiveApi::class,
     ExperimentalMaterial3Api::class,
-    androidx.compose.animation.ExperimentalSharedTransitionApi::class
 )
 
 package com.luminatweaks.ui.screen
@@ -20,8 +19,6 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
@@ -58,6 +55,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -101,12 +99,12 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -118,8 +116,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp as lerpGraphicsColor
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -130,6 +130,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -142,6 +143,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -155,7 +158,6 @@ import com.luminatweaks.data.DaemonManager
 import com.luminatweaks.gamedeck.GameDeckSettingsScreen
 import com.luminatweaks.service.FloatingFpsService
 import com.luminatweaks.ui.component.ExpressiveInfoTile
-import com.luminatweaks.ui.component.LocalSharedTransitionScope
 import com.luminatweaks.ui.component.LuminaBottomBar
 import com.luminatweaks.ui.component.LuminaMicroTicker
 import com.luminatweaks.ui.component.OdometerNumber
@@ -163,7 +165,6 @@ import com.luminatweaks.ui.component.TouchOriginDialog
 import com.luminatweaks.ui.component.bouncyClickable
 import com.luminatweaks.ui.component.dampOverscrollPull
 import com.luminatweaks.ui.component.luminaHazeHeader
-import com.luminatweaks.ui.component.luminaSharedContainerTarget
 import com.luminatweaks.ui.component.pressScale
 import com.luminatweaks.ui.component.rememberDialogOrigin
 import com.luminatweaks.ui.theme.LocalCornerRadius
@@ -176,7 +177,9 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import java.util.Locale
 import kotlin.math.PI
+import androidx.compose.ui.util.lerp as lerpFloat
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -502,28 +505,41 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
     var overlayConfig by remember { mutableStateOf(FloatingFpsPrefs.load(context)) }
     val homeScope = rememberCoroutineScope()
 
-    val containerDepthScale by animateFloatAsState(
-        targetValue = if (activeTweaksSubpage != null) 0.95f else 1f,
-        animationSpec = spring(dampingRatio = 0.88f, stiffness = 360f),
-        label = "tweaksContainerDepthScale"
-    )
-    val containerScrimAlpha by animateFloatAsState(
-        targetValue = if (activeTweaksSubpage != null) 0.35f else 0f,
-        animationSpec = tween(220),
-        label = "tweaksContainerScrimAlpha"
-    )
+    val subpageBounds = remember { mutableStateMapOf<TweaksSubpage, Rect>() }
+    var displayedTweaksSubpage by remember { mutableStateOf<TweaksSubpage?>(null) }
+    val expandProgress = remember { Animatable(0f) }
+    var rootSizePx by remember { mutableStateOf(IntSize.Zero) }
+
+    LaunchedEffect(activeTweaksSubpage) {
+        if (activeTweaksSubpage != null) {
+            displayedTweaksSubpage = activeTweaksSubpage
+            expandProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = spring(dampingRatio = 0.88f, stiffness = 380f)
+            )
+        } else if (displayedTweaksSubpage != null) {
+            expandProgress.animateTo(
+                targetValue = 0f,
+                animationSpec = spring(dampingRatio = 0.92f, stiffness = 430f)
+            )
+            displayedTweaksSubpage = null
+        }
+    }
+
+    val p = expandProgress.value.coerceIn(0f, 1f)
+    val containerDepthScale = 1f - 0.045f * p
+    val containerScrimAlpha = 0.36f * p
 
     BackHandler(enabled = activeTweaksSubpage != null) {
         activeTweaksSubpage = null
     }
 
-    SharedTransitionLayout(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .onSizeChanged { rootSizePx = it }
     ) {
-        CompositionLocalProvider(LocalSharedTransitionScope provides this) {
-            Box(modifier = Modifier.fillMaxSize()) {
                 val pagerScaleModifier = Modifier.graphicsLayer {
                     val s = tabFadeScale.value * containerDepthScale
                     scaleX = s
@@ -558,7 +574,9 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                                 )
                                 2 -> TweaksScreen(
                                     pagerState = pagerState,
-                                    activeSubpage = activeTweaksSubpage,
+                                    onRegisterSubpageBounds = { subpage, rect ->
+                                        subpageBounds[subpage] = rect
+                                    },
                                     onOpenSubpage = { subpage, hz ->
                                         if (subpage == TweaksSubpage.FLOATING_HUD) {
                                             overlayConfig = FloatingFpsPrefs.load(context)
@@ -637,7 +655,9 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                                 )
                                 2 -> TweaksScreen(
                                     pagerState = pagerState,
-                                    activeSubpage = activeTweaksSubpage,
+                                    onRegisterSubpageBounds = { subpage, rect ->
+                                        subpageBounds[subpage] = rect
+                                    },
                                     onOpenSubpage = { subpage, hz ->
                                         if (subpage == TweaksSubpage.FLOATING_HUD) {
                                             overlayConfig = FloatingFpsPrefs.load(context)
@@ -667,28 +687,45 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                     )
                 }
 
-                AnimatedContent(
-                    targetState = activeTweaksSubpage,
-                    transitionSpec = {
-                        fadeIn(tween(200)) togetherWith fadeOut(tween(180))
-                    },
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .zIndex(2f),
-                    label = "tweaksContainerTransform"
-                ) { subpage ->
-                    if (subpage != null) {
+                val currentSubpage = displayedTweaksSubpage
+                if (currentSubpage != null && rootSizePx.width > 0 && rootSizePx.height > 0) {
+                    val density = LocalDensity.current
+                    val fullW = rootSizePx.width.toFloat()
+                    val fullH = rootSizePx.height.toFloat()
+                    val startRect = subpageBounds[currentSubpage] ?: Rect(
+                        left = fullW * 0.06f,
+                        top = fullH * 0.36f,
+                        right = fullW * 0.94f,
+                        bottom = fullH * 0.52f
+                    )
+                    val curLeft = lerpFloat(startRect.left, 0f, p)
+                    val curTop = lerpFloat(startRect.top, 0f, p)
+                    val curRight = lerpFloat(startRect.right, fullW, p)
+                    val curBottom = lerpFloat(startRect.bottom, fullH, p)
+                    val curWidthDp = with(density) { (curRight - curLeft).coerceAtLeast(1f).toDp() }
+                    val curHeightDp = with(density) { (curBottom - curTop).coerceAtLeast(1f).toDp() }
+                    val cornerDp = lerp(26.dp, 0.dp, p)
+                    val morphBg = lerpGraphicsColor(
+                        MaterialTheme.colorScheme.surfaceContainerHigh,
+                        MaterialTheme.colorScheme.background,
+                        p
+                    )
+                    val contentAlpha = ((p - 0.14f) / 0.46f).coerceIn(0f, 1f)
+
+                    Box(
+                        modifier = Modifier
+                            .zIndex(2f)
+                            .offset { IntOffset(curLeft.roundToInt(), curTop.roundToInt()) }
+                            .size(width = curWidthDp, height = curHeightDp)
+                            .clip(RoundedCornerShape(cornerDp))
+                            .background(morphBg)
+                    ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .luminaSharedContainerTarget(
-                                    sharedKey = subpage.key,
-                                    animatedVisibilityScope = this@AnimatedContent,
-                                    cornerRadius = 26.dp
-                                )
-                                .background(MaterialTheme.colorScheme.background)
+                                .graphicsLayer { alpha = contentAlpha }
                         ) {
-                            when (subpage) {
+                            when (currentSubpage) {
                                 TweaksSubpage.FLOATING_HUD -> TelemetryOverlayScreen(
                                     config = overlayConfig,
                                     targetHz = tweaksTargetHz,
@@ -760,8 +797,6 @@ fun HomeScreen(onOpenSetupWizard: () -> Unit = {}) {
                         }
                     }
                 }
-            }
-        }
     }
 }
 

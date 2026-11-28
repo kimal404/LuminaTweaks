@@ -98,6 +98,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -127,7 +128,7 @@ import com.luminatweaks.service.FloatingFpsService
 import com.luminatweaks.ui.component.ExpressiveInfoTile
 import com.luminatweaks.ui.component.LuminaAnchoredSheet
 import com.luminatweaks.ui.component.LuminaBackButton
-import com.luminatweaks.ui.component.LuminaSharedContainerSource
+import com.luminatweaks.ui.component.trackSubpageBounds
 import com.luminatweaks.ui.component.OdometerNumber
 import com.luminatweaks.ui.component.luminaHazeHeader
 import com.luminatweaks.ui.component.pressScale
@@ -231,7 +232,7 @@ private suspend fun awaitPagerSettled(pagerState: PagerState?) {
 @Composable
 fun TweaksScreen(
     pagerState: PagerState? = null,
-    activeSubpage: TweaksSubpage? = null,
+    onRegisterSubpageBounds: ((TweaksSubpage, Rect) -> Unit)? = null,
     onOpenSubpage: ((TweaksSubpage, Int) -> Unit)? = null,
     onOpenFloatingHud: (() -> Unit)? = null,
     onBackClick: (() -> Unit)? = null
@@ -291,10 +292,9 @@ fun TweaksScreen(
     val ioSchedulerOrigin = rememberDialogOrigin()
 
     var fallbackSubpage by rememberSaveable { mutableStateOf<TweaksSubpage?>(null) }
-    val resolvedActiveSubpage = if (onOpenSubpage != null) activeSubpage else fallbackSubpage
 
-    LaunchedEffect(resolvedActiveSubpage) {
-        if (resolvedActiveSubpage == null) {
+    LaunchedEffect(fallbackSubpage) {
+        if (fallbackSubpage == null) {
             gameBarEnabled = GameDeckPrefs.load(context).enabled
             fpsConfig = FloatingFpsPrefs.load(context)
         }
@@ -591,97 +591,91 @@ fun TweaksScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        LuminaSharedContainerSource(
-                            sharedKey = TweaksSubpage.FLOATING_HUD.key,
-                            isExpanded = resolvedActiveSubpage == TweaksSubpage.FLOATING_HUD,
-                            minHeight = 112.dp,
-                            cornerRadius = 26.dp,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            ExpressiveInfoTile(
-                                modifier = Modifier.fillMaxWidth(),
-                                icon = Icons.Rounded.Speed,
-                                title = "Floating HUD",
-                                subtitle = telemetrySubtitle,
-                                accentColor = if (fpsConfig.enabled) scheme.primary else scheme.secondary,
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    openSubpage(TweaksSubpage.FLOATING_HUD)
-                                }
-                            )
-                        }
+                        ExpressiveInfoTile(
+                            modifier = Modifier
+                                .weight(1f)
+                                .then(
+                                    if (onRegisterSubpageBounds != null) {
+                                        Modifier.trackSubpageBounds(TweaksSubpage.FLOATING_HUD, onRegisterSubpageBounds)
+                                    } else {
+                                        Modifier
+                                    }
+                                ),
+                            icon = Icons.Rounded.Speed,
+                            title = "Floating HUD",
+                            subtitle = telemetrySubtitle,
+                            accentColor = if (fpsConfig.enabled) scheme.primary else scheme.secondary,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                openSubpage(TweaksSubpage.FLOATING_HUD)
+                            }
+                        )
 
-                        LuminaSharedContainerSource(
-                            sharedKey = TweaksSubpage.GAME_BAR.key,
-                            isExpanded = resolvedActiveSubpage == TweaksSubpage.GAME_BAR,
-                            minHeight = 112.dp,
-                            cornerRadius = 26.dp,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            ExpressiveInfoTile(
-                                modifier = Modifier.fillMaxWidth(),
-                                icon = Icons.Rounded.SportsEsports,
-                                title = "Game Bar",
-                                subtitle = gameBarSubtitle,
-                                accentColor = if (gameBarEnabled) scheme.tertiary else scheme.primary,
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    openSubpage(TweaksSubpage.GAME_BAR)
-                                }
-                            )
-                        }
+                        ExpressiveInfoTile(
+                            modifier = Modifier
+                                .weight(1f)
+                                .then(
+                                    if (onRegisterSubpageBounds != null) {
+                                        Modifier.trackSubpageBounds(TweaksSubpage.GAME_BAR, onRegisterSubpageBounds)
+                                    } else {
+                                        Modifier
+                                    }
+                                ),
+                            icon = Icons.Rounded.SportsEsports,
+                            title = "Game Bar",
+                            subtitle = gameBarSubtitle,
+                            accentColor = if (gameBarEnabled) scheme.tertiary else scheme.primary,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                openSubpage(TweaksSubpage.GAME_BAR)
+                            }
+                        )
                     }
                 }
 
                 item(key = "system_modules_group") {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        LuminaSharedContainerSource(
-                            sharedKey = TweaksSubpage.MEMORY_ZRAM.key,
-                            isExpanded = resolvedActiveSubpage == TweaksSubpage.MEMORY_ZRAM,
-                            minHeight = 64.dp,
-                            cornerRadius = 26.dp
-                        ) {
-                            ConnectedTweakActionRow(
-                                index = 0,
-                                count = 3,
-                                icon = Icons.Rounded.Memory,
-                                title = stringResource(R.string.tweak_memory_zram),
-                                subtitle = stringResource(R.string.tweak_memory_zram_desc),
-                                onClick = { openSubpage(TweaksSubpage.MEMORY_ZRAM) }
-                            )
-                        }
+                        ConnectedTweakActionRow(
+                            modifier = if (onRegisterSubpageBounds != null) {
+                                Modifier.trackSubpageBounds(TweaksSubpage.MEMORY_ZRAM, onRegisterSubpageBounds)
+                            } else {
+                                Modifier
+                            },
+                            index = 0,
+                            count = 3,
+                            icon = Icons.Rounded.Memory,
+                            title = stringResource(R.string.tweak_memory_zram),
+                            subtitle = stringResource(R.string.tweak_memory_zram_desc),
+                            onClick = { openSubpage(TweaksSubpage.MEMORY_ZRAM) }
+                        )
 
-                        LuminaSharedContainerSource(
-                            sharedKey = TweaksSubpage.HARDWARE.key,
-                            isExpanded = resolvedActiveSubpage == TweaksSubpage.HARDWARE,
-                            minHeight = 64.dp,
-                            cornerRadius = 12.dp
-                        ) {
-                            ConnectedTweakActionRow(
-                                index = 1,
-                                count = 3,
-                                icon = Icons.Rounded.DeveloperBoard,
-                                title = stringResource(R.string.hardware_diag_title),
-                                subtitle = stringResource(R.string.hardware_diag_desc),
-                                onClick = { openSubpage(TweaksSubpage.HARDWARE) }
-                            )
-                        }
+                        ConnectedTweakActionRow(
+                            modifier = if (onRegisterSubpageBounds != null) {
+                                Modifier.trackSubpageBounds(TweaksSubpage.HARDWARE, onRegisterSubpageBounds)
+                            } else {
+                                Modifier
+                            },
+                            index = 1,
+                            count = 3,
+                            icon = Icons.Rounded.DeveloperBoard,
+                            title = stringResource(R.string.hardware_diag_title),
+                            subtitle = stringResource(R.string.hardware_diag_desc),
+                            onClick = { openSubpage(TweaksSubpage.HARDWARE) }
+                        )
 
-                        LuminaSharedContainerSource(
-                            sharedKey = TweaksSubpage.UTILITY.key,
-                            isExpanded = resolvedActiveSubpage == TweaksSubpage.UTILITY,
-                            minHeight = 64.dp,
-                            cornerRadius = 26.dp
-                        ) {
-                            ConnectedTweakActionRow(
-                                index = 2,
-                                count = 3,
-                                icon = Icons.Rounded.Widgets,
-                                title = stringResource(R.string.utility_screen_title),
-                                subtitle = stringResource(R.string.utility_screen_desc),
-                                onClick = { openSubpage(TweaksSubpage.UTILITY) }
-                            )
-                        }
+                        ConnectedTweakActionRow(
+                            modifier = if (onRegisterSubpageBounds != null) {
+                                Modifier.trackSubpageBounds(TweaksSubpage.UTILITY, onRegisterSubpageBounds)
+                            } else {
+                                Modifier
+                            },
+                            index = 2,
+                            count = 3,
+                            icon = Icons.Rounded.Widgets,
+                            title = stringResource(R.string.utility_screen_title),
+                            subtitle = stringResource(R.string.utility_screen_desc),
+                            onClick = { openSubpage(TweaksSubpage.UTILITY) }
+                        )
                     }
                 }
             }
@@ -1608,6 +1602,7 @@ internal fun ConnectedTweakActionRow(
     title: String,
     subtitle: String,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     enabled: Boolean = true,
     highlightSubtitle: Boolean = false
 ) {
@@ -1617,7 +1612,7 @@ internal fun ConnectedTweakActionRow(
     val pressScaleModifier = pressScale(interactionSource, 0.975f, enabled)
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .then(pressScaleModifier)
             .clip(shape)
